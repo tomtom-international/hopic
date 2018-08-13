@@ -1,0 +1,2 @@
+-e git+https://github.com/pallets/click.git@7463db5c2ce1cf7697f6aeded5798da35fcb4968#egg=click
+-e .
