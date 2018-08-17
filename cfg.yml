@@ -5,11 +5,14 @@ build:
     - Build/build.py -f Build/Linux-x86_64.yaml -m Release
   Linux-x86_64-Debug:
     - Build/build.py -f Build/Linux-x86_64.yaml -m Debug
-    - Build/build.py -f Build/Linux-x86_64.yaml -m Debug -s Test
   Linux_AGL-aarch64-Release:
     - Build/build.py -f Build/Linux_AGL-aarch64.yaml -m Release
   Linux_AGL-aarch64-Debug:
     - Build/build.py -f Build/Linux_AGL-aarch64.yaml -m Debug
+
+test:
+  Linux-x86_64-Debug:
+    - Build/build.py -f Build/Linux-x86_64.yaml -m Debug -s Test
 
 deploy:
   Linux_AGL-aarch64-Release:
