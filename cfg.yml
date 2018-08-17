@@ -11,6 +11,6 @@ build:
   Linux_AGL-aarch64-Debug:
     - Build/build.py -f Build/Linux_AGL-aarch64.yaml -m Debug
 
-publish:
+deploy:
   Linux_AGL-aarch64-Release:
     - Build/build.py -f Build/Linux_AGL-aarch64.yaml -m Release -s Publish
