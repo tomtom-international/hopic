@@ -1,0 +1,16 @@
+image: hub.docker.com/tomtom/agl-build-x86_64-toolchain:5.2.0
+
+build:
+  Linux-x86_64-Release:
+    - Build/build.py -f Build/Linux-x86_64.yaml -m Release
+  Linux-x86_64-Debug:
+    - Build/build.py -f Build/Linux-x86_64.yaml -m Debug
+    - Build/build.py -f Build/Linux-x86_64.yaml -m Debug -s Test
+  Linux_AGL-aarch64-Release:
+    - Build/build.py -f Build/Linux_AGL-aarch64.yaml -m Release
+  Linux_AGL-aarch64-Debug:
+    - Build/build.py -f Build/Linux_AGL-aarch64.yaml -m Debug
+
+publish:
+  Linux_AGL-aarch64-Release:
+    - Build/build.py -f Build/Linux_AGL-aarch64.yaml -m Release -s Publish
