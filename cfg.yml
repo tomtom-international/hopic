@@ -1,5 +1,12 @@
 image: hub.docker.com/tomtom/agl-build-x86_64-toolchain:5.2.0
 
+##checks:
+##  - pull-request-checker:
+##    - jira-project: CARU
+##      parameter1: aaa
+##      parameter2: bbb
+##  - pull-request-approval-check:
+
 build:
   Linux-x86_64-Release:
     - Build/build.py -f Build/Linux-x86_64.yaml -m Release
