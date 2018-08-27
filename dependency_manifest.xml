@@ -1,0 +1,8 @@
+<ivy-module version="2.0">
+  <info module="something" organisation="com.tomtom" revision="dont-care" />
+  <dependencies>
+    <dependency name="agl-build-x86_64-toolchain" org="com.tomtom.toolchains" rev="5.2.0" revConstraint="[3.10.1,6.0[">
+      <conf mapped="toolchain" name="default" />
+    </dependency>
+  </dependencies>
+</ivy-module>

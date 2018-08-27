@@ -1,4 +1,6 @@
-image: hub.docker.com/tomtom/agl-build-x86_64-toolchain:5.2.0
+image: !image-from-ivy-manifest
+  repository: hub.docker.com
+  path: tomtom
 
 ##checks:
 ##  - pull-request-checker:
