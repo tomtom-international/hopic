@@ -5,6 +5,7 @@ from dateutil.parser import parse as date_parse
 from dateutil.tz import (tzoffset, tzlocal, tzutc)
 import os
 import re
+import xml.etree.ElementTree as ET
 import yaml
 
 class DateTime(click.ParamType):
@@ -40,14 +41,52 @@ class DateTime(click.ParamType):
         except ValueError as e:
             self.fail('Could not parse datetime string "{value}": {e}'.format(value=value, e=' '.join(e.args)), param, ctx)
 
+def get_toolchain_image_information(dependency_manifest):
+    tree = ET.parse(dependency_manifest)
+
+    def refers_to_toolchain(dependency):
+        confAttribute = dependency.get("conf")
+        if confAttribute and "toolchain" in confAttribute:
+            return True
+
+        for child in dependency:
+            if child.tag == "conf":
+                mappedAttribute = child.get("mapped")
+                if mappedAttribute == "toolchain":
+                    return True
+        return False
+
+    toolchain_dep, = (
+        dep.attrib for dep in tree.getroot().find("dependencies") if refers_to_toolchain(dep))
+
+    return toolchain_dep
+
 @click.group(context_settings=dict(help_option_names=('-h', '--help')))
 @click.option('--config', type=click.Path(exists=True, readable=True, resolve_path=True), required=True)
+@click.option('--workspace', type=click.Path(exists=True, file_okay=False, dir_okay=True))
+@click.option('--dependency-manifest', type=click.File('r'))
 @click.pass_context
-def cli(ctx, config):
+def cli(ctx, config, workspace, dependency_manifest):
     if ctx.obj is None:
         ctx.obj = {}
 
     config_dir = os.path.dirname(config)
+    def image_from_ivy_manifest(loader, node):
+        props = loader.construct_mapping(node) if node.value else {}
+
+        # Fallback to 'dependency_manifest.xml' file in same directory as config
+        manifest = (dependency_manifest if dependency_manifest
+                else (os.path.join(workspace or config_dir, 'dependency_manifest.xml')))
+        image = get_toolchain_image_information(manifest)
+
+        # Override dependency manifest with info from config
+        image.update(props)
+
+        # Construct a full, pullable, image path
+        image['image'] = os.path.join(*filter(None, (image.get('repository'), image.get('path'), image['name'])))
+
+        return '{image}:{rev}'.format(**image)
+    yaml.add_constructor('!image-from-ivy-manifest', image_from_ivy_manifest)
 
     with open(config, 'r') as f:
         cfg = yaml.load(f)
