@@ -5,8 +5,16 @@ from dateutil.parser import parse as date_parse
 from dateutil.tz import (tzoffset, tzlocal, tzutc)
 import os
 import re
+import shlex
+from six import string_types
+import subprocess
 import xml.etree.ElementTree as ET
 import yaml
+
+try:
+    from shlex import quote as shquote
+except ImportError:
+    from pipes import quote as shquote
 
 class DateTime(click.ParamType):
     name = 'date'
@@ -91,6 +99,53 @@ def cli(ctx, config, workspace, dependency_manifest):
     with open(config, 'r') as f:
         cfg = yaml.load(f)
 
+    volume_vars = {
+            'WORKSPACE': workspace or '/tmp/jenkins/' + str(os.getpid()),
+        }
+    try:
+        volume_vars['CT_DEVENV_HOME'] = os.environ['CT_DEVENV_HOME']
+    except KeyError:
+        pass
+    ctx.obj['volume-vars'] = volume_vars
+    volumes = []
+    for volume in cfg.setdefault('volumes', ['${WORKSPACE}:/code:rw']):
+        if isinstance(volume, string_types):
+            volume = volume.split(':')
+            source = volume.pop(0)
+            try:
+                target = volume.pop(0)
+            except IndexError:
+                target = source
+            try:
+                read_only = {'rw': False, 'ro': True}[volume.pop(0)]
+            except IndexError:
+                read_only = None
+            volume = {
+                    'source': source,
+                    'target': target,
+                }
+            if read_only is not None:
+                volume['read-only'] = read_only
+        if 'source' in volume:
+            source = os.path.expanduser(volume['source'])
+
+            # Expand variables from our "virtual" environment
+            var_re = re.compile(r'\$(?:(\w+)|\{([^}]+)\})')
+            last_idx = 0
+            new_source = source[:last_idx]
+            for var in var_re.finditer(source):
+                name = var.group(1) or var.group(2)
+                value = volume_vars[name]
+                new_source = new_source + source[last_idx:var.start()] + value
+                last_idx = var.end()
+
+            new_source = new_source + source[last_idx:]
+            # Make relative paths relative to the configuration directory.
+            # Absolute paths will be absolute
+            source = os.path.join(config_dir, new_source)
+            volume['source'] = source
+        volumes.append(volume)
+    cfg['volumes'] = volumes
     ctx.obj['cfg'] = cfg
 
 @cli.command('checkout-source-tree')
@@ -117,8 +172,47 @@ def prepare_source_tree(target_remote, target_ref, source_remote, source_ref, pu
 
 @cli.command()
 @click.option('--ref'               , metavar='<ref>', help='''Commit-ish that's checked out and to be built''')
-def build(ref):
-    pass
+@click.pass_context
+def build(ctx, ref):
+    cfg = ctx.obj['cfg']
+    for phase in ('install', 'build', 'test', 'deploy'):
+        if not phase in cfg:
+            continue
+        for name, cmds in cfg[phase].items():
+            for cmd in cmds:
+                cmd = shlex.split(cmd)
+                # Handle execution inside docker
+                if 'image' in cfg:
+                    image = cfg['image']
+                    if not isinstance(image, string_types):
+                        try:
+                            image = image[name]
+                        except KeyError:
+                            image = image['default']
+                    uid, gid = os.getuid(), os.getgid()
+                    docker_run = ['docker', 'run',
+                            '--rm',
+                            '--net=host',
+                            '--tty',
+                            '-e', 'HOME=/home/sandbox',
+                            '--tmpfs', '/home/sandbox:uid={},gid={}'.format(uid, gid),
+                            '-u', '{}:{}'.format(uid, gid),
+                            '-v', '/etc/passwd:/etc/passwd:ro',
+                            '-v', '/etc/group:/etc/group:ro',
+                            '-w', '/code',
+                            '-v', '{WORKSPACE}:/code:rw'.format(**ctx.obj['volume-vars'])
+                        ]
+                    for volume in cfg['volumes']:
+                        param = '{source}:{target}'.format(**volume)
+                        try:
+                            param = param + ':' + ('ro' if volume['read-only'] else 'rw')
+                        except KeyError:
+                            pass
+                        docker_run += ['-v', param]
+                    docker_run.append(image)
+                    cmd = docker_run + cmd
+                click.echo('Executing: ' + click.style(' '.join(shquote(word) for word in cmd), fg='yellow'))
+                subprocess.check_call(cmd)
 
 @cli.command()
 @click.option('--target-remote'     , metavar='<url>')

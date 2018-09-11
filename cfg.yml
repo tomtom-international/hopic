@@ -2,6 +2,14 @@ image: !image-from-ivy-manifest
   repository: hub.docker.com
   path: tomtom
 
+volumes:
+  - source: ${CT_DEVENV_HOME}
+    target: /tools/devenv
+    read_only: yes
+  - ~/.ccache:/home/sandbox/.ccache:rw
+  - ~/.ivy2:/home/sandbox/.ivy2:rw
+  - .:/code/ci-config:ro
+
 ##checks:
 ##  - pull-request-checker:
 ##    - jira-project: CARU
@@ -25,4 +33,4 @@ test:
 
 deploy:
   Linux_AGL-aarch64-Release:
-    - Build/build.py -f Build/Linux_AGL-aarch64.yaml -m Release -s Publish
+    - Build/build.py -f Build/Linux_AGL-aarch64.yaml -m Release publish-rc
