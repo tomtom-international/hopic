@@ -7,6 +7,7 @@ setup(
     install_requires=(
       'Click',
       'python-dateutil',
+      'PyYAML',
     ),
     setup_requires=(
       'setuptools_scm',

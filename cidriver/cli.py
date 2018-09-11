@@ -3,7 +3,9 @@ import click
 from datetime import datetime
 from dateutil.parser import parse as date_parse
 from dateutil.tz import (tzoffset, tzlocal, tzutc)
+import os
 import re
+import yaml
 
 class DateTime(click.ParamType):
     name = 'date'
@@ -39,8 +41,18 @@ class DateTime(click.ParamType):
             self.fail('Could not parse datetime string "{value}": {e}'.format(value=value, e=' '.join(e.args)), param, ctx)
 
 @click.group(context_settings=dict(help_option_names=('-h', '--help')))
-def cli():
-    pass
+@click.option('--config', type=click.Path(exists=True, readable=True, resolve_path=True), required=True)
+@click.pass_context
+def cli(ctx, config):
+    if ctx.obj is None:
+        ctx.obj = {}
+
+    config_dir = os.path.dirname(config)
+
+    with open(config, 'r') as f:
+        cfg = yaml.load(f)
+
+    ctx.obj['cfg'] = cfg
 
 @cli.command('checkout-source-tree')
 @click.option('--target-remote'     , metavar='<url>')
