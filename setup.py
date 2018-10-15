@@ -14,7 +14,7 @@ setup(
       'setuptools_scm',
       'setuptools_scm_git_archive',
     ),
-    use_scm_version={"root": "../..", "relative_to": __file__},
+    use_scm_version={"relative_to": __file__},
     entry_points='''
       [console_scripts]
       ci-driver=cidriver.cli:cli
