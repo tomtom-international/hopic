@@ -1,5 +1,6 @@
 import click
 
+from collections import OrderedDict
 from datetime import datetime
 from dateutil.parser import parse as date_parse
 from dateutil.tz import (tzoffset, tzlocal, tzutc)
@@ -15,6 +16,13 @@ try:
     from shlex import quote as shquote
 except ImportError:
     from pipes import quote as shquote
+
+class OrderedLoader(yaml.SafeLoader):
+    pass
+def __yaml_construct_mapping(loader, node):
+    loader.flatten_mapping(node)
+    return OrderedDict(loader.construct_pairs(node))
+OrderedLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, __yaml_construct_mapping)
 
 class DateTime(click.ParamType):
     name = 'date'
@@ -94,10 +102,10 @@ def cli(ctx, config, workspace, dependency_manifest):
         image['image'] = os.path.join(*filter(None, (image.get('repository'), image.get('path'), image['name'])))
 
         return '{image}:{rev}'.format(**image)
-    yaml.add_constructor('!image-from-ivy-manifest', image_from_ivy_manifest)
+    OrderedLoader.add_constructor('!image-from-ivy-manifest', image_from_ivy_manifest)
 
     with open(config, 'r') as f:
-        cfg = yaml.load(f)
+        cfg = yaml.load(f, OrderedLoader)
 
     volume_vars = {
             'WORKSPACE': workspace or '/tmp/jenkins/' + str(os.getpid()),
