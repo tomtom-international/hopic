@@ -186,6 +186,12 @@ def build(ctx, ref):
     for phase in cfg['phases'].values():
         for name, cmds in phase.items():
             for cmd in cmds:
+                if not isinstance(cmd, string_types):
+                    try:
+                        cmd = cmd['sh']
+                    except (KeyError, TypeError):
+                        continue
+
                 cmd = shlex.split(cmd)
                 # Handle execution inside docker
                 if 'image' in cfg:
