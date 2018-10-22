@@ -30,9 +30,11 @@ phases:
 
   test:
     Linux-x86_64-Release:
+      - description: Run unit tests
       - Build/build.py -f Build/Linux-x86_64.yaml -m Release DBusTests_Run_SmokeTests
       - clazy-standalone.sh Components Build/Output/Linux-x86_64/Release
     Linux-x86_64-Debug:
+      - description: Run unit tests
       - Build/build.py -f Build/Linux-x86_64.yaml -m Debug test-v
       - clazy-standalone.sh Components Build/Output/Linux-x86_64/Debug
 

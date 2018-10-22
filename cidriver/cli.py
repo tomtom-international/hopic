@@ -188,6 +188,12 @@ def build(ctx, ref):
             for cmd in cmds:
                 if not isinstance(cmd, string_types):
                     try:
+                        desc = cmd['description']
+                    except (KeyError, TypeError):
+                        pass
+                    else:
+                        click.echo('Performing: ' + click.style(desc, fg='cyan'))
+                    try:
                         cmd = cmd['sh']
                     except (KeyError, TypeError):
                         continue
