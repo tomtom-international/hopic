@@ -179,6 +179,29 @@ def prepare_source_tree(target_remote, target_ref, source_remote, source_ref, pu
     pass
 
 @cli.command()
+@click.pass_context
+def phases(ctx):
+    cfg = ctx.obj['cfg']
+    for phase in cfg['phases']:
+        click.echo(phase)
+
+@cli.command()
+@click.option('--phase'             , metavar='<phase>'  , help='''Build phase to show variants for''')
+@click.pass_context
+def variants(ctx, phase):
+    variants = []
+    cfg = ctx.obj['cfg']
+    for phasename, curphase in cfg['phases'].items():
+        if phase is not None and phasename != phase:
+            continue
+        for variant in curphase:
+            # Only add when not a duplicate, but preserve order from config file
+            if variant not in variants:
+                variants.append(variant)
+    for variant in variants:
+        click.echo(variant)
+
+@cli.command()
 @click.option('--ref'               , metavar='<ref>'    , help='''Commit-ish that's checked out and to be built''')
 @click.option('--phase'             , metavar='<phase>'  , help='''Build phase to execute''')
 @click.option('--variant'           , metavar='<variant>', help='''Configuration variant to build''')
