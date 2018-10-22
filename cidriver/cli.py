@@ -179,12 +179,18 @@ def prepare_source_tree(target_remote, target_ref, source_remote, source_ref, pu
     pass
 
 @cli.command()
-@click.option('--ref'               , metavar='<ref>', help='''Commit-ish that's checked out and to be built''')
+@click.option('--ref'               , metavar='<ref>'    , help='''Commit-ish that's checked out and to be built''')
+@click.option('--phase'             , metavar='<phase>'  , help='''Build phase to execute''')
+@click.option('--variant'           , metavar='<variant>', help='''Configuration variant to build''')
 @click.pass_context
-def build(ctx, ref):
+def build(ctx, ref, phase, variant):
     cfg = ctx.obj['cfg']
-    for phase in cfg['phases'].values():
-        for name, cmds in phase.items():
+    for phasename, curphase in cfg['phases'].items():
+        if phase is not None and phasename != phase:
+            continue
+        for curvariant, cmds in curphase.items():
+            if variant is not None and curvariant != variant:
+                continue
             for cmd in cmds:
                 if not isinstance(cmd, string_types):
                     try:
@@ -204,7 +210,7 @@ def build(ctx, ref):
                     image = cfg['image']
                     if not isinstance(image, string_types):
                         try:
-                            image = image[name]
+                            image = image[curvariant]
                         except KeyError:
                             image = image['default']
                     uid, gid = os.getuid(), os.getgid()
