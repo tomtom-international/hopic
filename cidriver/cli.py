@@ -183,10 +183,8 @@ def prepare_source_tree(target_remote, target_ref, source_remote, source_ref, pu
 @click.pass_context
 def build(ctx, ref):
     cfg = ctx.obj['cfg']
-    for phase in ('install', 'build', 'test', 'deploy'):
-        if not phase in cfg:
-            continue
-        for name, cmds in cfg[phase].items():
+    for phase in cfg['phases'].values():
+        for name, cmds in phase.items():
             for cmd in cmds:
                 cmd = shlex.split(cmd)
                 # Handle execution inside docker

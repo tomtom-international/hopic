@@ -17,20 +17,21 @@ volumes:
 ##      parameter2: bbb
 ##  - pull-request-approval-check:
 
-build:
-  Linux-x86_64-Release:
-    - Build/build.py -f Build/Linux-x86_64.yaml -m Release
-  Linux-x86_64-Debug:
-    - Build/build.py -f Build/Linux-x86_64.yaml -m Debug
-  Linux_AGL-aarch64-Release:
-    - Build/build.py -f Build/Linux_AGL-aarch64.yaml -m Release
-  Linux_AGL-aarch64-Debug:
-    - Build/build.py -f Build/Linux_AGL-aarch64.yaml -m Debug
+phases:
+  build:
+    Linux-x86_64-Release:
+      - Build/build.py -f Build/Linux-x86_64.yaml -m Release
+    Linux-x86_64-Debug:
+      - Build/build.py -f Build/Linux-x86_64.yaml -m Debug
+    Linux_AGL-aarch64-Release:
+      - Build/build.py -f Build/Linux_AGL-aarch64.yaml -m Release
+    Linux_AGL-aarch64-Debug:
+      - Build/build.py -f Build/Linux_AGL-aarch64.yaml -m Debug
 
-test:
-  Linux-x86_64-Debug:
-    - Build/build.py -f Build/Linux-x86_64.yaml -m Debug -s Test
+  test:
+    Linux-x86_64-Debug:
+      - Build/build.py -f Build/Linux-x86_64.yaml -m Debug -s Test
 
-deploy:
-  Linux_AGL-aarch64-Release:
-    - Build/build.py -f Build/Linux_AGL-aarch64.yaml -m Release publish-rc
+  publish:
+    Linux_AGL-aarch64-Release:
+      - Build/build.py -f Build/Linux_AGL-aarch64.yaml -m Release publish-rc
