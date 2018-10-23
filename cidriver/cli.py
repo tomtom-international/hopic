@@ -4,6 +4,7 @@ from collections import OrderedDict
 from datetime import datetime
 from dateutil.parser import parse as date_parse
 from dateutil.tz import (tzoffset, tzlocal, tzutc)
+import json
 import os
 import re
 import shlex
@@ -200,6 +201,35 @@ def variants(ctx, phase):
                 variants.append(variant)
     for variant in variants:
         click.echo(variant)
+
+@cli.command()
+@click.option('--phase'             , metavar='<phase>'  , required=True, help='''Build phase''')
+@click.option('--variant'           , metavar='<variant>', required=True, help='''Configuration variant''')
+@click.pass_context
+def getinfo(ctx, phase, variant):
+    variants = []
+    cfg = ctx.obj['cfg']
+    info = {}
+    for var in cfg['phases'][phase][variant]:
+        if isinstance(var, string_types):
+            continue
+        var = var.copy()
+        for key, val in var.items():
+            # TODO: handle recursion over non-string values here
+
+            # Expand variables from our "virtual" environment
+            var_re = re.compile(r'\$(?:(\w+)|\{([^}]+)\})')
+            last_idx = 0
+            new_val = val[:last_idx]
+            for var in var_re.finditer(val):
+                name = var.group(1) or var.group(2)
+                value = ctx.obj['volume-vars'][name]
+                new_val = new_val + val[last_idx:var.start()] + value
+                last_idx = var.end()
+
+            new_val = new_val + val[last_idx:]
+            info[key] = new_val
+    click.echo(json.dumps(info))
 
 @cli.command()
 @click.option('--ref'               , metavar='<ref>'    , help='''Commit-ish that's checked out and to be built''')
