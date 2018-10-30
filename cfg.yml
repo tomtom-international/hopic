@@ -6,8 +6,8 @@ volumes:
   - source: ${CT_DEVENV_HOME}
     target: /tools/devenv
     read_only: yes
-  - ~/.ccache:/home/sandbox/.ccache:rw
-  - ~/.ivy2:/home/sandbox/.ivy2:rw
+  - ~/.ccache:~/.ccache:rw
+  - ~/.ivy2:~/.ivy2:rw
   - .:/code/ci-config:ro
 
 ##checks:

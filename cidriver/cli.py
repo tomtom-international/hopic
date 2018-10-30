@@ -125,6 +125,8 @@ def cli(ctx, config, workspace, dependency_manifest):
                 target = volume.pop(0)
             except IndexError:
                 target = source
+            if target.startswith('~/'):
+                target = '/home/sandbox' + target[1:]
             try:
                 read_only = {'rw': False, 'ro': True}[volume.pop(0)]
             except IndexError:
