@@ -81,23 +81,36 @@ class CiDriver
   * @return string usable for interpolation in shell scripts as ci-driver command
   */
 
-def call(version) {
-  def cidriver = pwd(tmp: true) + "/cidriver-src"
-  checkout(scm: [
+def call(repo, version) {
+  def path = pwd(tmp: true) + "/cidriver-src"
+  cfg = [
       $class: 'GitSCM',
       userRemoteConfigs: [[
-          url: 'https://bitbucket.example.com/scm/~muggenhor/cidriver.git',
+          url: repo,
           credentialsId: 'tt_service_account_creds',
         ]],
       branches: [[name: version]],
-      browser: [
-          $class: 'BitbucketWeb',
-          repoUrl: 'https://bitbucket.example.com/users/muggenhor/repos/cidriver',
-        ],
       extensions: [[
           $class: 'RelativeTargetDirectory',
-          relativeTargetDir: cidriver,
+          relativeTargetDir: path,
         ]],
-    ])
-  return new CiDriver(this, cidriver, WORKSPACE)
+    ]
+  def match = (repo =~ /^https:\/\/([^\/]+)\/scm\/~(\w+)\/(\w+?)(?:\.git)?$/)
+  if (match) {
+    cfg['browser'] = [
+        $class: 'BitbucketWeb',
+        repoUrl: "https://${match[0][1]}/users/${match[0][2]}/repos/${match[0][3]}",
+      ]
+  } else {
+    match = (repo ==~ /^https:\/\/([^\/]+)\/scm\/(\w+)\/(\w+?)(?:\.git)?$/)
+    if (match) {
+      cfg['browser'] = [
+          $class: 'BitbucketWeb',
+          repoUrl: "https://${match[0][1]}/projects/${match[0][2]}/repos/${match[0][3]}",
+        ]
+    }
+  }
+          match = null
+  checkout(scm: cfg)
+  return new CiDriver(this, path, WORKSPACE)
 }
