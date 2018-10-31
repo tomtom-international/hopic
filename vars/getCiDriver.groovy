@@ -20,7 +20,7 @@ class CiDriver
   private steps
   private prerequisites_installed
 
-  CiDriver(steps, repo, workspace) {
+  CiDriver(steps, repo) {
     this.repo = repo
     this.steps = steps
     this.prerequisites_installed = false
@@ -29,6 +29,7 @@ class CiDriver
   public def install_prerequisites() {
     if (!this.prerequisites_installed) {
       def venv = steps.pwd(tmp: true) + "/cidriver-venv"
+      def workspace = steps.pwd()
       steps.sh(script: "pip install --user virtualenv\n"
                      + "~/.local/bin/virtualenv ${venv}\n"
                      + "${venv}/bin/python ${venv}/bin/easy_install pip\n"
@@ -86,5 +87,5 @@ class CiDriver
   */
 
 def call(repo) {
-  return new CiDriver(this, repo, WORKSPACE)
+  return new CiDriver(this, repo)
 }
