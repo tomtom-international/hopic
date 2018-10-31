@@ -18,18 +18,23 @@ class CiDriver
   private modulepath
   private cmd
   private steps
+  private venv
   private prerequisites_installed
 
   CiDriver(steps, modulepath, workspace) {
     this.steps = steps
     this.modulepath = modulepath
-    this.cmd = "PYTHONPATH=\"${modulepath}\" python -m cidriver --config=\"${workspace}/cfg.yml\" --workspace=\"${workspace}\""
+    this.venv = steps.pwd(tmp: true) + "/cidriver-venv"
+    this.cmd = "${venv}/bin/python ${venv}/bin/ci-driver --config=\"${workspace}/cfg.yml\" --workspace=\"${workspace}\""
     this.prerequisites_installed = false
   }
 
   public def install_prerequisites() {
     if (!this.prerequisites_installed) {
-      steps.sh(script: 'pip install --user \'click>=7.0,<8.0\'')
+      steps.sh(script: "pip install --user virtualenv\n"
+                     + "~/.local/bin/virtualenv ${venv}\n"
+                     + "${venv}/bin/python ${venv}/bin/easy_install pip\n"
+                     + "${venv}/bin/python ${venv}/bin/pip install -e ${this.modulepath}")
       this.prerequisites_installed = true
     }
   }
