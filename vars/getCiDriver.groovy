@@ -81,7 +81,7 @@ class CiDriver
   * @return string usable for interpolation in shell scripts as ci-driver command
   */
 
-def call(repo, version) {
+def call(repo, version = 'refs/heads/master') {
   def path = pwd(tmp: true) + "/cidriver-src"
   cfg = [
       $class: 'GitSCM',
