@@ -15,15 +15,15 @@
 
 class CiDriver
 {
-  private modulepath
+  private repo
   private cmd
   private steps
   private venv
   private prerequisites_installed
 
-  CiDriver(steps, modulepath, workspace) {
+  CiDriver(steps, repo, workspace) {
+    this.repo = repo
     this.steps = steps
-    this.modulepath = modulepath
     this.venv = steps.pwd(tmp: true) + "/cidriver-venv"
     this.cmd = "${venv}/bin/python ${venv}/bin/ci-driver --config=\"${workspace}/cfg.yml\" --workspace=\"${workspace}\""
     this.prerequisites_installed = false
@@ -34,7 +34,7 @@ class CiDriver
       steps.sh(script: "pip install --user virtualenv\n"
                      + "~/.local/bin/virtualenv ${venv}\n"
                      + "${venv}/bin/python ${venv}/bin/easy_install pip\n"
-                     + "${venv}/bin/python ${venv}/bin/pip install -e ${this.modulepath}")
+                     + "${venv}/bin/python ${venv}/bin/pip install \"${this.repo}\"")
       this.prerequisites_installed = true
     }
   }
@@ -86,36 +86,6 @@ class CiDriver
   * @return string usable for interpolation in shell scripts as ci-driver command
   */
 
-def call(repo, version = 'refs/heads/master') {
-  def path = pwd(tmp: true) + "/cidriver-src"
-  cfg = [
-      $class: 'GitSCM',
-      userRemoteConfigs: [[
-          url: repo,
-          credentialsId: 'tt_service_account_creds',
-        ]],
-      branches: [[name: version]],
-      extensions: [[
-          $class: 'RelativeTargetDirectory',
-          relativeTargetDir: path,
-        ]],
-    ]
-  def match = (repo =~ /^https:\/\/([^\/]+)\/scm\/~(\w+)\/(\w+?)(?:\.git)?$/)
-  if (match) {
-    cfg['browser'] = [
-        $class: 'BitbucketWeb',
-        repoUrl: "https://${match[0][1]}/users/${match[0][2]}/repos/${match[0][3]}",
-      ]
-  } else {
-    match = (repo ==~ /^https:\/\/([^\/]+)\/scm\/(\w+)\/(\w+?)(?:\.git)?$/)
-    if (match) {
-      cfg['browser'] = [
-          $class: 'BitbucketWeb',
-          repoUrl: "https://${match[0][1]}/projects/${match[0][2]}/repos/${match[0][3]}",
-        ]
-    }
-  }
-          match = null
-  checkout(scm: cfg)
-  return new CiDriver(this, path, WORKSPACE)
+def call(repo) {
+  return new CiDriver(this, repo, WORKSPACE)
 }
