@@ -5,7 +5,7 @@ setup(
     packages=('cidriver',),
     py_modules=('cidriver',),
     install_requires=(
-      'Click',
+      'Click>=7.0,<8.0',
       'python-dateutil',
       'PyYAML',
       'six',
