@@ -111,10 +111,13 @@ def cli(ctx, config, workspace, dependency_manifest):
     volume_vars = {
             'WORKSPACE': workspace or '/tmp/jenkins/' + str(os.getpid()),
         }
-    try:
-        volume_vars['CT_DEVENV_HOME'] = os.environ['CT_DEVENV_HOME']
-    except KeyError:
-        pass
+    for whitelisted_var in (
+            'CT_DEVENV_HOME',
+        ):
+        try:
+            volume_vars[whitelisted_var] = os.environ[whitelisted_var]
+        except KeyError:
+            pass
     ctx.obj['volume-vars'] = volume_vars
     volumes = []
     for volume in cfg.setdefault('volumes', ['${WORKSPACE}:/code:rw']):
