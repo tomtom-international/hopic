@@ -19,12 +19,14 @@ class CiDriver
   private cmds
   private steps
   private nodes
+  private workspaces
 
   CiDriver(steps, repo) {
     this.cmds = [:]
     this.repo = repo
     this.steps = steps
     this.nodes = [:]
+    this.workspaces = [:]
   }
 
   public def install_prerequisites() {
@@ -72,8 +74,7 @@ class CiDriver
               steps.node(label) {
                 steps.stage("${phase}-${variant}") {
                   def cmd = this.install_prerequisites()
-                  if (!this.nodes.containsKey(variant)) {
-                    this.nodes[variant] = steps.env.NODE_NAME
+                  if (!this.workspaces.containsKey(steps.env.NODE_NAME)) {
                     // TODO: checkout with ci-driver instead
                     def cfg = [
                         $class: 'GitSCM',
@@ -92,6 +93,10 @@ class CiDriver
                     }
                             match = null
                     steps.checkout(scm: cfg)
+                    this.workspaces[steps.env.NODE_NAME] = steps.pwd()
+                  }
+                  if (!this.nodes.containsKey(variant)) {
+                    this.nodes[variant] = steps.env.NODE_NAME
                   }
                   steps.sh(script: "${cmd} build --phase=\"${phase}\" --variant=\"${variant}\"")
                   if (phase == 'upload')
