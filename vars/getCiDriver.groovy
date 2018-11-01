@@ -16,46 +16,50 @@
 class CiDriver
 {
   private repo
-  private cmd
+  private cmds
   private steps
   private nodes
 
   CiDriver(steps, repo) {
+    this.cmds = [:]
     this.repo = repo
     this.steps = steps
     this.nodes = [:]
   }
 
   public def install_prerequisites() {
-    def venv = steps.pwd(tmp: true) + "/cidriver-venv"
-    def workspace = steps.pwd()
-    steps.sh(script: "python -m virtualenv --clear ${venv}\n"
-                   + "${venv}/bin/python -m pip install \"${this.repo}\"")
-    this.cmd = "${venv}/bin/python ${venv}/bin/ci-driver --config=\"${workspace}/cfg.yml\" --workspace=\"${workspace}\""
+    if (!this.cmds.containsKey(steps.env.NODE_NAME)) {
+      def venv = steps.pwd(tmp: true) + "/cidriver-venv"
+      def workspace = steps.pwd()
+      steps.sh(script: "python -m virtualenv --clear ${venv}\n"
+                     + "${venv}/bin/python -m pip install \"${this.repo}\"")
+      this.cmds[steps.env.NODE_NAME] = "${venv}/bin/python ${venv}/bin/ci-driver --config=\"${workspace}/cfg.yml\" --workspace=\"${workspace}\""
+    }
+    return this.cmds[steps.env.NODE_NAME]
   }
 
   public def build() {
-    this.install_prerequisites()
+    def orchestrator_cmd = this.install_prerequisites()
 
     /*
      * We're splitting the enumeration of phases and variants from their execution in order to
      * enable Jenkins to execute the different variants within a phase in parallel.
      */
     def phases = steps.sh(
-        script: "${this.cmd} phases",
+        script: "${orchestrator_cmd} phases",
         returnStdout: true,
       ).split("\\r?\\n")
 
     phases.each { phase ->
         def variants = steps.sh(
-            script: "${this.cmd} variants --phase=\"${phase}\"",
+            script: "${orchestrator_cmd} variants --phase=\"${phase}\"",
             returnStdout: true,
           ).split("\\r?\\n")
         steps.stage(phase) {
           def stepsForBuilding = variants.collectEntries { variant ->
             [ "${phase}-${variant}": {
               def meta = steps.readJSON(text: steps.sh(
-                  script: "${this.cmd} getinfo --phase=\"${phase}\" --variant=\"${variant}\"",
+                  script: "${orchestrator_cmd} getinfo --phase=\"${phase}\" --variant=\"${variant}\"",
                   returnStdout: true,
                 ))
               def label = 'Linux && Docker'
@@ -67,9 +71,9 @@ class CiDriver
               }
               steps.node(label) {
                 steps.stage("${phase}-${variant}") {
+                  def cmd = this.install_prerequisites()
                   if (!this.nodes.containsKey(variant)) {
                     this.nodes[variant] = steps.env.NODE_NAME
-                    this.install_prerequisites()
                     // TODO: checkout with ci-driver instead
                     def cfg = [
                         $class: 'GitSCM',
@@ -89,7 +93,7 @@ class CiDriver
                             match = null
                     steps.checkout(scm: cfg)
                   }
-                  steps.sh(script: "${this.cmd} build --phase=\"${phase}\" --variant=\"${variant}\"")
+                  steps.sh(script: "${cmd} build --phase=\"${phase}\" --variant=\"${variant}\"")
                   if (phase == 'upload')
                   {
                     if (meta.containsKey('ivy-output-dir')) {
