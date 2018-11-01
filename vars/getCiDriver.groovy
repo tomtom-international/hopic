@@ -52,16 +52,20 @@ class CiDriver
         steps.stage(phase) {
           def stepsForBuilding = variants.collectEntries { variant ->
             [ "${phase}-${variant}": {
-              steps.node('Linux && Docker') {
+              def meta = steps.readJSON(text: steps.sh(
+                  script: "${this.cmd} getinfo --phase=\"${phase}\" --variant=\"${variant}\"",
+                  returnStdout: true,
+                ))
+              def label = 'Linux && Docker'
+              if (meta.containsKey('node-label')) {
+                label = meta['node-label']
+              }
+              steps.node(label) {
                 steps.stage("${phase}-${variant}") {
                   this.install_prerequisites()
                   steps.sh(script: "${this.cmd} build --phase=\"${phase}\" --variant=\"${variant}\"")
                   if (phase == 'upload')
                   {
-                    def meta = steps.readJSON(text: steps.sh(
-                        script: "${this.cmd} getinfo --phase=\"${phase}\" --variant=\"${variant}\"",
-                        returnStdout: true,
-                      ))
                     if (meta.containsKey('ivy-output-dir')) {
                       steps.stashPublishedArtifactsFiles(variant, meta['ivy-output-dir'])
                     }
