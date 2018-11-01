@@ -285,6 +285,8 @@ def build(ctx, ref, phase, variant):
                             '-v', '{WORKSPACE}:/code:rw'.format(**ctx.obj['volume-vars'])
                         ]
                     for volume in cfg['volumes']:
+                        if not os.path.exists(volume['source']):
+                            os.makedirs(volume['source'])
                         param = '{source}:{target}'.format(**volume)
                         try:
                             param = param + ':' + ('ro' if volume['read-only'] else 'rw')
