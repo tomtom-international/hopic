@@ -18,25 +18,20 @@ class CiDriver
   private repo
   private cmd
   private steps
-  private prerequisites_installed
 
   CiDriver(steps, repo) {
     this.repo = repo
     this.steps = steps
-    this.prerequisites_installed = false
   }
 
   public def install_prerequisites() {
-    if (!this.prerequisites_installed) {
-      def venv = steps.pwd(tmp: true) + "/cidriver-venv"
-      def workspace = steps.pwd()
-      steps.sh(script: "pip install --user virtualenv\n"
-                     + "~/.local/bin/virtualenv ${venv}\n"
-                     + "${venv}/bin/python ${venv}/bin/easy_install pip\n"
-                     + "${venv}/bin/python ${venv}/bin/pip install \"${this.repo}\"")
-      this.cmd = "${venv}/bin/python ${venv}/bin/ci-driver --config=\"${workspace}/cfg.yml\" --workspace=\"${workspace}\""
-      this.prerequisites_installed = true
-    }
+    def venv = steps.pwd(tmp: true) + "/cidriver-venv"
+    def workspace = steps.pwd()
+    steps.sh(script: "pip install --user virtualenv\n"
+                   + "~/.local/bin/virtualenv ${venv}\n"
+                   + "${venv}/bin/python ${venv}/bin/easy_install pip\n"
+                   + "${venv}/bin/python ${venv}/bin/pip install \"${this.repo}\"")
+    this.cmd = "${venv}/bin/python ${venv}/bin/ci-driver --config=\"${workspace}/cfg.yml\" --workspace=\"${workspace}\""
   }
 
   public def build() {
