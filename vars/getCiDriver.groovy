@@ -18,10 +18,12 @@ class CiDriver
   private repo
   private cmd
   private steps
+  private nodes
 
   CiDriver(steps, repo) {
     this.repo = repo
     this.steps = steps
+    this.nodes = [:]
   }
 
   public def install_prerequisites() {
@@ -60,9 +62,16 @@ class CiDriver
               if (meta.containsKey('node-label')) {
                 label = meta['node-label']
               }
+              if (this.nodes.containsKey(variant)) {
+                label = this.nodes[variant]
+              }
               steps.node(label) {
                 steps.stage("${phase}-${variant}") {
-                  this.install_prerequisites()
+                  if (!this.nodes.containsKey(variant)) {
+                    this.nodes[variant] = steps.env.NODE_NAME
+                    this.install_prerequisites()
+                    // TODO: checkout here
+                  }
                   steps.sh(script: "${this.cmd} build --phase=\"${phase}\" --variant=\"${variant}\"")
                   if (phase == 'upload')
                   {
