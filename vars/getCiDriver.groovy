@@ -70,7 +70,24 @@ class CiDriver
                   if (!this.nodes.containsKey(variant)) {
                     this.nodes[variant] = steps.env.NODE_NAME
                     this.install_prerequisites()
-                    // TODO: checkout here
+                    // TODO: checkout with ci-driver instead
+                    def cfg = [
+                        $class: 'GitSCM',
+                        userRemoteConfigs: [[
+                            url: steps.env.GIT_URL,
+                            credentialsId: 'tt_service_account_creds',
+                          ]],
+                        branches: [[name: steps.env.GIT_COMMIT]],
+                      ]
+                    def match = (steps.env.GIT_URL =~ /^https:\/\/([^\/]+)\/scm\/(~?\w+)\/(\w+?)(?:\.git)?$/)
+                    if (match) {
+                      cfg['browser'] = [
+                          $class: 'BitbucketWeb',
+                          repoUrl: "https://${match[0][1]}/" + (match[0][2] ==~ /^~.*/ ? 'users/' : 'projects/') + "${match[0][2]}/repos/${match[0][3]}",
+                        ]
+                    }
+                            match = null
+                    steps.checkout(scm: cfg)
                   }
                   steps.sh(script: "${this.cmd} build --phase=\"${phase}\" --variant=\"${variant}\"")
                   if (phase == 'upload')
