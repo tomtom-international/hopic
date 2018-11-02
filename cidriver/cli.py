@@ -78,6 +78,10 @@ def get_toolchain_image_information(dependency_manifest):
 
     return toolchain_dep
 
+def echo_cmd(fun, cmd, *args, **kwargs):
+  click.echo('Executing: ' + click.style(' '.join(shquote(word) for word in cmd), fg='yellow'))
+  return fun(cmd, *args, **kwargs)
+
 @click.group(context_settings=dict(help_option_names=('-h', '--help')))
 @click.option('--config', type=click.Path(exists=True, readable=True, resolve_path=True))
 @click.option('--workspace', type=click.Path(exists=True, file_okay=False, dir_okay=True))
@@ -173,11 +177,11 @@ def cli(ctx, config, workspace, dependency_manifest):
 def checkout_source_tree(ctx, target_remote, target_ref):
     workspace = ctx.obj['workspace']
     has_work_tree = (os.path.isdir(os.path.join(workspace, '.git'))
-        and subprocess.call(('git', 'rev-parse', '--is-inside-work-tree'), cwd=workspace) == 0)
+        and echo_cmd(subprocess.call, ('git', 'rev-parse', '--is-inside-work-tree'), cwd=workspace) == 0)
     if not has_work_tree:
-        subprocess.check_call(('git', 'clone', target_remote, workspace))
-    subprocess.check_call(('git', 'fetch', target_remote, target_ref), cwd=workspace)
-    subprocess.check_call(('git', 'checkout', '--force', target_ref), cwd=workspace)
+        echo_cmd(subprocess.check_call, ('git', 'clone', target_remote, workspace))
+    echo_cmd(subprocess.check_call, ('git', 'fetch', target_remote, target_ref), cwd=workspace)
+    echo_cmd(subprocess.check_call, ('git', 'checkout', '--force', target_ref), cwd=workspace)
 
 @cli.command('prepare-source-tree')
 # git
@@ -306,8 +310,7 @@ def build(ctx, ref, phase, variant):
                         docker_run += ['-v', param]
                     docker_run.append(image)
                     cmd = docker_run + cmd
-                click.echo('Executing: ' + click.style(' '.join(shquote(word) for word in cmd), fg='yellow'))
-                subprocess.check_call(cmd)
+                echo_cmd(subprocess.check_call, cmd)
 
 @cli.command()
 @click.option('--target-remote'     , metavar='<url>')
