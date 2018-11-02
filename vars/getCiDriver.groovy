@@ -28,9 +28,8 @@ class CiDriver
     def venv = steps.pwd(tmp: true) + "/cidriver-venv"
     def workspace = steps.pwd()
     steps.sh(script: "pip install --user virtualenv\n"
-                   + "~/.local/bin/virtualenv ${venv}\n"
-                   + "${venv}/bin/python ${venv}/bin/easy_install pip\n"
-                   + "${venv}/bin/python ${venv}/bin/pip install \"${this.repo}\"")
+                   + "python -m virtualenv --clear ${venv}\n"
+                   + "${venv}/bin/python -m pip install \"${this.repo}\"")
     this.cmd = "${venv}/bin/python ${venv}/bin/ci-driver --config=\"${workspace}/cfg.yml\" --workspace=\"${workspace}\""
   }
 
