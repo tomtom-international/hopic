@@ -79,13 +79,17 @@ def get_toolchain_image_information(dependency_manifest):
     return toolchain_dep
 
 @click.group(context_settings=dict(help_option_names=('-h', '--help')))
-@click.option('--config', type=click.Path(exists=True, readable=True, resolve_path=True), required=True)
+@click.option('--config', type=click.Path(exists=True, readable=True, resolve_path=True))
 @click.option('--workspace', type=click.Path(exists=True, file_okay=False, dir_okay=True))
 @click.option('--dependency-manifest', type=click.File('r'))
 @click.pass_context
 def cli(ctx, config, workspace, dependency_manifest):
     if ctx.obj is None:
         ctx.obj = {}
+    ctx.obj['workspace'] = workspace
+
+    if config is None:
+        return
 
     config_dir = os.path.dirname(config)
     def image_from_ivy_manifest(loader, node):
@@ -120,7 +124,7 @@ def cli(ctx, config, workspace, dependency_manifest):
             pass
     ctx.obj['volume-vars'] = volume_vars
     volumes = []
-    for volume in cfg.setdefault('volumes', ['${WORKSPACE}:/code:rw']):
+    for volume in cfg.setdefault('volumes', ()):
         if isinstance(volume, string_types):
             volume = volume.split(':')
             source = volume.pop(0)
@@ -165,8 +169,15 @@ def cli(ctx, config, workspace, dependency_manifest):
 @cli.command('checkout-source-tree')
 @click.option('--target-remote'     , metavar='<url>')
 @click.option('--target-ref'        , metavar='<ref>')
-def checkout_source_tree(target_remote, target_ref):
-    pass
+@click.pass_context
+def checkout_source_tree(ctx, target_remote, target_ref):
+    workspace = ctx.obj['workspace']
+    has_work_tree = (os.path.isdir(os.path.join(workspace, '.git'))
+        and subprocess.call(('git', 'rev-parse', '--is-inside-work-tree'), cwd=workspace) == 0)
+    if not has_work_tree:
+        subprocess.check_call(('git', 'clone', target_remote, workspace))
+    subprocess.check_call(('git', 'fetch', target_remote, target_ref), cwd=workspace)
+    subprocess.check_call(('git', 'checkout', '--force', target_ref), cwd=workspace)
 
 @cli.command('prepare-source-tree')
 # git

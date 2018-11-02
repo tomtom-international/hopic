@@ -70,35 +70,23 @@ class CiDriver
               steps.node(label) {
                 steps.stage("${phase}-${variant}") {
                   def cmd = this.install_prerequisites()
+                  if (!this.workspaces.containsKey(steps.env.NODE_NAME)) {
+                    def venv = steps.pwd(tmp: true) + "/cidriver-venv"
+                    def workspace = steps.pwd()
+                    steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --workspace=\"${workspace}\""
+                                     + " checkout-source-tree"
+                                     + " --target-remote=\"${steps.env.GIT_URL}\""
+                                     + " --target-ref=\"${steps.env.GIT_COMMIT}\"")
+                    this.workspaces[steps.env.NODE_NAME] = workspace
+                  }
+                  if (!this.nodes.containsKey(variant)) {
+                    this.nodes[variant] = steps.env.NODE_NAME
+                  }
                   // Meta-data retrieval needs to take place on the executing node to ensure environment variable expansion happens properly
                   def meta = steps.readJSON(text: steps.sh(
                       script: "${cmd} getinfo --phase=\"${phase}\" --variant=\"${variant}\"",
                       returnStdout: true,
                     ))
-                  if (!this.workspaces.containsKey(steps.env.NODE_NAME)) {
-                    // TODO: checkout with ci-driver instead
-                    def cfg = [
-                        $class: 'GitSCM',
-                        userRemoteConfigs: [[
-                            url: steps.env.GIT_URL,
-                            credentialsId: 'tt_service_account_creds',
-                          ]],
-                        branches: [[name: steps.env.GIT_COMMIT]],
-                      ]
-                    def match = (steps.env.GIT_URL =~ /^https:\/\/([^\/]+)\/scm\/(~?\w+)\/(\w+?)(?:\.git)?$/)
-                    if (match) {
-                      cfg['browser'] = [
-                          $class: 'BitbucketWeb',
-                          repoUrl: "https://${match[0][1]}/" + (match[0][2] ==~ /^~.*/ ? 'users/' : 'projects/') + "${match[0][2]}/repos/${match[0][3]}",
-                        ]
-                    }
-                            match = null
-                    steps.checkout(scm: cfg)
-                    this.workspaces[steps.env.NODE_NAME] = steps.pwd()
-                  }
-                  if (!this.nodes.containsKey(variant)) {
-                    this.nodes[variant] = steps.env.NODE_NAME
-                  }
                   steps.sh(script: "${cmd} build --phase=\"${phase}\" --variant=\"${variant}\"")
                   if (phase == 'upload')
                   {
