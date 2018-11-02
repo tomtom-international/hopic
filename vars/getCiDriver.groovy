@@ -60,20 +60,21 @@ class CiDriver
         steps.stage(phase) {
           def stepsForBuilding = variants.collectEntries { variant ->
             [ "${phase}-${variant}": {
-              def meta = steps.readJSON(text: steps.sh(
+              def label = steps.readJSON(text: steps.sh(
                   script: "${orchestrator_cmd} getinfo --phase=\"${phase}\" --variant=\"${variant}\"",
                   returnStdout: true,
-                ))
-              def label = 'Linux && Docker'
-              if (meta.containsKey('node-label')) {
-                label = meta['node-label']
-              }
+                )).get('node-label', 'Linux && Docker')
               if (this.nodes.containsKey(variant)) {
                 label = this.nodes[variant]
               }
               steps.node(label) {
                 steps.stage("${phase}-${variant}") {
                   def cmd = this.install_prerequisites()
+                  // Meta-data retrieval needs to take place on the executing node to ensure environment variable expansion happens properly
+                  def meta = steps.readJSON(text: steps.sh(
+                      script: "${cmd} getinfo --phase=\"${phase}\" --variant=\"${variant}\"",
+                      returnStdout: true,
+                    ))
                   if (!this.workspaces.containsKey(steps.env.NODE_NAME)) {
                     // TODO: checkout with ci-driver instead
                     def cfg = [
