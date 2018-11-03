@@ -27,8 +27,7 @@ class CiDriver
   public def install_prerequisites() {
     def venv = steps.pwd(tmp: true) + "/cidriver-venv"
     def workspace = steps.pwd()
-    steps.sh(script: "pip install --user virtualenv\n"
-                   + "python -m virtualenv --clear ${venv}\n"
+    steps.sh(script: "python -m virtualenv --clear ${venv}\n"
                    + "${venv}/bin/python -m pip install \"${this.repo}\"")
     this.cmd = "${venv}/bin/python ${venv}/bin/ci-driver --config=\"${workspace}/cfg.yml\" --workspace=\"${workspace}\""
   }
