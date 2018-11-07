@@ -40,6 +40,18 @@ class CiDriver
     return this.cmds[steps.env.NODE_NAME]
   }
 
+  private def checkout() {
+    this.install_prerequisites()
+
+    def venv = steps.pwd(tmp: true) + "/cidriver-venv"
+    def workspace = steps.pwd()
+    steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --workspace=\"${workspace}\""
+                     + " checkout-source-tree"
+                     + " --target-remote=\"${steps.env.GIT_URL}\""
+                     + " --target-ref=\"${steps.env.GIT_COMMIT}\"")
+    return workspace
+  }
+
   public def build() {
     def orchestrator_cmd = this.install_prerequisites()
 
@@ -47,6 +59,7 @@ class CiDriver
      * We're splitting the enumeration of phases and variants from their execution in order to
      * enable Jenkins to execute the different variants within a phase in parallel.
      */
+    this.checkout()
     def phases = steps.sh(
         script: "${orchestrator_cmd} phases",
         returnStdout: true,
@@ -71,13 +84,7 @@ class CiDriver
                 steps.stage("${phase}-${variant}") {
                   def cmd = this.install_prerequisites()
                   if (!this.workspaces.containsKey(steps.env.NODE_NAME)) {
-                    def venv = steps.pwd(tmp: true) + "/cidriver-venv"
-                    def workspace = steps.pwd()
-                    steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --workspace=\"${workspace}\""
-                                     + " checkout-source-tree"
-                                     + " --target-remote=\"${steps.env.GIT_URL}\""
-                                     + " --target-ref=\"${steps.env.GIT_COMMIT}\"")
-                    this.workspaces[steps.env.NODE_NAME] = workspace
+                    this.workspaces[steps.env.NODE_NAME] = this.checkout()
                   }
                   if (!this.nodes.containsKey(variant)) {
                     this.nodes[variant] = steps.env.NODE_NAME
