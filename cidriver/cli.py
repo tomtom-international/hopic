@@ -82,6 +82,15 @@ def echo_cmd(fun, cmd, *args, **kwargs):
   click.echo('Executing: ' + click.style(' '.join(shquote(word) for word in cmd), fg='yellow'))
   return fun(cmd, *args, **kwargs)
 
+def git_has_work_tree(workspace):
+  if not os.path.isdir(os.path.join(workspace, '.git')):
+    return False
+  try:
+    output = echo_cmd(subprocess.check_output, ('git', 'rev-parse', '--is-inside-work-tree'), cwd=workspace, env={'LANG': 'C'})
+  except subprocess.CalledProcessError:
+    return False
+  return output.strip().lower() == 'true'
+
 @click.group(context_settings=dict(help_option_names=('-h', '--help')))
 @click.option('--config', type=click.Path(exists=True, readable=True, resolve_path=True))
 @click.option('--workspace', type=click.Path(exists=True, file_okay=False, dir_okay=True))
@@ -176,9 +185,7 @@ def cli(ctx, config, workspace, dependency_manifest):
 @click.pass_context
 def checkout_source_tree(ctx, target_remote, target_ref):
     workspace = ctx.obj['workspace']
-    has_work_tree = (os.path.isdir(os.path.join(workspace, '.git'))
-        and echo_cmd(subprocess.call, ('git', 'rev-parse', '--is-inside-work-tree'), cwd=workspace) == 0)
-    if not has_work_tree:
+    if not git_has_work_tree(workspace):
         echo_cmd(subprocess.check_call, ('git', 'clone', target_remote, workspace))
     echo_cmd(subprocess.check_call, ('git', 'fetch', target_remote, target_ref), cwd=workspace)
     echo_cmd(subprocess.check_call, ('git', 'checkout', '--force', target_ref), cwd=workspace)
