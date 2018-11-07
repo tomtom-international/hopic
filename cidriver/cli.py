@@ -187,13 +187,16 @@ def cli(ctx, config, workspace, dependency_manifest):
 @cli.command('checkout-source-tree')
 @click.option('--target-remote'     , metavar='<url>')
 @click.option('--target-ref'        , metavar='<ref>')
+@click.option('--clean/--no-clean'  , default=False, help='''Clean workspace of non-tracked files''')
 @click.pass_context
-def checkout_source_tree(ctx, target_remote, target_ref):
+def checkout_source_tree(ctx, target_remote, target_ref, clean):
     workspace = ctx.obj['workspace']
     if not git_has_work_tree(workspace):
         echo_cmd(subprocess.check_call, ('git', 'clone', target_remote, workspace))
     echo_cmd(subprocess.check_call, ('git', 'fetch', target_remote, target_ref), cwd=workspace)
     echo_cmd(subprocess.check_call, ('git', 'checkout', '--force', target_ref), cwd=workspace)
+    if clean:
+      echo_cmd(subprocess.check_call, ('git', 'clean', '--force', '-xd'), cwd=workspace)
 
 @cli.command('prepare-source-tree')
 # git

@@ -40,19 +40,21 @@ class CiDriver
     return this.cmds[steps.env.NODE_NAME]
   }
 
-  private def checkout() {
+  private def checkout(clean = false) {
     this.install_prerequisites()
 
     def venv = steps.pwd(tmp: true) + "/cidriver-venv"
     def workspace = steps.pwd()
+    def clean_param = clean ? " --clean" : ""
     steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --workspace=\"${workspace}\""
                      + " checkout-source-tree"
                      + " --target-remote=\"${steps.env.GIT_URL}\""
-                     + " --target-ref=\"${steps.env.GIT_COMMIT}\"")
+                     + " --target-ref=\"${steps.env.GIT_COMMIT}\""
+                     + clean_param)
     return workspace
   }
 
-  public def build() {
+  public def build(clean = false) {
     def orchestrator_cmd = this.install_prerequisites()
 
     /*
@@ -84,7 +86,7 @@ class CiDriver
                 steps.stage("${phase}-${variant}") {
                   def cmd = this.install_prerequisites()
                   if (!this.workspaces.containsKey(steps.env.NODE_NAME)) {
-                    this.workspaces[steps.env.NODE_NAME] = this.checkout()
+                    this.workspaces[steps.env.NODE_NAME] = this.checkout(clean)
                   }
                   if (!this.nodes.containsKey(variant)) {
                     this.nodes[variant] = steps.env.NODE_NAME
