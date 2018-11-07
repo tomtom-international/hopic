@@ -80,7 +80,12 @@ def get_toolchain_image_information(dependency_manifest):
 
 def echo_cmd(fun, cmd, *args, **kwargs):
   click.echo('Executing: ' + click.style(' '.join(shquote(word) for word in cmd), fg='yellow'))
-  return fun(cmd, *args, **kwargs)
+  try:
+    return fun(cmd, *args, **kwargs)
+  except Exception as e:
+    if hasattr(e, 'child_traceback'):
+      click.echo("Child traceback: {}".format(e.child_traceback), err=True)
+    raise
 
 def git_has_work_tree(workspace):
   if not os.path.isdir(os.path.join(workspace, '.git')):
