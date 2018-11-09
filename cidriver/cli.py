@@ -242,28 +242,35 @@ def variants(ctx, phase):
 @click.option('--variant'           , metavar='<variant>', required=True, help='''Configuration variant''')
 @click.pass_context
 def getinfo(ctx, phase, variant):
+    var_re = re.compile(r'\$(?:(\w+)|\{([^}]+)\})')
+    def expand_vars(expr):
+        if isinstance(expr, string_types):
+            # Expand variables from our "virtual" environment
+            last_idx = 0
+            new_val = expr[:last_idx]
+            for var in var_re.finditer(expr):
+                name = var.group(1) or var.group(2)
+                value = ctx.obj['volume-vars'][name]
+                new_val = new_val + expr[last_idx:var.start()] + value
+                last_idx = var.end()
+
+            new_val = new_val + expr[last_idx:]
+            return new_val
+        if hasattr(expr, 'items'):
+            expr = expr.copy()
+            for key, val in expr.items():
+                expr[key] = expand_vars(expr[key])
+            return expr
+        return [expand_vars(val) for val in expr]
+
     variants = []
     cfg = ctx.obj['cfg']
     info = {}
     for var in cfg['phases'][phase][variant]:
         if isinstance(var, string_types):
             continue
-        var = var.copy()
         for key, val in var.items():
-            # TODO: handle recursion over non-string values here
-
-            # Expand variables from our "virtual" environment
-            var_re = re.compile(r'\$(?:(\w+)|\{([^}]+)\})')
-            last_idx = 0
-            new_val = val[:last_idx]
-            for var in var_re.finditer(val):
-                name = var.group(1) or var.group(2)
-                value = ctx.obj['volume-vars'][name]
-                new_val = new_val + val[last_idx:var.start()] + value
-                last_idx = var.end()
-
-            new_val = new_val + val[last_idx:]
-            info[key] = new_val
+            info[key] = expand_vars(val)
     click.echo(json.dumps(info))
 
 @cli.command()
