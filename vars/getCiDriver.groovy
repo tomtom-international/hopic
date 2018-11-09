@@ -97,10 +97,17 @@ class CiDriver
                       returnStdout: true,
                     ))
                   steps.sh(script: "${cmd} build --phase=\"${phase}\" --variant=\"${variant}\"")
-                  if (phase == 'upload')
-                  {
-                    if (meta.containsKey('ivy-output-dir')) {
-                      steps.stashPublishedArtifactsFiles(variant, meta['ivy-output-dir'])
+
+                  // FIXME: get rid of special casing for stashing
+                  if (meta.containsKey('stash')) {
+                    steps.dir(meta['stash'].get('dir', this.workspaces[steps.env.NODE_NAME])) {
+                      def params = [
+                          name: variant,
+                        ]
+                      if (meta['stash'].containsKey('includes')) {
+                        params['includes'] = meta['stash']['includes']
+                      }
+                      steps.stash(params)
                     }
                   }
                 }
