@@ -194,7 +194,7 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
     if not git_has_work_tree(workspace):
         echo_cmd(subprocess.check_call, ('git', 'clone', target_remote, workspace))
     echo_cmd(subprocess.check_call, ('git', 'fetch', target_remote, target_ref), cwd=workspace)
-    echo_cmd(subprocess.check_call, ('git', 'checkout', '--force', target_ref), cwd=workspace)
+    echo_cmd(subprocess.check_call, ('git', 'checkout', '--force', 'FETCH_HEAD'), cwd=workspace)
     if clean:
       echo_cmd(subprocess.check_call, ('git', 'clean', '--force', '-xd'), cwd=workspace)
 

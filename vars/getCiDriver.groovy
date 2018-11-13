@@ -46,10 +46,14 @@ class CiDriver
     def venv = steps.pwd(tmp: true) + "/cidriver-venv"
     def workspace = steps.pwd()
     def clean_param = clean ? " --clean" : ""
+    def ref = steps.env.GIT_COMMIT
+    if (steps.env.CHANGE_TARGET != null) {
+      ref = steps.env.CHANGE_TARGET
+    }
     steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --workspace=\"${workspace}\""
                      + " checkout-source-tree"
                      + " --target-remote=\"${steps.env.GIT_URL}\""
-                     + " --target-ref=\"${steps.env.GIT_COMMIT}\""
+                     + " --target-ref=\"${ref}\""
                      + clean_param)
     return workspace
   }
