@@ -55,6 +55,22 @@ class CiDriver
                      + " --target-remote=\"${steps.env.GIT_URL}\""
                      + " --target-ref=\"${ref}\""
                      + clean_param)
+    if (steps.env.CHANGE_ID != null) {
+      // FIXME: get date of last update to change request
+      def author_time = steps.currentBuild.timeInMillis / 1000.0
+      def commit_time = steps.currentBuild.startTimeInMillis / 1000.0
+      steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --workspace=\"${workspace}\""
+                       + " prepare-source-tree"
+                       + " --source-remote=\"${steps.env.GIT_URL}\""
+                       + " --source-ref=\"pull-requests/${steps.env.CHANGE_ID}/from\""
+                       + " --change-request=\"${steps.env.CHANGE_ID}\""
+                       + " --change-request-title=\"${steps.env.CHANGE_TITLE}\""
+                       + " --author-name=\"${steps.env.CHANGE_AUTHOR}\""
+                       + " --author-email=\"${steps.env.CHANGE_AUTHOR_EMAIL}\""
+                       + " --author-date=\"@${author_time}\""
+                       + " --commit-date=\"@${commit_time}\""
+                       + clean_param)
+    }
     return workspace
   }
 

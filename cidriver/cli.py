@@ -27,7 +27,7 @@ OrderedLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, __
 
 class DateTime(click.ParamType):
     name = 'date'
-    stamp_re = re.compile(r'^@(?P<utcstamp>\d+)(?:\s+(?P<tzdir>[-+])(?P<tzhour>\d{1,2}):?(?P<tzmin>\d{2}))?$')
+    stamp_re = re.compile(r'^@(?P<utcstamp>\d+(?:\.\d+)?)(?:\s+(?P<tzdir>[-+])(?P<tzhour>\d{1,2}):?(?P<tzmin>\d{2}))?$')
 
     def convert(self, value, param, ctx):
         if value is None or isinstance(value, datetime):
@@ -49,7 +49,7 @@ class DateTime(click.ParamType):
                     tz = tzoffset(None, tzdir * (tzhour * 3600 + tzmin * 60))
                 else:
                     tz = tzutc()
-                return datetime.fromtimestamp(int(stamp.group('utcstamp')), tz)
+                return datetime.fromtimestamp(float(stamp.group('utcstamp')), tz)
 
             dt = date_parse(value)
             if dt.tzinfo is None:
@@ -200,19 +200,42 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
 
 @cli.command('prepare-source-tree')
 # git
-@click.option('--target-remote'     , metavar='<url>', help='<target> remote in which to merge <source>')
-@click.option('--target-ref'        , metavar='<ref>', help='ref of <target> remote in which to merge <source>')
-@click.option('--source-remote'     , metavar='<url>', help='<source> remote to merge into <target>')
-@click.option('--source-ref'        , metavar='<ref>', help='ref of <source> remote to merge into <target>')
-@click.option('--pull-request'      , metavar='<identifier>'           , help='Identifier of pull-request to use in merge commit message')
-@click.option('--pull-request-title', metavar='<title>'                , help='''Pull request title to incorporate in merge commit's subject line''')
-@click.option('--author-name'       , metavar='<name>'                 , help='''Name of pull-request's author''')
-@click.option('--author-email'      , metavar='<email>'                , help='''E-mail address of pull-request's author''')
-@click.option('--author-date'       , metavar='<date>', type=DateTime(), help='''Time of last update to the pull-request''')
+@click.option('--source-remote'       , metavar='<url>', help='<source> remote to merge into <target>')
+@click.option('--source-ref'          , metavar='<ref>', help='ref of <source> remote to merge into <target>')
+@click.option('--change-request'      , metavar='<identifier>'           , help='Identifier of change-request to use in merge commit message')
+@click.option('--change-request-title', metavar='<title>'                , help='''Change request title to incorporate in merge commit's subject line''')
+@click.option('--author-name'         , metavar='<name>'                 , help='''Name of change-request's author''')
+@click.option('--author-email'        , metavar='<email>'                , help='''E-mail address of change-request's author''')
+@click.option('--author-date'         , metavar='<date>', type=DateTime(), help='''Time of last update to the change-request''')
+@click.option('--commit-date'         , metavar='<date>', type=DateTime(), help='''Time of starting to build this change-request''')
 # misc
-@click.option('--bump-api'          , type=click.Choice(('major', 'minor', 'patch')))
-def prepare_source_tree(target_remote, target_ref, source_remote, source_ref, pull_request, pull_request_title, author_name, author_email, author_date, bump_api):
-    pass
+@click.option('--bump-api'            , type=click.Choice(('major', 'minor', 'patch')))
+@click.pass_context
+def prepare_source_tree(ctx, source_remote, source_ref, change_request, change_request_title, author_name, author_email, author_date, commit_date, bump_api):
+    workspace = ctx.obj['workspace']
+    assert git_has_work_tree(workspace)
+    echo_cmd(subprocess.check_call, ('git', 'fetch', source_remote, source_ref), cwd=workspace)
+    env = os.environ.copy()
+    if author_name is not None:
+        env['GIT_AUTHOR_NAME'] = author_name
+    if author_email is not None:
+        env['GIT_AUTHOR_EMAIL'] = author_email
+    if author_date is not None:
+        env['GIT_AUTHOR_DATE'] = author_date.strftime('%Y-%m-%d %H:%M:%S.%f %z')
+    if commit_date is not None:
+        env['GIT_COMMITTER_DATE'] = commit_date.strftime('%Y-%m-%d %H:%M:%S.%f %z')
+    echo_cmd(subprocess.check_call, (
+            'git',
+            'merge',
+            '--no-ff',
+            'FETCH_HEAD',
+            '-m', "Merge #{change_request}: {change_request_title}".format(
+                    change_request=change_request,
+                    change_request_title=change_request_title,
+                )),
+        cwd=workspace,
+        env=env)
+    echo_cmd(subprocess.check_call, ('git', 'log', '--format=fuller', '-1'), cwd=workspace)
 
 @cli.command()
 @click.pass_context
