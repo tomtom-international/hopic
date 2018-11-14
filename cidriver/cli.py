@@ -122,7 +122,7 @@ def cli(ctx, config, workspace, dependency_manifest):
         image.update(props)
 
         # Construct a full, pullable, image path
-        image['image'] = os.path.join(*filter(None, (image.get('repository'), image.get('path'), image['name'])))
+        image['image'] = '/'.join(filter(None, (image.get('repository'), image.get('path'), image['name'])))
 
         return '{image}:{rev}'.format(**image)
     OrderedLoader.add_constructor('!image-from-ivy-manifest', image_from_ivy_manifest)
