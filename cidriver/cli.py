@@ -79,7 +79,7 @@ def get_toolchain_image_information(dependency_manifest):
     return toolchain_dep
 
 def echo_cmd(fun, cmd, *args, **kwargs):
-  click.echo('Executing: ' + click.style(' '.join(shquote(word) for word in cmd), fg='yellow'))
+  click.echo('Executing: ' + click.style(' '.join(shquote(word) for word in cmd), fg='yellow'), err=True)
   try:
     return fun(cmd, *args, **kwargs)
   except Exception as e:
@@ -196,7 +196,8 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
     echo_cmd(subprocess.check_call, ('git', 'fetch', target_remote, target_ref), cwd=workspace)
     echo_cmd(subprocess.check_call, ('git', 'checkout', '--force', 'FETCH_HEAD'), cwd=workspace)
     if clean:
-      echo_cmd(subprocess.check_call, ('git', 'clean', '--force', '-xd'), cwd=workspace)
+      click.echo(echo_cmd(subprocess.check_output, ('git', 'clean', '--force', '-xd'), cwd=workspace), err=True, nl=False)
+    echo_cmd(subprocess.check_call, ('git', 'rev-parse', 'HEAD'), cwd=workspace)
 
 @cli.command('prepare-source-tree')
 # git
@@ -224,7 +225,7 @@ def prepare_source_tree(ctx, source_remote, source_ref, change_request, change_r
         env['GIT_AUTHOR_DATE'] = author_date.strftime('%Y-%m-%d %H:%M:%S.%f %z')
     if commit_date is not None:
         env['GIT_COMMITTER_DATE'] = commit_date.strftime('%Y-%m-%d %H:%M:%S.%f %z')
-    echo_cmd(subprocess.check_call, (
+    click.echo(echo_cmd(subprocess.check_output, (
             'git',
             'merge',
             '--no-ff',
@@ -234,8 +235,9 @@ def prepare_source_tree(ctx, source_remote, source_ref, change_request, change_r
                     change_request_title=change_request_title,
                 )),
         cwd=workspace,
-        env=env)
-    echo_cmd(subprocess.check_call, ('git', 'show', '--format=fuller', '--stat'), cwd=workspace)
+        env=env), err=True, nl=False)
+    click.echo(echo_cmd(subprocess.check_output, ('git', 'show', '--format=fuller', '--stat'), cwd=workspace), err=True, nl=False)
+    echo_cmd(subprocess.check_call, ('git', 'rev-parse', 'HEAD'), cwd=workspace)
 
 @cli.command()
 @click.pass_context
@@ -316,7 +318,7 @@ def build(ctx, ref, phase, variant):
                     except (KeyError, TypeError):
                         pass
                     else:
-                        click.echo('Performing: ' + click.style(desc, fg='cyan'))
+                        click.echo('Performing: ' + click.style(desc, fg='cyan'), err=True)
                     try:
                         cmd = cmd['sh']
                     except (KeyError, TypeError):
