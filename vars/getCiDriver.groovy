@@ -21,6 +21,8 @@ class CiDriver
   private nodes
   private workspaces
   private pull_request = null
+  private build_commit = null
+  private submit_commit = null
 
   CiDriver(steps, repo) {
     this.cmds = [:]
@@ -75,25 +77,28 @@ class CiDriver
     if (steps.env.CHANGE_TARGET != null) {
       ref = steps.env.CHANGE_TARGET
     }
-    steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --workspace=\"${workspace}\""
-                     + " checkout-source-tree"
-                     + " --target-remote=\"${steps.env.GIT_URL}\""
-                     + " --target-ref=\"${ref}\""
-                     + clean_param)
+    this.build_commit = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --workspace=\"${workspace}\""
+                                       + " checkout-source-tree"
+                                       + " --target-remote=\"${steps.env.GIT_URL}\""
+                                       + " --target-ref=\"${ref}\""
+                                       + clean_param,
+                               returnStdout: true).replaceAll('\\s', '')
     if (this.pull_request != null) {
       def author_time = this.pull_request.get('updatedDate', steps.currentBuild.timeInMillis) / 1000.0
       def commit_time = steps.currentBuild.startTimeInMillis / 1000.0
-      steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --workspace=\"${workspace}\""
-                       + " prepare-source-tree"
-                       + " --source-remote=\"${steps.env.GIT_URL}\""
-                       + " --source-ref=\"pull-requests/${steps.env.CHANGE_ID}/from\""
-                       + " --change-request=\"${steps.env.CHANGE_ID}\""
-                       + " --change-request-title=\"${steps.env.CHANGE_TITLE}\""
-                       + " --author-name=\"${steps.env.CHANGE_AUTHOR}\""
-                       + " --author-email=\"${steps.env.CHANGE_AUTHOR_EMAIL}\""
-                       + " --author-date=\"@${author_time}\""
-                       + " --commit-date=\"@${commit_time}\""
-                       + clean_param)
+      this.submit_commit = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --workspace=\"${workspace}\""
+                                          + " prepare-source-tree"
+                                          + " --source-remote=\"${steps.env.GIT_URL}\""
+                                          + " --source-ref=\"pull-requests/${steps.env.CHANGE_ID}/from\""
+                                          + " --change-request=\"${steps.env.CHANGE_ID}\""
+                                          + " --change-request-title=\"${steps.env.CHANGE_TITLE}\""
+                                          + " --author-name=\"${steps.env.CHANGE_AUTHOR}\""
+                                          + " --author-email=\"${steps.env.CHANGE_AUTHOR_EMAIL}\""
+                                          + " --author-date=\"@${author_time}\""
+                                          + " --commit-date=\"@${commit_time}\""
+                                          + clean_param,
+                                  returnStdout: true).replaceAll('\\s', '')
+      this.build_commit = this.submit_commit
     }
     return workspace
   }
@@ -141,7 +146,11 @@ class CiDriver
                       script: "${cmd} getinfo --phase=\"${phase}\" --variant=\"${variant}\"",
                       returnStdout: true,
                     ))
-                  steps.sh(script: "${cmd} build --phase=\"${phase}\" --variant=\"${variant}\"")
+                  def ref_arg = ""
+                  if (this.build_commit != null) {
+                    ref_arg = " --ref=\"${this.build_commit}\""
+                  }
+                  steps.sh(script: "${cmd} build --phase=\"${phase}\" --variant=\"${variant}\"" + ref_arg)
 
                   // FIXME: get rid of special casing for stashing
                   if (meta.containsKey('stash')) {
@@ -163,11 +172,12 @@ class CiDriver
         }
     }
 
-    if (this.pull_request != null) {
+    if (this.submit_commit != null) {
       // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
       steps.sh(script: "${orchestrator_cmd} submit"
                        + " --target-remote=\"${steps.env.GIT_URL}\""
-                       + " --target-ref=\"${steps.env.CHANGE_TARGET}\"")
+                       + " --target-ref=\"${steps.env.CHANGE_TARGET}\""
+                       + " --ref=\"${submit_commit}\"")
     }
   }
 }
