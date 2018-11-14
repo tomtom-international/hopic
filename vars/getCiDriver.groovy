@@ -20,6 +20,7 @@ class CiDriver
   private steps
   private nodes
   private workspaces
+  private pull_request = null
 
   CiDriver(steps, repo) {
     this.cmds = [:]
@@ -27,6 +28,30 @@ class CiDriver
     this.steps = steps
     this.nodes = [:]
     this.workspaces = [:]
+  }
+
+  public def get_change_request_info() {
+    if (steps.env.CHANGE_URL == null
+     || !steps.env.CHANGE_URL.contains('/pull-requests/')) {
+     return null
+    }
+    def restUrl = steps.env.CHANGE_URL
+      .replaceFirst(/(\/projects\/)/, '/rest/api/1.0$1')
+      .replaceFirst(/\/overview$/, '')
+    def info = steps.readJSON(text: steps.httpRequest(
+        url: restUrl,
+        httpMode: 'GET',
+        authentication: 'tt_service_account_creds',
+      ).content)
+    def merge = steps.readJSON(text: steps.httpRequest(
+        url: restUrl + '/merge',
+        httpMode: 'GET',
+        authentication: 'tt_service_account_creds',
+      ).content)
+    if (merge.containsKey('canMerge')) {
+      info['canMerge'] = merge['canMerge']
+    }
+    return info
   }
 
   public def install_prerequisites() {
@@ -55,9 +80,8 @@ class CiDriver
                      + " --target-remote=\"${steps.env.GIT_URL}\""
                      + " --target-ref=\"${ref}\""
                      + clean_param)
-    if (steps.env.CHANGE_ID != null) {
-      // FIXME: get date of last update to change request
-      def author_time = steps.currentBuild.timeInMillis / 1000.0
+    if (this.pull_request != null) {
+      def author_time = this.pull_request.get('updatedDate', steps.currentBuild.timeInMillis) / 1000.0
       def commit_time = steps.currentBuild.startTimeInMillis / 1000.0
       steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --workspace=\"${workspace}\""
                        + " prepare-source-tree"
@@ -75,6 +99,7 @@ class CiDriver
   }
 
   public def build(clean = false) {
+    this.pull_request = this.get_change_request_info()
     def orchestrator_cmd = this.install_prerequisites()
 
     /*
