@@ -162,6 +162,13 @@ class CiDriver
           steps.parallel stepsForBuilding
         }
     }
+
+    if (this.pull_request != null) {
+      // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
+      steps.sh(script: "${orchestrator_cmd} submit"
+                       + " --target-remote=\"${steps.env.GIT_URL}\""
+                       + " --target-ref=\"${steps.env.CHANGE_TARGET}\"")
+    }
   }
 }
 

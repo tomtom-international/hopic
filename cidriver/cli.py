@@ -360,8 +360,11 @@ def build(ctx, ref, phase, variant):
                 echo_cmd(subprocess.check_call, cmd)
 
 @cli.command()
-@click.option('--target-remote'     , metavar='<url>')
-@click.option('--target-ref'        , metavar='<ref>')
-@click.option('--ref'               , metavar='<ref>', help='''Commit-ish that has been verified and is to be submitted''')
-def submit(target_remote, target_ref, ref):
-    pass
+@click.option('--target-remote'     , metavar='<url>', required=True)
+@click.option('--target-ref'        , metavar='<ref>', required=True)
+@click.option('--ref'               , metavar='<ref>', default='HEAD', help='''Commit-ish that has been verified and is to be submitted''')
+@click.pass_context
+def submit(ctx, target_remote, target_ref, ref):
+    workspace = ctx.obj['workspace']
+    assert git_has_work_tree(workspace)
+    echo_cmd(subprocess.check_call, ('git', 'push', target_remote, ':'.join((ref, target_ref))), cwd=workspace)
