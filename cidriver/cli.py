@@ -235,7 +235,7 @@ def prepare_source_tree(ctx, source_remote, source_ref, change_request, change_r
                 )),
         cwd=workspace,
         env=env)
-    echo_cmd(subprocess.check_call, ('git', 'log', '--format=fuller', '-1'), cwd=workspace)
+    echo_cmd(subprocess.check_call, ('git', 'show', '--format=fuller', '--stat'), cwd=workspace)
 
 @cli.command()
 @click.pass_context
