@@ -21,8 +21,7 @@ class CiDriver
   private nodes
   private workspaces
   private pull_request = null
-  private build_commit = null
-  private submit_refspecs = []
+  private submit_refspecs = null
 
   CiDriver(steps, repo) {
     this.cmds = [:]
@@ -77,12 +76,11 @@ class CiDriver
     if (steps.env.CHANGE_TARGET != null) {
       ref = steps.env.CHANGE_TARGET
     }
-    this.build_commit = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --workspace=\"${workspace}\""
-                                       + " checkout-source-tree"
-                                       + " --target-remote=\"${steps.env.GIT_URL}\""
-                                       + " --target-ref=\"${ref}\""
-                                       + clean_param,
-                               returnStdout: true).replaceAll('\\s', '')
+    steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --workspace=\"${workspace}\""
+                   + " checkout-source-tree"
+                   + " --target-remote=\"${steps.env.GIT_URL}\""
+                   + " --target-ref=\"${ref}\""
+                   + clean_param)
     if (this.pull_request != null) {
       def author_time = this.pull_request.get('updatedDate', steps.currentBuild.timeInMillis) / 1000.0
       def commit_time = steps.currentBuild.startTimeInMillis / 1000.0
@@ -92,6 +90,8 @@ class CiDriver
       }
       this.submit_refspecs = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --workspace=\"${workspace}\""
                                             + " prepare-source-tree"
+                                            + " --target-remote=\"${steps.env.GIT_URL}\""
+                                            + " --target-ref=\"${ref}\""
                                             + " --source-remote=\"${steps.env.GIT_URL}\""
                                             + " --source-ref=\"pull-requests/${steps.env.CHANGE_ID}/from\""
                                             + " --change-request=\"${steps.env.CHANGE_ID}\""
@@ -105,7 +105,6 @@ class CiDriver
                                             + " --bump-version=patch"
                                             + extra_params,
                                       returnStdout: true).split("\\r?\\n")
-      this.build_commit = this.submit_refspecs
     }
     return workspace
   }
@@ -153,11 +152,7 @@ class CiDriver
                       script: "${cmd} getinfo --phase=\"${phase}\" --variant=\"${variant}\"",
                       returnStdout: true,
                     ))
-                  def ref_arg = ""
-                  if (this.build_commit != null) {
-                    ref_arg = " --ref=\"${this.build_commit}\""
-                  }
-                  steps.sh(script: "${cmd} build --phase=\"${phase}\" --variant=\"${variant}\"" + ref_arg)
+                  steps.sh(script: "${cmd} build --phase=\"${phase}\" --variant=\"${variant}\"")
 
                   // FIXME: get rid of special casing for stashing
                   if (meta.containsKey('stash')) {
@@ -181,10 +176,13 @@ class CiDriver
 
     if (this.submit_refspecs != null) {
       // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
+      def refspecs = ""
+      this.submit_refspecs.each { refspec ->
+        refspecs += " --refspec=\"${refspec}\""
+      }
       steps.sh(script: "${orchestrator_cmd} submit"
                        + " --target-remote=\"${steps.env.GIT_URL}\""
-                       + " --target-ref=\"${steps.env.CHANGE_TARGET}\""
-                       + " --ref=\"${submit_refspecs}\"")
+                       + refspecs)
     }
   }
 }

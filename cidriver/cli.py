@@ -236,6 +236,8 @@ def stringify_semver(major, minor, patch, prerelease, build):
 
 @cli.command('prepare-source-tree')
 # git
+@click.option('--target-remote'             , metavar='<url>')
+@click.option('--target-ref'                , metavar='<ref>')
 @click.option('--source-remote'             , metavar='<url>', help='<source> remote to merge into <target>')
 @click.option('--source-ref'                , metavar='<ref>', help='ref of <source> remote to merge into <target>')
 @click.option('--change-request'            , metavar='<identifier>'           , help='Identifier of change-request to use in merge commit message')
@@ -251,6 +253,8 @@ def stringify_semver(major, minor, patch, prerelease, build):
 @click.pass_context
 def prepare_source_tree(
         ctx,
+        target_remote,
+        target_ref,
         source_remote,
         source_ref,
         change_request,
@@ -265,6 +269,8 @@ def prepare_source_tree(
     ):
     workspace = ctx.obj['workspace']
     assert git_has_work_tree(workspace)
+    echo_cmd(subprocess.check_call, ('git', 'fetch', target_remote, target_ref), cwd=workspace)
+    echo_cmd(subprocess.check_call, ('git', 'checkout', '--force', 'FETCH_HEAD'), cwd=workspace)
     echo_cmd(subprocess.check_call, ('git', 'fetch', source_remote, source_ref), cwd=workspace)
 
     click.echo(echo_cmd(subprocess.check_output, (
@@ -354,8 +360,8 @@ def prepare_source_tree(
 
     click.echo(echo_cmd(subprocess.check_output, ('git', 'show', '--format=fuller', '--stat', commit), cwd=workspace), err=True, nl=False)
     click.echo('{commit}:{target_ref}'.format(commit=commit, target_ref=target_ref))
-    if version is not None and version_tag:
-        click.echo('tag {version}'.format(**locals()))
+    if tag_version is not None:
+        click.echo('tag {tag_version}'.format(**locals()))
 
 @cli.command()
 @click.pass_context
@@ -479,10 +485,9 @@ def build(ctx, ref, phase, variant):
 
 @cli.command()
 @click.option('--target-remote'     , metavar='<url>', required=True)
-@click.option('--target-ref'        , metavar='<ref>', required=True)
-@click.option('--ref'               , metavar='<ref>', default='HEAD', help='''Commit-ish that has been verified and is to be submitted''')
+@click.option('--refspec'           , metavar='<ref>', required=True, multiple=True, help='''Refspecs that are to be submitted''')
 @click.pass_context
-def submit(ctx, target_remote, target_ref, ref):
+def submit(ctx, target_remote, refspec):
     workspace = ctx.obj['workspace']
     assert git_has_work_tree(workspace)
-    echo_cmd(subprocess.check_call, ('git', 'push', target_remote, ':'.join((ref, target_ref))), cwd=workspace)
+    echo_cmd(subprocess.check_call, ('git', 'push', '--atomic', target_remote) + tuple(refspec), cwd=workspace)
