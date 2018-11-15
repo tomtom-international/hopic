@@ -247,9 +247,6 @@ def stringify_semver(major, minor, patch, prerelease, build):
 @click.option('--author-email'              , metavar='<email>'                , help='''E-mail address of change-request's author''')
 @click.option('--author-date'               , metavar='<date>', type=DateTime(), help='''Time of last update to the change-request''')
 @click.option('--commit-date'               , metavar='<date>', type=DateTime(), help='''Time of starting to build this change-request''')
-# misc
-@click.option('--version-file'              , type=click.Path(exists=True, readable=True, resolve_path=True), help='''File that contains version to bump''')
-@click.option('--bump-version'              , type=click.Choice(('major', 'minor', 'patch')), default='patch')
 @click.pass_context
 def prepare_source_tree(
         ctx,
@@ -264,9 +261,8 @@ def prepare_source_tree(
         author_email,
         author_date,
         commit_date,
-        version_file,
-        bump_version,
     ):
+    cfg = ctx.obj.get('cfg', {})
     workspace = ctx.obj['workspace']
     assert git_has_work_tree(workspace)
     echo_cmd(subprocess.check_call, ('git', 'fetch', target_remote, target_ref), cwd=workspace)
@@ -283,11 +279,17 @@ def prepare_source_tree(
         cwd=workspace), err=True, nl=False)
 
     tag_version = None
-    if version_file is not None:
+    version_info   = cfg.get('change-request', {}).get('version', {})
+    version_file   = version_info.get('file', None)
+    version_format = version_info.get('format', 'semver')
+    version_bump   = version_info.get('format', 'patch')
+    if version_file:
         new_content = StringIO()
         with open(version_file, 'r') as f:
             for l in f:
-                ver = parse_semver(l)
+                ver = None
+                if version_format == 'semver':
+                    ver = parse_semver(l)
                 if ver is None:
                     new_content.write(l)
                     continue
@@ -298,21 +300,24 @@ def prepare_source_tree(
 
                 click.echo("Current version: {}".format(tag_version), err=True)
 
-                if bump_version:
+                if version_bump:
                     major, minor, patch, prerelease, build = ver
 
-                    if bump_version == 'patch':
+                    if version_bump == 'patch':
                         if not prerelease:
                             patch += 1
-                    elif bump_version == 'minor':
+                    elif version_bump == 'minor':
                         if not prerelease or patch > 0:
                             minor += 1
                         patch = 0
-                    elif bump_version == 'major':
+                    elif version_bump == 'major':
                         if not prerelease or (minor > 0 and patch > 0):
                             major += 1
                         major = 0
                         minor = 0
+                    else:
+                        click.echo("Invalid version bumping target: {version_bump}".format(**locals()), err=True)
+                        sys.exit(1)
 
                     # When bumping the prerelease tags need to be dropped always
                     prerelease, build = (), ()
@@ -326,10 +331,11 @@ def prepare_source_tree(
                     new_line = l[:m.start(1)] + tag_version + l[m.end(m.lastgroup)]
                     new_content.write(new_line)
 
-        assert tag_version is not None, "no version found"
-        with open(version_file, 'w') as f:
-            f.write(new_content.getvalue())
-        echo_cmd(subprocess.check_call, ('git', 'add', version_file), cwd=workspace)
+        if version_bump:
+            assert tag_version is not None, "no version found"
+            with open(version_file, 'w') as f:
+                f.write(new_content.getvalue())
+            echo_cmd(subprocess.check_call, ('git', 'add', version_file), cwd=workspace)
 
     env = os.environ.copy()
     if author_name is not None:

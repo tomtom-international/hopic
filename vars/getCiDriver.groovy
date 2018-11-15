@@ -105,9 +105,6 @@ class CiDriver
                                             + " --author-email=\"${steps.env.CHANGE_AUTHOR_EMAIL}\""
                                             + " --author-date=\"@${author_time}\""
                                             + " --commit-date=\"@${commit_time}\""
-                                            // TODO: make version file (and format, currently semver, configurable)
-                                            + " --version-file=\"${workspace}/revision.txt\""
-                                            + " --bump-version=patch"
                                             + extra_params,
                                       returnStdout: true).split("\\r?\\n")
     }
