@@ -278,11 +278,13 @@ def prepare_source_tree(
         ),
         cwd=workspace), err=True, nl=False)
 
-    tag_version = None
+    version = None
+
     version_info   = cfg.get('change-request', {}).get('version', {})
     version_file   = version_info.get('file', None)
     version_format = version_info.get('format', 'semver')
     version_bump   = version_info.get('format', 'patch')
+    version_tag    = version_info.get('tag', False)
     if version_file:
         new_content = StringIO()
         with open(version_file, 'r') as f:
@@ -294,14 +296,11 @@ def prepare_source_tree(
                     new_content.write(l)
                     continue
 
-                assert tag_version is None, "multiple versions are not supported"
-
-                tag_version = stringify_semver(*ver)
-
-                click.echo("Current version: {}".format(tag_version), err=True)
+                assert version is None, "multiple versions are not supported"
+                version = ver
 
                 if version_bump:
-                    major, minor, patch, prerelease, build = ver
+                    major, minor, patch, prerelease, build = version
 
                     if version_bump == 'patch':
                         if not prerelease:
@@ -322,17 +321,15 @@ def prepare_source_tree(
                     # When bumping the prerelease tags need to be dropped always
                     prerelease, build = (), ()
 
-                    ver = (major, minor, patch, prerelease, build)
-                    tag_version = stringify_semver(*ver)
-                    click.echo("Bumped to version: {}".format(tag_version), err=True)
+                    version = (major, minor, patch, prerelease, build)
 
                     # Replace version in source line
                     m = _semver_re.match(l)
-                    new_line = l[:m.start(1)] + tag_version + l[m.end(m.lastgroup)]
+                    new_line = l[:m.start(1)] + stringify_semver(*version) + l[m.end(m.lastgroup)]
                     new_content.write(new_line)
 
         if version_bump:
-            assert tag_version is not None, "no version found"
+            assert version is not None, "no version found"
             with open(version_file, 'w') as f:
                 f.write(new_content.getvalue())
             echo_cmd(subprocess.check_call, ('git', 'add', version_file), cwd=workspace)
@@ -361,13 +358,13 @@ def prepare_source_tree(
         env=env), err=True, nl=False)
     commit = echo_cmd(subprocess.check_output, ('git', 'rev-parse', 'HEAD'), cwd=workspace).strip()
 
-    if tag_version is not None:
-        click.echo(echo_cmd(subprocess.check_output, ('git', 'tag', '-f', tag_version, commit), cwd=workspace), err=True)
+    if version is not None and version_tag:
+        click.echo(echo_cmd(subprocess.check_output, ('git', 'tag', '-f', stringify_semver(*version), commit), cwd=workspace), err=True)
 
     click.echo(echo_cmd(subprocess.check_output, ('git', 'show', '--format=fuller', '--stat', commit), cwd=workspace), err=True, nl=False)
     click.echo('{commit}:{target_ref}'.format(commit=commit, target_ref=target_ref))
-    if tag_version is not None:
-        click.echo('tag {tag_version}'.format(**locals()))
+    if version is not None and version_tag:
+        click.echo('tag {version}'.format(version=stringify_semver(*version)))
 
 @cli.command()
 @click.pass_context
