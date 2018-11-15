@@ -67,7 +67,7 @@ class CiDriver
   }
 
   private def checkout(clean = false) {
-    this.install_prerequisites()
+    def cmd = this.install_prerequisites()
 
     def venv = steps.pwd(tmp: true) + "/cidriver-venv"
     def workspace = steps.pwd()
@@ -84,11 +84,16 @@ class CiDriver
     if (this.pull_request != null) {
       def author_time = this.pull_request.get('updatedDate', steps.currentBuild.timeInMillis) / 1000.0
       def commit_time = steps.currentBuild.startTimeInMillis / 1000.0
+      def conf_params = ''
+      if (steps.fileExists("${workspace}/cfg.yml")) {
+        conf_params += " --config=\"${workspace}/cfg.yml\""
+      }
       def extra_params = ''
       if (this.pull_request.containsKey('description')) {
         extra_params += " --change-request-description=\"${pull_request.description}\""
       }
       this.submit_refspecs = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --workspace=\"${workspace}\""
+                                            + conf_params
                                             + " prepare-source-tree"
                                             + " --target-remote=\"${steps.env.GIT_URL}\""
                                             + " --target-ref=\"${ref}\""
