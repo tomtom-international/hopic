@@ -86,6 +86,10 @@ class CiDriver
     if (this.pull_request != null) {
       def author_time = this.pull_request.get('updatedDate', steps.currentBuild.timeInMillis) / 1000.0
       def commit_time = steps.currentBuild.startTimeInMillis / 1000.0
+      def extra_params = ''
+      if (this.pull_request.containsKey('description')) {
+        extra_params += " --change-request-description=\"${pull_request.description}\""
+      }
       this.submit_refspecs = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --workspace=\"${workspace}\""
                                             + " prepare-source-tree"
                                             + " --source-remote=\"${steps.env.GIT_URL}\""
@@ -99,7 +103,7 @@ class CiDriver
                                             // TODO: make version file (and format, currently semver, configurable)
                                             + " --version-file=\"${workspace}/revision.txt\""
                                             + " --bump-version=patch"
-                                            + clean_param,
+                                            + extra_params,
                                       returnStdout: true).split("\\r?\\n")
       this.build_commit = this.submit_refspecs
     }

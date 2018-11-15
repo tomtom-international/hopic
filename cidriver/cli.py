@@ -240,6 +240,7 @@ def stringify_semver(major, minor, patch, prerelease, build):
 @click.option('--source-ref'                , metavar='<ref>', help='ref of <source> remote to merge into <target>')
 @click.option('--change-request'            , metavar='<identifier>'           , help='Identifier of change-request to use in merge commit message')
 @click.option('--change-request-title'      , metavar='<title>'                , help='''Change request title to incorporate in merge commit's subject line''')
+@click.option('--change-request-description', metavar='<description>'          , help='''Change request title to incorporate in merge commit's subject line''')
 @click.option('--author-name'               , metavar='<name>'                 , help='''Name of change-request's author''')
 @click.option('--author-email'              , metavar='<email>'                , help='''E-mail address of change-request's author''')
 @click.option('--author-date'               , metavar='<date>', type=DateTime(), help='''Time of last update to the change-request''')
@@ -254,6 +255,7 @@ def prepare_source_tree(
         source_ref,
         change_request,
         change_request_title,
+        change_request_description,
         author_name,
         author_email,
         author_date,
@@ -335,6 +337,8 @@ def prepare_source_tree(
     msg = "Merge #{}".format(change_request)
     if change_request_title is not None:
         msg = "{msg}: {title}".format(msg=msg, title=change_request_title)
+    if change_request_description is not None:
+        msg = "{msg}\n\n{description}".format(msg=msg, description=change_request_description)
 
     click.echo(echo_cmd(subprocess.check_output, (
             'git',
