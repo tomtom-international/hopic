@@ -18,6 +18,11 @@ try:
 except ImportError:
     from pipes import quote as shquote
 
+try:
+    from cStringIO import StringIO
+except ImportError:
+    from StringIO import StringIO
+
 class OrderedLoader(yaml.SafeLoader):
     pass
 def __yaml_construct_mapping(loader, node):
@@ -199,23 +204,125 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
       click.echo(echo_cmd(subprocess.check_output, ('git', 'clean', '--force', '-xd'), cwd=workspace), err=True, nl=False)
     echo_cmd(subprocess.check_call, ('git', 'rev-parse', 'HEAD'), cwd=workspace)
 
+_semver_re = re.compile(r'^(?:version=)?(?P<major>0|[1-9][0-9]*)\.(?P<minor>0|[1-9][0-9]*)\.(?P<patch>0|[1-9][0-9]*)(?:-(?P<prerelease>[-0-9a-zA-Z]+(?:\.[-0-9a-zA-Z])*))?(?:\+(?P<build>[-0-9a-zA-Z]+(?:\.[-0-9a-zA-Z])*))?$')
+def parse_semver(s):
+    m = _semver_re.match(s)
+    if not m:
+        return None
+
+    major, minor, patch, prerelease, build = m.groups()
+
+    major, minor, patch = int(major), int(minor), int(patch)
+
+    if prerelease is None:
+        prerelease = ()
+    else:
+        prerelease = tuple(prerelease.split('.'))
+
+    if build is None:
+        build = ()
+    else:
+        build = tuple(build.split('.'))
+
+    return (major, minor, patch, prerelease, build)
+
+def stringify_semver(major, minor, patch, prerelease, build):
+    ver = '.'.join(str(x) for x in (major, minor, patch))
+    if prerelease:
+        ver += '-' + '.'.join(prerelease)
+    if build:
+        ver += '+' + '.'.join(build)
+    return ver
+
 @cli.command('prepare-source-tree')
 # git
-@click.option('--source-remote'       , metavar='<url>', help='<source> remote to merge into <target>')
-@click.option('--source-ref'          , metavar='<ref>', help='ref of <source> remote to merge into <target>')
-@click.option('--change-request'      , metavar='<identifier>'           , help='Identifier of change-request to use in merge commit message')
-@click.option('--change-request-title', metavar='<title>'                , help='''Change request title to incorporate in merge commit's subject line''')
-@click.option('--author-name'         , metavar='<name>'                 , help='''Name of change-request's author''')
-@click.option('--author-email'        , metavar='<email>'                , help='''E-mail address of change-request's author''')
-@click.option('--author-date'         , metavar='<date>', type=DateTime(), help='''Time of last update to the change-request''')
-@click.option('--commit-date'         , metavar='<date>', type=DateTime(), help='''Time of starting to build this change-request''')
+@click.option('--source-remote'             , metavar='<url>', help='<source> remote to merge into <target>')
+@click.option('--source-ref'                , metavar='<ref>', help='ref of <source> remote to merge into <target>')
+@click.option('--change-request'            , metavar='<identifier>'           , help='Identifier of change-request to use in merge commit message')
+@click.option('--change-request-title'      , metavar='<title>'                , help='''Change request title to incorporate in merge commit's subject line''')
+@click.option('--author-name'               , metavar='<name>'                 , help='''Name of change-request's author''')
+@click.option('--author-email'              , metavar='<email>'                , help='''E-mail address of change-request's author''')
+@click.option('--author-date'               , metavar='<date>', type=DateTime(), help='''Time of last update to the change-request''')
+@click.option('--commit-date'               , metavar='<date>', type=DateTime(), help='''Time of starting to build this change-request''')
 # misc
-@click.option('--bump-api'            , type=click.Choice(('major', 'minor', 'patch')))
+@click.option('--version-file'              , type=click.Path(exists=True, readable=True, resolve_path=True), help='''File that contains version to bump''')
+@click.option('--bump-version'              , type=click.Choice(('major', 'minor', 'patch')), default='patch')
 @click.pass_context
-def prepare_source_tree(ctx, source_remote, source_ref, change_request, change_request_title, author_name, author_email, author_date, commit_date, bump_api):
+def prepare_source_tree(
+        ctx,
+        source_remote,
+        source_ref,
+        change_request,
+        change_request_title,
+        author_name,
+        author_email,
+        author_date,
+        commit_date,
+        version_file,
+        bump_version,
+    ):
     workspace = ctx.obj['workspace']
     assert git_has_work_tree(workspace)
     echo_cmd(subprocess.check_call, ('git', 'fetch', source_remote, source_ref), cwd=workspace)
+
+    click.echo(echo_cmd(subprocess.check_output, (
+            'git',
+            'merge',
+            '--no-ff',
+            '--no-commit',
+            'FETCH_HEAD',
+        ),
+        cwd=workspace), err=True, nl=False)
+
+    tag_version = None
+    if version_file is not None:
+        new_content = StringIO()
+        with open(version_file, 'r') as f:
+            for l in f:
+                ver = parse_semver(l)
+                if ver is None:
+                    new_content.write(l)
+                    continue
+
+                assert tag_version is None, "multiple versions are not supported"
+
+                tag_version = stringify_semver(*ver)
+
+                click.echo("Current version: {}".format(tag_version), err=True)
+
+                if bump_version:
+                    major, minor, patch, prerelease, build = ver
+
+                    if bump_version == 'patch':
+                        if not prerelease:
+                            patch += 1
+                    elif bump_version == 'minor':
+                        if not prerelease or patch > 0:
+                            minor += 1
+                        patch = 0
+                    elif bump_version == 'major':
+                        if not prerelease or (minor > 0 and patch > 0):
+                            major += 1
+                        major = 0
+                        minor = 0
+
+                    # When bumping the prerelease tags need to be dropped always
+                    prerelease, build = (), ()
+
+                    ver = (major, minor, patch, prerelease, build)
+                    tag_version = stringify_semver(*ver)
+                    click.echo("Bumped to version: {}".format(tag_version), err=True)
+
+                    # Replace version in source line
+                    m = _semver_re.match(l)
+                    new_line = l[:m.start(1)] + tag_version + l[m.end(m.lastgroup)]
+                    new_content.write(new_line)
+
+        assert tag_version is not None, "no version found"
+        with open(version_file, 'w') as f:
+            f.write(new_content.getvalue())
+        echo_cmd(subprocess.check_call, ('git', 'add', version_file), cwd=workspace)
+
     env = os.environ.copy()
     if author_name is not None:
         env['GIT_AUTHOR_NAME'] = author_name
@@ -225,19 +332,26 @@ def prepare_source_tree(ctx, source_remote, source_ref, change_request, change_r
         env['GIT_AUTHOR_DATE'] = author_date.strftime('%Y-%m-%d %H:%M:%S.%f %z')
     if commit_date is not None:
         env['GIT_COMMITTER_DATE'] = commit_date.strftime('%Y-%m-%d %H:%M:%S.%f %z')
+    msg = "Merge #{}".format(change_request)
+    if change_request_title is not None:
+        msg = "{msg}: {title}".format(msg=msg, title=change_request_title)
+
     click.echo(echo_cmd(subprocess.check_output, (
             'git',
-            'merge',
-            '--no-ff',
-            'FETCH_HEAD',
-            '-m', "Merge #{change_request}: {change_request_title}".format(
-                    change_request=change_request,
-                    change_request_title=change_request_title,
-                )),
+            'commit',
+            '-m', msg,
+        ),
         cwd=workspace,
         env=env), err=True, nl=False)
-    click.echo(echo_cmd(subprocess.check_output, ('git', 'show', '--format=fuller', '--stat'), cwd=workspace), err=True, nl=False)
-    echo_cmd(subprocess.check_call, ('git', 'rev-parse', 'HEAD'), cwd=workspace)
+    commit = echo_cmd(subprocess.check_output, ('git', 'rev-parse', 'HEAD'), cwd=workspace).strip()
+
+    if tag_version is not None:
+        click.echo(echo_cmd(subprocess.check_output, ('git', 'tag', '-f', tag_version, commit), cwd=workspace), err=True)
+
+    click.echo(echo_cmd(subprocess.check_output, ('git', 'show', '--format=fuller', '--stat', commit), cwd=workspace), err=True, nl=False)
+    click.echo('{commit}:{target_ref}'.format(commit=commit, target_ref=target_ref))
+    if version is not None and version_tag:
+        click.echo('tag {version}'.format(**locals()))
 
 @cli.command()
 @click.pass_context

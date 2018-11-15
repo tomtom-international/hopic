@@ -22,7 +22,7 @@ class CiDriver
   private workspaces
   private pull_request = null
   private build_commit = null
-  private submit_commit = null
+  private submit_refspecs = []
 
   CiDriver(steps, repo) {
     this.cmds = [:]
@@ -86,19 +86,22 @@ class CiDriver
     if (this.pull_request != null) {
       def author_time = this.pull_request.get('updatedDate', steps.currentBuild.timeInMillis) / 1000.0
       def commit_time = steps.currentBuild.startTimeInMillis / 1000.0
-      this.submit_commit = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --workspace=\"${workspace}\""
-                                          + " prepare-source-tree"
-                                          + " --source-remote=\"${steps.env.GIT_URL}\""
-                                          + " --source-ref=\"pull-requests/${steps.env.CHANGE_ID}/from\""
-                                          + " --change-request=\"${steps.env.CHANGE_ID}\""
-                                          + " --change-request-title=\"${steps.env.CHANGE_TITLE}\""
-                                          + " --author-name=\"${steps.env.CHANGE_AUTHOR}\""
-                                          + " --author-email=\"${steps.env.CHANGE_AUTHOR_EMAIL}\""
-                                          + " --author-date=\"@${author_time}\""
-                                          + " --commit-date=\"@${commit_time}\""
-                                          + clean_param,
-                                  returnStdout: true).replaceAll('\\s', '')
-      this.build_commit = this.submit_commit
+      this.submit_refspecs = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --workspace=\"${workspace}\""
+                                            + " prepare-source-tree"
+                                            + " --source-remote=\"${steps.env.GIT_URL}\""
+                                            + " --source-ref=\"pull-requests/${steps.env.CHANGE_ID}/from\""
+                                            + " --change-request=\"${steps.env.CHANGE_ID}\""
+                                            + " --change-request-title=\"${steps.env.CHANGE_TITLE}\""
+                                            + " --author-name=\"${steps.env.CHANGE_AUTHOR}\""
+                                            + " --author-email=\"${steps.env.CHANGE_AUTHOR_EMAIL}\""
+                                            + " --author-date=\"@${author_time}\""
+                                            + " --commit-date=\"@${commit_time}\""
+                                            // TODO: make version file (and format, currently semver, configurable)
+                                            + " --version-file=\"${workspace}/revision.txt\""
+                                            + " --bump-version=patch"
+                                            + clean_param,
+                                      returnStdout: true).split("\\r?\\n")
+      this.build_commit = this.submit_refspecs
     }
     return workspace
   }
@@ -172,12 +175,12 @@ class CiDriver
         }
     }
 
-    if (this.submit_commit != null) {
+    if (this.submit_refspecs != null) {
       // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
       steps.sh(script: "${orchestrator_cmd} submit"
                        + " --target-remote=\"${steps.env.GIT_URL}\""
                        + " --target-ref=\"${steps.env.CHANGE_TARGET}\""
-                       + " --ref=\"${submit_commit}\"")
+                       + " --ref=\"${submit_refspecs}\"")
     }
   }
 }
