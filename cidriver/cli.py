@@ -235,11 +235,11 @@ def bump_version(workspace, file, format='semver', bump='patch', **_):
                     if not prerelease:
                         patch += 1
                 elif bump == 'minor':
-                    if not prerelease or patch > 0:
+                    if not (prerelease and patch == 0):
                         minor += 1
                     patch = 0
                 elif bump == 'major':
-                    if not prerelease or (minor > 0 and patch > 0):
+                    if not (prerelease and minor == 0 and patch == 0):
                         major += 1
                     major = 0
                     minor = 0
