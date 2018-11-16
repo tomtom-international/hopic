@@ -432,7 +432,7 @@ def prepare_source_tree(
     click.echo(echo_cmd(subprocess.check_output, ('git', '-c', 'color.ui=always', 'show', '--format=fuller', '--stat', commit), cwd=workspace), err=True, nl=False)
     click.echo('{commit}:{target_ref}'.format(commit=commit, target_ref=target_ref))
     if version is not None and version_tag:
-        click.echo('tag {version}'.format(**locals()))
+        click.echo('refs/tags/{version}:refs/tags/{version}'.format(**locals()))
 
 @cli.command()
 @click.pass_context
