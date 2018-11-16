@@ -96,6 +96,75 @@ def image_from_ivy_manifest(manifest, loader, node):
 
     return '{image}:{rev}'.format(**image)
 
+def expand_docker_volume_spec(volume_vars, volume_specs):
+    var_re = re.compile(r'\$(?:(\w+)|\{([^}]+)\})')
+    guest_volume_vars = {
+            'WORKSPACE': '/code',
+        }
+    volumes = []
+    for volume in volume_specs:
+        # Expand string format to dictionary format
+        if isinstance(volume, string_types):
+            volume = volume.split(':')
+            source = volume.pop(0)
+            try:
+                target = volume.pop(0)
+            except IndexError:
+                target = source
+            try:
+                read_only = {'rw': False, 'ro': True}[volume.pop(0)]
+            except IndexError:
+                read_only = None
+            volume = {
+                    'source': source,
+                    'target': target,
+                }
+            if read_only is not None:
+                volume['read-only'] = read_only
+
+        # Expand source specification resolved on the host side
+        if 'source' in volume:
+            source = os.path.expanduser(volume['source'])
+
+            # Expand variables from our "virtual" environment
+            last_idx = 0
+            new_source = source[:last_idx]
+            for var in var_re.finditer(source):
+                name = var.group(1) or var.group(2)
+                value = volume_vars[name]
+                new_source = new_source + source[last_idx:var.start()] + value
+                last_idx = var.end()
+
+            new_source = new_source + source[last_idx:]
+            # Make relative paths relative to the configuration directory.
+            # Absolute paths will be absolute
+            source = os.path.join(config_dir, new_source)
+            volume['source'] = source
+
+        # Expand target specification resolved on the guest side
+        if 'target' in volume:
+            target = volume['target']
+
+            if target.startswith('~/'):
+                target = '/home/sandbox' + target[1:]
+
+            # Expand variables from our virtual guest side environment
+            last_idx = 0
+            new_target = target[:last_idx]
+            for var in var_re.finditer(target):
+                name = var.group(1) or var.group(2)
+                value = guest_volume_vars[name]
+                new_target = new_target + target[last_idx:var.start()] + value
+                last_idx = var.end()
+
+            new_target = new_target + target[last_idx:]
+            target = new_target
+
+            volume['target'] = target
+
+        volumes.append(volume)
+    return volumes
+
 def echo_cmd(fun, cmd, *args, **kwargs):
   click.echo('Executing: ' + click.style(' '.join(shquote(word) for word in cmd), fg='yellow'), err=True)
   try:
@@ -182,47 +251,7 @@ def cli(ctx, config, workspace, dependency_manifest):
         except KeyError:
             pass
     ctx.obj['volume-vars'] = volume_vars
-    volumes = []
-    for volume in cfg.setdefault('volumes', ()):
-        if isinstance(volume, string_types):
-            volume = volume.split(':')
-            source = volume.pop(0)
-            try:
-                target = volume.pop(0)
-            except IndexError:
-                target = source
-            if target.startswith('~/'):
-                target = '/home/sandbox' + target[1:]
-            try:
-                read_only = {'rw': False, 'ro': True}[volume.pop(0)]
-            except IndexError:
-                read_only = None
-            volume = {
-                    'source': source,
-                    'target': target,
-                }
-            if read_only is not None:
-                volume['read-only'] = read_only
-        if 'source' in volume:
-            source = os.path.expanduser(volume['source'])
-
-            # Expand variables from our "virtual" environment
-            var_re = re.compile(r'\$(?:(\w+)|\{([^}]+)\})')
-            last_idx = 0
-            new_source = source[:last_idx]
-            for var in var_re.finditer(source):
-                name = var.group(1) or var.group(2)
-                value = volume_vars[name]
-                new_source = new_source + source[last_idx:var.start()] + value
-                last_idx = var.end()
-
-            new_source = new_source + source[last_idx:]
-            # Make relative paths relative to the configuration directory.
-            # Absolute paths will be absolute
-            source = os.path.join(config_dir, new_source)
-            volume['source'] = source
-        volumes.append(volume)
-    cfg['volumes'] = volumes
+    cfg['volumes'] = expand_docker_volume_spec(volume_vars, cfg.get('volumes', ()))
     ctx.obj['cfg'] = cfg
 
 @cli.command('checkout-source-tree')
