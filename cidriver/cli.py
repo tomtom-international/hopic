@@ -101,6 +101,16 @@ def git_has_work_tree(workspace):
     return False
   return output.strip().lower() == 'true'
 
+def volume_spec_to_docker_param(volume):
+    if not os.path.exists(volume['source']):
+        os.makedirs(volume['source'])
+    param = '{source}:{target}'.format(**volume)
+    try:
+        param = param + ':' + ('ro' if volume['read-only'] else 'rw')
+    except KeyError:
+        pass
+    return param
+
 @click.group(context_settings=dict(help_option_names=('-h', '--help')))
 @click.option('--config', type=click.Path(exists=True, readable=True, resolve_path=True))
 @click.option('--workspace', type=click.Path(exists=True, file_okay=False, dir_okay=True))
@@ -474,14 +484,7 @@ def build(ctx, ref, phase, variant):
                             '-v', '{WORKSPACE}:/code:rw'.format(**ctx.obj['volume-vars'])
                         ]
                     for volume in cfg['volumes']:
-                        if not os.path.exists(volume['source']):
-                            os.makedirs(volume['source'])
-                        param = '{source}:{target}'.format(**volume)
-                        try:
-                            param = param + ':' + ('ro' if volume['read-only'] else 'rw')
-                        except KeyError:
-                            pass
-                        docker_run += ['-v', param]
+                        docker_run += ['-v', volume_spec_to_docker_param(volume)]
                     docker_run.append(image)
                     cmd = docker_run + cmd
                 echo_cmd(subprocess.check_call, cmd)
