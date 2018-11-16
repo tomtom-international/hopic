@@ -348,7 +348,7 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
     echo_cmd(subprocess.check_call, ('git', 'fetch', target_remote, target_ref), cwd=workspace)
     echo_cmd(subprocess.check_call, ('git', 'checkout', '--force', 'FETCH_HEAD'), cwd=workspace)
     if clean:
-      click.echo(echo_cmd(subprocess.check_output, ('git', 'clean', '--force', '-xd'), cwd=workspace), err=True, nl=False)
+      click.echo(echo_cmd(subprocess.check_output, ('git', '-c', 'color.ui=always', 'clean', '--force', '-xd'), cwd=workspace), err=True, nl=False)
     echo_cmd(subprocess.check_call, ('git', 'rev-parse', 'HEAD'), cwd=workspace)
 
 @cli.command('prepare-source-tree')
@@ -387,7 +387,7 @@ def prepare_source_tree(
     echo_cmd(subprocess.check_call, ('git', 'fetch', source_remote, source_ref), cwd=workspace)
 
     click.echo(echo_cmd(subprocess.check_output, (
-            'git',
+            'git', '-c', 'color.ui=always',
             'merge',
             '--no-ff',
             '--no-commit',
@@ -418,7 +418,7 @@ def prepare_source_tree(
         msg = "{msg}\n\n{description}".format(msg=msg, description=change_request_description)
 
     click.echo(echo_cmd(subprocess.check_output, (
-            'git',
+            'git', '-c', 'color.ui=always',
             'commit',
             '-m', msg,
         ),
@@ -427,9 +427,9 @@ def prepare_source_tree(
     commit = echo_cmd(subprocess.check_output, ('git', 'rev-parse', 'HEAD'), cwd=workspace).strip()
 
     if version is not None and version_tag:
-        click.echo(echo_cmd(subprocess.check_output, ('git', 'tag', '-f', version, commit), cwd=workspace), err=True, nl=False)
+        click.echo(echo_cmd(subprocess.check_output, ('git', '-c', 'color.ui=always', 'tag', '-f', version, commit), cwd=workspace), err=True, nl=False)
 
-    click.echo(echo_cmd(subprocess.check_output, ('git', 'show', '--format=fuller', '--stat', commit), cwd=workspace), err=True, nl=False)
+    click.echo(echo_cmd(subprocess.check_output, ('git', '-c', 'color.ui=always', 'show', '--format=fuller', '--stat', commit), cwd=workspace), err=True, nl=False)
     click.echo('{commit}:{target_ref}'.format(commit=commit, target_ref=target_ref))
     if version is not None and version_tag:
         click.echo('tag {version}'.format(**locals()))
