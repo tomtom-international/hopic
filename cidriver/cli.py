@@ -96,7 +96,7 @@ def image_from_ivy_manifest(manifest, loader, node):
 
     return '{image}:{rev}'.format(**image)
 
-def expand_docker_volume_spec(volume_vars, volume_specs):
+def expand_docker_volume_spec(config_dir, volume_vars, volume_specs):
     var_re = re.compile(r'\$(?:(\w+)|\{([^}]+)\})')
     guest_volume_vars = {
             'WORKSPACE': '/code',
@@ -333,7 +333,7 @@ def cli(ctx, config, workspace, dependency_manifest):
         except KeyError:
             pass
     ctx.obj['volume-vars'] = volume_vars
-    cfg['volumes'] = expand_docker_volume_spec(volume_vars, cfg.get('volumes', ()))
+    cfg['volumes'] = expand_docker_volume_spec(config_dir, volume_vars, cfg.get('volumes', ()))
     ctx.obj['cfg'] = cfg
 
 @cli.command('checkout-source-tree')
