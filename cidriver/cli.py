@@ -83,6 +83,19 @@ def get_toolchain_image_information(dependency_manifest):
 
     return toolchain_dep
 
+def image_from_ivy_manifest(manifest, loader, node):
+    props = loader.construct_mapping(node) if node.value else {}
+
+    image = get_toolchain_image_information(manifest)
+
+    # Override dependency manifest with info from config
+    image.update(props)
+
+    # Construct a full, pullable, image path
+    image['image'] = '/'.join(filter(None, (image.get('repository'), image.get('path'), image['name'])))
+
+    return '{image}:{rev}'.format(**image)
+
 def echo_cmd(fun, cmd, *args, **kwargs):
   click.echo('Executing: ' + click.style(' '.join(shquote(word) for word in cmd), fg='yellow'), err=True)
   try:
@@ -146,22 +159,14 @@ def cli(ctx, config, workspace, dependency_manifest):
         return
 
     config_dir = os.path.dirname(config)
-    def image_from_ivy_manifest(loader, node):
-        props = loader.construct_mapping(node) if node.value else {}
 
-        # Fallback to 'dependency_manifest.xml' file in same directory as config
-        manifest = (dependency_manifest if dependency_manifest
-                else (os.path.join(workspace or config_dir, 'dependency_manifest.xml')))
-        image = get_toolchain_image_information(manifest)
-
-        # Override dependency manifest with info from config
-        image.update(props)
-
-        # Construct a full, pullable, image path
-        image['image'] = '/'.join(filter(None, (image.get('repository'), image.get('path'), image['name'])))
-
-        return '{image}:{rev}'.format(**image)
-    OrderedLoader.add_constructor('!image-from-ivy-manifest', image_from_ivy_manifest)
+    # Fallback to 'dependency_manifest.xml' file in same directory as config
+    manifest = (dependency_manifest if dependency_manifest
+            else (os.path.join(workspace or config_dir, 'dependency_manifest.xml')))
+    OrderedLoader.add_constructor(
+            '!image-from-ivy-manifest',
+            lambda *args: image_from_ivy_manifest(manifest, *args)
+        )
 
     with open(config, 'r') as f:
         cfg = yaml.load(f, OrderedLoader)
