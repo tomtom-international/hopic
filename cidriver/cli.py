@@ -96,6 +96,14 @@ def image_from_ivy_manifest(manifest, loader, node):
 
     return '{image}:{rev}'.format(**image)
 
+def ordered_image_ivy_loader(manifest):
+    OrderedImageLoader = type('OrderedImageLoader', (OrderedLoader,), {})
+    OrderedImageLoader.add_constructor(
+            '!image-from-ivy-manifest',
+            lambda *args: image_from_ivy_manifest(manifest, *args)
+        )
+    return OrderedImageLoader
+
 def expand_docker_volume_spec(config_dir, volume_vars, volume_specs):
     var_re = re.compile(r'\$(?:(\w+)|\{([^}]+)\})')
     guest_volume_vars = {
@@ -314,13 +322,10 @@ def cli(ctx, config, workspace, dependency_manifest):
     # Fallback to 'dependency_manifest.xml' file in same directory as config
     manifest = (dependency_manifest if dependency_manifest
             else (os.path.join(workspace or config_dir, 'dependency_manifest.xml')))
-    OrderedLoader.add_constructor(
-            '!image-from-ivy-manifest',
-            lambda *args: image_from_ivy_manifest(manifest, *args)
-        )
+    OrderedImageLoader = ordered_image_ivy_loader(manifest)
 
     with open(config, 'r') as f:
-        cfg = yaml.load(f, OrderedLoader)
+        cfg = yaml.load(f, OrderedImageLoader)
 
     volume_vars = {
             'WORKSPACE': workspace or '/tmp/jenkins/' + str(os.getpid()),
