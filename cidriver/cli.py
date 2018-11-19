@@ -1,6 +1,6 @@
 import click
 
-from collections import OrderedDict
+from .config_reader import read as read_config
 from datetime import datetime
 from dateutil.parser import parse as date_parse
 from dateutil.tz import (tzoffset, tzlocal, tzutc)
@@ -10,8 +10,6 @@ import re
 import shlex
 from six import string_types
 import subprocess
-import xml.etree.ElementTree as ET
-import yaml
 
 try:
     from shlex import quote as shquote
@@ -22,13 +20,6 @@ try:
     from cStringIO import StringIO
 except ImportError:
     from StringIO import StringIO
-
-class OrderedLoader(yaml.SafeLoader):
-    pass
-def __yaml_construct_mapping(loader, node):
-    loader.flatten_mapping(node)
-    return OrderedDict(loader.construct_pairs(node))
-OrderedLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, __yaml_construct_mapping)
 
 class DateTime(click.ParamType):
     name = 'date'
@@ -62,116 +53,6 @@ class DateTime(click.ParamType):
             return dt
         except ValueError as e:
             self.fail('Could not parse datetime string "{value}": {e}'.format(value=value, e=' '.join(e.args)), param, ctx)
-
-def get_toolchain_image_information(dependency_manifest):
-    tree = ET.parse(dependency_manifest)
-
-    def refers_to_toolchain(dependency):
-        confAttribute = dependency.get("conf")
-        if confAttribute and "toolchain" in confAttribute:
-            return True
-
-        for child in dependency:
-            if child.tag == "conf":
-                mappedAttribute = child.get("mapped")
-                if mappedAttribute == "toolchain":
-                    return True
-        return False
-
-    toolchain_dep, = (
-        dep.attrib for dep in tree.getroot().find("dependencies") if refers_to_toolchain(dep))
-
-    return toolchain_dep
-
-def image_from_ivy_manifest(manifest, loader, node):
-    props = loader.construct_mapping(node) if node.value else {}
-
-    image = get_toolchain_image_information(manifest)
-
-    # Override dependency manifest with info from config
-    image.update(props)
-
-    # Construct a full, pullable, image path
-    image['image'] = '/'.join(filter(None, (image.get('repository'), image.get('path'), image['name'])))
-
-    return '{image}:{rev}'.format(**image)
-
-def ordered_image_ivy_loader(manifest):
-    OrderedImageLoader = type('OrderedImageLoader', (OrderedLoader,), {})
-    OrderedImageLoader.add_constructor(
-            '!image-from-ivy-manifest',
-            lambda *args: image_from_ivy_manifest(manifest, *args)
-        )
-    return OrderedImageLoader
-
-def expand_docker_volume_spec(config_dir, volume_vars, volume_specs):
-    var_re = re.compile(r'\$(?:(\w+)|\{([^}]+)\})')
-    guest_volume_vars = {
-            'WORKSPACE': '/code',
-        }
-    volumes = []
-    for volume in volume_specs:
-        # Expand string format to dictionary format
-        if isinstance(volume, string_types):
-            volume = volume.split(':')
-            source = volume.pop(0)
-            try:
-                target = volume.pop(0)
-            except IndexError:
-                target = source
-            try:
-                read_only = {'rw': False, 'ro': True}[volume.pop(0)]
-            except IndexError:
-                read_only = None
-            volume = {
-                    'source': source,
-                    'target': target,
-                }
-            if read_only is not None:
-                volume['read-only'] = read_only
-
-        # Expand source specification resolved on the host side
-        if 'source' in volume:
-            source = os.path.expanduser(volume['source'])
-
-            # Expand variables from our "virtual" environment
-            last_idx = 0
-            new_source = source[:last_idx]
-            for var in var_re.finditer(source):
-                name = var.group(1) or var.group(2)
-                value = volume_vars[name]
-                new_source = new_source + source[last_idx:var.start()] + value
-                last_idx = var.end()
-
-            new_source = new_source + source[last_idx:]
-            # Make relative paths relative to the configuration directory.
-            # Absolute paths will be absolute
-            source = os.path.join(config_dir, new_source)
-            volume['source'] = source
-
-        # Expand target specification resolved on the guest side
-        if 'target' in volume:
-            target = volume['target']
-
-            if target.startswith('~/'):
-                target = '/home/sandbox' + target[1:]
-
-            # Expand variables from our virtual guest side environment
-            last_idx = 0
-            new_target = target[:last_idx]
-            for var in var_re.finditer(target):
-                name = var.group(1) or var.group(2)
-                value = guest_volume_vars[name]
-                new_target = new_target + target[last_idx:var.start()] + value
-                last_idx = var.end()
-
-            new_target = new_target + target[last_idx:]
-            target = new_target
-
-            volume['target'] = target
-
-        volumes.append(volume)
-    return volumes
 
 def echo_cmd(fun, cmd, *args, **kwargs):
   click.echo('Executing: ' + click.style(' '.join(shquote(word) for word in cmd), fg='yellow'), err=True)
@@ -314,22 +195,9 @@ def cli(ctx, config, workspace, dependency_manifest):
         ctx.obj = {}
     ctx.obj['workspace'] = workspace
 
-    if config is None:
-        return
-
-    config_dir = os.path.dirname(config)
-
-    # Fallback to 'dependency_manifest.xml' file in same directory as config
-    manifest = (dependency_manifest if dependency_manifest
-            else (os.path.join(workspace or config_dir, 'dependency_manifest.xml')))
-    OrderedImageLoader = ordered_image_ivy_loader(manifest)
-
-    with open(config, 'r') as f:
-        cfg = yaml.load(f, OrderedImageLoader)
-
-    volume_vars = {
-            'WORKSPACE': workspace or '/tmp/jenkins/' + str(os.getpid()),
-        }
+    volume_vars = {}
+    if workspace is not None:
+        volume_vars['WORKSPACE'] = workspace
     for whitelisted_var in (
             'CT_DEVENV_HOME',
         ):
@@ -338,8 +206,13 @@ def cli(ctx, config, workspace, dependency_manifest):
         except KeyError:
             pass
     ctx.obj['volume-vars'] = volume_vars
-    cfg['volumes'] = expand_docker_volume_spec(config_dir, volume_vars, cfg.get('volumes', ()))
-    ctx.obj['cfg'] = cfg
+
+    # Fallback to 'dependency_manifest.xml' file in same directory as config
+    manifest = (dependency_manifest if dependency_manifest
+            else (os.path.join(workspace or config_dir, 'dependency_manifest.xml')))
+
+    if config is not None:
+        ctx.obj['cfg'] = read_config(config, manifest, volume_vars)
 
 @cli.command('checkout-source-tree')
 @click.option('--target-remote'     , metavar='<url>')
