@@ -8,3 +8,9 @@ Advantages:
 
 Easter egg advantages:
  * Declarative approach
+
+Requirements:
+ * Allow overriding of version used by client's build system via command line
+   - Allows automatically generating user-specific pre-release tags
+   - Defaulting to ${CUR_VERSION} -> bump patch -> set pre-release to "$(git describe --tags --long --dirty --always)-${USER}"
+ * Build config should not be executable
