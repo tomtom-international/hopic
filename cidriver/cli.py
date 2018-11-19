@@ -1,6 +1,7 @@
 import click
 
 from .config_reader import read as read_config
+from .execution import echo_cmd
 from datetime import datetime
 from dateutil.parser import parse as date_parse
 from dateutil.tz import (tzoffset, tzlocal, tzutc)
@@ -10,11 +11,6 @@ import re
 import shlex
 from six import string_types
 import subprocess
-
-try:
-    from shlex import quote as shquote
-except ImportError:
-    from pipes import quote as shquote
 
 try:
     from cStringIO import StringIO
@@ -53,15 +49,6 @@ class DateTime(click.ParamType):
             return dt
         except ValueError as e:
             self.fail('Could not parse datetime string "{value}": {e}'.format(value=value, e=' '.join(e.args)), param, ctx)
-
-def echo_cmd(fun, cmd, *args, **kwargs):
-  click.echo('Executing: ' + click.style(' '.join(shquote(word) for word in cmd), fg='yellow'), err=True)
-  try:
-    return fun(cmd, *args, **kwargs)
-  except Exception as e:
-    if hasattr(e, 'child_traceback'):
-      click.echo("Child traceback: {}".format(e.child_traceback), err=True)
-    raise
 
 def git_has_work_tree(workspace):
   if not os.path.isdir(os.path.join(workspace, '.git')):
