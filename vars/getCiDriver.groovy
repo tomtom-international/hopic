@@ -61,7 +61,7 @@ class CiDriver
       def workspace = steps.pwd()
       steps.sh(script: "python -m virtualenv --clear ${venv}\n"
                      + "${venv}/bin/python -m pip install \"${this.repo}\"")
-      this.cmds[steps.env.NODE_NAME] = "${venv}/bin/python ${venv}/bin/ci-driver --config=\"${workspace}/cfg.yml\" --workspace=\"${workspace}\""
+      this.cmds[steps.env.NODE_NAME] = "${venv}/bin/python ${venv}/bin/ci-driver --color=always --config=\"${workspace}/cfg.yml\" --workspace=\"${workspace}\""
     }
     return this.cmds[steps.env.NODE_NAME]
   }
@@ -76,7 +76,7 @@ class CiDriver
     if (steps.env.CHANGE_TARGET != null) {
       ref = steps.env.CHANGE_TARGET
     }
-    steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --workspace=\"${workspace}\""
+    steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --color=always --workspace=\"${workspace}\""
                    + " checkout-source-tree"
                    + " --target-remote=\"${steps.env.GIT_URL}\""
                    + " --target-ref=\"${ref}\""
@@ -92,7 +92,7 @@ class CiDriver
       if (this.pull_request.containsKey('description')) {
         extra_params += " --change-request-description=\"${pull_request.description}\""
       }
-      this.submit_refspecs = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --workspace=\"${workspace}\""
+      this.submit_refspecs = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --color=always --workspace=\"${workspace}\""
                                             + conf_params
                                             + " prepare-source-tree"
                                             + " --target-remote=\"${steps.env.GIT_URL}\""
@@ -112,79 +112,81 @@ class CiDriver
   }
 
   public def build(clean = false) {
-    this.pull_request = this.get_change_request_info()
-    def orchestrator_cmd = this.install_prerequisites()
+    steps.ansiColor('xterm') {
+      this.pull_request = this.get_change_request_info()
+      def orchestrator_cmd = this.install_prerequisites()
 
-    /*
-     * We're splitting the enumeration of phases and variants from their execution in order to
-     * enable Jenkins to execute the different variants within a phase in parallel.
-     */
-    this.checkout()
-    def phases = steps.sh(
-        script: "${orchestrator_cmd} phases",
-        returnStdout: true,
-      ).split("\\r?\\n")
+      /*
+       * We're splitting the enumeration of phases and variants from their execution in order to
+       * enable Jenkins to execute the different variants within a phase in parallel.
+       */
+      this.checkout()
+      def phases = steps.sh(
+          script: "${orchestrator_cmd} phases",
+          returnStdout: true,
+        ).split("\\r?\\n")
 
-    phases.each { phase ->
-        def variants = steps.sh(
-            script: "${orchestrator_cmd} variants --phase=\"${phase}\"",
-            returnStdout: true,
-          ).split("\\r?\\n")
-        steps.stage(phase) {
-          def stepsForBuilding = variants.collectEntries { variant ->
-            [ "${phase}-${variant}": {
-              def label = steps.readJSON(text: steps.sh(
-                  script: "${orchestrator_cmd} getinfo --phase=\"${phase}\" --variant=\"${variant}\"",
-                  returnStdout: true,
-                )).get('node-label', 'Linux && Docker')
-              if (this.nodes.containsKey(variant)) {
-                label = this.nodes[variant]
-              }
-              steps.node(label) {
-                steps.stage("${phase}-${variant}") {
-                  def cmd = this.install_prerequisites()
-                  if (!this.workspaces.containsKey(steps.env.NODE_NAME)) {
-                    this.workspaces[steps.env.NODE_NAME] = this.checkout(clean)
-                  }
-                  if (!this.nodes.containsKey(variant)) {
-                    this.nodes[variant] = steps.env.NODE_NAME
-                  }
-                  // Meta-data retrieval needs to take place on the executing node to ensure environment variable expansion happens properly
-                  def meta = steps.readJSON(text: steps.sh(
-                      script: "${cmd} getinfo --phase=\"${phase}\" --variant=\"${variant}\"",
-                      returnStdout: true,
-                    ))
-                  steps.sh(script: "${cmd} build --phase=\"${phase}\" --variant=\"${variant}\"")
+      phases.each { phase ->
+          def variants = steps.sh(
+              script: "${orchestrator_cmd} variants --phase=\"${phase}\"",
+              returnStdout: true,
+            ).split("\\r?\\n")
+          steps.stage(phase) {
+            def stepsForBuilding = variants.collectEntries { variant ->
+              [ "${phase}-${variant}": {
+                def label = steps.readJSON(text: steps.sh(
+                    script: "${orchestrator_cmd} getinfo --phase=\"${phase}\" --variant=\"${variant}\"",
+                    returnStdout: true,
+                  )).get('node-label', 'Linux && Docker')
+                if (this.nodes.containsKey(variant)) {
+                  label = this.nodes[variant]
+                }
+                steps.node(label) {
+                  steps.stage("${phase}-${variant}") {
+                    def cmd = this.install_prerequisites()
+                    if (!this.workspaces.containsKey(steps.env.NODE_NAME)) {
+                      this.workspaces[steps.env.NODE_NAME] = this.checkout(clean)
+                    }
+                    if (!this.nodes.containsKey(variant)) {
+                      this.nodes[variant] = steps.env.NODE_NAME
+                    }
+                    // Meta-data retrieval needs to take place on the executing node to ensure environment variable expansion happens properly
+                    def meta = steps.readJSON(text: steps.sh(
+                        script: "${cmd} getinfo --phase=\"${phase}\" --variant=\"${variant}\"",
+                        returnStdout: true,
+                      ))
+                    steps.sh(script: "${cmd} build --phase=\"${phase}\" --variant=\"${variant}\"")
 
-                  // FIXME: get rid of special casing for stashing
-                  if (meta.containsKey('stash')) {
-                    steps.dir(meta['stash'].get('dir', this.workspaces[steps.env.NODE_NAME])) {
-                      def params = [
-                          name: variant,
-                        ]
-                      if (meta['stash'].containsKey('includes')) {
-                        params['includes'] = meta['stash']['includes']
+                    // FIXME: get rid of special casing for stashing
+                    if (meta.containsKey('stash')) {
+                      steps.dir(meta['stash'].get('dir', this.workspaces[steps.env.NODE_NAME])) {
+                        def params = [
+                            name: variant,
+                          ]
+                        if (meta['stash'].containsKey('includes')) {
+                          params['includes'] = meta['stash']['includes']
+                        }
+                        steps.stash(params)
                       }
-                      steps.stash(params)
                     }
                   }
                 }
-              }
-            }]
+              }]
+            }
+            steps.parallel stepsForBuilding
           }
-          steps.parallel stepsForBuilding
-        }
-    }
-
-    if (this.submit_refspecs != null) {
-      // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
-      def refspecs = ""
-      this.submit_refspecs.each { refspec ->
-        refspecs += " --refspec=\"${refspec}\""
       }
-      steps.sh(script: "${orchestrator_cmd} submit"
-                       + " --target-remote=\"${steps.env.GIT_URL}\""
-                       + refspecs)
+
+      if (this.submit_refspecs != null) {
+        // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
+        def refspecs = ""
+        this.submit_refspecs.each { refspec ->
+          refspecs += " --refspec=\"${refspec}\""
+        }
+        steps.sh(script: "${orchestrator_cmd} submit"
+                         + " --target-remote=\"${steps.env.GIT_URL}\""
+                         + refspecs)
+      }
     }
   }
 }

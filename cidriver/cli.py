@@ -87,11 +87,20 @@ def volume_spec_to_docker_param(volume):
     return param
 
 @click.group(context_settings=dict(help_option_names=('-h', '--help')))
+@click.option('--color', type=click.Choice(('always', 'auto', 'never')), default='auto')
 @click.option('--config', type=click.Path(exists=True, readable=True, resolve_path=True))
 @click.option('--workspace', type=click.Path(exists=True, file_okay=False, dir_okay=True))
 @click.option('--dependency-manifest', type=click.File('r'))
 @click.pass_context
-def cli(ctx, config, workspace, dependency_manifest):
+def cli(ctx, color, config, workspace, dependency_manifest):
+    if color == 'always':
+        ctx.color = True
+    elif color == 'never':
+        ctx.color = False
+    else:
+        # leave as is: 'auto' is the default for Click
+        pass
+
     if ctx.obj is None:
         ctx.obj = {}
     ctx.obj['workspace'] = workspace
