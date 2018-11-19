@@ -22,6 +22,7 @@ class CiDriver
   private workspaces
   private pull_request = null
   private submit_refspecs = null
+  private submit_version = null
 
   CiDriver(steps, repo) {
     this.cmds = [:]
@@ -107,8 +108,34 @@ class CiDriver
                                             + " --commit-date=\"@${commit_time}\""
                                             + extra_params,
                                       returnStdout: true).split("\\r?\\n")
+      def versions = []
+      this.submit_refspecs.each { refspec ->
+        def m = (refspec =~ /^[^:]*:refs\/tags\/(.+)/)
+        if (m) {
+          versions << m[0][1]
+        }
+      }
+      if (versions.size() == 1) {
+        this.submit_version = versions[0]
+      }
     }
     return workspace
+  }
+
+  public def get_submit_version() {
+    return this.submit_version
+  }
+
+  public def get_variants(phase = null) {
+    def phase_arg = ""
+    if (phase != null) {
+      phase_arg = " --phase=\"${phase}\""
+    }
+    def cmd = this.install_prerequisites()
+    return steps.sh(
+        script: "${cmd} variants --phase=\"${phase}\"",
+        returnStdout: true,
+      ).split("\\r?\\n")
   }
 
   public def build(clean = false) {
@@ -127,10 +154,7 @@ class CiDriver
         ).split("\\r?\\n")
 
       phases.each { phase ->
-          def variants = steps.sh(
-              script: "${orchestrator_cmd} variants --phase=\"${phase}\"",
-              returnStdout: true,
-            ).split("\\r?\\n")
+          def variants = this.get_variants(phase)
           steps.stage(phase) {
             def stepsForBuilding = variants.collectEntries { variant ->
               [ "${phase}-${variant}": {
