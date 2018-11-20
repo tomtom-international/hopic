@@ -5,7 +5,7 @@ from .execution import echo_cmd
 from .versioning import bump_version
 from datetime import datetime
 from dateutil.parser import parse as date_parse
-from dateutil.tz import (tzoffset, tzlocal, tzutc)
+from dateutil.tz import (tzoffset, tzlocal)
 import json
 import os
 import re
@@ -36,7 +36,7 @@ class DateTime(click.ParamType):
                 if tzhour is not None:
                     tz = tzoffset(None, tzdir * (tzhour * 3600 + tzmin * 60))
                 else:
-                    tz = tzutc()
+                    tz = tzlocal()
                 return datetime.fromtimestamp(float(stamp.group('utcstamp')), tz)
 
             dt = date_parse(value)
