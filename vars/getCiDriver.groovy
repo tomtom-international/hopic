@@ -201,7 +201,7 @@ class CiDriver
           }
       }
 
-      if (this.submit_refspecs != null) {
+      if (this.submit_refspecs != null && this.pull_request.canMerge) {
         // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
         def refspecs = ""
         this.submit_refspecs.each { refspec ->
