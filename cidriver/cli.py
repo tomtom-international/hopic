@@ -12,6 +12,7 @@ import re
 import shlex
 from six import string_types
 import subprocess
+import sys
 
 class DateTime(click.ParamType):
     name = 'date'
@@ -136,7 +137,7 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
     echo_cmd(subprocess.check_call, ('git', 'fetch', target_remote, target_ref), cwd=workspace)
     echo_cmd(subprocess.check_call, ('git', 'checkout', '--force', 'FETCH_HEAD'), cwd=workspace)
     if clean:
-      click.echo(echo_cmd(subprocess.check_output, ('git', '-c', 'color.ui=always', 'clean', '--force', '-xd'), cwd=workspace), err=True, nl=False)
+      echo_cmd(subprocess.check_call, ('git', '-c', 'color.ui=always', 'clean', '--force', '-xd'), cwd=workspace, stdout=sys.stderr)
     echo_cmd(subprocess.check_call, ('git', 'rev-parse', 'HEAD'), cwd=workspace)
 
 @cli.command('prepare-source-tree')
@@ -174,14 +175,16 @@ def prepare_source_tree(
     echo_cmd(subprocess.check_call, ('git', 'checkout', '--force', 'FETCH_HEAD'), cwd=workspace)
     echo_cmd(subprocess.check_call, ('git', 'fetch', source_remote, source_ref), cwd=workspace)
 
-    click.echo(echo_cmd(subprocess.check_output, (
+    echo_cmd(subprocess.check_call, (
             'git', '-c', 'color.ui=always',
             'merge',
             '--no-ff',
             '--no-commit',
             'FETCH_HEAD',
         ),
-        cwd=workspace), err=True, nl=False)
+        cwd=workspace,
+        stdout=sys.stderr,
+    )
 
     version = None
 
@@ -205,19 +208,21 @@ def prepare_source_tree(
     if change_request_description is not None:
         msg = "{msg}\n\n{description}".format(msg=msg, description=change_request_description)
 
-    click.echo(echo_cmd(subprocess.check_output, (
+    echo_cmd(subprocess.check_call, (
             'git', '-c', 'color.ui=always',
             'commit',
             '-m', msg,
         ),
         cwd=workspace,
-        env=env), err=True, nl=False)
+        env=env,
+        stdout=sys.stderr,
+    )
     commit = echo_cmd(subprocess.check_output, ('git', 'rev-parse', 'HEAD'), cwd=workspace).strip()
 
     if version is not None and version_tag:
-        click.echo(echo_cmd(subprocess.check_output, ('git', '-c', 'color.ui=always', 'tag', '-f', version, commit), cwd=workspace), err=True, nl=False)
+        echo_cmd(subprocess.check_call, ('git', '-c', 'color.ui=always', 'tag', '-f', version, commit), cwd=workspace, stdout=sys.stderr)
 
-    click.echo(echo_cmd(subprocess.check_output, ('git', '-c', 'color.ui=always', 'show', '--format=fuller', '--stat', commit), cwd=workspace), err=True, nl=False)
+    echo_cmd(subprocess.check_call, ('git', '-c', 'color.ui=always', 'show', '--format=fuller', '--stat', commit), cwd=workspace, stdout=sys.stderr)
     click.echo('{commit}:{target_ref}'.format(commit=commit, target_ref=target_ref))
     if version is not None and version_tag:
         click.echo('refs/tags/{version}:refs/tags/{version}'.format(**locals()))
