@@ -218,6 +218,7 @@ def prepare_source_tree(
         stdout=sys.stderr,
     )
     commit = echo_cmd(subprocess.check_output, ('git', 'rev-parse', 'HEAD'), cwd=workspace).strip()
+    click.echo(commit)
 
     if version is not None and version_tag:
         echo_cmd(subprocess.check_call, ('git', '-c', 'color.ui=always', 'tag', '-f', version, commit), cwd=workspace, stdout=sys.stderr)

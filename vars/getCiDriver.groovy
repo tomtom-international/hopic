@@ -22,6 +22,7 @@ class CiDriver
   private workspaces
   private pull_request = null
   private submit_refspecs = null
+  private submit_commit = null
   private submit_version = null
 
   CiDriver(steps, repo) {
@@ -107,7 +108,17 @@ class CiDriver
                                             + " --author-date=\"@${author_time}\""
                                             + " --commit-date=\"@${commit_time}\""
                                             + extra_params,
-                                      returnStdout: true).split("\\r?\\n")
+                                      returnStdout: true).split("\\r?\\n").collect{it}
+      this.submit_commit = this.submit_refspecs.remove(0)
+
+      steps.checkout(scm: [
+          $class: 'GitSCM',
+          userRemoteConfigs: [[
+              url: workspace,
+            ]],
+          branches: [[name: this.submit_commit]],
+        ])
+
       def versions = []
       this.submit_refspecs.each { refspec ->
         def m = (refspec =~ /^[^:]*:refs\/tags\/(.+)/)
