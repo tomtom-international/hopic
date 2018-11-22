@@ -2,7 +2,7 @@ import click
 
 from .config_reader import read as read_config
 from .execution import echo_cmd
-from .versioning import bump_version
+from .versioning import (bump_version, stringify_semver)
 from datetime import datetime
 from dateutil.parser import parse as date_parse
 from dateutil.tz import (tzoffset, tzlocal)
@@ -220,13 +220,15 @@ def prepare_source_tree(
     commit = echo_cmd(subprocess.check_output, ('git', 'rev-parse', 'HEAD'), cwd=workspace).strip()
     click.echo(commit)
 
-    if version is not None and version_tag:
-        echo_cmd(subprocess.check_call, ('git', '-c', 'color.ui=always', 'tag', '-f', version, commit), cwd=workspace, stdout=sys.stderr)
+    tagname = None
+    if version is not None and not version.prerelease and version_tag:
+        tagname = stringify_semver(*version)
+        echo_cmd(subprocess.check_call, ('git', '-c', 'color.ui=always', 'tag', '-f', tagname, commit), cwd=workspace, stdout=sys.stderr)
 
     echo_cmd(subprocess.check_call, ('git', '-c', 'color.ui=always', 'show', '--format=fuller', '--stat', commit), cwd=workspace, stdout=sys.stderr)
     click.echo('{commit}:{target_ref}'.format(commit=commit, target_ref=target_ref))
-    if version is not None and version_tag:
-        click.echo('refs/tags/{version}:refs/tags/{version}'.format(**locals()))
+    if tagname is not None:
+        click.echo('refs/tags/{tagname}:refs/tags/{tagname}'.format(**locals()))
 
 @cli.command()
 @click.pass_context
