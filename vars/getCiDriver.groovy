@@ -100,7 +100,7 @@ class CiDriver
                                             + " --target-remote=\"${steps.env.GIT_URL}\""
                                             + " --target-ref=\"${ref}\""
                                             + " --source-remote=\"${steps.env.GIT_URL}\""
-                                            + " --source-ref=\"pull-requests/${steps.env.CHANGE_ID}/from\""
+                                            + " --source-ref=\"${steps.env.GIT_COMMIT}\""
                                             + " --change-request=\"${steps.env.CHANGE_ID}\""
                                             + " --change-request-title=\"${steps.env.CHANGE_TITLE}\""
                                             + " --author-name=\"${steps.env.CHANGE_AUTHOR}\""
@@ -212,7 +212,7 @@ class CiDriver
           }
       }
 
-      if (this.submit_refspecs != null && this.pull_request.canMerge) {
+      if (this.submit_refspecs != null && this.canMerge()) {
         // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
         def refspecs = ""
         this.submit_refspecs.each { refspec ->
@@ -223,6 +223,14 @@ class CiDriver
                          + refspecs)
       }
     }
+  }
+
+  private def canMerge() {
+    def cur_cr_info = this.get_change_request_info()
+    return !(cur_cr_info == null
+          || cur_cr_info.fromRef == null
+          || cur_cr_info.fromRef.latestCommit != steps.env.GIT_COMMIT
+          || !cur_cr_info.canMerge)
   }
 }
 
