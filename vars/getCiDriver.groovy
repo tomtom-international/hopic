@@ -16,21 +16,18 @@
 class CiDriver
 {
   private repo
-  private cmds
   private steps
-  private nodes
-  private workspaces
-  private pull_request = null
+  private cmds            = [:]
+  private nodes           = [:]
+  private workspaces      = [:]
+  private pull_request    = null
   private submit_refspecs = null
-  private submit_commit = null
-  private submit_version = null
+  private submit_commit   = null
+  private submit_version  = null
 
   CiDriver(steps, repo) {
-    this.cmds = [:]
     this.repo = repo
     this.steps = steps
-    this.nodes = [:]
-    this.workspaces = [:]
   }
 
   public def get_change_request_info() {
