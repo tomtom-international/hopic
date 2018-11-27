@@ -136,11 +136,12 @@ def cli(ctx, color, config, workspace, dependency_manifest):
 def checkout_source_tree(ctx, target_remote, target_ref, clean):
     workspace = ctx.obj['workspace']
     if not git_has_work_tree(workspace):
-        echo_cmd(subprocess.check_call, ('git', 'clone', target_remote, workspace))
+        echo_cmd(subprocess.check_call, ('git', 'clone', '-c' 'color.ui=always', target_remote, workspace))
+    echo_cmd(subprocess.check_call, ('git', 'config', 'color.ui', 'always'), cwd=workspace)
     echo_cmd(subprocess.check_call, ('git', 'fetch', target_remote, target_ref), cwd=workspace)
     echo_cmd(subprocess.check_call, ('git', 'checkout', '--force', 'FETCH_HEAD'), cwd=workspace)
     if clean:
-      echo_cmd(subprocess.check_call, ('git', '-c', 'color.ui=always', 'clean', '--force', '-xd'), cwd=workspace, stdout=sys.stderr)
+      echo_cmd(subprocess.check_call, ('git', 'clean', '--force', '-xd'), cwd=workspace, stdout=sys.stderr)
     echo_cmd(subprocess.check_call, ('git', 'rev-parse', 'HEAD'), cwd=workspace)
 
 @cli.group('prepare-source-tree')
@@ -196,7 +197,7 @@ def process_prepare_source_tree(
         version = bump_version(workspace, **version_info)
 
     echo_cmd(subprocess.check_call, (
-            'git', '-c', 'color.ui=always',
+            'git',
             'commit',
             '-m', msg,
         ),
@@ -220,9 +221,9 @@ def process_prepare_source_tree(
                 prerelease_sep = ('-' if version.prerelease else ''),
                 build_sep      = ('+' if version.build else ''),
             )
-        echo_cmd(subprocess.check_call, ('git', '-c', 'color.ui=always', 'tag', '-f', tagname, commit), cwd=workspace, stdout=sys.stderr)
+        echo_cmd(subprocess.check_call, ('git', 'tag', '-f', tagname, commit), cwd=workspace, stdout=sys.stderr)
 
-    echo_cmd(subprocess.check_call, ('git', '-c', 'color.ui=always', 'show', '--format=fuller', '--stat', commit), cwd=workspace, stdout=sys.stderr)
+    echo_cmd(subprocess.check_call, ('git', 'show', '--format=fuller', '--stat', commit), cwd=workspace, stdout=sys.stderr)
     click.echo('{commit}:{target_ref}'.format(commit=commit, target_ref=target_ref))
     if tagname is not None:
         click.echo('refs/tags/{tagname}:refs/tags/{tagname}'.format(**locals()))
@@ -244,7 +245,7 @@ def merge_change_request(
     def change_applicator(workspace):
         echo_cmd(subprocess.check_call, ('git', 'fetch', source_remote, source_ref), cwd=workspace)
         echo_cmd(subprocess.check_call, (
-                'git', '-c', 'color.ui=always',
+                'git',
                 'merge',
                 '--no-ff',
                 '--no-commit',
