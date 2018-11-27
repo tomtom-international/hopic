@@ -130,6 +130,7 @@ class CiDriver
   private submit_refspecs = null
   private submit_version  = null
   private change          = null
+  private target_commit   = null
 
   CiDriver(steps, repo, change = null) {
     this.repo = repo
@@ -160,11 +161,12 @@ class CiDriver
     def workspace = steps.pwd()
     def clean_param = clean ? " --clean" : ""
     def ref = steps.env.CHANGE_TARGET ?: steps.env.GIT_COMMIT
-    steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --color=always --workspace=\"${workspace}\""
-                   + " checkout-source-tree"
-                   + " --target-remote=\"${steps.env.GIT_URL}\""
-                   + " --target-ref=\"${ref}\""
-                   + clean_param)
+    this.target_commit = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --color=always --workspace=\"${workspace}\""
+                                        + " checkout-source-tree"
+                                        + " --target-remote=\"${steps.env.GIT_URL}\""
+                                        + " --target-ref=\"${ref}\""
+                                        + clean_param,
+                                  returnStdout: true).trim()
     if (this.change != null) {
       def submit_info = this.change.apply(venv, workspace, ref)
       steps.checkout(scm: [
@@ -268,7 +270,6 @@ class CiDriver
           }
       }
 
-      def target_commit = steps.env.CHANGE_TARGET ? "origin/${steps.env.CHANGE_TARGET}" : steps.env.GIT_COMMIT
       def source_commit = steps.env.CHANGE_TARGET ? steps.env.GIT_COMMIT : "HEAD"
       if (this.submit_refspecs != null && this.change.maySubmit(target_commit, source_commit)) {
         // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
