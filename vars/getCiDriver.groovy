@@ -13,29 +13,47 @@
  * limitations under the License.
  */
 
-class CiDriver
+class ChangeRequest
 {
-  private repo
-  private steps
-  private cmds            = [:]
-  private nodes           = [:]
-  private workspaces      = [:]
-  private pull_request    = null
-  private submit_refspecs = null
-  private submit_commit   = null
-  private submit_version  = null
+  protected steps
 
-  CiDriver(steps, repo) {
-    this.repo = repo
+  ChangeRequest(steps) {
     this.steps = steps
   }
 
-  public def get_change_request_info() {
-    if (steps.env.CHANGE_URL == null
-     || !steps.env.CHANGE_URL.contains('/pull-requests/')) {
+  public def maySubmit(target_commit, source_commit) {
+    return !steps.sh(script: "git log ${target_commit}..${source_commit} --pretty=\"%s\" --reverse", returnStdout: true)
+      .trim().split('\\r?\\n').find { subject ->
+        if (subject.startsWith('fixup!') || subject.startsWith('squash!')) {
+          return true
+        }
+    }
+  }
+
+  public def apply(venv, workspace, target_ref) {
+    assert false : "Change request instance does not override apply()"
+  }
+}
+
+class BitbucketPullRequest extends ChangeRequest
+{
+  private url
+  private info
+
+  BitbucketPullRequest(steps, url) {
+    super(steps)
+    this.url = url
+  }
+
+  public def get_info(allow_cache = true) {
+    if (allow_cache && this.info) {
+      return this.info
+    }
+    if (url == null
+     || !url.contains('/pull-requests/')) {
      return null
     }
-    def restUrl = steps.env.CHANGE_URL
+    def restUrl = url
       .replaceFirst(/(\/projects\/)/, '/rest/api/1.0$1')
       .replaceFirst(/\/overview$/, '')
     def info = steps.readJSON(text: steps.httpRequest(
@@ -51,7 +69,76 @@ class CiDriver
     if (merge.containsKey('canMerge')) {
       info['canMerge'] = merge['canMerge']
     }
+    info['author_time'] = info.get('updatedDate', steps.currentBuild.timeInMillis) / 1000.0
+    info['commit_time'] = steps.currentBuild.startTimeInMillis / 1000.0
+    this.info = info
     return info
+  }
+
+  public def maySubmit(target_commit, source_commit) {
+    def cur_cr_info = this.get_info()
+    return !(!super.maySubmit(target_commit, source_commit)
+          || cur_cr_info == null
+          || cur_cr_info.fromRef == null
+          || cur_cr_info.fromRef.latestCommit != source_commit
+          || !cur_cr_info.canMerge)
+  }
+
+  public def apply(venv, workspace, target_ref) {
+    def change_request = this.get_info()
+    def conf_params = ''
+    if (steps.fileExists("${workspace}/cfg.yml")) {
+      conf_params += " --config=\"${workspace}/cfg.yml\""
+    }
+    def extra_params = ''
+    if (change_request.containsKey('description')) {
+      extra_params += " --change-request-description=\"${change_request.description}\""
+    }
+    def submit_refspecs = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --color=always --workspace=\"${workspace}\""
+                                         + conf_params
+                                         + " prepare-source-tree"
+                                         + " --target-remote=\"${steps.env.GIT_URL}\""
+                                         + " --target-ref=\"${target_ref}\""
+                                         + " --source-remote=\"${steps.env.GIT_URL}\""
+                                         + " --source-ref=\"${steps.env.GIT_COMMIT}\""
+                                         + " --change-request=\"${steps.env.CHANGE_ID}\""
+                                         + " --change-request-title=\"${steps.env.CHANGE_TITLE}\""
+                                         + " --author-name=\"${steps.env.CHANGE_AUTHOR}\""
+                                         + " --author-email=\"${steps.env.CHANGE_AUTHOR_EMAIL}\""
+                                         + " --author-date=\"@${change_request.author_time}\""
+                                         + " --commit-date=\"@${change_request.commit_time}\""
+                                         + extra_params,
+                                   returnStdout: true).split("\\r?\\n").collect{it}
+    def submit_commit = submit_refspecs.remove(0)
+
+    return [
+        commit: submit_commit,
+        refspecs: submit_refspecs,
+      ]
+  }
+
+}
+
+class CiDriver
+{
+  private repo
+  private steps
+  private cmds            = [:]
+  private nodes           = [:]
+  private workspaces      = [:]
+  private submit_refspecs = null
+  private submit_version  = null
+  private change          = null
+
+  CiDriver(steps, repo, change = null) {
+    this.repo = repo
+    this.steps = steps
+    this.change = change
+    if (this.change == null
+     && steps.env.CHANGE_URL != null
+     && steps.env.CHANGE_URL.contains('/pull-requests/')) {
+      this.change = new BitbucketPullRequest(steps, steps.env.CHANGE_URL)
+    }
   }
 
   public def install_prerequisites() {
@@ -71,51 +158,23 @@ class CiDriver
     def venv = steps.pwd(tmp: true) + "/cidriver-venv"
     def workspace = steps.pwd()
     def clean_param = clean ? " --clean" : ""
-    def ref = steps.env.GIT_COMMIT
-    if (steps.env.CHANGE_TARGET != null) {
-      ref = steps.env.CHANGE_TARGET
-    }
+    def ref = steps.env.CHANGE_TARGET ?: steps.env.GIT_COMMIT
     steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --color=always --workspace=\"${workspace}\""
                    + " checkout-source-tree"
                    + " --target-remote=\"${steps.env.GIT_URL}\""
                    + " --target-ref=\"${ref}\""
                    + clean_param)
-    if (this.pull_request != null) {
-      def author_time = this.pull_request.get('updatedDate', steps.currentBuild.timeInMillis) / 1000.0
-      def commit_time = steps.currentBuild.startTimeInMillis / 1000.0
-      def conf_params = ''
-      if (steps.fileExists("${workspace}/cfg.yml")) {
-        conf_params += " --config=\"${workspace}/cfg.yml\""
-      }
-      def extra_params = ''
-      if (this.pull_request.containsKey('description')) {
-        extra_params += " --change-request-description=\"${pull_request.description}\""
-      }
-      this.submit_refspecs = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --color=always --workspace=\"${workspace}\""
-                                            + conf_params
-                                            + " prepare-source-tree"
-                                            + " --target-remote=\"${steps.env.GIT_URL}\""
-                                            + " --target-ref=\"${ref}\""
-                                            + " --source-remote=\"${steps.env.GIT_URL}\""
-                                            + " --source-ref=\"${steps.env.GIT_COMMIT}\""
-                                            + " --change-request=\"${steps.env.CHANGE_ID}\""
-                                            + " --change-request-title=\"${steps.env.CHANGE_TITLE}\""
-                                            + " --author-name=\"${steps.env.CHANGE_AUTHOR}\""
-                                            + " --author-email=\"${steps.env.CHANGE_AUTHOR_EMAIL}\""
-                                            + " --author-date=\"@${author_time}\""
-                                            + " --commit-date=\"@${commit_time}\""
-                                            + extra_params,
-                                      returnStdout: true).split("\\r?\\n").collect{it}
-      this.submit_commit = this.submit_refspecs.remove(0)
-
+    if (this.change != null) {
+      def submit_info = this.change.apply(venv, workspace, ref)
       steps.checkout(scm: [
           $class: 'GitSCM',
           userRemoteConfigs: [[
               url: workspace,
             ]],
-          branches: [[name: this.submit_commit]],
+          branches: [[name: submit_info.commit]],
         ])
 
+      this.submit_refspecs = submit_info.refspecs
       def versions = []
       this.submit_refspecs.each { refspec ->
         def m = (refspec =~ /^[^:]*:refs\/tags\/(.+)/)
@@ -148,7 +207,6 @@ class CiDriver
 
   public def build(clean = false) {
     steps.ansiColor('xterm') {
-      this.pull_request = this.get_change_request_info()
       def orchestrator_cmd = this.install_prerequisites()
 
       /*
@@ -209,7 +267,9 @@ class CiDriver
           }
       }
 
-      if (this.submit_refspecs != null && this.canMerge()) {
+      def target_commit = steps.env.CHANGE_TARGET ? "origin/${steps.env.CHANGE_TARGET}" : steps.env.GIT_COMMIT
+      def source_commit = steps.env.CHANGE_TARGET ? steps.env.GIT_COMMIT : "HEAD"
+      if (this.submit_refspecs != null && this.change.maySubmit(target_commit, source_commit)) {
         // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
         def refspecs = ""
         this.submit_refspecs.each { refspec ->
@@ -220,14 +280,6 @@ class CiDriver
                          + refspecs)
       }
     }
-  }
-
-  private def canMerge() {
-    def cur_cr_info = this.get_change_request_info()
-    return !(cur_cr_info == null
-          || cur_cr_info.fromRef == null
-          || cur_cr_info.fromRef.latestCommit != steps.env.GIT_COMMIT
-          || !cur_cr_info.canMerge)
   }
 }
 
