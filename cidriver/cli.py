@@ -143,29 +143,24 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
       echo_cmd(subprocess.check_call, ('git', '-c', 'color.ui=always', 'clean', '--force', '-xd'), cwd=workspace, stdout=sys.stderr)
     echo_cmd(subprocess.check_call, ('git', 'rev-parse', 'HEAD'), cwd=workspace)
 
-@cli.command('prepare-source-tree')
+@cli.group('prepare-source-tree')
 # git
 @click.option('--target-remote'             , metavar='<url>')
 @click.option('--target-ref'                , metavar='<ref>')
-@click.option('--source-remote'             , metavar='<url>', help='<source> remote to merge into <target>')
-@click.option('--source-ref'                , metavar='<ref>', help='ref of <source> remote to merge into <target>')
-@click.option('--change-request'            , metavar='<identifier>'           , help='Identifier of change-request to use in merge commit message')
-@click.option('--change-request-title'      , metavar='<title>'                , help='''Change request title to incorporate in merge commit's subject line''')
-@click.option('--change-request-description', metavar='<description>'          , help='''Change request title to incorporate in merge commit's subject line''')
 @click.option('--author-name'               , metavar='<name>'                 , help='''Name of change-request's author''')
 @click.option('--author-email'              , metavar='<email>'                , help='''E-mail address of change-request's author''')
 @click.option('--author-date'               , metavar='<date>', type=DateTime(), help='''Time of last update to the change-request''')
 @click.option('--commit-date'               , metavar='<date>', type=DateTime(), help='''Time of starting to build this change-request''')
+def prepare_source_tree(*args, **kwargs):
+    pass
+
+@prepare_source_tree.resultcallback()
 @click.pass_context
-def prepare_source_tree(
+def process_prepare_source_tree(
         ctx,
+        change_applicator,
         target_remote,
         target_ref,
-        source_remote,
-        source_ref,
-        change_request,
-        change_request_title,
-        change_request_description,
         author_name,
         author_email,
         author_date,
@@ -174,20 +169,9 @@ def prepare_source_tree(
     cfg = ctx.obj.get('cfg', {})
     workspace = ctx.obj['workspace']
     assert git_has_work_tree(workspace)
+
     echo_cmd(subprocess.check_call, ('git', 'fetch', target_remote, target_ref), cwd=workspace)
     echo_cmd(subprocess.check_call, ('git', 'checkout', '--force', 'FETCH_HEAD'), cwd=workspace)
-    echo_cmd(subprocess.check_call, ('git', 'fetch', source_remote, source_ref), cwd=workspace)
-
-    echo_cmd(subprocess.check_call, (
-            'git', '-c', 'color.ui=always',
-            'merge',
-            '--no-ff',
-            '--no-commit',
-            'FETCH_HEAD',
-        ),
-        cwd=workspace,
-        stdout=sys.stderr,
-    )
 
     version = None
 
@@ -195,8 +179,6 @@ def prepare_source_tree(
     version_tag  = version_info.get('tag', False)
     if version_tag and not isinstance(version_tag, string_types):
         version_tag = '{version}'
-    if 'file' in version_info:
-        version = bump_version(workspace, **version_info)
 
     env = os.environ.copy()
     if author_name is not None:
@@ -207,11 +189,11 @@ def prepare_source_tree(
         env['GIT_AUTHOR_DATE'] = author_date.strftime('%Y-%m-%d %H:%M:%S.%f %z')
     if commit_date is not None:
         env['GIT_COMMITTER_DATE'] = commit_date.strftime('%Y-%m-%d %H:%M:%S.%f %z')
-    msg = "Merge #{}".format(change_request)
-    if change_request_title is not None:
-        msg = "{msg}: {title}".format(msg=msg, title=change_request_title)
-    if change_request_description is not None:
-        msg = "{msg}\n\n{description}".format(msg=msg, description=change_request_description)
+
+    msg = change_applicator(workspace)
+
+    if'file' in version_info:
+        version = bump_version(workspace, **version_info)
 
     echo_cmd(subprocess.check_call, (
             'git', '-c', 'color.ui=always',
@@ -222,6 +204,7 @@ def prepare_source_tree(
         env=env,
         stdout=sys.stderr,
     )
+
     commit = echo_cmd(subprocess.check_output, ('git', 'rev-parse', 'HEAD'), cwd=workspace).strip()
     click.echo(commit)
 
@@ -243,6 +226,41 @@ def prepare_source_tree(
     click.echo('{commit}:{target_ref}'.format(commit=commit, target_ref=target_ref))
     if tagname is not None:
         click.echo('refs/tags/{tagname}:refs/tags/{tagname}'.format(**locals()))
+
+@prepare_source_tree.command('merge-change-request')
+# git
+@click.option('--source-remote' , metavar='<url>', help='<source> remote to merge into <target>')
+@click.option('--source-ref'    , metavar='<ref>', help='ref of <source> remote to merge into <target>')
+@click.option('--change-request', metavar='<identifier>'           , help='Identifier of change-request to use in merge commit message')
+@click.option('--title'         , metavar='<title>'                , help='''Change request title to incorporate in merge commit's subject line''')
+@click.option('--description'   , metavar='<description>'          , help='''Change request title to incorporate in merge commit's subject line''')
+def merge_change_request(
+        source_remote,
+        source_ref,
+        change_request,
+        title,
+        description,
+    ):
+    def change_applicator(workspace):
+        echo_cmd(subprocess.check_call, ('git', 'fetch', source_remote, source_ref), cwd=workspace)
+        echo_cmd(subprocess.check_call, (
+                'git', '-c', 'color.ui=always',
+                'merge',
+                '--no-ff',
+                '--no-commit',
+                'FETCH_HEAD',
+            ),
+            cwd=workspace,
+            stdout=sys.stderr,
+        )
+
+        msg = "Merge #{}".format(change_request)
+        if title is not None:
+            msg = "{msg}: {title}".format(msg=msg, title=title)
+        if description is not None:
+            msg = "{msg}\n\n{description}".format(msg=msg, description=description)
+        return msg
+    return change_applicator
 
 @cli.command()
 @click.pass_context

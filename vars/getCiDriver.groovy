@@ -92,21 +92,22 @@ class BitbucketPullRequest extends ChangeRequest
     }
     def extra_params = ''
     if (change_request.containsKey('description')) {
-      extra_params += " --change-request-description=\"${change_request.description}\""
+      extra_params += " --description=\"${change_request.description}\""
     }
     def submit_refspecs = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --color=always --workspace=\"${workspace}\""
                                          + conf_params
                                          + " prepare-source-tree"
                                          + " --target-remote=\"${steps.env.GIT_URL}\""
                                          + " --target-ref=\"${target_ref}\""
-                                         + " --source-remote=\"${steps.env.GIT_URL}\""
-                                         + " --source-ref=\"${steps.env.GIT_COMMIT}\""
-                                         + " --change-request=\"${steps.env.CHANGE_ID}\""
-                                         + " --change-request-title=\"${steps.env.CHANGE_TITLE}\""
                                          + " --author-name=\"${steps.env.CHANGE_AUTHOR}\""
                                          + " --author-email=\"${steps.env.CHANGE_AUTHOR_EMAIL}\""
                                          + " --author-date=\"@${change_request.author_time}\""
                                          + " --commit-date=\"@${change_request.commit_time}\""
+                                         + " merge-change-request"
+                                         + " --source-remote=\"${steps.env.GIT_URL}\""
+                                         + " --source-ref=\"${steps.env.GIT_COMMIT}\""
+                                         + " --change-request=\"${steps.env.CHANGE_ID}\""
+                                         + " --title=\"${steps.env.CHANGE_TITLE}\""
                                          + extra_params,
                                    returnStdout: true).split("\\r?\\n").collect{it}
     def submit_commit = submit_refspecs.remove(0)
