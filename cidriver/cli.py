@@ -193,6 +193,8 @@ def prepare_source_tree(
 
     version_info = cfg.get('change-request', {}).get('version', {})
     version_tag  = version_info.get('tag', False)
+    if version_tag and not isinstance(version_tag, string_types):
+        version_tag = '{version}'
     if 'file' in version_info:
         version = bump_version(workspace, **version_info)
 
@@ -225,7 +227,16 @@ def prepare_source_tree(
 
     tagname = None
     if version is not None and not version.prerelease and version_tag:
-        tagname = stringify_semver(*version)
+        tagname = version_tag.format(
+                version        = stringify_semver(*version),
+                major          = version.major,
+                minor          = version.minor,
+                patch          = version.patch,
+                prerelease     = '.'.join(version.prerelease),
+                build          = '.'.join(version.build),
+                prerelease_sep = ('-' if version.prerelease else ''),
+                build_sep      = ('+' if version.build else ''),
+            )
         echo_cmd(subprocess.check_call, ('git', '-c', 'color.ui=always', 'tag', '-f', tagname, commit), cwd=workspace, stdout=sys.stderr)
 
     echo_cmd(subprocess.check_call, ('git', '-c', 'color.ui=always', 'show', '--format=fuller', '--stat', commit), cwd=workspace, stdout=sys.stderr)
