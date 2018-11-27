@@ -48,13 +48,13 @@ class DateTime(click.ParamType):
             self.fail('Could not parse datetime string "{value}": {e}'.format(value=value, e=' '.join(e.args)), param, ctx)
 
 def git_has_work_tree(workspace):
-  if not os.path.isdir(os.path.join(workspace, '.git')):
-    return False
-  try:
-    output = echo_cmd(subprocess.check_output, ('git', 'rev-parse', '--is-inside-work-tree'), cwd=workspace, env={'LANG': 'C'})
-  except subprocess.CalledProcessError:
-    return False
-  return output.strip().lower() == 'true'
+    if not workspace or not os.path.isdir(os.path.join(workspace, '.git')):
+        return False
+    try:
+        output = echo_cmd(subprocess.check_output, ('git', 'rev-parse', '--is-inside-work-tree'), cwd=workspace, env={'LANG': 'C'})
+    except subprocess.CalledProcessError:
+        return False
+    return output.strip().lower() == 'true'
 
 _var_re = re.compile(r'\$(?:(\w+)|\{([^}]+)\})')
 def expand_vars(vars, expr):
@@ -119,8 +119,11 @@ def cli(ctx, color, config, workspace, dependency_manifest):
     ctx.obj['volume-vars'] = volume_vars
 
     # Fallback to 'dependency_manifest.xml' file in same directory as config
+    config_dir = os.path.dirname(os.path.realpath(config)) if config else None
     manifest = (dependency_manifest if dependency_manifest
-            else (os.path.join(workspace or config_dir, 'dependency_manifest.xml')))
+            else (
+                os.path.join(workspace or config_dir, 'dependency_manifest.xml')
+                if workspace or config_dir else None))
 
     if config is not None:
         ctx.obj['cfg'] = read_config(config, manifest, volume_vars)
