@@ -124,6 +124,8 @@ def cli(ctx, color, config, workspace, dependency_manifest):
             else (
                 os.path.join(workspace or config_dir, 'dependency_manifest.xml')
                 if workspace or config_dir else None))
+    if manifest is not None:
+        ctx.obj['manifest'] = manifest
 
     if config is not None:
         ctx.obj['cfg'] = read_config(config, manifest, volume_vars)
@@ -261,6 +263,38 @@ def merge_change_request(
         if description is not None:
             msg = "{msg}\n\n{description}".format(msg=msg, description=description)
         return msg
+    return change_applicator
+
+@prepare_source_tree.command('update-ivy-dependency-manifest')
+@click.pass_context
+def update_ivy_dependency_manifest(
+        ctx,
+    ):
+    manifest = ctx.obj['manifest']
+    def change_applicator(workspace):
+        env = os.environ.copy()
+        # The following assumes that when a dependency is available for the following configuration
+        # (i.e. x86_64 linux, release) it is available for all needed configurations.
+        env.update(dict(
+                IVY_PLATFORM  ='linux',
+                IVY_ARCH      ='x86_64',
+                IVY_BUILD_TYPE='release',
+            ))
+
+        # FIXME: get rid of this hard coding
+        ivy_settings = os.path.join(workspace, 'Build/ivysettings.xml')
+
+        echo_cmd(subprocess.check_call, (
+                    'update_dependency_manifest.py',
+                    manifest,
+                    ivy_settings,
+                ),
+                cwd=workspace,
+                env=env,
+                stdout=sys.stderr,
+            )
+        echo_cmd(subprocess.check_call, ('git', 'add', manifest), cwd=workspace)
+        return 'Update of dependency manifest.'
     return change_applicator
 
 @cli.command()

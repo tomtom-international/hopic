@@ -38,14 +38,14 @@ class ChangeRequest
 class BitbucketPullRequest extends ChangeRequest
 {
   private url
-  private info
+  private info = null
 
   BitbucketPullRequest(steps, url) {
     super(steps)
     this.url = url
   }
 
-  public def get_info(allow_cache = true) {
+  private def get_info(allow_cache = true) {
     if (allow_cache && this.info) {
       return this.info
     }
@@ -120,6 +120,37 @@ class BitbucketPullRequest extends ChangeRequest
 
 }
 
+class UpdateDependencyManifestRequest extends ChangeRequest
+{
+  UpdateDependencyManifestRequest(steps) {
+    super(steps)
+  }
+
+  public def apply(venv, workspace, target_ref) {
+    def author_time = steps.currentBuild.timeInMillis / 1000.0
+    def commit_time = steps.currentBuild.startTimeInMillis / 1000.0
+    def conf_params = ''
+    if (steps.fileExists("${workspace}/cfg.yml")) {
+      conf_params += " --config=\"${workspace}/cfg.yml\""
+    }
+    def submit_refspecs = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --color=always --workspace=\"${workspace}\""
+                                         + conf_params
+                                         + " prepare-source-tree"
+                                         + " --target-remote=\"${steps.env.GIT_URL}\""
+                                         + " --target-ref=\"${target_ref}\""
+                                         + " --author-date=\"@${author_time}\""
+                                         + " --commit-date=\"@${commit_time}\""
+                                         + " update-ivy-dependency-manifest",
+                                   returnStdout: true).split("\\r?\\n").collect{it}
+    def submit_commit = submit_refspecs.remove(0)
+
+    return [
+        commit: submit_commit,
+        refspecs: submit_refspecs,
+      ]
+  }
+}
+
 class CiDriver
 {
   private repo
@@ -136,10 +167,13 @@ class CiDriver
     this.repo = repo
     this.steps = steps
     this.change = change
-    if (this.change == null
-     && steps.env.CHANGE_URL != null
-     && steps.env.CHANGE_URL.contains('/pull-requests/')) {
-      this.change = new BitbucketPullRequest(steps, steps.env.CHANGE_URL)
+    if (this.change == null) {
+      if (steps.env.CHANGE_URL != null
+       && steps.env.CHANGE_URL.contains('/pull-requests/'))
+        this.change = new BitbucketPullRequest(steps, steps.env.CHANGE_URL)
+      // FIXME: Don't rely on hard-coded build parameter, externalize this instead.
+      else if (steps.params.MODALITY == "UPDATE_DEPENDENCY_MANIFEST")
+        this.change = new UpdateDependencyManifestRequest(steps)
     }
   }
 
