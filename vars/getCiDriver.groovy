@@ -249,6 +249,10 @@ class CiDriver
       ).split("\\r?\\n")
   }
 
+  public def has_change() {
+    return this.change != null
+  }
+
   public def build(clean = false) {
     steps.ansiColor('xterm') {
       def phases = steps.node('Linux && Docker') {
