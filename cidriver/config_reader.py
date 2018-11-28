@@ -38,6 +38,9 @@ def get_toolchain_image_information(dependency_manifest):
     return toolchain_dep
 
 def image_from_ivy_manifest(manifest, loader, node):
+    if manifest is None:
+        return None
+
     props = loader.construct_mapping(node) if node.value else {}
 
     image = get_toolchain_image_information(manifest)

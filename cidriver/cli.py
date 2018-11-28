@@ -120,10 +120,11 @@ def cli(ctx, color, config, workspace, dependency_manifest):
 
     # Fallback to 'dependency_manifest.xml' file in same directory as config
     config_dir = os.path.dirname(os.path.realpath(config)) if config else None
-    manifest = (dependency_manifest if dependency_manifest
-            else (
-                os.path.join(workspace or config_dir, 'dependency_manifest.xml')
-                if workspace or config_dir else None))
+    manifest = dependency_manifest
+    if manifest is None and (workspace or config_dir):
+        manifest = os.path.join(workspace or config_dir, 'dependency_manifest.xml')
+        if not os.path.exists(manifest):
+            manifest = None
     if manifest is not None:
         ctx.obj['manifest'] = manifest
 
