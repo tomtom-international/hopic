@@ -194,15 +194,15 @@ class CiDriver
     def venv = steps.pwd(tmp: true) + "/cidriver-venv"
     def workspace = steps.pwd()
     def clean_param = clean ? " --clean" : ""
-    def ref = steps.env.CHANGE_TARGET ?: steps.env.GIT_COMMIT
+    def target_ref = steps.env.CHANGE_TARGET ?: steps.env.BRANCH_NAME
     this.target_commit = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --color=always --workspace=\"${workspace}\""
                                         + " checkout-source-tree"
                                         + " --target-remote=\"${steps.env.GIT_URL}\""
-                                        + " --target-ref=\"${ref}\""
+                                        + " --target-ref=\"${target_ref}\""
                                         + clean_param,
                                   returnStdout: true).trim()
     if (this.change != null) {
-      def submit_info = this.change.apply(venv, workspace, ref)
+      def submit_info = this.change.apply(venv, workspace, target_ref)
       steps.checkout(scm: [
           $class: 'GitSCM',
           userRemoteConfigs: [[
