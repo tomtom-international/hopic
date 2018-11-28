@@ -312,6 +312,14 @@ class CiDriver
                         script: "${cmd} getinfo --phase=\"${phase}\" --variant=\"${variant}\"",
                         returnStdout: true,
                       ))
+
+                    // Make sure steps exclusive to changes or not intended to execute for changes are skipped when appropriate
+                    def run_on_change = meta.get('run-on-change', true)
+                    if (!run_on_change
+                     || (run_on_change == "only"  && this.change == null)
+                     || (run_on_change == "never" && this.change != null))
+                      return
+
                     steps.sh(script: "${cmd} build --phase=\"${phase}\" --variant=\"${variant}\"")
 
                     // FIXME: get rid of special casing for stashing
