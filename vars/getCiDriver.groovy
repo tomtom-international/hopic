@@ -370,8 +370,6 @@ class CiDriver
 
 /**
   * getCiDriver()
-  *
-  * @return string usable for interpolation in shell scripts as ci-driver command
   */
 
 def call(repo) {
