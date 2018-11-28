@@ -75,7 +75,10 @@ def expand_vars(vars, expr):
         for key, val in expr.items():
             expr[key] = expand_vars(vars, expr[key])
         return expr
-    return [expand_vars(vars, val) for val in expr]
+    try:
+        return [expand_vars(vars, val) for val in expr]
+    except TypeError:
+        return expr
 
 def volume_spec_to_docker_param(volume):
     if not os.path.exists(volume['source']):
