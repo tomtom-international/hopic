@@ -84,7 +84,7 @@ class BitbucketPullRequest extends ChangeRequest
           || !cur_cr_info.canMerge)
   }
 
-  public def apply(venv, workspace, target_ref) {
+  public def apply(venv, workspace, target_remote, target_ref) {
     def change_request = this.get_info()
     def conf_params = ''
     if (steps.fileExists("${workspace}/cfg.yml")) {
@@ -94,18 +94,22 @@ class BitbucketPullRequest extends ChangeRequest
     if (change_request.containsKey('description')) {
       extra_params += " --description=\"${change_request.description}\""
     }
+    def source_refspec = steps.scm.userRemoteConfigs[0].refspec
+    def (remote_ref, local_ref) = source_refspec.tokenize(':')
+    if (remote_ref.startsWith('+'))
+      remote_ref = remote_ref.substring(1)
     def submit_refspecs = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --color=always --workspace=\"${workspace}\""
                                          + conf_params
                                          + " prepare-source-tree"
-                                         + " --target-remote=\"${steps.env.GIT_URL}\""
+                                         + " --target-remote=\"${target_remote}\""
                                          + " --target-ref=\"${target_ref}\""
                                          + " --author-name=\"${steps.env.CHANGE_AUTHOR}\""
                                          + " --author-email=\"${steps.env.CHANGE_AUTHOR_EMAIL}\""
                                          + " --author-date=\"@${change_request.author_time}\""
                                          + " --commit-date=\"@${change_request.commit_time}\""
                                          + " merge-change-request"
-                                         + " --source-remote=\"${steps.env.GIT_URL}\""
-                                         + " --source-ref=\"${steps.env.GIT_COMMIT}\""
+                                         + " --source-remote=\"${target_remote}\""
+                                         + " --source-ref=\"${remote_ref}\""
                                          + " --change-request=\"${steps.env.CHANGE_ID}\""
                                          + " --title=\"${steps.env.CHANGE_TITLE}\""
                                          + extra_params,
@@ -126,7 +130,7 @@ class UpdateDependencyManifestRequest extends ChangeRequest
     super(steps)
   }
 
-  public def apply(venv, workspace, target_ref) {
+  public def apply(venv, workspace, target_remote, target_ref) {
     def author_time = steps.currentBuild.timeInMillis / 1000.0
     def commit_time = steps.currentBuild.startTimeInMillis / 1000.0
     def conf_params = ''
@@ -136,7 +140,7 @@ class UpdateDependencyManifestRequest extends ChangeRequest
     def submit_refspecs = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --color=always --workspace=\"${workspace}\""
                                          + conf_params
                                          + " prepare-source-tree"
-                                         + " --target-remote=\"${steps.env.GIT_URL}\""
+                                         + " --target-remote=\"${target_remote}\""
                                          + " --target-ref=\"${target_ref}\""
                                          + " --author-date=\"@${author_time}\""
                                          + " --commit-date=\"@${commit_time}\""
@@ -162,6 +166,8 @@ class CiDriver
   private submit_version  = null
   private change          = null
   private target_commit   = null
+  private target_remote
+  private target_ref
 
   CiDriver(steps, repo, change = null) {
     this.repo = repo
@@ -175,6 +181,8 @@ class CiDriver
       else if (steps.params.MODALITY == "UPDATE_DEPENDENCY_MANIFEST")
         this.change = new UpdateDependencyManifestRequest(steps)
     }
+    this.target_remote = steps.scm.userRemoteConfigs[0].url
+    this.target_ref = steps.env.CHANGE_TARGET ?: steps.env.BRANCH_NAME
   }
 
   public def install_prerequisites() {
@@ -194,15 +202,14 @@ class CiDriver
     def venv = steps.pwd(tmp: true) + "/cidriver-venv"
     def workspace = steps.pwd()
     def clean_param = clean ? " --clean" : ""
-    def target_ref = steps.env.CHANGE_TARGET ?: steps.env.BRANCH_NAME
     this.target_commit = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --color=always --workspace=\"${workspace}\""
                                         + " checkout-source-tree"
-                                        + " --target-remote=\"${steps.env.GIT_URL}\""
+                                        + " --target-remote=\"${target_remote}\""
                                         + " --target-ref=\"${target_ref}\""
                                         + clean_param,
                                   returnStdout: true).trim()
     if (this.change != null) {
-      def submit_info = this.change.apply(venv, workspace, target_ref)
+      def submit_info = this.change.apply(venv, workspace, target_remote, target_ref)
       steps.checkout(scm: [
           $class: 'GitSCM',
           userRemoteConfigs: [[
@@ -244,27 +251,50 @@ class CiDriver
 
   public def build(clean = false) {
     steps.ansiColor('xterm') {
-      def orchestrator_cmd = this.install_prerequisites()
+      def phases = steps.node('Linux && Docker') {
+        def cmd = this.install_prerequisites()
+        def workspace = steps.pwd()
 
-      /*
-       * We're splitting the enumeration of phases and variants from their execution in order to
-       * enable Jenkins to execute the different variants within a phase in parallel.
-       */
-      this.checkout()
-      def phases = steps.sh(
-          script: "${orchestrator_cmd} phases",
-          returnStdout: true,
-        ).split("\\r?\\n")
-
-      phases.each { phase ->
-          def variants = this.get_variants(phase)
-          steps.stage(phase) {
-            def stepsForBuilding = variants.collectEntries { variant ->
-              [ "${phase}-${variant}": {
-                def label = steps.readJSON(text: steps.sh(
-                    script: "${orchestrator_cmd} getinfo --phase=\"${phase}\" --variant=\"${variant}\"",
+        /*
+         * We're splitting the enumeration of phases and variants from their execution in order to
+         * enable Jenkins to execute the different variants within a phase in parallel.
+         *
+         * In order to do this we only check out the CI config file to the orchestrator node.
+         */
+        def scm = steps.checkout(steps.scm)
+        steps.env.GIT_COMMIT          = scm.GIT_COMMIT
+        steps.env.GIT_COMMITTER_NAME  = scm.GIT_COMMITTER_NAME
+        steps.env.GIT_COMMITTER_EMAIL = scm.GIT_COMMITTER_EMAIL
+        steps.env.GIT_AUTHOR_NAME     = scm.GIT_AUTHOR_NAME
+        steps.env.GIT_AUTHOR_EMAIL    = scm.GIT_AUTHOR_EMAIL
+        def phases = steps.sh(
+            script: "${cmd} phases",
+            returnStdout: true,
+          ).split("\\r?\\n").collect { phase ->
+          [
+            phase: phase,
+            variants: this.get_variants(phase).collect { variant ->
+              [
+                variant: variant,
+                label: steps.readJSON(text: steps.sh(
+                    script: "${cmd} getinfo --phase=\"${phase}\" --variant=\"${variant}\"",
                     returnStdout: true,
-                  )).get('node-label', 'Linux && Docker')
+                  )).get('node-label', 'Linux && Docker'),
+              ]
+            },
+          ]
+        }
+        return phases
+      }
+
+      phases.each {
+          def phase    = it.phase
+          def variants = it.variants
+          steps.stage(phase) {
+            def stepsForBuilding = variants.collectEntries {
+              def variant = it.variant
+              def label   = it.label
+              [ "${phase}-${variant}": {
                 if (this.nodes.containsKey(variant)) {
                   label = this.nodes[variant]
                 }
@@ -304,16 +334,26 @@ class CiDriver
           }
       }
 
-      def source_commit = steps.env.CHANGE_TARGET ? steps.env.GIT_COMMIT : "HEAD"
-      if (this.submit_refspecs != null && this.change.maySubmit(target_commit, source_commit)) {
-        // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
-        def refspecs = ""
-        this.submit_refspecs.each { refspec ->
-          refspecs += " --refspec=\"${refspec}\""
+      def node = this.nodes.find{true}
+      if (!node) {
+        assert this.submit_refspecs == null : "Cannot submit without having an allocated node"
+        return
+      }
+      steps.node(node.value) {
+        def source_commit = steps.env.CHANGE_TARGET ? (steps.env.GIT_COMMIT ?: "HEAD") : "HEAD"
+        if (this.submit_refspecs != null && this.change.maySubmit(target_commit, source_commit)) {
+          steps.stage('submit') {
+            // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
+            def refspecs = ""
+            this.submit_refspecs.each { refspec ->
+              refspecs += " --refspec=\"${refspec}\""
+            }
+            def cmd = this.install_prerequisites()
+            steps.sh(script: "${cmd} submit"
+                             + " --target-remote=\"${target_remote}\""
+                             + refspecs)
+          }
         }
-        steps.sh(script: "${orchestrator_cmd} submit"
-                         + " --target-remote=\"${steps.env.GIT_URL}\""
-                         + refspecs)
       }
     }
   }
