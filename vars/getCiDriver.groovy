@@ -166,6 +166,7 @@ class CiDriver
   private submit_refspecs = null
   private submit_version  = null
   private change          = null
+  private source_commit   = "HEAD"
   private target_commit   = null
   private target_remote
   private target_ref
@@ -312,6 +313,10 @@ esac
         steps.env.GIT_AUTHOR_NAME     = scm.GIT_AUTHOR_NAME
         steps.env.GIT_AUTHOR_EMAIL    = scm.GIT_AUTHOR_EMAIL
 
+        if (steps.env.CHANGE_TARGET) {
+          this.source_commit = scm.GIT_COMMIT
+        }
+
         def phases = steps.sh(
             script: "${cmd} phases",
             returnStdout: true,
@@ -331,8 +336,6 @@ esac
         }
         return phases
       }
-
-      def source_commit = steps.env.CHANGE_TARGET ? (steps.env.GIT_COMMIT ?: "HEAD") : "HEAD"
 
       phases.each {
           def phase    = it.phase
