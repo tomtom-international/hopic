@@ -198,6 +198,8 @@ def process_prepare_source_tree(
         env['GIT_COMMITTER_DATE'] = commit_date.strftime('%Y-%m-%d %H:%M:%S.%f %z')
 
     msg = change_applicator(workspace)
+    if msg is None:
+        return
 
     if'file' in version_info:
         version = bump_version(workspace, **version_info)
@@ -297,6 +299,15 @@ def update_ivy_dependency_manifest(
                 env=env,
                 stdout=sys.stderr,
             )
+        changed = echo_cmd(subprocess.call, (
+                    'git', 'diff', '--exit-code', '-w', '--quiet', manifest
+                ),
+                cwd=workspace,
+                stdout=sys.stderr,
+            )
+        if changed is None or changed == 0:
+            click.echo("Dependency manifest did not change: '{manifest}'".format(**locals()), err=True)
+            return None
         echo_cmd(subprocess.check_call, ('git', 'add', manifest), cwd=workspace)
         return 'Update of dependency manifest.'
     return change_applicator

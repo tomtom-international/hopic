@@ -114,7 +114,7 @@ class BitbucketPullRequest extends ChangeRequest
                                          + " --title=\"${steps.env.CHANGE_TITLE}\""
                                          + extra_params,
                                    returnStdout: true).split("\\r?\\n").collect{it}
-    def submit_commit = submit_refspecs.remove(0)
+    def submit_commit = submit_refspecs.size() >= 1 ? submit_refspecs.remove(0) : null
 
     return [
         commit: submit_commit,
@@ -146,7 +146,7 @@ class UpdateDependencyManifestRequest extends ChangeRequest
                                          + " --commit-date=\"@${commit_time}\""
                                          + " update-ivy-dependency-manifest",
                                    returnStdout: true).split("\\r?\\n").collect{it}
-    def submit_commit = submit_refspecs.remove(0)
+    def submit_commit = submit_refspecs.size() >= 1 ? submit_refspecs.remove(0) : null
 
     return [
         commit: submit_commit,
@@ -239,6 +239,19 @@ esac
                                     returnStdout: true).trim()
       if (this.change != null) {
         def submit_info = this.change.apply(venv, workspace, target_remote, target_ref)
+        if (!submit_info.commit)
+        {
+          try {
+              if (steps.currentBuild.rawBuild.getCauses().get(0).properties.shortDescription.contains('Started by timer')) {
+                steps.currentBuild.rawBuild.delete()
+              }
+          } catch (Exception ex) {
+            // Ignore issues
+          }
+          steps.currentBuild.result = 'ABORTED'
+          steps.error('No changes to build')
+        }
+
         steps.checkout(scm: [
             $class: 'GitSCM',
             userRemoteConfigs: [[
