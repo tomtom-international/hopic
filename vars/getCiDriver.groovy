@@ -287,6 +287,8 @@ class CiDriver
         return phases
       }
 
+      def source_commit = steps.env.CHANGE_TARGET ? (steps.env.GIT_COMMIT ?: "HEAD") : "HEAD"
+
       phases.each {
           def phase    = it.phase
           def variants = it.variants
@@ -316,7 +318,7 @@ class CiDriver
                     // Make sure steps exclusive to changes or not intended to execute for changes are skipped when appropriate
                     def run_on_change = meta.get('run-on-change', true)
                     if (!run_on_change
-                     || (run_on_change == "only"  && this.change == null)
+                     || (run_on_change == "only"  && (this.change == null || !this.change.maySubmit(target_commit, source_commit)))
                      || (run_on_change == "never" && this.change != null))
                       return
 
@@ -348,7 +350,6 @@ class CiDriver
         return
       }
       steps.node(node.value) {
-        def source_commit = steps.env.CHANGE_TARGET ? (steps.env.GIT_COMMIT ?: "HEAD") : "HEAD"
         if (this.submit_refspecs != null && this.change.maySubmit(target_commit, source_commit)) {
           steps.stage('submit') {
             // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
