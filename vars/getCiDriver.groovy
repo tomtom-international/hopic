@@ -13,6 +13,8 @@
  * limitations under the License.
  */
 
+import org.jenkinsci.plugins.credentialsbinding.impl.CredentialNotFoundException
+
 class ChangeRequest
 {
   protected steps
@@ -202,25 +204,29 @@ class CiDriver
   private def get_credentials() {
     if (!this.creds.containsKey(steps.env.NODE_NAME)) {
       // Ensure
-      steps.withCredentials([steps.usernamePassword(
-          credentialsId: steps.scm.userRemoteConfigs[0].credentialsId,
-          usernameVariable: 'USERNAME',
-          passwordVariable: 'PASSWORD',
-          )]) {
-          def askpass_program = steps.pwd(tmp: true) + '/jenkins-git-askpass.sh'
-          steps.writeFile(
-              file: askpass_program,
-              text: '''\
+      try {
+        steps.withCredentials([steps.usernamePassword(
+            credentialsId: steps.scm.userRemoteConfigs[0].credentialsId,
+            usernameVariable: 'USERNAME',
+            passwordVariable: 'PASSWORD',
+            )]) {
+            def askpass_program = steps.pwd(tmp: true) + '/jenkins-git-askpass.sh'
+            steps.writeFile(
+                file: askpass_program,
+                text: '''\
 #!/bin/sh
 case "$1" in
 [Uu]sername*) echo ''' + "'" + steps.USERNAME.replace("'", "'\\''") + "'" + ''' ;;
 [Pp]assword*) echo ''' + "'" + steps.PASSWORD.replace("'", "'\\''") + "'" + ''' ;;
 esac
 ''')
-          this.creds[steps.env.NODE_NAME] = ["GIT_ASKPASS=${askpass_program}"]
-          steps.withEnv(this.creds[steps.env.NODE_NAME]) {
-            steps.sh(script: 'chmod 700 "${GIT_ASKPASS}"')
-          }
+            this.creds[steps.env.NODE_NAME] = ["GIT_ASKPASS=${askpass_program}"]
+            steps.withEnv(this.creds[steps.env.NODE_NAME]) {
+              steps.sh(script: 'chmod 700 "${GIT_ASKPASS}"')
+            }
+        }
+      } catch (CredentialNotFoundException ex) {
+        // Ignore, hoping that we're dealing with an SSH credential stored at ~/.ssh/id_rsa
       }
     }
     return this.creds.get(steps.env.NODE_NAME, [])
