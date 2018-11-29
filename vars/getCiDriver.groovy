@@ -238,13 +238,10 @@ class CiDriver
   }
 
   public def get_variants(phase = null) {
-    def phase_arg = ""
-    if (phase != null) {
-      phase_arg = " --phase=\"${phase}\""
-    }
+    def phase_arg = phase ? " --phase=\"${phase}\"" : ""
     def cmd = this.install_prerequisites()
     return steps.sh(
-        script: "${cmd} variants --phase=\"${phase}\"",
+        script: "${cmd} variants" + phase_arg,
         returnStdout: true,
       ).split("\\r?\\n")
   }
