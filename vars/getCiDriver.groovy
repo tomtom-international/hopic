@@ -324,13 +324,20 @@ esac
           [
             phase: phase,
             variants: this.get_variants(phase).collect { variant ->
+              def meta = steps.readJSON(text: steps.sh(
+                  script: "${cmd} getinfo --phase=\"${phase}\" --variant=\"${variant}\"",
+                  returnStdout: true,
+                ))
               [
                 variant: variant,
-                label: steps.readJSON(text: steps.sh(
-                    script: "${cmd} getinfo --phase=\"${phase}\" --variant=\"${variant}\"",
-                    returnStdout: true,
-                  )).get('node-label', 'Linux && Docker'),
+                label: meta.get('node-label', 'Linux && Docker'),
+                run_on_change: meta.get('run-on-change', true),
               ]
+            // Exclude variants for which we can "statically" determine they're not supposed to run
+            }.findAll {
+              return ((it.run_on_change == "only"  && this.change != null)
+                   || (it.run_on_change == "never" && this.change == null)
+                   || (it.run_on_change == true))
             },
           ]
         }
@@ -340,6 +347,11 @@ esac
       phases.each {
           def phase    = it.phase
           def variants = it.variants
+
+          if (variants.size() == 0) {
+            return
+          }
+
           steps.stage(phase) {
             def stepsForBuilding = variants.collectEntries {
               def variant = it.variant
