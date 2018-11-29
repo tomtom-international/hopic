@@ -160,6 +160,7 @@ class CiDriver
   private repo
   private steps
   private cmds            = [:]
+  private creds           = [:]
   private nodes           = [:]
   private workspaces      = [:]
   private submit_refspecs = null
@@ -196,38 +197,67 @@ class CiDriver
     return this.cmds[steps.env.NODE_NAME]
   }
 
+  private def get_credentials() {
+    if (!this.creds.containsKey(steps.env.NODE_NAME)) {
+      // Ensure
+      steps.withCredentials([steps.usernamePassword(
+          credentialsId: steps.scm.userRemoteConfigs[0].credentialsId,
+          usernameVariable: 'USERNAME',
+          passwordVariable: 'PASSWORD',
+          )]) {
+          def askpass_program = steps.pwd(tmp: true) + '/jenkins-git-askpass.sh'
+          steps.writeFile(
+              file: askpass_program,
+              text: '''\
+#!/bin/sh
+case "$1" in
+[Uu]sername*) echo ''' + "'" + steps.USERNAME.replace("'", "'\\''") + "'" + ''' ;;
+[Pp]assword*) echo ''' + "'" + steps.PASSWORD.replace("'", "'\\''") + "'" + ''' ;;
+esac
+''')
+          this.creds[steps.env.NODE_NAME] = ["GIT_ASKPASS=${askpass_program}"]
+          steps.withEnv(this.creds[steps.env.NODE_NAME]) {
+            steps.sh(script: 'chmod 700 "${GIT_ASKPASS}"')
+          }
+      }
+    }
+    return this.creds.get(steps.env.NODE_NAME, [])
+  }
+
   private def checkout(clean = false) {
     def cmd = this.install_prerequisites()
 
     def venv = steps.pwd(tmp: true) + "/cidriver-venv"
     def workspace = steps.pwd()
-    def clean_param = clean ? " --clean" : ""
-    this.target_commit = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --color=always --workspace=\"${workspace}\""
-                                        + " checkout-source-tree"
-                                        + " --target-remote=\"${target_remote}\""
-                                        + " --target-ref=\"${target_ref}\""
-                                        + clean_param,
-                                  returnStdout: true).trim()
-    if (this.change != null) {
-      def submit_info = this.change.apply(venv, workspace, target_remote, target_ref)
-      steps.checkout(scm: [
-          $class: 'GitSCM',
-          userRemoteConfigs: [[
-              url: workspace,
-            ]],
-          branches: [[name: submit_info.commit]],
-        ])
+    steps.withEnv(this.get_credentials()) {
+      def clean_param = clean ? " --clean" : ""
+      this.target_commit = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --color=always --workspace=\"${workspace}\""
+                                          + " checkout-source-tree"
+                                          + " --target-remote=\"${target_remote}\""
+                                          + " --target-ref=\"${target_ref}\""
+                                          + clean_param,
+                                    returnStdout: true).trim()
+      if (this.change != null) {
+        def submit_info = this.change.apply(venv, workspace, target_remote, target_ref)
+        steps.checkout(scm: [
+            $class: 'GitSCM',
+            userRemoteConfigs: [[
+                url: workspace,
+              ]],
+            branches: [[name: submit_info.commit]],
+          ])
 
-      this.submit_refspecs = submit_info.refspecs
-      def versions = []
-      this.submit_refspecs.each { refspec ->
-        def m = (refspec =~ /^[^:]*:refs\/tags\/(.+)/)
-        if (m) {
-          versions << m[0][1]
+        this.submit_refspecs = submit_info.refspecs
+        def versions = []
+        this.submit_refspecs.each { refspec ->
+          def m = (refspec =~ /^[^:]*:refs\/tags\/(.+)/)
+          if (m) {
+            versions << m[0][1]
+          }
         }
-      }
-      if (versions.size() == 1) {
-        this.submit_version = versions[0]
+        if (versions.size() == 1) {
+          this.submit_version = versions[0]
+        }
       }
     }
     return workspace
@@ -268,6 +298,7 @@ class CiDriver
         steps.env.GIT_COMMITTER_EMAIL = scm.GIT_COMMITTER_EMAIL
         steps.env.GIT_AUTHOR_NAME     = scm.GIT_AUTHOR_NAME
         steps.env.GIT_AUTHOR_EMAIL    = scm.GIT_AUTHOR_EMAIL
+
         def phases = steps.sh(
             script: "${cmd} phases",
             returnStdout: true,
@@ -353,15 +384,17 @@ class CiDriver
       steps.node(node.value) {
         if (this.submit_refspecs != null && this.change.maySubmit(target_commit, source_commit)) {
           steps.stage('submit') {
-            // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
-            def refspecs = ""
-            this.submit_refspecs.each { refspec ->
-              refspecs += " --refspec=\"${refspec}\""
+            steps.withEnv(this.get_credentials()) {
+              // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
+              def refspecs = ""
+              this.submit_refspecs.each { refspec ->
+                refspecs += " --refspec=\"${refspec}\""
+              }
+              def cmd = this.install_prerequisites()
+              steps.sh(script: "${cmd} submit"
+                               + " --target-remote=\"${target_remote}\""
+                               + refspecs)
             }
-            def cmd = this.install_prerequisites()
-            steps.sh(script: "${cmd} submit"
-                             + " --target-remote=\"${target_remote}\""
-                             + refspecs)
           }
         }
       }
