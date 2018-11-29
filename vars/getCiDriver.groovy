@@ -170,6 +170,7 @@ class CiDriver
   private target_commit   = null
   private target_remote
   private target_ref
+  private may_submit_result = null
 
   CiDriver(steps, repo, change = null) {
     this.repo = repo
@@ -294,6 +295,14 @@ esac
     return this.change != null
   }
 
+  public def has_submittable_change() {
+    if (this.may_submit_result == null) {
+      assert !this.has_change() || (this.target_commit != null && this.source_commit != null)
+      this.may_submit_result = this.has_change() && this.change.maySubmit(target_commit, source_commit)
+    }
+    return this.may_submit_result
+  }
+
   public def build(clean = false) {
     steps.ansiColor('xterm') {
       def phases = steps.node('Linux && Docker') {
@@ -333,11 +342,6 @@ esac
                 label: meta.get('node-label', 'Linux && Docker'),
                 run_on_change: meta.get('run-on-change', true),
               ]
-            // Exclude variants for which we can "statically" determine they're not supposed to run
-            }.findAll {
-              return ((it.run_on_change == "only"  && this.change != null)
-                   || (it.run_on_change == "never" && this.change == null)
-                   || (it.run_on_change == true))
             },
           ]
         }
@@ -346,8 +350,34 @@ esac
 
       phases.each {
           def phase    = it.phase
-          def variants = it.variants
 
+          // Make sure steps exclusive to changes, or not intended to execute for changes, are skipped when appropriate
+          def variants = it.variants.findAll {
+            def run_on_change = it.run_on_change
+
+            if (run_on_change == "never") {
+              return !this.has_change()
+            } else if (run_on_change instanceof Boolean) {
+              return run_on_change
+            } else if (run_on_change == "only") {
+              if (this.source_commit == null
+               || this.target_commit == null) {
+                // Don't have enough information to determine whether this is a submittable change: assume it is
+                return true
+              }
+
+              // Only allocate a node to determine submittability once
+              if (this.may_submit_result == null) {
+                steps.node(this.nodes.get(it.variant, it.label)) {
+                  this.has_submittable_change()
+                }
+              }
+
+              assert this.may_submit_result != null
+              return this.may_submit_result
+            }
+            assert false : "Unknown 'run-on-change' option: ${run_on_change}"
+          }
           if (variants.size() == 0) {
             return
           }
@@ -374,13 +404,6 @@ esac
                         script: "${cmd} getinfo --phase=\"${phase}\" --variant=\"${variant}\"",
                         returnStdout: true,
                       ))
-
-                    // Make sure steps exclusive to changes or not intended to execute for changes are skipped when appropriate
-                    def run_on_change = meta.get('run-on-change', true)
-                    if (!run_on_change
-                     || (run_on_change == "only"  && (this.change == null || !this.change.maySubmit(target_commit, source_commit)))
-                     || (run_on_change == "never" && this.change != null))
-                      return
 
                     steps.sh(script: "${cmd} build --phase=\"${phase}\" --variant=\"${variant}\"")
 
@@ -410,7 +433,7 @@ esac
         return
       }
       steps.node(node.value) {
-        if (this.submit_refspecs != null && this.change.maySubmit(target_commit, source_commit)) {
+        if (this.submit_refspecs != null && this.has_submittable_change()) {
           steps.stage('submit') {
             steps.withEnv(this.get_credentials()) {
               // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
