@@ -77,8 +77,8 @@ class BitbucketPullRequest extends ChangeRequest
     return info
   }
 
-  public def maySubmit(target_commit, source_commit) {
-    def cur_cr_info = this.get_info()
+  public def maySubmit(target_commit, source_commit, allow_cache = true) {
+    def cur_cr_info = this.get_info(allow_cache)
     return !(!super.maySubmit(target_commit, source_commit)
           || cur_cr_info == null
           || cur_cr_info.fromRef == null
@@ -304,7 +304,7 @@ esac
   public def has_submittable_change() {
     if (this.may_submit_result == null) {
       assert !this.has_change() || (this.target_commit != null && this.source_commit != null)
-      this.may_submit_result = this.has_change() && this.change.maySubmit(target_commit, source_commit)
+      this.may_submit_result = this.has_change() && this.change.maySubmit(target_commit, source_commit, /* allow_cache =*/ false)
     }
     return this.may_submit_result
   }
