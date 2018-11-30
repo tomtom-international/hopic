@@ -374,7 +374,8 @@ esac
 
               // Only allocate a node to determine submittability once
               if (this.may_submit_result == null) {
-                steps.node(this.nodes.get(it.variant, it.label)) {
+                def node_expr = this.nodes.collect { variant, node -> node }.join(" || ") ?: it.label
+                steps.node(node_expr) {
                   this.has_submittable_change()
                 }
               }
