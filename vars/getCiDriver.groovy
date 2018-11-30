@@ -23,7 +23,7 @@ class ChangeRequest
     this.steps = steps
   }
 
-  public def maySubmit(target_commit, source_commit) {
+  public def maySubmit(target_commit, source_commit, allow_cache = true) {
     return !steps.sh(script: "git log ${target_commit}..${source_commit} --pretty=\"%s\" --reverse", returnStdout: true)
       .trim().split('\\r?\\n').find { subject ->
         if (subject.startsWith('fixup!') || subject.startsWith('squash!')) {
