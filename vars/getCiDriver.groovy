@@ -354,6 +354,12 @@ esac
         return phases
       }
 
+      def ensure_checkout = {
+        if (!this.workspaces.containsKey(steps.env.NODE_NAME)) {
+          this.workspaces[steps.env.NODE_NAME] = this.checkout(clean)
+        }
+      }
+
       phases.each {
           def phase    = it.phase
 
@@ -376,6 +382,7 @@ esac
               if (this.may_submit_result == null) {
                 def node_expr = this.nodes.collect { variant, node -> node }.join(" || ") ?: it.label
                 steps.node(node_expr) {
+                  ensure_checkout()
                   this.has_submittable_change()
                 }
               }
@@ -400,9 +407,7 @@ esac
                 steps.node(label) {
                   steps.stage("${phase}-${variant}") {
                     def cmd = this.install_prerequisites()
-                    if (!this.workspaces.containsKey(steps.env.NODE_NAME)) {
-                      this.workspaces[steps.env.NODE_NAME] = this.checkout(clean)
-                    }
+                    ensure_checkout()
                     if (!this.nodes.containsKey(variant)) {
                       this.nodes[variant] = steps.env.NODE_NAME
                     }
