@@ -271,45 +271,88 @@ def merge_change_request(
         return msg
     return change_applicator
 
-@prepare_source_tree.command('update-ivy-dependency-manifest')
+_env_var_re = re.compile(r'^(?P<var>[A-Za-z_][0-9A-Za-z_]*)=(?P<val>.*)$')
+@prepare_source_tree.command('apply-modality-change')
+@click.argument('modality')
 @click.pass_context
-def update_ivy_dependency_manifest(
+def apply_modality_change(
         ctx,
+        modality,
     ):
-    manifest = ctx.obj['manifest']
+    cfg = ctx.obj['cfg']
+    modality_cmds = cfg.get('modality-source-preparation', {}).get(modality, ())
     def change_applicator(workspace):
-        env = os.environ.copy()
-        # The following assumes that when a dependency is available for the following configuration
-        # (i.e. x86_64 linux, release) it is available for all needed configurations.
-        env.update(dict(
-                IVY_PLATFORM  ='linux',
-                IVY_ARCH      ='x86_64',
-                IVY_BUILD_TYPE='release',
-            ))
+        has_changed_files = False
+        message = modality
+        for cmd in modality_cmds:
+            try:
+                cmd["changed-files"]
+            except (KeyError, TypeError):
+                pass
+            else:
+                has_changed_files = True
+            try:
+                message = cmd["message"]
+            except (KeyError, TypeError):
+                pass
 
-        # FIXME: get rid of this hard coding
-        ivy_settings = os.path.join(workspace, 'Build/ivysettings.xml')
+        if not has_changed_files:
+            # Force clean builds when we don't know how to discover changed files
+            echo_cmd(subprocess.check_call, ('git', 'clean', '--force', '-xd'), cwd=workspace, stdout=sys.stderr)
 
-        echo_cmd(subprocess.check_call, (
-                    'update_dependency_manifest.py',
-                    manifest,
-                    ivy_settings,
-                ),
-                cwd=workspace,
-                env=env,
-                stdout=sys.stderr,
-            )
+        volume_vars = ctx.obj.get('volume-vars', {})
+
+        for cmd in modality_cmds:
+            if isinstance(cmd, string_types):
+                cmd = {"sh": cmd}
+
+            try:
+                desc = cmd['description']
+            except KeyError:
+                pass
+            else:
+                click.echo('Performing: ' + click.style(desc, fg='cyan'), err=True)
+
+            try:
+                args = shlex.split(cmd['sh'])
+            except KeyError:
+                pass
+            else:
+                env = os.environ.copy()
+                while args:
+                    m = _env_var_re.match(args[0])
+                    if not m:
+                        break
+                    env[m.group('var')] = expand_vars(volume_vars, m.group('val'))
+                    args.pop(0)
+
+                args = [expand_vars(volume_vars, arg) for arg in args]
+                echo_cmd(subprocess.check_call, args, cwd=workspace, env=env, stdout=sys.stderr)
+
+            try:
+                changed_files = cmd["changed-files"]
+            except KeyError:
+                pass
+            else:
+                if isinstance(changed_files, string_types):
+                    changed_files = [changed_files]
+                changed_files = [expand_vars(volume_vars, f) for f in changed_files]
+                echo_cmd(subprocess.check_call, ['git', 'add'] + changed_files, cwd=workspace, stdout=sys.stderr)
+
+        if not has_changed_files:
+            # Force clean builds when we don't know how to discover changed files
+            echo_cmd(subprocess.check_call, ('git', 'add', '--all'), cwd=workspace, stdout=sys.stderr)
+
         changed = echo_cmd(subprocess.call, (
-                    'git', 'diff', '--exit-code', '-w', '--quiet', manifest
+                    'git', 'diff', '--exit-code', '--ignore-all-space', '--quiet', '--cached',
                 ),
                 cwd=workspace,
                 stdout=sys.stderr,
             )
         if changed is None or changed == 0:
-            click.echo("Dependency manifest did not change: '{manifest}'".format(**locals()), err=True)
+            click.echo("No changes introduced by '{message}'".format(**locals()), err=True)
             return None
-        echo_cmd(subprocess.check_call, ('git', 'add', manifest), cwd=workspace)
-        return 'Update of dependency manifest.'
+        return message
     return change_applicator
 
 @cli.command()

@@ -126,10 +126,13 @@ class BitbucketPullRequest extends ChangeRequest
 
 }
 
-class UpdateDependencyManifestRequest extends ChangeRequest
+class SpecialModalityRequest extends ChangeRequest
 {
-  UpdateDependencyManifestRequest(steps) {
+  private modality
+
+  SpecialModalityRequest(steps, modality) {
     super(steps)
+    this.modality = modality
   }
 
   public def apply(venv, workspace, target_remote, target_ref) {
@@ -146,7 +149,7 @@ class UpdateDependencyManifestRequest extends ChangeRequest
                                          + " --target-ref=\"${target_ref}\""
                                          + " --author-date=\"@${author_time}\""
                                          + " --commit-date=\"@${commit_time}\""
-                                         + " update-ivy-dependency-manifest",
+                                         + " apply-modality-change ${modality}",
                                    returnStdout: true).split("\\r?\\n").collect{it}
     def submit_commit = submit_refspecs.size() >= 1 ? submit_refspecs.remove(0) : null
 
@@ -183,8 +186,8 @@ class CiDriver
        && steps.env.CHANGE_URL.contains('/pull-requests/'))
         this.change = new BitbucketPullRequest(steps, steps.env.CHANGE_URL)
       // FIXME: Don't rely on hard-coded build parameter, externalize this instead.
-      else if (steps.params.MODALITY == "UPDATE_DEPENDENCY_MANIFEST")
-        this.change = new UpdateDependencyManifestRequest(steps)
+      else if (steps.params.MODALITY != null && steps.params.MODALITY != "NORMAL")
+        this.change = new SpecialModalityRequest(steps, steps.params.MODALITY)
     }
     this.target_remote = steps.scm.userRemoteConfigs[0].url
     this.target_ref = steps.env.CHANGE_TARGET ?: steps.env.BRANCH_NAME
