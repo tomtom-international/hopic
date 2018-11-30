@@ -169,7 +169,6 @@ class CiDriver
   private repo
   private steps
   private cmds            = [:]
-  private creds           = [:]
   private nodes           = [:]
   private workspaces      = [:]
   private submit_refspecs = null
@@ -208,35 +207,73 @@ class CiDriver
     return this.cmds[steps.env.NODE_NAME]
   }
 
-  private def get_credentials() {
-    if (!this.creds.containsKey(steps.env.NODE_NAME)) {
-      // Ensure
-      try {
-        steps.withCredentials([steps.usernamePassword(
-            credentialsId: steps.scm.userRemoteConfigs[0].credentialsId,
-            usernameVariable: 'USERNAME',
-            passwordVariable: 'PASSWORD',
-            )]) {
-            def askpass_program = steps.pwd(tmp: true) + '/jenkins-git-askpass.sh'
-            steps.writeFile(
-                file: askpass_program,
-                text: '''\
+  private def with_credentials(closure) {
+    // Ensure
+    try {
+      steps.withCredentials([steps.usernamePassword(
+          credentialsId: steps.scm.userRemoteConfigs[0].credentialsId,
+          usernameVariable: 'USERNAME',
+          passwordVariable: 'PASSWORD',
+          )]) {
+          def askpass_program = steps.pwd(tmp: true) + '/jenkins-git-askpass.sh'
+          steps.writeFile(
+              file: askpass_program,
+              text: '''\
 #!/bin/sh
 case "$1" in
 [Uu]sername*) echo ''' + "'" + steps.USERNAME.replace("'", "'\\''") + "'" + ''' ;;
 [Pp]assword*) echo ''' + "'" + steps.PASSWORD.replace("'", "'\\''") + "'" + ''' ;;
 esac
 ''')
-            this.creds[steps.env.NODE_NAME] = ["GIT_ASKPASS=${askpass_program}"]
-            steps.withEnv(this.creds[steps.env.NODE_NAME]) {
-              steps.sh(script: 'chmod 700 "${GIT_ASKPASS}"')
+          return steps.withEnv(["GIT_ASKPASS=${askpass_program}"]) {
+            steps.sh(script: 'chmod 700 "${GIT_ASKPASS}"')
+            return closure()
+          }
+      }
+    } catch (CredentialNotFoundException e1) {
+      try {
+        steps.withCredentials([steps.sshUserPrivateKey(
+            credentialsId: steps.scm.userRemoteConfigs[0].credentialsId,
+            keyFileVariable: 'KEYFILE',
+            usernameVariable: 'USERNAME',
+            passphraseVariable: 'PASSPHRASE',
+            )]) {
+            def tmpdir = steps.pwd(tmp: true)
+
+            def askpass_program = "${tmpdir}/jenkins-git-ssh-askpass.sh"
+            steps.writeFile(
+                file: askpass_program,
+                text: '''\
+#!/bin/sh
+echo ''' + "'" + (steps.env.PASSPHRASE ?: '').replace("'", "'\\''") + "'" + '''
+''')
+
+            def ssh_program = "${tmpdir}/jenkins-git-ssh.sh"
+            steps.writeFile(
+                file: ssh_program,
+                text: '''\
+#!/bin/sh
+# SSH_ASKPASS might be ignored if DISPLAY is not set
+if [ -z "${DISPLAY:-}" ]; then
+DISPLAY=:123.456
+export DISPLAY
+fi
+exec ssh -i '''
++ "'" + steps.KEYFILE.replace("'", "'\\''") + "'"
++ (steps.env.USERNAME != null ? ''' -l ''' + "'" + steps.USERNAME.replace("'", "'\\''") + "'" : '')
++ ''' -o StrictHostKeyChecking=no -o IdentitiesOnly=yes "$@"
+''')
+
+            return steps.withEnv(["SSH_ASKPASS=${askpass_program}", "GIT_SSH=${ssh_program}", "GIT_SSH_VARIANT=ssh"]) {
+              steps.sh(script: 'chmod 700 "${GIT_SSH}" "${SSH_ASKPASS}"')
+              return closure()
             }
         }
-      } catch (CredentialNotFoundException ex) {
-        // Ignore, hoping that we're dealing with an SSH credential stored at ~/.ssh/id_rsa
+      } catch (CredentialNotFoundException e2) {
+        // Ignore, hoping that we're dealing with a passwordless SSH credential stored at ~/.ssh/id_rsa
+        return closure()
       }
     }
-    return this.creds.get(steps.env.NODE_NAME, [])
   }
 
   private def checkout(clean = false) {
@@ -244,7 +281,7 @@ esac
 
     def venv = steps.pwd(tmp: true) + "/cidriver-venv"
     def workspace = steps.pwd()
-    steps.withEnv(this.get_credentials()) {
+    this.with_credentials() {
       def clean_param = clean ? " --clean" : ""
       this.target_commit = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --color=always --workspace=\"${workspace}\""
                                           + " checkout-source-tree"
@@ -454,7 +491,7 @@ esac
       steps.node(node.value) {
         if (this.submit_refspecs != null && this.has_submittable_change()) {
           steps.stage('submit') {
-            steps.withEnv(this.get_credentials()) {
+            this.with_credentials() {
               // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
               def refspecs = ""
               this.submit_refspecs.each { refspec ->
