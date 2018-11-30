@@ -23,13 +23,17 @@ class ChangeRequest
     this.steps = steps
   }
 
-  public def maySubmit(target_commit, source_commit, allow_cache = true) {
+  protected def maySubmitImpl(target_commit, source_commit, allow_cache = true) {
     return !steps.sh(script: "git log ${target_commit}..${source_commit} --pretty=\"%s\" --reverse", returnStdout: true)
       .trim().split('\\r?\\n').find { subject ->
         if (subject.startsWith('fixup!') || subject.startsWith('squash!')) {
           return true
         }
     }
+  }
+
+  public def maySubmit(target_commit, source_commit, allow_cache = true) {
+    return this.maySubmitImpl(target_commit, source_commit, allow_cache)
   }
 
   public def apply(venv, workspace, target_ref) {
@@ -79,7 +83,7 @@ class BitbucketPullRequest extends ChangeRequest
 
   public def maySubmit(target_commit, source_commit, allow_cache = true) {
     def cur_cr_info = this.get_info(allow_cache)
-    return !(!super.maySubmit(target_commit, source_commit)
+    return !(!super.maySubmitImpl(target_commit, source_commit, allow_cache)
           || cur_cr_info == null
           || cur_cr_info.fromRef == null
           || cur_cr_info.fromRef.latestCommit != source_commit
