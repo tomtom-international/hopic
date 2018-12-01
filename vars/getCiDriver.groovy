@@ -472,12 +472,14 @@ exec ssh -i '''
 
                     // FIXME: get rid of special casing for stashing
                     if (meta.containsKey('stash')) {
-                      steps.dir(meta['stash'].get('dir', this.workspaces[steps.env.NODE_NAME])) {
+                      def dir   = meta.stash.get('dir', this.workspaces[steps.env.NODE_NAME])
+                      def name  = "${phase}-${variant}"
+                      steps.dir(dir) {
                         def params = [
-                            name: variant,
+                            name: name,
                           ]
-                        if (meta['stash'].containsKey('includes')) {
-                          params['includes'] = meta['stash']['includes']
+                        if (meta.stash.containsKey('includes')) {
+                          params['includes'] = meta.stash.includes
                         }
                         steps.stash(params)
                       }
