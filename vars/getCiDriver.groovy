@@ -413,6 +413,8 @@ exec ssh -i '''
         return phases
       }
 
+      def next_stash = [:]
+
       phases.each {
           def phase    = it.phase
 
@@ -447,6 +449,9 @@ exec ssh -i '''
             return
           }
 
+          def stash = next_stash
+          next_stash = [:]
+
           steps.stage(phase) {
             def stepsForBuilding = variants.collectEntries {
               def variant = it.variant
@@ -462,6 +467,14 @@ exec ssh -i '''
                     if (!this.nodes.containsKey(variant)) {
                       this.nodes[variant] = steps.env.NODE_NAME
                     }
+
+                    // Unstash everything from the previous phase here
+                    stash.each { name, dir ->
+                      steps.dir(dir) {
+                        steps.unstash(name)
+                      }
+                    }
+
                     // Meta-data retrieval needs to take place on the executing node to ensure environment variable expansion happens properly
                     def meta = steps.readJSON(text: steps.sh(
                         script: "${cmd} getinfo --phase=\"${phase}\" --variant=\"${variant}\"",
@@ -470,7 +483,7 @@ exec ssh -i '''
 
                     steps.sh(script: "${cmd} build --phase=\"${phase}\" --variant=\"${variant}\"")
 
-                    // FIXME: get rid of special casing for stashing
+                    // FIXME: re-evaluate if we can and need to get rid of special casing for stashing
                     if (meta.containsKey('stash')) {
                       def dir   = meta.stash.get('dir', this.workspaces[steps.env.NODE_NAME])
                       def name  = "${phase}-${variant}"
@@ -483,6 +496,7 @@ exec ssh -i '''
                         }
                         steps.stash(params)
                       }
+                      next_stash[name] = dir
                     }
                   }
                 }
@@ -490,6 +504,23 @@ exec ssh -i '''
             }
             steps.parallel stepsForBuilding
           }
+      }
+
+      // Unstash everything from the last phase here to ensure that it's available to user code running on one of these nodes afterwards
+      // FIXME: figure out if this can be done lazily instead, or avoided altogether
+      if (next_stash.size() > 0) {
+        steps.parallel(this.nodes.collectEntries { variant, node ->
+          [ (variant): {
+            steps.node(node) {
+              next_stash.each { name, dir ->
+                steps.dir(dir) {
+                  steps.unstash(name)
+                }
+              }
+            }
+          }]
+        })
+        next_stash = [:]
       }
 
       def node = this.nodes.find{true}
