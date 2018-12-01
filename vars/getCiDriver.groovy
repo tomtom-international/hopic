@@ -179,6 +179,7 @@ class CiDriver
   private target_remote
   private target_ref
   private may_submit_result = null
+  private default_node_expr = "Linux && Docker"
 
   CiDriver(steps, repo, change = null) {
     this.repo = repo
@@ -353,9 +354,23 @@ exec ssh -i '''
     return this.may_submit_result
   }
 
+  private def ensure_checkout(clean = false) {
+    if (!this.workspaces.containsKey(steps.env.NODE_NAME)) {
+      this.workspaces[steps.env.NODE_NAME] = this.checkout(clean)
+    }
+  }
+
+  public def on_build_node(Map params = [:], closure) {
+    def node_expr = this.nodes.collect { variant, node -> node }.join(" || ") ?: params.get('default_node_expr', this.default_node_expr)
+    return steps.node(node_expr) {
+      this.ensure_checkout(params.get('clean', false))
+      return closure()
+    }
+  }
+
   public def build(clean = false) {
     steps.ansiColor('xterm') {
-      def phases = steps.node('Linux && Docker') {
+      def phases = steps.node(default_node_expr) {
         def cmd = this.install_prerequisites()
         def workspace = steps.pwd()
 
@@ -389,19 +404,13 @@ exec ssh -i '''
                 ))
               [
                 variant: variant,
-                label: meta.get('node-label', 'Linux && Docker'),
+                label: meta.get('node-label', default_node_expr),
                 run_on_change: meta.get('run-on-change', true),
               ]
             },
           ]
         }
         return phases
-      }
-
-      def ensure_checkout = {
-        if (!this.workspaces.containsKey(steps.env.NODE_NAME)) {
-          this.workspaces[steps.env.NODE_NAME] = this.checkout(clean)
-        }
       }
 
       phases.each {
@@ -424,9 +433,7 @@ exec ssh -i '''
 
               // Only allocate a node to determine submittability once
               if (this.may_submit_result == null) {
-                def node_expr = this.nodes.collect { variant, node -> node }.join(" || ") ?: it.label
-                steps.node(node_expr) {
-                  ensure_checkout()
+                this.on_build_node(default_node_expr: it.label, clean: clean) {
                   this.has_submittable_change()
                 }
               }
@@ -451,7 +458,7 @@ exec ssh -i '''
                 steps.node(label) {
                   steps.stage("${phase}-${variant}") {
                     def cmd = this.install_prerequisites()
-                    ensure_checkout()
+                    ensure_checkout(clean)
                     if (!this.nodes.containsKey(variant)) {
                       this.nodes[variant] = steps.env.NODE_NAME
                     }
@@ -488,7 +495,7 @@ exec ssh -i '''
         assert this.submit_refspecs == null : "Cannot submit without having an allocated node"
         return
       }
-      steps.node(node.value) {
+      this.on_build_node {
         if (this.submit_refspecs != null && this.has_submittable_change()) {
           steps.stage('submit') {
             this.with_credentials() {
