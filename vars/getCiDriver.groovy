@@ -296,7 +296,7 @@ exec ssh -i '''
         if (!submit_info.commit)
         {
           try {
-              if (steps.currentBuild.rawBuild.getCauses().get(0).properties.shortDescription.contains('Started by timer')) {
+              if (steps.currentBuild.rawBuild.getCauses().get(0).properties['shortDescription'].contains('Started by timer')) {
                 steps.currentBuild.rawBuild.delete()
               }
           } catch (Exception ex) {
