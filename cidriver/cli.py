@@ -100,7 +100,7 @@ def cli(ctx, color, config, workspace):
     if config is not None:
         ctx.obj['cfg'] = read_config(config, volume_vars)
 
-@cli.command('checkout-source-tree')
+@cli.command()
 @click.option('--target-remote'     , metavar='<url>')
 @click.option('--target-ref'        , metavar='<ref>')
 @click.option('--clean/--no-clean'  , default=False, help='''Clean workspace of non-tracked files''')
@@ -116,7 +116,7 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
       echo_cmd(subprocess.check_call, ('git', 'clean', '--force', '-xd'), cwd=workspace, stdout=sys.stderr)
     echo_cmd(subprocess.check_call, ('git', 'rev-parse', 'HEAD'), cwd=workspace)
 
-@cli.group('prepare-source-tree')
+@cli.group()
 # git
 @click.option('--target-remote'             , metavar='<url>')
 @click.option('--target-ref'                , metavar='<ref>')
@@ -202,7 +202,7 @@ def process_prepare_source_tree(
     if tagname is not None:
         click.echo('refs/tags/{tagname}:refs/tags/{tagname}'.format(**locals()))
 
-@prepare_source_tree.command('merge-change-request')
+@prepare_source_tree.command()
 # git
 @click.option('--source-remote' , metavar='<url>', help='<source> remote to merge into <target>')
 @click.option('--source-ref'    , metavar='<ref>', help='ref of <source> remote to merge into <target>')
@@ -238,7 +238,7 @@ def merge_change_request(
     return change_applicator
 
 _env_var_re = re.compile(r'^(?P<var>[A-Za-z_][0-9A-Za-z_]*)=(?P<val>.*)$')
-@prepare_source_tree.command('apply-modality-change')
+@prepare_source_tree.command()
 @click.argument('modality')
 @click.pass_context
 def apply_modality_change(
