@@ -171,6 +171,7 @@ class CiDriver
   private cmds            = [:]
   private nodes           = [:]
   private workspaces      = [:]
+  private stashes         = [:]
   private submit_refspecs = null
   private submit_version  = null
   private change          = null
@@ -360,10 +361,26 @@ exec ssh -i '''
     }
   }
 
+  /**
+   * Unstash everything previously stashed on other nodes that we didn't yet unstash here.
+   */
+  private def ensure_unstashed() {
+    this.stashes.each { name, stash ->
+      if (stash.nodes[steps.env.NODE_NAME]) {
+        return
+      }
+      steps.dir(stash.dir) {
+        steps.unstash(name)
+      }
+      this.stashes[name].nodes[steps.env.NODE_NAME] = true
+    }
+  }
+
   public def on_build_node(Map params = [:], closure) {
     def node_expr = this.nodes.collect { variant, node -> node }.join(" || ") ?: params.get('default_node_expr', this.default_node_expr)
     return steps.node(node_expr) {
       this.ensure_checkout(params.get('clean', false))
+      this.ensure_unstashed()
       return closure()
     }
   }
@@ -413,8 +430,6 @@ exec ssh -i '''
         return phases
       }
 
-      def next_stash = [:]
-
       phases.each {
           def phase    = it.phase
 
@@ -449,9 +464,6 @@ exec ssh -i '''
             return
           }
 
-          def stash = next_stash
-          next_stash = [:]
-
           steps.stage(phase) {
             def stepsForBuilding = variants.collectEntries {
               def variant = it.variant
@@ -468,12 +480,7 @@ exec ssh -i '''
                       this.nodes[variant] = steps.env.NODE_NAME
                     }
 
-                    // Unstash everything from the previous phase here
-                    stash.each { name, dir ->
-                      steps.dir(dir) {
-                        steps.unstash(name)
-                      }
-                    }
+                    this.ensure_unstashed()
 
                     // Meta-data retrieval needs to take place on the executing node to ensure environment variable expansion happens properly
                     def meta = steps.readJSON(text: steps.sh(
@@ -496,7 +503,7 @@ exec ssh -i '''
                         }
                         steps.stash(params)
                       }
-                      next_stash[name] = dir
+                      this.stashes[name] = [dir: dir, nodes: [(steps.env.NODE_NAME): true]]
                     }
                   }
                 }
@@ -504,23 +511,6 @@ exec ssh -i '''
             }
             steps.parallel stepsForBuilding
           }
-      }
-
-      // Unstash everything from the last phase here to ensure that it's available to user code running on one of these nodes afterwards
-      // FIXME: figure out if this can be done lazily instead, or avoided altogether
-      if (next_stash.size() > 0) {
-        steps.parallel(this.nodes.collectEntries { variant, node ->
-          [ (variant): {
-            steps.node(node) {
-              next_stash.each { name, dir ->
-                steps.dir(dir) {
-                  steps.unstash(name)
-                }
-              }
-            }
-          }]
-        })
-        next_stash = [:]
       }
 
       def node = this.nodes.find{true}
