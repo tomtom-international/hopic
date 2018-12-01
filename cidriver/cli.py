@@ -1,6 +1,7 @@
 import click
 
 from .config_reader import read as read_config
+from .config_reader import expand_vars
 from .execution import echo_cmd
 from .versioning import (bump_version, stringify_semver)
 from datetime import datetime
@@ -56,30 +57,6 @@ def git_has_work_tree(workspace):
         return False
     return output.strip().lower() == 'true'
 
-_var_re = re.compile(r'\$(?:(\w+)|\{([^}]+)\})')
-def expand_vars(vars, expr):
-    if isinstance(expr, string_types):
-        # Expand variables from our "virtual" environment
-        last_idx = 0
-        new_val = expr[:last_idx]
-        for var in _var_re.finditer(expr):
-            name = var.group(1) or var.group(2)
-            value = vars[name]
-            new_val = new_val + expr[last_idx:var.start()] + value
-            last_idx = var.end()
-
-        new_val = new_val + expr[last_idx:]
-        return new_val
-    if hasattr(expr, 'items'):
-        expr = expr.copy()
-        for key, val in expr.items():
-            expr[key] = expand_vars(vars, expr[key])
-        return expr
-    try:
-        return [expand_vars(vars, val) for val in expr]
-    except TypeError:
-        return expr
-
 def volume_spec_to_docker_param(volume):
     if not os.path.exists(volume['source']):
         os.makedirs(volume['source'])
@@ -94,9 +71,8 @@ def volume_spec_to_docker_param(volume):
 @click.option('--color', type=click.Choice(('always', 'auto', 'never')), default='auto')
 @click.option('--config', type=click.Path(exists=True, readable=True, resolve_path=True))
 @click.option('--workspace', type=click.Path(exists=True, file_okay=False, dir_okay=True))
-@click.option('--dependency-manifest', type=click.File('r'))
 @click.pass_context
-def cli(ctx, color, config, workspace, dependency_manifest):
+def cli(ctx, color, config, workspace):
     if color == 'always':
         ctx.color = True
     elif color == 'never':
@@ -121,18 +97,8 @@ def cli(ctx, color, config, workspace, dependency_manifest):
             pass
     ctx.obj['volume-vars'] = volume_vars
 
-    # Fallback to 'dependency_manifest.xml' file in same directory as config
-    config_dir = os.path.dirname(os.path.realpath(config)) if config else None
-    manifest = dependency_manifest
-    if manifest is None and (workspace or config_dir):
-        manifest = os.path.join(workspace or config_dir, 'dependency_manifest.xml')
-        if not os.path.exists(manifest):
-            manifest = None
-    if manifest is not None:
-        ctx.obj['manifest'] = manifest
-
     if config is not None:
-        ctx.obj['cfg'] = read_config(config, manifest, volume_vars)
+        ctx.obj['cfg'] = read_config(config, volume_vars)
 
 @cli.command('checkout-source-tree')
 @click.option('--target-remote'     , metavar='<url>')

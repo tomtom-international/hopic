@@ -6,8 +6,33 @@ import xml.etree.ElementTree as ET
 import yaml
 
 __all__ = (
+        'expand_vars',
         'read',
     )
+
+_var_re = re.compile(r'\$(?:(\w+)|\{([^}]+)\})')
+def expand_vars(vars, expr):
+    if isinstance(expr, string_types):
+        # Expand variables from our "virtual" environment
+        last_idx = 0
+        new_val = expr[:last_idx]
+        for var in _var_re.finditer(expr):
+            name = var.group(1) or var.group(2)
+            value = vars[name]
+            new_val = new_val + expr[last_idx:var.start()] + value
+            last_idx = var.end()
+
+        new_val = new_val + expr[last_idx:]
+        return new_val
+    if hasattr(expr, 'items'):
+        expr = expr.copy()
+        for key, val in expr.items():
+            expr[key] = expand_vars(vars, expr[key])
+        return expr
+    try:
+        return [expand_vars(vars, val) for val in expr]
+    except TypeError:
+        return expr
 
 class OrderedLoader(yaml.SafeLoader):
     pass
@@ -37,11 +62,21 @@ def get_toolchain_image_information(dependency_manifest):
 
     return toolchain_dep
 
-def image_from_ivy_manifest(manifest, loader, node):
-    if manifest is None:
-        return None
-
+def image_from_ivy_manifest(volume_vars, loader, node):
     props = loader.construct_mapping(node) if node.value else {}
+
+    if 'manifest' in props:
+        manifest = expand_vars(volume_vars, props['manifest'])
+    else:
+        # Fall back to searching for dependency_manifest.xml in these directories
+        for dir in ('WORKSPACE', 'CFGDIR'):
+            if dir not in volume_vars:
+                continue
+            manifest = os.path.join(volume_vars[dir], 'dependency_manifest.xml')
+            if os.path.exists(manifest):
+                break
+    if not os.path.exists(manifest):
+        return None
 
     image = get_toolchain_image_information(manifest)
 
@@ -53,16 +88,15 @@ def image_from_ivy_manifest(manifest, loader, node):
 
     return '{image}:{rev}'.format(**image)
 
-def ordered_image_ivy_loader(manifest):
+def ordered_image_ivy_loader(volume_vars):
     OrderedImageLoader = type('OrderedImageLoader', (OrderedLoader,), {})
     OrderedImageLoader.add_constructor(
             '!image-from-ivy-manifest',
-            lambda *args: image_from_ivy_manifest(manifest, *args)
+            lambda *args: image_from_ivy_manifest(volume_vars, *args)
         )
     return OrderedImageLoader
 
 def expand_docker_volume_spec(config_dir, volume_vars, volume_specs):
-    var_re = re.compile(r'\$(?:(\w+)|\{([^}]+)\})')
     guest_volume_vars = {
             'WORKSPACE': '/code',
         }
@@ -89,21 +123,11 @@ def expand_docker_volume_spec(config_dir, volume_vars, volume_specs):
 
         # Expand source specification resolved on the host side
         if 'source' in volume:
-            source = os.path.expanduser(volume['source'])
+            source = expand_vars(volume_vars, os.path.expanduser(volume['source']))
 
-            # Expand variables from our "virtual" environment
-            last_idx = 0
-            new_source = source[:last_idx]
-            for var in var_re.finditer(source):
-                name = var.group(1) or var.group(2)
-                value = volume_vars[name]
-                new_source = new_source + source[last_idx:var.start()] + value
-                last_idx = var.end()
-
-            new_source = new_source + source[last_idx:]
             # Make relative paths relative to the configuration directory.
             # Absolute paths will be absolute
-            source = os.path.join(config_dir, new_source)
+            source = os.path.join(config_dir, source)
             volume['source'] = source
 
         # Expand target specification resolved on the guest side
@@ -113,27 +137,19 @@ def expand_docker_volume_spec(config_dir, volume_vars, volume_specs):
             if target.startswith('~/'):
                 target = '/home/sandbox' + target[1:]
 
-            # Expand variables from our virtual guest side environment
-            last_idx = 0
-            new_target = target[:last_idx]
-            for var in var_re.finditer(target):
-                name = var.group(1) or var.group(2)
-                value = guest_volume_vars[name]
-                new_target = new_target + target[last_idx:var.start()] + value
-                last_idx = var.end()
-
-            new_target = new_target + target[last_idx:]
-            target = new_target
+            target = expand_vars(guest_volume_vars, target)
 
             volume['target'] = target
 
         volumes.append(volume)
     return volumes
 
-def read(config, manifest, volume_vars):
+def read(config, volume_vars):
     config_dir = os.path.dirname(config)
 
-    OrderedImageLoader = ordered_image_ivy_loader(manifest)
+    volume_vars = volume_vars.copy()
+    volume_vars['CFGDIR'] = config_dir
+    OrderedImageLoader = ordered_image_ivy_loader(volume_vars)
 
     with open(config, 'r') as f:
         cfg = yaml.load(f, OrderedImageLoader)

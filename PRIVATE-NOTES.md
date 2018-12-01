@@ -17,3 +17,4 @@ Requirements on build system:
 Requirements for ci-driver:
  * Build config should not be executable
  - Maybe: allow adding an extra "SNAPSHOT pre-release bump" commit _after_ the commit created to build
+ * Put all (or most) customization in the YAML config, avoiding the CLI or Jenkinsfile for this purpose
