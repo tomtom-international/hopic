@@ -326,18 +326,12 @@ def apply_modality_change(
             if isinstance(cmd, string_types):
                 cmd = {"sh": cmd}
 
-            try:
+            if 'description' in cmd:
                 desc = cmd['description']
-            except KeyError:
-                pass
-            else:
                 click.echo('Performing: ' + click.style(desc, fg='cyan'), err=True)
 
-            try:
+            if 'sh' in cmd:
                 args = shlex.split(cmd['sh'])
-            except KeyError:
-                pass
-            else:
                 env = os.environ.copy()
                 while args:
                     m = _env_var_re.match(args[0])
@@ -349,11 +343,8 @@ def apply_modality_change(
                 args = [expand_vars(volume_vars, arg) for arg in args]
                 echo_cmd(subprocess.check_call, args, cwd=workspace, env=env, stdout=sys.stderr)
 
-            try:
+            if 'changed-files' in cmd:
                 changed_files = cmd["changed-files"]
-            except KeyError:
-                pass
-            else:
                 if isinstance(changed_files, string_types):
                     changed_files = [changed_files]
                 changed_files = [expand_vars(volume_vars, f) for f in changed_files]
