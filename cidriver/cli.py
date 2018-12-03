@@ -155,15 +155,17 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
         echo_cmd(subprocess.check_call, ('git', 'clone', '-c' 'color.ui=always', target_remote, workspace))
     echo_cmd(subprocess.check_call, ('git', 'config', 'color.ui', 'always'), cwd=workspace)
     echo_cmd(subprocess.check_call, ('git', 'fetch', target_remote, target_ref), cwd=workspace)
-    echo_cmd(subprocess.check_call, ('git', 'checkout', '--force', 'FETCH_HEAD'), cwd=workspace)
+    commit = echo_cmd(subprocess.check_output, ('git', 'rev-parse', 'FETCH_HEAD'), cwd=workspace).strip()
+    echo_cmd(subprocess.check_call, ('git', 'checkout', '--force', commit), cwd=workspace)
     if clean:
       echo_cmd(subprocess.check_call, ('git', 'clean', '--force', '-xd'), cwd=workspace, stdout=sys.stderr)
-    echo_cmd(subprocess.check_call, ('git', 'rev-parse', 'HEAD'), cwd=workspace)
+    click.echo(commit)
+
+    echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.{commit}.ref'.format(**locals()), target_ref), cwd=workspace)
+    echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.{commit}.remote'.format(**locals()), target_remote), cwd=workspace)
 
 @cli.group()
 # git
-@click.option('--target-remote'             , metavar='<url>')
-@click.option('--target-ref'                , metavar='<ref>')
 @click.option('--author-name'               , metavar='<name>'                 , help='''Name of change-request's author''')
 @click.option('--author-email'              , metavar='<email>'                , help='''E-mail address of change-request's author''')
 @click.option('--author-date'               , metavar='<date>', type=DateTime(), help='''Time of last update to the change-request''')
@@ -180,8 +182,6 @@ def prepare_source_tree(*args, **kwargs):
 def process_prepare_source_tree(
         ctx,
         change_applicator,
-        target_remote,
-        target_ref,
         author_name,
         author_email,
         author_date,
@@ -191,8 +191,10 @@ def process_prepare_source_tree(
     workspace = ctx.obj.workspace
     assert git_has_work_tree(workspace)
 
-    echo_cmd(subprocess.check_call, ('git', 'fetch', target_remote, target_ref), cwd=workspace)
-    echo_cmd(subprocess.check_call, ('git', 'checkout', '--force', 'FETCH_HEAD'), cwd=workspace)
+    target_commit = echo_cmd(subprocess.check_output, ('git', 'rev-parse', 'HEAD'), cwd=workspace).strip()
+    target_ref    = echo_cmd(subprocess.check_output, ('git', 'config', '--get', 'ci-driver.{target_commit}.ref'.format(**locals())), cwd=workspace).strip()
+    target_remote = echo_cmd(subprocess.check_output, ('git', 'config', '--get', 'ci-driver.{target_commit}.remote'.format(**locals())), cwd=workspace).strip()
+    echo_cmd(subprocess.check_call, ('git', 'config', '--remove-section', 'ci-driver.{target_commit}'.format(**locals())), cwd=workspace)
 
     version = None
 
@@ -228,8 +230,8 @@ def process_prepare_source_tree(
         stdout=sys.stderr,
     )
 
-    commit = echo_cmd(subprocess.check_output, ('git', 'rev-parse', 'HEAD'), cwd=workspace).strip()
-    click.echo(commit)
+    submit_commit = echo_cmd(subprocess.check_output, ('git', 'rev-parse', 'HEAD'), cwd=workspace).strip()
+    click.echo(submit_commit)
 
     tagname = None
     if version is not None and not version.prerelease and version_tag:
@@ -243,12 +245,27 @@ def process_prepare_source_tree(
                 prerelease_sep = ('-' if version.prerelease else ''),
                 build_sep      = ('+' if version.build else ''),
             )
-        echo_cmd(subprocess.check_call, ('git', 'tag', '-f', tagname, commit), cwd=workspace, stdout=sys.stderr)
+        echo_cmd(subprocess.check_call, ('git', 'tag', '-f', tagname, submit_commit), cwd=workspace, stdout=sys.stderr)
 
-    echo_cmd(subprocess.check_call, ('git', 'show', '--format=fuller', '--stat', commit), cwd=workspace, stdout=sys.stderr)
-    click.echo('{commit}:{target_ref}'.format(commit=commit, target_ref=target_ref))
+    echo_cmd(subprocess.check_call, ('git', 'show', '--format=fuller', '--stat', submit_commit), cwd=workspace, stdout=sys.stderr)
+
+    echo_cmd(subprocess.call, ('git', 'config', '--unset-all', 'ci-driver.{submit_commit}.refspec'.format(**locals())), cwd=workspace)
+    echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.{submit_commit}.remote'.format(**locals()), target_remote), cwd=workspace)
+    echo_cmd(subprocess.check_call, (
+            'git', 'config', '--add',
+            'ci-driver.{submit_commit}.refspec'.format(**locals()),
+            '{submit_commit}:{target_ref}'.format(**locals()),
+        ),
+        cwd=workspace)
+    if version is not None:
+        click.echo(version)
     if tagname is not None:
-        click.echo('refs/tags/{tagname}:refs/tags/{tagname}'.format(**locals()))
+        echo_cmd(subprocess.check_call, (
+                'git', 'config', '--add',
+                'ci-driver.{submit_commit}.refspec'.format(**locals()),
+                'refs/tags/{tagname}:refs/tags/{tagname}'.format(**locals()),
+            ),
+            cwd=workspace)
 
 @prepare_source_tree.command()
 # git
@@ -492,17 +509,29 @@ def build(ctx, phase, variant):
                 echo_cmd(subprocess.check_call, cmd, env=new_env)
 
 @cli.command()
-@click.option('--target-remote'     , metavar='<url>', required=True)
-@click.option('--refspec'           , metavar='<ref>', required=True, multiple=True, help='''Refspecs that are to be submitted''')
+@click.option('--target-remote', metavar='<url>', help='''The remote to push to, if not specified this will default to the checkout remote.''')
 @click.pass_context
-def submit(ctx, target_remote, refspec):
+def submit(ctx, target_remote):
     """
-    Submit the changes specified by the given refspecs to the specified remote.
+    Submit the changes created by prepare-source-tree to the target remote.
     """
 
     workspace = ctx.obj.workspace
     assert git_has_work_tree(workspace)
-    echo_cmd(subprocess.check_call, ('git', 'push', '--atomic', target_remote) + tuple(refspec), cwd=workspace)
+
+    submit_commit = echo_cmd(subprocess.check_output, ('git', 'rev-parse', 'HEAD'), cwd=workspace).strip()
+    if target_remote is None:
+        target_remote = echo_cmd(subprocess.check_output, ('git', 'config', '--get', 'ci-driver.{submit_commit}.remote'.format(**locals())), cwd=workspace).strip()
+
+    refspecs = tuple(filter(None,
+        echo_cmd(subprocess.check_output, (
+            'git', 'config', '--get-all', '--null',
+            'ci-driver.{submit_commit}.refspec'.format(**locals())
+        )
+        , cwd=workspace).split('\0')))
+    echo_cmd(subprocess.check_call, ('git', 'config', '--remove-section', 'ci-driver.{submit_commit}'.format(**locals())), cwd=workspace)
+
+    echo_cmd(subprocess.check_call, ('git', 'push', '--atomic', target_remote) + refspecs, cwd=workspace)
 
 @cli.command()
 @click.pass_context

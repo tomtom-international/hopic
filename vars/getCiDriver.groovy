@@ -36,7 +36,7 @@ class ChangeRequest
     return this.maySubmitImpl(target_commit, source_commit, allow_cache)
   }
 
-  public def apply(venv, workspace, target_ref) {
+  public def apply(venv, workspace, source_remote = null) {
     assert false : "Change request instance does not override apply()"
   }
 }
@@ -90,7 +90,7 @@ class BitbucketPullRequest extends ChangeRequest
           || !cur_cr_info.canMerge)
   }
 
-  public def apply(venv, workspace, target_remote, target_ref) {
+  public def apply(venv, workspace, source_remote) {
     def change_request = this.get_info()
     def conf_params = ''
     if (steps.fileExists("${workspace}/cfg.yml")) {
@@ -104,28 +104,30 @@ class BitbucketPullRequest extends ChangeRequest
     def (remote_ref, local_ref) = source_refspec.tokenize(':')
     if (remote_ref.startsWith('+'))
       remote_ref = remote_ref.substring(1)
-    def submit_refspecs = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --color=always --workspace=\"${workspace}\""
-                                         + conf_params
-                                         + " prepare-source-tree"
-                                         + " --target-remote=\"${target_remote}\""
-                                         + " --target-ref=\"${target_ref}\""
-                                         + " --author-name=\"${steps.env.CHANGE_AUTHOR}\""
-                                         + " --author-email=\"${steps.env.CHANGE_AUTHOR_EMAIL}\""
-                                         + " --author-date=\"@${change_request.author_time}\""
-                                         + " --commit-date=\"@${change_request.commit_time}\""
-                                         + " merge-change-request"
-                                         + " --source-remote=\"${target_remote}\""
-                                         + " --source-ref=\"${remote_ref}\""
-                                         + " --change-request=\"${steps.env.CHANGE_ID}\""
-                                         + " --title=\"${steps.env.CHANGE_TITLE}\""
-                                         + extra_params,
-                                   returnStdout: true).split("\\r?\\n").collect{it}
-    def submit_commit = submit_refspecs.size() >= 1 ? submit_refspecs.remove(0) : null
-
-    return [
-        commit: submit_commit,
-        refspecs: submit_refspecs,
+    def output = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --color=always --workspace=\"${workspace}\""
+                                + conf_params
+                                + " prepare-source-tree"
+                                + " --author-name=\"${steps.env.CHANGE_AUTHOR}\""
+                                + " --author-email=\"${steps.env.CHANGE_AUTHOR_EMAIL}\""
+                                + " --author-date=\"@${change_request.author_time}\""
+                                + " --commit-date=\"@${change_request.commit_time}\""
+                                + " merge-change-request"
+                                + " --source-remote=\"${source_remote}\""
+                                + " --source-ref=\"${remote_ref}\""
+                                + " --change-request=\"${steps.env.CHANGE_ID}\""
+                                + " --title=\"${steps.env.CHANGE_TITLE}\""
+                                + extra_params,
+                          returnStdout: true).split("\\r?\\n").collect{it}
+    if (output.size() <= 0) {
+      return null
+    }
+    def rv = [
+        commit: output.remove(0),
       ]
+    if (output.size() > 0) {
+      rv.version = output.remove(0)
+    }
+    return rv
   }
 
 }
@@ -139,28 +141,30 @@ class SpecialModalityRequest extends ChangeRequest
     this.modality = modality
   }
 
-  public def apply(venv, workspace, target_remote, target_ref) {
+  public def apply(venv, workspace, source_remote = null) {
     def author_time = steps.currentBuild.timeInMillis / 1000.0
     def commit_time = steps.currentBuild.startTimeInMillis / 1000.0
     def conf_params = ''
     if (steps.fileExists("${workspace}/cfg.yml")) {
       conf_params += " --config=\"${workspace}/cfg.yml\""
     }
-    def submit_refspecs = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --color=always --workspace=\"${workspace}\""
-                                         + conf_params
-                                         + " prepare-source-tree"
-                                         + " --target-remote=\"${target_remote}\""
-                                         + " --target-ref=\"${target_ref}\""
-                                         + " --author-date=\"@${author_time}\""
-                                         + " --commit-date=\"@${commit_time}\""
-                                         + " apply-modality-change ${modality}",
-                                   returnStdout: true).split("\\r?\\n").collect{it}
-    def submit_commit = submit_refspecs.size() >= 1 ? submit_refspecs.remove(0) : null
-
-    return [
-        commit: submit_commit,
-        refspecs: submit_refspecs,
+    def output = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --color=always --workspace=\"${workspace}\""
+                                + conf_params
+                                + " prepare-source-tree"
+                                + " --author-date=\"@${author_time}\""
+                                + " --commit-date=\"@${commit_time}\""
+                                + " apply-modality-change ${modality}",
+                          returnStdout: true).split("\\r?\\n").collect{it}
+    if (output.size() <= 0) {
+      return null
+    }
+    def rv = [
+        commit: output.remove(0),
       ]
+    if (output.size() > 0) {
+      rv.version = output.remove(0)
+    }
+    return rv
   }
 }
 
@@ -172,13 +176,10 @@ class CiDriver
   private nodes           = [:]
   private workspaces      = [:]
   private stashes         = [:]
-  private submit_refspecs = null
   private submit_version  = null
   private change          = null
   private source_commit   = "HEAD"
   private target_commit   = null
-  private target_remote
-  private target_ref
   private may_submit_result = null
   private default_node_expr = "Linux && Docker"
 
@@ -194,8 +195,6 @@ class CiDriver
       else if (steps.params.MODALITY != null && steps.params.MODALITY != "NORMAL")
         this.change = new SpecialModalityRequest(steps, steps.params.MODALITY)
     }
-    this.target_remote = steps.scm.userRemoteConfigs[0].url
-    this.target_ref = steps.env.CHANGE_TARGET ?: steps.env.BRANCH_NAME
   }
 
   public def install_prerequisites() {
@@ -284,6 +283,8 @@ exec ssh -i '''
     def venv = steps.pwd(tmp: true) + "/cidriver-venv"
     def workspace = steps.pwd()
     this.with_credentials() {
+      def target_remote = steps.scm.userRemoteConfigs[0].url
+      def target_ref    = steps.env.CHANGE_TARGET ?: steps.env.BRANCH_NAME
       def clean_param = clean ? " --clean" : ""
       this.target_commit = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --color=always --workspace=\"${workspace}\""
                                           + " checkout-source-tree"
@@ -292,8 +293,8 @@ exec ssh -i '''
                                           + clean_param,
                                     returnStdout: true).trim()
       if (this.change != null) {
-        def submit_info = this.change.apply(venv, workspace, target_remote, target_ref)
-        if (!submit_info.commit)
+        def submit_info = this.change.apply(venv, workspace, target_remote)
+        if (submit_info == null)
         {
           try {
               if (steps.currentBuild.rawBuild.getCauses().get(0).properties['shortDescription'].contains('Started by timer')) {
@@ -314,17 +315,7 @@ exec ssh -i '''
             branches: [[name: submit_info.commit]],
           ])
 
-        this.submit_refspecs = submit_info.refspecs
-        def versions = []
-        this.submit_refspecs.each { refspec ->
-          def m = (refspec =~ /^[^:]*:refs\/tags\/(.+)/)
-          if (m) {
-            versions << m[0][1]
-          }
-        }
-        if (versions.size() == 1) {
-          this.submit_version = versions[0]
-        }
+        this.submit_version = submit_info.version
       }
     }
     return workspace
@@ -515,22 +506,15 @@ exec ssh -i '''
 
       def node = this.nodes.find{true}
       if (!node) {
-        assert this.submit_refspecs == null : "Cannot submit without having an allocated node"
         return
       }
       this.on_build_node {
-        if (this.submit_refspecs != null && this.has_submittable_change()) {
+        if (this.has_submittable_change()) {
           steps.stage('submit') {
             this.with_credentials() {
               // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
-              def refspecs = ""
-              this.submit_refspecs.each { refspec ->
-                refspecs += " --refspec=\"${refspec}\""
-              }
               def cmd = this.install_prerequisites()
-              steps.sh(script: "${cmd} submit"
-                               + " --target-remote=\"${target_remote}\""
-                               + refspecs)
+              steps.sh(script: "${cmd} submit")
             }
           }
         }
