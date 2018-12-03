@@ -110,6 +110,11 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
     Checks out a source tree of the specified remote's ref to the workspace.
     """
 
+    if 'workspace' not in ctx.obj:
+        for param in ctx.parent.command.params:
+            if isinstance(param, click.Option) and param.human_readable_name == 'workspace':
+                raise click.MissingParameter(ctx=ctx.parent, param=param)
+
     workspace = ctx.obj['workspace']
     if not git_has_work_tree(workspace):
         echo_cmd(subprocess.check_call, ('git', 'clone', '-c' 'color.ui=always', target_remote, workspace))
@@ -147,6 +152,16 @@ def process_prepare_source_tree(
         author_date,
         commit_date,
     ):
+    if 'cfg' not in ctx.obj:
+        for param in ctx.parent.command.params:
+            if isinstance(param, click.Option) and param.human_readable_name == 'config':
+                raise click.MissingParameter(ctx=ctx.parent, param=param)
+
+    if 'workspace' not in ctx.obj:
+        for param in ctx.parent.command.params:
+            if isinstance(param, click.Option) and param.human_readable_name == 'workspace':
+                raise click.MissingParameter(ctx=ctx.parent, param=param)
+
     cfg = ctx.obj.get('cfg', {})
     workspace = ctx.obj['workspace']
     assert git_has_work_tree(workspace)
@@ -261,6 +276,11 @@ def apply_modality_change(
     Applies the changes specific to the specified modality.
     """
 
+    if 'cfg' not in ctx.obj:
+        for param in ctx.parent.command.params:
+            if isinstance(param, click.Option) and param.human_readable_name == 'config':
+                raise click.MissingParameter(ctx=ctx.parent, param=param)
+
     cfg = ctx.obj['cfg']
     modality_cmds = cfg.get('modality-source-preparation', {}).get(modality, ())
     def change_applicator(workspace):
@@ -344,6 +364,11 @@ def phases(ctx):
     Enumerate all available phases.
     """
 
+    if 'cfg' not in ctx.obj:
+        for param in ctx.parent.command.params:
+            if isinstance(param, click.Option) and param.human_readable_name == 'config':
+                raise click.MissingParameter(ctx=ctx.parent, param=param)
+
     cfg = ctx.obj['cfg']
     for phase in cfg['phases']:
         click.echo(phase)
@@ -355,6 +380,11 @@ def variants(ctx, phase):
     """
     Enumerates all available variants. Optionally this can be limited to all variants within a single phase.
     """
+
+    if 'cfg' not in ctx.obj:
+        for param in ctx.parent.command.params:
+            if isinstance(param, click.Option) and param.human_readable_name == 'config':
+                raise click.MissingParameter(ctx=ctx.parent, param=param)
 
     variants = []
     cfg = ctx.obj['cfg']
@@ -376,6 +406,11 @@ def getinfo(ctx, phase, variant):
     """
     Display meta-data associated with the specified variant in the given phase as JSON.
     """
+
+    if 'cfg' not in ctx.obj:
+        for param in ctx.parent.command.params:
+            if isinstance(param, click.Option) and param.human_readable_name == 'config':
+                raise click.MissingParameter(ctx=ctx.parent, param=param)
 
     variants = []
     cfg = ctx.obj['cfg']
@@ -399,6 +434,11 @@ def build(ctx, phase, variant):
     It's possible to limit building to either all variants for a single phase, all phases for a single variant or a
     single variant for a single phase.
     """
+
+    if 'cfg' not in ctx.obj:
+        for param in ctx.parent.command.params:
+            if isinstance(param, click.Option) and param.human_readable_name == 'config':
+                raise click.MissingParameter(ctx=ctx.parent, param=param)
 
     cfg = ctx.obj['cfg']
     for phasename, curphase in cfg['phases'].items():
@@ -457,6 +497,11 @@ def submit(ctx, target_remote, refspec):
     Submit the changes specified by the given refspecs to the specified remote.
     """
 
+    if 'workspace' not in ctx.obj:
+        for param in ctx.parent.command.params:
+            if isinstance(param, click.Option) and param.human_readable_name == 'workspace':
+                raise click.MissingParameter(ctx=ctx.parent, param=param)
+
     workspace = ctx.obj['workspace']
     assert git_has_work_tree(workspace)
     echo_cmd(subprocess.check_call, ('git', 'push', '--atomic', target_remote) + tuple(refspec), cwd=workspace)
@@ -467,5 +512,10 @@ def show_config(ctx):
     """
     Diagnostic helper command to display the configuration after processing.
     """
+
+    if 'cfg' not in ctx.obj:
+        for param in ctx.parent.command.params:
+            if isinstance(param, click.Option) and param.human_readable_name == 'config':
+                raise click.MissingParameter(ctx=ctx.parent, param=param)
 
     click.echo(json.dumps(ctx.obj['cfg'], indent=4, separators=(',', ': ')))
