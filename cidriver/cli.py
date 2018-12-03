@@ -67,6 +67,43 @@ def volume_spec_to_docker_param(volume):
         pass
     return param
 
+class OptionContext(object):
+    def __init__(self):
+        super(OptionContext, self).__init__()
+        self._opts = {}
+        self._missing_parameters = {}
+
+    def __getattr__(self, name):
+        if name in frozenset({'_opts', '_missing_parameters'}):
+            return super(OptionContext, self).__getattr__(name)
+
+        try:
+            return self._opts[name]
+        except KeyError:
+            pass
+        try:
+            raise click.MissingParameter(**self._missing_parameters[name])
+        except KeyError:
+            raise AttributeError("'{}' object has no attribute '{}'.".format(self.__class__.__name__, name))
+
+    def __setattr__(self, name, value):
+        if name in frozenset({'_opts', '_missing_parameters'}):
+            return super(OptionContext, self).__setattr__(name, value)
+
+        self._opts[name] = value
+
+    def __delattr__(self, name):
+        del self._opts[name]
+
+    def register_parameter(self, ctx, param, name=None):
+        if name is None:
+            name = param.human_readable_name
+
+        self._missing_parameters[name] = dict(
+                ctx=ctx,
+                param=param,
+            )
+
 @click.group(context_settings=dict(help_option_names=('-h', '--help')))
 @click.option('--color', type=click.Choice(('always', 'auto', 'never')), default='auto')
 @click.option('--config', type=click.Path(exists=True, readable=True, resolve_path=True))
@@ -81,9 +118,11 @@ def cli(ctx, color, config, workspace):
         # leave as is: 'auto' is the default for Click
         pass
 
-    if ctx.obj is None:
-        ctx.obj = {}
-    ctx.obj['workspace'] = workspace
+    ctx.obj = OptionContext()
+    for param in ctx.command.params:
+        ctx.obj.register_parameter(ctx=ctx, param=param)
+    if workspace is not None:
+        ctx.obj.workspace = workspace
 
     volume_vars = {}
     if workspace is not None:
@@ -95,10 +134,10 @@ def cli(ctx, color, config, workspace):
             volume_vars[whitelisted_var] = os.environ[whitelisted_var]
         except KeyError:
             pass
-    ctx.obj['volume-vars'] = volume_vars
+    ctx.obj.volume_vars = volume_vars
 
     if config is not None:
-        ctx.obj['cfg'] = read_config(config, volume_vars)
+        ctx.obj.config = read_config(config, volume_vars)
 
 @cli.command()
 @click.option('--target-remote'     , metavar='<url>')
@@ -110,12 +149,7 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
     Checks out a source tree of the specified remote's ref to the workspace.
     """
 
-    if 'workspace' not in ctx.obj:
-        for param in ctx.parent.command.params:
-            if isinstance(param, click.Option) and param.human_readable_name == 'workspace':
-                raise click.MissingParameter(ctx=ctx.parent, param=param)
-
-    workspace = ctx.obj['workspace']
+    workspace = ctx.obj.workspace
     if not git_has_work_tree(workspace):
         echo_cmd(subprocess.check_call, ('git', 'clone', '-c' 'color.ui=always', target_remote, workspace))
     echo_cmd(subprocess.check_call, ('git', 'config', 'color.ui', 'always'), cwd=workspace)
@@ -152,18 +186,8 @@ def process_prepare_source_tree(
         author_date,
         commit_date,
     ):
-    if 'cfg' not in ctx.obj:
-        for param in ctx.parent.command.params:
-            if isinstance(param, click.Option) and param.human_readable_name == 'config':
-                raise click.MissingParameter(ctx=ctx.parent, param=param)
-
-    if 'workspace' not in ctx.obj:
-        for param in ctx.parent.command.params:
-            if isinstance(param, click.Option) and param.human_readable_name == 'workspace':
-                raise click.MissingParameter(ctx=ctx.parent, param=param)
-
-    cfg = ctx.obj.get('cfg', {})
-    workspace = ctx.obj['workspace']
+    cfg = getattr(ctx.obj, 'config', {})
+    workspace = ctx.obj.workspace
     assert git_has_work_tree(workspace)
 
     echo_cmd(subprocess.check_call, ('git', 'fetch', target_remote, target_ref), cwd=workspace)
@@ -276,13 +300,7 @@ def apply_modality_change(
     Applies the changes specific to the specified modality.
     """
 
-    if 'cfg' not in ctx.obj:
-        for param in ctx.parent.command.params:
-            if isinstance(param, click.Option) and param.human_readable_name == 'config':
-                raise click.MissingParameter(ctx=ctx.parent, param=param)
-
-    cfg = ctx.obj['cfg']
-    modality_cmds = cfg.get('modality-source-preparation', {}).get(modality, ())
+    modality_cmds = ctx.obj.config.get('modality-source-preparation', {}).get(modality, ())
     def change_applicator(workspace):
         has_changed_files = False
         message = modality
@@ -302,7 +320,7 @@ def apply_modality_change(
             # Force clean builds when we don't know how to discover changed files
             echo_cmd(subprocess.check_call, ('git', 'clean', '--force', '-xd'), cwd=workspace, stdout=sys.stderr)
 
-        volume_vars = ctx.obj.get('volume-vars', {})
+        volume_vars = ctx.obj.volume_vars
 
         for cmd in modality_cmds:
             if isinstance(cmd, string_types):
@@ -364,13 +382,7 @@ def phases(ctx):
     Enumerate all available phases.
     """
 
-    if 'cfg' not in ctx.obj:
-        for param in ctx.parent.command.params:
-            if isinstance(param, click.Option) and param.human_readable_name == 'config':
-                raise click.MissingParameter(ctx=ctx.parent, param=param)
-
-    cfg = ctx.obj['cfg']
-    for phase in cfg['phases']:
+    for phase in ctx.obj.config['phases']:
         click.echo(phase)
 
 @cli.command()
@@ -381,14 +393,8 @@ def variants(ctx, phase):
     Enumerates all available variants. Optionally this can be limited to all variants within a single phase.
     """
 
-    if 'cfg' not in ctx.obj:
-        for param in ctx.parent.command.params:
-            if isinstance(param, click.Option) and param.human_readable_name == 'config':
-                raise click.MissingParameter(ctx=ctx.parent, param=param)
-
     variants = []
-    cfg = ctx.obj['cfg']
-    for phasename, curphase in cfg['phases'].items():
+    for phasename, curphase in ctx.obj.config['phases'].items():
         if phase is not None and phasename != phase:
             continue
         for variant in curphase:
@@ -407,19 +413,13 @@ def getinfo(ctx, phase, variant):
     Display meta-data associated with the specified variant in the given phase as JSON.
     """
 
-    if 'cfg' not in ctx.obj:
-        for param in ctx.parent.command.params:
-            if isinstance(param, click.Option) and param.human_readable_name == 'config':
-                raise click.MissingParameter(ctx=ctx.parent, param=param)
-
     variants = []
-    cfg = ctx.obj['cfg']
     info = {}
-    for var in cfg['phases'][phase][variant]:
+    for var in ctx.obj.config['phases'][phase][variant]:
         if isinstance(var, string_types):
             continue
         for key, val in var.items():
-            info[key] = expand_vars(ctx.obj.get('volume-vars', {}), val)
+            info[key] = expand_vars(ctx.obj.volume_vars, val)
     click.echo(json.dumps(info))
 
 @cli.command()
@@ -435,12 +435,7 @@ def build(ctx, phase, variant):
     single variant for a single phase.
     """
 
-    if 'cfg' not in ctx.obj:
-        for param in ctx.parent.command.params:
-            if isinstance(param, click.Option) and param.human_readable_name == 'config':
-                raise click.MissingParameter(ctx=ctx.parent, param=param)
-
-    cfg = ctx.obj['cfg']
+    cfg = ctx.obj.config
     for phasename, curphase in cfg['phases'].items():
         if phase is not None and phasename != phase:
             continue
@@ -480,7 +475,7 @@ def build(ctx, phase, variant):
                             '-v', '/etc/passwd:/etc/passwd:ro',
                             '-v', '/etc/group:/etc/group:ro',
                             '-w', '/code',
-                            '-v', '{WORKSPACE}:/code:rw'.format(**ctx.obj['volume-vars'])
+                            '-v', '{WORKSPACE}:/code:rw'.format(**ctx.obj.volume_vars)
                         ]
                     for volume in cfg['volumes']:
                         docker_run += ['-v', volume_spec_to_docker_param(volume)]
@@ -497,12 +492,7 @@ def submit(ctx, target_remote, refspec):
     Submit the changes specified by the given refspecs to the specified remote.
     """
 
-    if 'workspace' not in ctx.obj:
-        for param in ctx.parent.command.params:
-            if isinstance(param, click.Option) and param.human_readable_name == 'workspace':
-                raise click.MissingParameter(ctx=ctx.parent, param=param)
-
-    workspace = ctx.obj['workspace']
+    workspace = ctx.obj.workspace
     assert git_has_work_tree(workspace)
     echo_cmd(subprocess.check_call, ('git', 'push', '--atomic', target_remote) + tuple(refspec), cwd=workspace)
 
@@ -513,9 +503,4 @@ def show_config(ctx):
     Diagnostic helper command to display the configuration after processing.
     """
 
-    if 'cfg' not in ctx.obj:
-        for param in ctx.parent.command.params:
-            if isinstance(param, click.Option) and param.human_readable_name == 'config':
-                raise click.MissingParameter(ctx=ctx.parent, param=param)
-
-    click.echo(json.dumps(ctx.obj['cfg'], indent=4, separators=(',', ': ')))
+    click.echo(json.dumps(ctx.obj.config, indent=4, separators=(',', ': ')))
