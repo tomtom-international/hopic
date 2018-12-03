@@ -106,6 +106,10 @@ def cli(ctx, color, config, workspace):
 @click.option('--clean/--no-clean'  , default=False, help='''Clean workspace of non-tracked files''')
 @click.pass_context
 def checkout_source_tree(ctx, target_remote, target_ref, clean):
+    """
+    Checks out a source tree of the specified remote's ref to the workspace.
+    """
+
     workspace = ctx.obj['workspace']
     if not git_has_work_tree(workspace):
         echo_cmd(subprocess.check_call, ('git', 'clone', '-c' 'color.ui=always', target_remote, workspace))
@@ -125,6 +129,10 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
 @click.option('--author-date'               , metavar='<date>', type=DateTime(), help='''Time of last update to the change-request''')
 @click.option('--commit-date'               , metavar='<date>', type=DateTime(), help='''Time of starting to build this change-request''')
 def prepare_source_tree(*args, **kwargs):
+    """
+    Prepares the source tree for building with some change.
+    """
+
     pass
 
 @prepare_source_tree.resultcallback()
@@ -216,6 +224,10 @@ def merge_change_request(
         title,
         description,
     ):
+    """
+    Merges the change request from the specified branch.
+    """
+
     def change_applicator(workspace):
         echo_cmd(subprocess.check_call, ('git', 'fetch', source_remote, source_ref), cwd=workspace)
         echo_cmd(subprocess.check_call, (
@@ -245,6 +257,10 @@ def apply_modality_change(
         ctx,
         modality,
     ):
+    """
+    Applies the changes specific to the specified modality.
+    """
+
     cfg = ctx.obj['cfg']
     modality_cmds = cfg.get('modality-source-preparation', {}).get(modality, ())
     def change_applicator(workspace):
@@ -324,6 +340,10 @@ def apply_modality_change(
 @cli.command()
 @click.pass_context
 def phases(ctx):
+    """
+    Enumerate all available phases.
+    """
+
     cfg = ctx.obj['cfg']
     for phase in cfg['phases']:
         click.echo(phase)
@@ -332,6 +352,10 @@ def phases(ctx):
 @click.option('--phase'             , metavar='<phase>'  , help='''Build phase to show variants for''')
 @click.pass_context
 def variants(ctx, phase):
+    """
+    Enumerates all available variants. Optionally this can be limited to all variants within a single phase.
+    """
+
     variants = []
     cfg = ctx.obj['cfg']
     for phasename, curphase in cfg['phases'].items():
@@ -349,6 +373,10 @@ def variants(ctx, phase):
 @click.option('--variant'           , metavar='<variant>', required=True, help='''Configuration variant''')
 @click.pass_context
 def getinfo(ctx, phase, variant):
+    """
+    Display meta-data associated with the specified variant in the given phase as JSON.
+    """
+
     variants = []
     cfg = ctx.obj['cfg']
     info = {}
@@ -360,11 +388,18 @@ def getinfo(ctx, phase, variant):
     click.echo(json.dumps(info))
 
 @cli.command()
-@click.option('--ref'               , metavar='<ref>'    , help='''Commit-ish that's checked out and to be built''')
 @click.option('--phase'             , metavar='<phase>'  , help='''Build phase to execute''')
 @click.option('--variant'           , metavar='<variant>', help='''Configuration variant to build''')
 @click.pass_context
-def build(ctx, ref, phase, variant):
+def build(ctx, phase, variant):
+    """
+    Build for the specified commit.
+
+    This defaults to building all variants for all phases.
+    It's possible to limit building to either all variants for a single phase, all phases for a single variant or a
+    single variant for a single phase.
+    """
+
     cfg = ctx.obj['cfg']
     for phasename, curphase in cfg['phases'].items():
         if phase is not None and phasename != phase:
@@ -418,6 +453,19 @@ def build(ctx, ref, phase, variant):
 @click.option('--refspec'           , metavar='<ref>', required=True, multiple=True, help='''Refspecs that are to be submitted''')
 @click.pass_context
 def submit(ctx, target_remote, refspec):
+    """
+    Submit the changes specified by the given refspecs to the specified remote.
+    """
+
     workspace = ctx.obj['workspace']
     assert git_has_work_tree(workspace)
     echo_cmd(subprocess.check_call, ('git', 'push', '--atomic', target_remote) + tuple(refspec), cwd=workspace)
+
+@cli.command()
+@click.pass_context
+def show_config(ctx):
+    """
+    Diagnostic helper command to display the configuration after processing.
+    """
+
+    click.echo(json.dumps(ctx.obj['cfg'], indent=4, separators=(',', ': ')))
