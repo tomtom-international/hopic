@@ -7,6 +7,7 @@ from .versioning import (bump_version, stringify_semver)
 from datetime import datetime
 from dateutil.parser import parse as date_parse
 from dateutil.tz import (tzoffset, tzlocal)
+from itertools import chain
 import json
 import os
 import re
@@ -447,6 +448,18 @@ def build(ctx, phase, variant):
                         continue
 
                 cmd = shlex.split(cmd)
+                env = dict(
+                        HOME            = '/home/sandbox',
+                        _JAVA_OPTIONS   = '-Duser.home=/home/sandbox',
+                    )
+                # Strip of prefixed environment variables from this command-line and apply them
+                while cmd:
+                    m = _env_var_re.match(cmd[0])
+                    if not m:
+                        break
+                    env[m.group('var')] = expand_vars(volume_vars, m.group('val'))
+                    cmd.pop(0)
+
                 # Handle execution inside docker
                 if 'image' in cfg:
                     image = cfg['image']
@@ -460,19 +473,23 @@ def build(ctx, phase, variant):
                             '--rm',
                             '--net=host',
                             '--tty',
-                            '-e', 'HOME=/home/sandbox',
-                            '--tmpfs', '/home/sandbox:uid={},gid={}'.format(uid, gid),
+                            '--tmpfs', '{}:uid={},gid={}'.format(env['HOME'], uid, gid),
                             '-u', '{}:{}'.format(uid, gid),
                             '-v', '/etc/passwd:/etc/passwd:ro',
                             '-v', '/etc/group:/etc/group:ro',
                             '-w', '/code',
                             '-v', '{WORKSPACE}:/code:rw'.format(**ctx.obj.volume_vars)
-                        ]
+                        ] + list(chain(*[
+                            ['-e', '{}={}'.format(k, v)] for k, v in env.items()
+                        ]))
                     for volume in cfg['volumes']:
                         docker_run += ['-v', volume_spec_to_docker_param(volume)]
                     docker_run.append(image)
                     cmd = docker_run + cmd
-                echo_cmd(subprocess.check_call, cmd)
+                new_env = os.environ.copy()
+                if 'image' in cfg:
+                    new_env.update(env)
+                echo_cmd(subprocess.check_call, cmd, env=new_env)
 
 @cli.command()
 @click.option('--target-remote'     , metavar='<url>', required=True)
