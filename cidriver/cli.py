@@ -201,7 +201,7 @@ def process_prepare_source_tree(
     version_info = cfg.get('version', {})
     version_tag  = version_info.get('tag', False)
     if version_tag and not isinstance(version_tag, string_types):
-        version_tag = '{version}'
+        version_tag = '{version.major}.{version.minor}.{version.patch}'
 
     env = os.environ.copy()
     if author_name is not None:
@@ -252,7 +252,6 @@ def process_prepare_source_tree(
     if version is not None and not version.prerelease and version_tag:
         tagname = version_tag.format(
                 version        = version,
-                prerelease_sep = ('-' if version.prerelease else ''),
                 build_sep      = ('+' if version.build else ''),
             )
         echo_cmd(subprocess.check_call, ('git', 'tag', '-f', tagname, submit_commit), cwd=workspace, stdout=sys.stderr)
