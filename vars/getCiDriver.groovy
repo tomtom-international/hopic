@@ -23,8 +23,12 @@ class ChangeRequest
     this.steps = steps
   }
 
+  protected def shell_quote(word) {
+    return "'" + word.replace("'", "'\\''") + "'"
+  }
+
   protected def maySubmitImpl(target_commit, source_commit, allow_cache = true) {
-    return !steps.sh(script: "git log ${target_commit}..${source_commit} --pretty=\"%s\" --reverse", returnStdout: true)
+    return !steps.sh(script: 'git log ' + shell_quote(target_commit) + '..' + shell_quote(source_commit) + " --pretty='%s' --reverse", returnStdout: true)
       .trim().split('\\r?\\n').find { subject ->
         if (subject.startsWith('fixup!') || subject.startsWith('squash!')) {
           return true
@@ -104,18 +108,18 @@ class BitbucketPullRequest extends ChangeRequest
     def (remote_ref, local_ref) = source_refspec.tokenize(':')
     if (remote_ref.startsWith('+'))
       remote_ref = remote_ref.substring(1)
-    def output = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --color=always --workspace=\"${workspace}\""
+    def output = steps.sh(script: shell_quote("${venv}/bin/python") + ' -m cidriver --color=always --workspace=' + shell_quote(workspace)
                                 + conf_params
-                                + " prepare-source-tree"
-                                + " --author-name=\"${steps.env.CHANGE_AUTHOR}\""
-                                + " --author-email=\"${steps.env.CHANGE_AUTHOR_EMAIL}\""
-                                + " --author-date=\"@${change_request.author_time}\""
-                                + " --commit-date=\"@${change_request.commit_time}\""
-                                + " merge-change-request"
-                                + " --source-remote=\"${source_remote}\""
-                                + " --source-ref=\"${remote_ref}\""
-                                + " --change-request=\"${steps.env.CHANGE_ID}\""
-                                + " --title=\"${steps.env.CHANGE_TITLE}\""
+                                + ' prepare-source-tree'
+                                + ' --author-name=' + shell_quote(steps.env.CHANGE_AUTHOR)
+                                + ' --author-email=' + shell_quote(steps.env.CHANGE_AUTHOR_EMAIL)
+                                + ' --author-date=' + shell_quote('@' + change_request.author_time)
+                                + ' --commit-date=' + shell_quote('@' + change_request.commit_time)
+                                + ' merge-change-request'
+                                + ' --source-remote=' + shell_quote(source_remote)
+                                + ' --source-ref=' + shell_quote(remote_ref)
+                                + ' --change-request=' + shell_quote(steps.env.CHANGE_ID)
+                                + ' --title=' + shell_quote(steps.env.CHANGE_TITLE)
                                 + extra_params,
                           returnStdout: true).split("\\r?\\n").collect{it}
     if (output.size() <= 0) {
@@ -148,12 +152,12 @@ class SpecialModalityRequest extends ChangeRequest
     if (steps.fileExists("${workspace}/cfg.yml")) {
       conf_params += " --config=\"${workspace}/cfg.yml\""
     }
-    def output = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --color=always --workspace=\"${workspace}\""
+    def output = steps.sh(script: shell_quote("${venv}/bin/python") + ' -m cidriver --color=always --workspace=' + shell_quote(workspace)
                                 + conf_params
-                                + " prepare-source-tree"
-                                + " --author-date=\"@${author_time}\""
-                                + " --commit-date=\"@${commit_time}\""
-                                + " apply-modality-change ${modality}",
+                                + ' prepare-source-tree'
+                                + ' --author-date=' + shell_quote('@' + author_time)
+                                + ' --commit-date=' + shell_quote('@' + commit_time)
+                                + ' apply-modality-change ' + shell_quote(modality),
                           returnStdout: true).split("\\r?\\n").collect{it}
     if (output.size() <= 0) {
       return null
@@ -197,12 +201,16 @@ class CiDriver
     }
   }
 
+  private def shell_quote(word) {
+    return "'" + word.replace("'", "'\\''") + "'"
+  }
+
   public def install_prerequisites() {
     if (!this.cmds.containsKey(steps.env.NODE_NAME)) {
       def venv = steps.pwd(tmp: true) + "/cidriver-venv"
       def workspace = steps.pwd()
-      steps.sh(script: "python -m virtualenv --clear ${venv}\n"
-                     + "${venv}/bin/python -m pip install \"${this.repo}\"")
+      steps.sh(script: 'python -m virtualenv --clear ' + shell_quote(venv) + '\n'
+                     + shell_quote("${venv}/bin/python") + ' -m pip install ' + shell_quote(this.repo))
       this.cmds[steps.env.NODE_NAME] = "${venv}/bin/python ${venv}/bin/ci-driver --color=always --config=\"${workspace}/cfg.yml\" --workspace=\"${workspace}\""
     }
     return this.cmds[steps.env.NODE_NAME]
@@ -222,8 +230,8 @@ class CiDriver
               text: '''\
 #!/bin/sh
 case "$1" in
-[Uu]sername*) echo ''' + "'" + steps.USERNAME.replace("'", "'\\''") + "'" + ''' ;;
-[Pp]assword*) echo ''' + "'" + steps.PASSWORD.replace("'", "'\\''") + "'" + ''' ;;
+[Uu]sername*) echo ''' + shell_quote(steps.USERNAME) + ''' ;;
+[Pp]assword*) echo ''' + shell_quote(steps.PASSWORD) + ''' ;;
 esac
 ''')
           return steps.withEnv(["GIT_ASKPASS=${askpass_program}"]) {
@@ -246,7 +254,7 @@ esac
                 file: askpass_program,
                 text: '''\
 #!/bin/sh
-echo ''' + "'" + (steps.env.PASSPHRASE ?: '').replace("'", "'\\''") + "'" + '''
+echo ''' + shell_quote(steps.env.PASSPHRASE ?: '') + '''
 ''')
 
             def ssh_program = "${tmpdir}/jenkins-git-ssh.sh"
@@ -260,8 +268,8 @@ DISPLAY=:123.456
 export DISPLAY
 fi
 exec ssh -i '''
-+ "'" + steps.KEYFILE.replace("'", "'\\''") + "'"
-+ (steps.env.USERNAME != null ? ''' -l ''' + "'" + steps.USERNAME.replace("'", "'\\''") + "'" : '')
++ shell_quote(steps.KEYFILE)
++ (steps.env.USERNAME != null ? ''' -l ''' + shell_quote(steps.USERNAME) : '')
 + ''' -o StrictHostKeyChecking=no -o IdentitiesOnly=yes "$@"
 ''')
 
@@ -286,10 +294,10 @@ exec ssh -i '''
       def target_remote = steps.scm.userRemoteConfigs[0].url
       def target_ref    = steps.env.CHANGE_TARGET ?: steps.env.BRANCH_NAME
       def clean_param = clean ? " --clean" : ""
-      this.target_commit = steps.sh(script: "${venv}/bin/python ${venv}/bin/ci-driver --color=always --workspace=\"${workspace}\""
-                                          + " checkout-source-tree"
-                                          + " --target-remote=\"${target_remote}\""
-                                          + " --target-ref=\"${target_ref}\""
+      this.target_commit = steps.sh(script: shell_quote("${venv}/bin/python") + ' -m cidriver --color=always --workspace=' + shell_quote(workspace)
+                                          + ' checkout-source-tree'
+                                          + ' --target-remote=' + shell_quote(target_remote)
+                                          + ' --target-ref=' + shell_quote(target_ref)
                                           + clean_param,
                                     returnStdout: true).trim()
       if (this.change != null) {
@@ -326,7 +334,7 @@ exec ssh -i '''
   }
 
   public def get_variants(phase = null) {
-    def phase_arg = phase ? " --phase=\"${phase}\"" : ""
+    def phase_arg = phase ? ' --phase=' + shell_quote(phase) : ""
     def cmd = this.install_prerequisites()
     return steps.sh(
         script: "${cmd} variants" + phase_arg,
@@ -407,7 +415,7 @@ exec ssh -i '''
             phase: phase,
             variants: this.get_variants(phase).collect { variant ->
               def meta = steps.readJSON(text: steps.sh(
-                  script: "${cmd} getinfo --phase=\"${phase}\" --variant=\"${variant}\"",
+                  script: "${cmd} getinfo --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant),
                   returnStdout: true,
                 ))
               [
@@ -475,11 +483,11 @@ exec ssh -i '''
 
                     // Meta-data retrieval needs to take place on the executing node to ensure environment variable expansion happens properly
                     def meta = steps.readJSON(text: steps.sh(
-                        script: "${cmd} getinfo --phase=\"${phase}\" --variant=\"${variant}\"",
+                        script: "${cmd} getinfo --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant),
                         returnStdout: true,
                       ))
 
-                    steps.sh(script: "${cmd} build --phase=\"${phase}\" --variant=\"${variant}\"")
+                    steps.sh(script: "${cmd} build --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant))
 
                     // FIXME: re-evaluate if we can and need to get rid of special casing for stashing
                     if (meta.containsKey('stash')) {
