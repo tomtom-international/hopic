@@ -223,12 +223,14 @@ def process_prepare_source_tree(
             params['format'] = version_info['format']
         version = read_version(version_info['file'], **params)
 
-        if version_info.get('bump', True):
-            params = {}
-            if 'bump' in version_info:
-                params['bump'] = version_info['bump']
+    if version is not None and version_info.get('bump', True):
+        params = {}
+        if 'bump' in version_info:
+            params['bump'] = version_info['bump']
 
-            version = version.next_version(**params)
+        version = version.next_version(**params)
+
+        if 'file' in version_info:
             replace_version(version_info['file'], version)
 
             echo_cmd(subprocess.check_call, ('git', 'add', version_info['file']), cwd=workspace)
