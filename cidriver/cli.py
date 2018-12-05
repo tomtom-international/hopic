@@ -3,7 +3,7 @@ import click
 from .config_reader import read as read_config
 from .config_reader import expand_vars
 from .execution import echo_cmd
-from .versioning import (read_version, replace_version)
+from .versioning import *
 from datetime import datetime
 from dateutil.parser import parse as date_parse
 from dateutil.tz import (tzoffset, tzlocal)
@@ -154,7 +154,10 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
     if not git_has_work_tree(workspace):
         echo_cmd(subprocess.check_call, ('git', 'clone', '-c' 'color.ui=always', target_remote, workspace))
     echo_cmd(subprocess.check_call, ('git', 'config', 'color.ui', 'always'), cwd=workspace)
-    echo_cmd(subprocess.check_call, ('git', 'fetch', target_remote, target_ref), cwd=workspace)
+    tags = tuple(tag.strip() for tag in echo_cmd(subprocess.check_output, ('git', 'tag'), cwd=workspace).split('\n') if tag.strip())
+    if tags:
+        echo_cmd(subprocess.check_call, ('git', 'tag', '-d') + tags, cwd=workspace, stdout=sys.stderr)
+    echo_cmd(subprocess.check_call, ('git', 'fetch', '--tags', target_remote, target_ref), cwd=workspace)
     commit = echo_cmd(subprocess.check_output, ('git', 'rev-parse', 'FETCH_HEAD'), cwd=workspace).strip()
     echo_cmd(subprocess.check_call, ('git', 'checkout', '--force', commit), cwd=workspace)
     if clean:
@@ -222,6 +225,20 @@ def process_prepare_source_tree(
         if 'format' in version_info:
             params['format'] = version_info['format']
         version = read_version(version_info['file'], **params)
+
+    if version_tag:
+        describe_out = echo_cmd(subprocess.check_output, (
+                'git', 'describe', '--tags', '--long', '--dirty', '--always'
+            ),
+            cwd=workspace,
+        ).strip()
+
+        params = {}
+        if 'format' in version_info:
+            params['format'] = version_info['format']
+        tag_version = parse_git_describe_version(describe_out, **params)
+        if tag_version:
+            click.echo("[DEBUG]: version from tag: \x1B[34m{tag_version}\x1B[39m".format(**locals()), err=True)
 
     if version is not None and version_info.get('bump', True):
         params = {}
