@@ -3,7 +3,7 @@ import click
 from .config_reader import read as read_config
 from .config_reader import expand_vars
 from .execution import echo_cmd
-from .versioning import (bump_version, stringify_semver)
+from .versioning import bump_version
 from datetime import datetime
 from dateutil.parser import parse as date_parse
 from dateutil.tz import (tzoffset, tzlocal)
@@ -241,12 +241,7 @@ def process_prepare_source_tree(
     tagname = None
     if version is not None and not version.prerelease and version_tag:
         tagname = version_tag.format(
-                version        = stringify_semver(*version),
-                major          = version.major,
-                minor          = version.minor,
-                patch          = version.patch,
-                prerelease     = '.'.join(version.prerelease),
-                build          = '.'.join(version.build),
+                version        = version,
                 prerelease_sep = ('-' if version.prerelease else ''),
                 build_sep      = ('+' if version.build else ''),
             )
