@@ -3,7 +3,7 @@ import click
 from .config_reader import read as read_config
 from .config_reader import expand_vars
 from .execution import echo_cmd
-from .versioning import bump_version
+from .versioning import (read_version, replace_version)
 from datetime import datetime
 from dateutil.parser import parse as date_parse
 from dateutil.tz import (tzoffset, tzlocal)
@@ -218,12 +218,20 @@ def process_prepare_source_tree(
         return
 
     if 'file' in version_info:
-        params = dict(
-                (k,v)
-                for k,v in version_info.items()
-                if k in {'file', 'format', 'bump'}
-            )
-        version = bump_version(workspace, **params)
+        params = {}
+        if 'format' in version_info:
+            params['format'] = version_info['format']
+        version = read_version(version_info['file'], **params)
+
+        if version_info.get('bump', True):
+            params = {}
+            if 'bump' in version_info:
+                params['bump'] = version_info['bump']
+
+            version = version.next_version(**params)
+            replace_version(version_info['file'], version)
+
+            echo_cmd(subprocess.check_call, ('git', 'add', version_info['file']), cwd=workspace)
 
     echo_cmd(subprocess.check_call, (
             'git',
