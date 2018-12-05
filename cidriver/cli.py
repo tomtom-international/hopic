@@ -198,7 +198,7 @@ def process_prepare_source_tree(
 
     version = None
 
-    version_info = cfg.get('change-request', {}).get('version', {})
+    version_info = cfg.get('version', {})
     version_tag  = version_info.get('tag', False)
     if version_tag and not isinstance(version_tag, string_types):
         version_tag = '{version}'
