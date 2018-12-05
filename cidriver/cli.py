@@ -217,8 +217,13 @@ def process_prepare_source_tree(
     if msg is None:
         return
 
-    if'file' in version_info:
-        version = bump_version(workspace, **version_info)
+    if 'file' in version_info:
+        params = dict(
+                (k,v)
+                for k,v in version_info.items()
+                if k in {'file', 'format', 'bump'}
+            )
+        version = bump_version(workspace, **params)
 
     echo_cmd(subprocess.check_call, (
             'git',
