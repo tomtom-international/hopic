@@ -53,7 +53,7 @@ def git_has_work_tree(workspace):
     if not workspace or not os.path.isdir(os.path.join(workspace, '.git')):
         return False
     try:
-        output = echo_cmd(subprocess.check_output, ('git', 'rev-parse', '--is-inside-work-tree'), cwd=workspace, env={'LANG': 'C'})
+        output = echo_cmd(subprocess.check_output, ('git', 'rev-parse', '--is-inside-work-tree'), cwd=workspace)
     except subprocess.CalledProcessError:
         return False
     return output.strip().lower() == 'true'
@@ -531,12 +531,12 @@ def submit(ctx, target_remote):
     if target_remote is None:
         target_remote = echo_cmd(subprocess.check_output, ('git', 'config', '--get', 'ci-driver.{submit_commit}.remote'.format(**locals())), cwd=workspace).strip()
 
-    refspecs = tuple(filter(None,
+    refspecs = tuple(refspec for refspec in
         echo_cmd(subprocess.check_output, (
             'git', 'config', '--get-all', '--null',
             'ci-driver.{submit_commit}.refspec'.format(**locals())
         )
-        , cwd=workspace).split('\0')))
+        , cwd=workspace).split('\0') if refspec)
     echo_cmd(subprocess.check_call, ('git', 'config', '--remove-section', 'ci-driver.{submit_commit}'.format(**locals())), cwd=workspace)
 
     echo_cmd(subprocess.check_call, ('git', 'push', '--atomic', target_remote) + refspecs, cwd=workspace)

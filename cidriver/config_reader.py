@@ -84,7 +84,7 @@ def image_from_ivy_manifest(volume_vars, loader, node):
     image.update(props)
 
     # Construct a full, pullable, image path
-    image['image'] = '/'.join(filter(None, (image.get('repository'), image.get('path'), image['name'])))
+    image['image'] = '/'.join(path for path in (image.get('repository'), image.get('path'), image['name']) if path)
 
     return '{image}:{rev}'.format(**image)
 
