@@ -49,10 +49,12 @@ class BitbucketPullRequest extends ChangeRequest
 {
   private url
   private info = null
+  private credentialsId
 
-  BitbucketPullRequest(steps, url) {
+  BitbucketPullRequest(steps, url, credentialsId) {
     super(steps)
     this.url = url
+    this.credentialsId = credentialsId
   }
 
   private def get_info(allow_cache = true) {
@@ -69,12 +71,12 @@ class BitbucketPullRequest extends ChangeRequest
     def info = steps.readJSON(text: steps.httpRequest(
         url: restUrl,
         httpMode: 'GET',
-        authentication: 'tt_service_account_creds',
+        authentication: credentialsId,
       ).content)
     def merge = steps.readJSON(text: steps.httpRequest(
         url: restUrl + '/merge',
         httpMode: 'GET',
-        authentication: 'tt_service_account_creds',
+        authentication: credentialsId,
       ).content)
     if (merge.containsKey('canMerge')) {
       info['canMerge'] = merge['canMerge']
@@ -191,14 +193,43 @@ class CiDriver
     this.repo = repo
     this.steps = steps
     this.change = change
+  }
+
+  private def get_change() {
     if (this.change == null) {
       if (steps.env.CHANGE_URL != null
        && steps.env.CHANGE_URL.contains('/pull-requests/'))
-        this.change = new BitbucketPullRequest(steps, steps.env.CHANGE_URL)
+      {
+        def httpServiceCredential = steps.scm.userRemoteConfigs[0].credentialsId
+        try {
+          steps.withCredentials([steps.usernamePassword(
+              credentialsId: httpServiceCredential,
+              usernameVariable: 'USERNAME',
+              passwordVariable: 'PASSWORD',
+              )]) {
+          }
+        } catch (CredentialNotFoundException e1) {
+          try {
+            steps.withCredentials([steps.usernamePassword(
+                credentialsId: httpServiceCredential,
+                keystoreVariable: 'KEYSTORE',
+                )]) {
+            }
+          } catch (CredentialNotFoundException e2) {
+            /* Fall back when this credential isn't usable for HTTP(S) Basic Auth */
+            httpServiceCredential = 'tt_service_account_creds'
+          }
+        }
+        this.change = new BitbucketPullRequest(steps, steps.env.CHANGE_URL, httpServiceCredential)
+      }
       // FIXME: Don't rely on hard-coded build parameter, externalize this instead.
       else if (steps.params.MODALITY != null && steps.params.MODALITY != "NORMAL")
+      {
         this.change = new SpecialModalityRequest(steps, steps.params.MODALITY)
+      }
     }
+
+    return this.change
   }
 
   private def shell_quote(word) {
@@ -300,8 +331,8 @@ exec ssh -i '''
                                           + ' --target-ref=' + shell_quote(target_ref)
                                           + clean_param,
                                     returnStdout: true).trim()
-      if (this.change != null) {
-        def submit_info = this.change.apply(venv, workspace, target_remote)
+      if (this.get_change() != null) {
+        def submit_info = this.get_change().apply(venv, workspace, target_remote)
         if (submit_info == null)
         {
           try {
@@ -343,13 +374,13 @@ exec ssh -i '''
   }
 
   public def has_change() {
-    return this.change != null
+    return this.get_change() != null
   }
 
   public def has_submittable_change() {
     if (this.may_submit_result == null) {
       assert !this.has_change() || (this.target_commit != null && this.source_commit != null)
-      this.may_submit_result = this.has_change() && this.change.maySubmit(target_commit, source_commit, /* allow_cache =*/ false)
+      this.may_submit_result = this.has_change() && this.get_change().maySubmit(target_commit, source_commit, /* allow_cache =*/ false)
     }
     return this.may_submit_result
   }
