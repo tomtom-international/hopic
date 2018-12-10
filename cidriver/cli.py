@@ -138,7 +138,36 @@ def cli(ctx, color, config, workspace):
     ctx.obj.volume_vars = volume_vars
 
     if config is not None:
-        ctx.obj.config = read_config(config, volume_vars)
+        cfg = ctx.obj.config = read_config(config, volume_vars)
+    else:
+        cfg = {}
+
+    ctx.obj.version = None
+    version_info = cfg.get('version', {})
+    if 'file' in version_info and ctx.obj.version is None:
+        params = {}
+        if 'format' in version_info:
+            params['format'] = version_info['format']
+        fname = version_info['file']
+        if os.path.isfile(fname):
+            ctx.obj.version = read_version(fname, **params)
+    if 'tag' in version_info and ctx.obj.version is None:
+        try:
+            describe_out = echo_cmd(subprocess.check_output, (
+                    'git', 'describe', '--tags', '--long', '--dirty', '--always'
+                ),
+                cwd=workspace,
+            ).strip()
+
+            params = {}
+            if 'format' in version_info:
+                params['format'] = version_info['format']
+            ctx.obj.version = parse_git_describe_version(describe_out, **params)
+        except subprocess.CalledProcessError:
+            pass
+    if ctx.obj.version is not None:
+        click.echo("[DEBUG]: read version: \x1B[34m{ctx.obj.version}\x1B[39m".format(**locals()), err=True)
+        ctx.obj.volume_vars['VERSION'] = ctx.obj.version
 
 @cli.command()
 @click.option('--target-remote'     , metavar='<url>')
@@ -199,13 +228,6 @@ def process_prepare_source_tree(
     target_remote = echo_cmd(subprocess.check_output, ('git', 'config', '--get', 'ci-driver.{target_commit}.remote'.format(**locals())), cwd=workspace).strip()
     echo_cmd(subprocess.check_call, ('git', 'config', '--remove-section', 'ci-driver.{target_commit}'.format(**locals())), cwd=workspace)
 
-    version = None
-
-    version_info = cfg.get('version', {})
-    version_tag  = version_info.get('tag', False)
-    if version_tag and not isinstance(version_tag, string_types):
-        version_tag = '{version.major}.{version.minor}.{version.patch}'
-
     env = os.environ.copy()
     if author_name is not None:
         env['GIT_AUTHOR_NAME'] = author_name
@@ -220,36 +242,20 @@ def process_prepare_source_tree(
     if msg is None:
         return
 
-    if 'file' in version_info:
-        params = {}
-        if 'format' in version_info:
-            params['format'] = version_info['format']
-        version = read_version(version_info['file'], **params)
+    version_info = cfg.get('version', {})
+    version_tag  = version_info.get('tag', False)
+    if version_tag and not isinstance(version_tag, string_types):
+        version_tag = '{version.major}.{version.minor}.{version.patch}'
 
-    if version_tag:
-        describe_out = echo_cmd(subprocess.check_output, (
-                'git', 'describe', '--tags', '--long', '--dirty', '--always'
-            ),
-            cwd=workspace,
-        ).strip()
-
-        params = {}
-        if 'format' in version_info:
-            params['format'] = version_info['format']
-        tag_version = parse_git_describe_version(describe_out, **params)
-        if tag_version:
-            click.echo("[DEBUG]: version from tag: \x1B[34m{tag_version}\x1B[39m".format(**locals()), err=True)
-
-    if version is not None and version_info.get('bump', True):
+    if ctx.obj.version is not None and version_info.get('bump', True):
         params = {}
         if 'bump' in version_info:
             params['bump'] = version_info['bump']
-
-        version = version.next_version(**params)
+        ctx.obj.version = ctx.obj.version.next_version(**params)
+        click.echo("[DEBUG]: bumped version to: \x1B[34m{ctx.obj.version}\x1B[39m".format(**locals()), err=True)
 
         if 'file' in version_info:
-            replace_version(version_info['file'], version)
-
+            replace_version(version_info['file'], ctx.obj.version)
             echo_cmd(subprocess.check_call, ('git', 'add', version_info['file']), cwd=workspace)
 
     echo_cmd(subprocess.check_call, (
@@ -266,10 +272,10 @@ def process_prepare_source_tree(
     click.echo(submit_commit)
 
     tagname = None
-    if version is not None and not version.prerelease and version_tag:
+    if ctx.obj.version is not None and not ctx.obj.version.prerelease and version_tag:
         tagname = version_tag.format(
-                version        = version,
-                build_sep      = ('+' if version.build else ''),
+                version        = ctx.obj.version,
+                build_sep      = ('+' if ctx.obj.version.build else ''),
             )
         echo_cmd(subprocess.check_call, ('git', 'tag', '-f', tagname, submit_commit), cwd=workspace, stdout=sys.stderr)
 
@@ -283,8 +289,8 @@ def process_prepare_source_tree(
             '{submit_commit}:{target_ref}'.format(**locals()),
         ),
         cwd=workspace)
-    if version is not None:
-        click.echo(version)
+    if ctx.obj.version is not None:
+        click.echo(ctx.obj.version)
     if tagname is not None:
         echo_cmd(subprocess.check_call, (
                 'git', 'config', '--add',
