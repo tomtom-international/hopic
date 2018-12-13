@@ -267,7 +267,9 @@ esac
 ''')
           return steps.withEnv(["GIT_ASKPASS=${askpass_program}"]) {
             steps.sh(script: 'chmod 700 "${GIT_ASKPASS}"')
-            return closure()
+            def r = closure()
+            steps.sh(script: 'rm "${GIT_ASKPASS}"')
+            return r
           }
       }
     } catch (CredentialNotFoundException e1) {
@@ -306,7 +308,9 @@ exec ssh -i '''
 
             return steps.withEnv(["SSH_ASKPASS=${askpass_program}", "GIT_SSH=${ssh_program}", "GIT_SSH_VARIANT=ssh"]) {
               steps.sh(script: 'chmod 700 "${GIT_SSH}" "${SSH_ASKPASS}"')
-              return closure()
+              def r = closure()
+              steps.sh(script: 'rm "${GIT_SSH}" "${SSH_ASKPASS}"')
+              return r
             }
         }
       } catch (CredentialNotFoundException e2) {
