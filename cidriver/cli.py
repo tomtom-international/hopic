@@ -108,7 +108,7 @@ class OptionContext(object):
 @click.group(context_settings=dict(help_option_names=('-h', '--help')))
 @click.option('--color', type=click.Choice(('always', 'auto', 'never')), default='auto')
 @click.option('--config', type=click.Path(exists=True, readable=True, resolve_path=True))
-@click.option('--workspace', type=click.Path(exists=True, file_okay=False, dir_okay=True))
+@click.option('--workspace', type=click.Path(exists=False, file_okay=False, dir_okay=True))
 @click.pass_context
 def cli(ctx, color, config, workspace):
     if color == 'always':
@@ -122,8 +122,17 @@ def cli(ctx, color, config, workspace):
     ctx.obj = OptionContext()
     for param in ctx.command.params:
         ctx.obj.register_parameter(ctx=ctx, param=param)
-    if workspace is not None:
-        ctx.obj.workspace = workspace
+        if param.human_readable_name == 'workspace' and workspace is not None:
+            if ctx.invoked_subcommand != 'checkout-source-tree':
+                # Require the workspace directory to exist for anything but the checkout command
+                try:
+                    os.stat(workspace)
+                except OSError:
+                    raise click.BadParameter(
+                            'Directory "{workspace}" does not exist.'.format(**locals()),
+                            ctx=ctx, param=param
+                        )
+            ctx.obj.workspace = workspace
 
     volume_vars = {}
     if workspace is not None:
