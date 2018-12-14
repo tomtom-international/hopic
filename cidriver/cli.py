@@ -134,20 +134,19 @@ def cli(ctx, color, config, workspace):
                         )
             ctx.obj.workspace = workspace
 
-    volume_vars = {}
+    ctx.obj.volume_vars = {}
     if workspace is not None:
-        volume_vars['WORKSPACE'] = workspace
+        ctx.obj.volume_vars['WORKSPACE'] = workspace
     for whitelisted_var in (
             'CT_DEVENV_HOME',
         ):
         try:
-            volume_vars[whitelisted_var] = os.environ[whitelisted_var]
+            ctx.obj.volume_vars[whitelisted_var] = os.environ[whitelisted_var]
         except KeyError:
             pass
-    ctx.obj.volume_vars = volume_vars
 
     if config is not None:
-        cfg = ctx.obj.config = read_config(config, volume_vars)
+        cfg = ctx.obj.config = read_config(config, ctx.obj.volume_vars)
     else:
         cfg = {}
 
@@ -176,7 +175,7 @@ def cli(ctx, color, config, workspace):
             pass
     if ctx.obj.version is not None:
         click.echo("[DEBUG]: read version: \x1B[34m{ctx.obj.version}\x1B[39m".format(**locals()), err=True)
-        ctx.obj.volume_vars['VERSION'] = ctx.obj.version
+        ctx.obj.volume_vars['VERSION'] = str(ctx.obj.version)
 
 @cli.command()
 @click.option('--target-remote'     , metavar='<url>')
