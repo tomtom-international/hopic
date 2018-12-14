@@ -505,10 +505,10 @@ def build(ctx, phase, variant):
                         continue
 
                 cmd = shlex.split(cmd)
-                env = dict(
+                env = (dict(
                         HOME            = '/home/sandbox',
                         _JAVA_OPTIONS   = '-Duser.home=/home/sandbox',
-                    )
+                    ) if 'image' in cfg else {})
                 # Strip of prefixed environment variables from this command-line and apply them
                 while cmd:
                     m = _env_var_re.match(cmd[0])
@@ -544,7 +544,7 @@ def build(ctx, phase, variant):
                     docker_run.append(image)
                     cmd = docker_run + cmd
                 new_env = os.environ.copy()
-                if 'image' in cfg:
+                if 'image' not in cfg:
                     new_env.update(env)
                 try:
                     echo_cmd(subprocess.check_call, cmd, env=new_env)
