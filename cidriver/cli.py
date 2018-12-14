@@ -546,7 +546,11 @@ def build(ctx, phase, variant):
                 new_env = os.environ.copy()
                 if 'image' in cfg:
                     new_env.update(env)
-                echo_cmd(subprocess.check_call, cmd, env=new_env)
+                try:
+                    echo_cmd(subprocess.check_call, cmd, env=new_env)
+                except subprocess.CalledProcessError as e:
+                    click.secho("Command fatally terminated with exit code {}".format(e.returncode), fg='red', err=True)
+                    sys.exit(e.returncode)
 
 @cli.command()
 @click.option('--target-remote', metavar='<url>', help='''The remote to push to, if not specified this will default to the checkout remote.''')
