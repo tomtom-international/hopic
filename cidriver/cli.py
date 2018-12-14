@@ -581,3 +581,12 @@ def show_config(ctx):
     """
 
     click.echo(json.dumps(ctx.obj.config, indent=4, separators=(',', ': ')))
+
+@cli.command()
+@click.pass_context
+def show_env(ctx):
+    """
+    Diagnostic helper command to display the execution environment.
+    """
+
+    click.echo(json.dumps(ctx.obj.volume_vars, indent=4, separators=(',', ': '), sort_keys=True))
