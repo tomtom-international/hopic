@@ -453,10 +453,14 @@ exec ssh -i '''
                   script: "${cmd} getinfo --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant),
                   returnStdout: true,
                 ))
+              def run_on_change = meta.get('run-on-change', 'always')
+              if (run_on_change instanceof Boolean) {
+                run_on_change = run_on_change ? 'always' : 'never'
+              }
               [
                 variant: variant,
                 label: meta.get('node-label', default_node_expr),
-                run_on_change: meta.get('run-on-change', true),
+                run_on_change: run_on_change,
               ]
             },
           ]
@@ -471,11 +475,11 @@ exec ssh -i '''
           def variants = it.variants.findAll {
             def run_on_change = it.run_on_change
 
-            if (run_on_change == "never") {
+            if (run_on_change == 'always') {
+              return true
+            } else if (run_on_change == 'never') {
               return !this.has_change()
-            } else if (run_on_change instanceof Boolean) {
-              return run_on_change
-            } else if (run_on_change == "only") {
+            } else if (run_on_change == 'only') {
               if (this.source_commit == null
                || this.target_commit == null) {
                 // Don't have enough information to determine whether this is a submittable change: assume it is
