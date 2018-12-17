@@ -123,7 +123,7 @@ class BitbucketPullRequest extends ChangeRequest
                                 + ' --change-request=' + shell_quote(steps.env.CHANGE_ID)
                                 + ' --title=' + shell_quote(steps.env.CHANGE_TITLE)
                                 + extra_params,
-                          returnStdout: true).split("\\r?\\n").collect{it}
+                          returnStdout: true).split("\\r?\\n").findAll{it.size() > 0}
     if (output.size() <= 0) {
       return null
     }
@@ -160,7 +160,7 @@ class SpecialModalityRequest extends ChangeRequest
                                 + ' --author-date=' + shell_quote('@' + author_time)
                                 + ' --commit-date=' + shell_quote('@' + commit_time)
                                 + ' apply-modality-change ' + shell_quote(modality),
-                          returnStdout: true).split("\\r?\\n").collect{it}
+                          returnStdout: true).split("\\r?\\n").findAll{it.size() > 0}
     if (output.size() <= 0) {
       return null
     }
