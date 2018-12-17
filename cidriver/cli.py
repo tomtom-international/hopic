@@ -510,12 +510,14 @@ def build(ctx, phase, variant):
                         _JAVA_OPTIONS   = '-Duser.home=/home/sandbox',
                     ) if 'image' in cfg else {})
                 # Strip of prefixed environment variables from this command-line and apply them
+                volume_vars = ctx.obj.volume_vars
                 while cmd:
                     m = _env_var_re.match(cmd[0])
                     if not m:
                         break
                     env[m.group('var')] = expand_vars(volume_vars, m.group('val'))
                     cmd.pop(0)
+                cmd = [expand_vars(volume_vars, arg) for arg in cmd]
 
                 # Handle execution inside docker
                 if 'image' in cfg:
