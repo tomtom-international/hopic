@@ -578,6 +578,37 @@ exec ssh -i '''
                       }
                       this.stashes[name] = [dir: dir, nodes: [(steps.env.NODE_NAME): true]]
                     }
+                    if (meta.containsKey('archive')) {
+                      def artifacts = meta.archive.artifacts
+                      if (artifacts == null) {
+                        steps.error("Archive configuration entry for ${phase}.${variant} does not contain 'artifacts' property")
+                      }
+                      if (artifacts instanceof String) {
+                        artifacts = [artifacts]
+                      }
+                      steps.dir(this.checkouts[steps.env.NODE_NAME].workspace) {
+                        artifacts.each { artifact ->
+                          steps.archiveArtifacts(
+                              artifacts: artifact,
+                              fingerprint: meta.archive.getOrDefault('fingerprint', true),
+                            )
+                        }
+                      }
+                    }
+                    if (meta.containsKey('fingerprint')) {
+                      def artifacts = meta.fingerprint.artifacts
+                      if (artifacts == null) {
+                        steps.error("Fingerprint configuration entry for ${phase}.${variant} does not contain 'artifacts' property")
+                      }
+                      if (artifacts instanceof String) {
+                        artifacts = [artifacts]
+                      }
+                      steps.dir(this.checkouts[steps.env.NODE_NAME].workspace) {
+                        artifacts.each { artifact ->
+                          steps.fingerprint(targets: artifact)
+                        }
+                      }
+                    }
                   }
                 }
               }]
