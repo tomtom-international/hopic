@@ -4,7 +4,7 @@ from .config_reader import read as read_config
 from .config_reader import expand_vars
 from .execution import echo_cmd
 from .versioning import *
-from datetime import datetime
+from datetime import (datetime, timedelta)
 from dateutil.parser import parse as date_parse
 from dateutil.tz import (tzoffset, tzlocal)
 from itertools import chain
@@ -58,6 +58,67 @@ def git_has_work_tree(workspace):
         return False
     return output.strip().lower() == 'true'
 
+def determine_source_date(workspace):
+    """Determine the date of most recent change to the sources in the given workspace"""
+    if not git_has_work_tree(workspace):
+        return None
+
+    try:
+        # Time of last commit as reported by Git
+        source_date = datetime.utcfromtimestamp(int(
+                    subprocess.check_output((
+                        'git', 'log', '-1', '--pretty=%ct'
+                    ),
+                    cwd=workspace,
+                ).strip().decode('UTF-8'))
+            )
+    except TypeError:
+        return None
+
+    # Ensure a more accurate source date is used if there have been any changes to the tracked sources
+    status_entries = subprocess.check_output((
+                'git', 'status', '--untracked-files=no', '--porcelain=v1', '-z',
+            )
+            , cwd=workspace).split(b'\0')
+    if status_entries and not status_entries[-1]:
+        del status_entries[-1]
+    encoding = sys.getfilesystemencoding() or sys.getdefaultencoding()
+    have_changes = False
+    modified_files = []
+    while status_entries:
+        entry = status_entries.pop(0)
+        if not status_entries and not entry:
+            # End of list
+            break
+
+        assert entry[2:3] == b' ', 'git-status entry {entry!r} does not separate status flags from filename by space'.format(**locals())
+        status, filename = entry[:2], entry[3:].decode(encoding)
+
+        if status in (b'  ', b'??', b'!!'):
+            continue
+        have_changes = True
+        if b'R' in status:
+            # This is the, NUL-terminated, renamed-from filename
+            status_entries.pop(0)
+        if b'D' in status:
+            continue
+        modified_files.append(filename)
+
+    if have_changes:
+        # Ensure that, no matter what happens, the source date is more recent than the check-in date
+        source_date = source_date + timedelta(seconds=1)
+
+        for filename in modified_files:
+            try:
+                st = os.lstat(os.path.join(workspace, filename))
+            except OSError:
+                pass
+            file_date = datetime.utcfromtimestamp(st.st_mtime)
+            source_date = max(source_date, file_date)
+
+    click.echo("[DEBUG]: Date of last modification to source: {source_date}".format(**locals()), err=True)
+    return source_date
+
 def volume_spec_to_docker_param(volume):
     if not os.path.exists(volume['source']):
         os.makedirs(volume['source'])
@@ -104,6 +165,9 @@ class OptionContext(object):
                 ctx=ctx,
                 param=param,
             )
+
+    def register_dependent_attribute(self, name, dependency):
+        self._missing_parameters[name] = self._missing_parameters[dependency]
 
 def cli_autocomplete_get_option_from_args(args, option):
     try:
@@ -184,6 +248,16 @@ def cli(ctx, color, config, workspace):
     ctx.obj.volume_vars = {}
     if workspace is not None:
         ctx.obj.volume_vars['WORKSPACE'] = workspace
+        source_date = determine_source_date(workspace)
+        if source_date is not None:
+            ctx.obj.source_date = source_date
+            ctx.obj.source_date_epoch = int((
+                    source_date - datetime(1970, 1, 1, 0, 0, 0)
+                ).total_seconds())
+            ctx.obj.volume_vars['SOURCE_DATE_EPOCH'] = str(ctx.obj.source_date_epoch)
+    ctx.obj.register_dependent_attribute('source_date', 'workspace')
+    ctx.obj.register_dependent_attribute('source_date_epoch', 'workspace')
+
     for whitelisted_var in (
             'CT_DEVENV_HOME',
         ):
@@ -206,7 +280,7 @@ def cli(ctx, color, config, workspace):
         fname = version_info['file']
         if os.path.isfile(fname):
             ctx.obj.version = read_version(fname, **params)
-    if 'tag' in version_info and ctx.obj.version is None:
+    if 'tag' in version_info and ctx.obj.version is None and git_has_work_tree(workspace):
         try:
             describe_out = echo_cmd(subprocess.check_output, (
                     'git', 'describe', '--tags', '--long', '--dirty', '--always'
@@ -217,7 +291,7 @@ def cli(ctx, color, config, workspace):
             params = {}
             if 'format' in version_info:
                 params['format'] = version_info['format']
-            ctx.obj.version = parse_git_describe_version(describe_out, **params)
+            ctx.obj.version = parse_git_describe_version(describe_out, dirty_date=ctx.obj.source_date, **params)
         except subprocess.CalledProcessError:
             pass
     if ctx.obj.version is not None:
@@ -583,7 +657,12 @@ def build(ctx, phase, variant):
                         HOME            = '/home/sandbox',
                         _JAVA_OPTIONS   = '-Duser.home=/home/sandbox',
                     ) if image is not None else {})
-                # Strip of prefixed environment variables from this command-line and apply them
+                try:
+                    env['SOURCE_DATE_EPOCH'] = str(ctx.obj.source_date_epoch)
+                except:
+                    pass
+
+                # Strip off prefixed environment variables from this command-line and apply them
                 while cmd:
                     m = _env_var_re.match(cmd[0])
                     if not m:
