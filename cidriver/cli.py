@@ -336,6 +336,35 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
     echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.{commit}.ref'.format(**locals()), target_ref), cwd=workspace)
     echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.{commit}.remote'.format(**locals()), target_remote), cwd=workspace)
 
+    files = subprocess.check_output(('git', 'ls-files', '-z'), cwd=workspace).split(b'\0')
+    if files and not files[-1]:
+        del files[-1]
+    files = set(files)
+
+    # Set all files' modification times to their last commit's time
+    encoding = sys.getfilesystemencoding() or sys.getdefaultencoding()
+    with open(os.devnull) as devnull:
+        whatchanged = subprocess.Popen(('git', 'whatchanged', '--pretty=format:%ct'), cwd=workspace, stdout=subprocess.PIPE, stderr=devnull)
+        mtime = 0
+        for line in whatchanged.stdout:
+            if not files:
+                break
+
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith(b':'):
+                filename = line.split(b'\t')[-1]
+                if filename in files:
+                    files.remove(filename)
+                    os.utime(os.path.join(workspace.encode(encoding), filename), (mtime, mtime))
+            else:
+                mtime = int(line)
+        try:
+            whatchanged.terminate()
+        except OSError:
+            pass
+
 @cli.group()
 # git
 @click.option('--author-name'               , metavar='<name>'                 , help='''Name of change-request's author''')
