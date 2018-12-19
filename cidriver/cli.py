@@ -491,6 +491,13 @@ def build(ctx, phase, variant):
         for curvariant, cmds in curphase.items():
             if variant is not None and curvariant != variant:
                 continue
+
+            image = cfg.get('image', None)
+            if image is not None and not isinstance(image, string_types):
+                try:
+                    image = image[curvariant]
+                except KeyError:
+                    image = image.get('default', None)
             for cmd in cmds:
                 if not isinstance(cmd, string_types):
                     try:
@@ -508,7 +515,7 @@ def build(ctx, phase, variant):
                 env = (dict(
                         HOME            = '/home/sandbox',
                         _JAVA_OPTIONS   = '-Duser.home=/home/sandbox',
-                    ) if 'image' in cfg else {})
+                    ) if image is not None else {})
                 # Strip of prefixed environment variables from this command-line and apply them
                 volume_vars = ctx.obj.volume_vars
                 while cmd:
@@ -520,13 +527,7 @@ def build(ctx, phase, variant):
                 cmd = [expand_vars(volume_vars, arg) for arg in cmd]
 
                 # Handle execution inside docker
-                if 'image' in cfg:
-                    image = cfg['image']
-                    if not isinstance(image, string_types):
-                        try:
-                            image = image[curvariant]
-                        except KeyError:
-                            image = image['default']
+                if image is not None:
                     uid, gid = os.getuid(), os.getgid()
                     docker_run = ['docker', 'run',
                             '--rm',
@@ -546,7 +547,7 @@ def build(ctx, phase, variant):
                     docker_run.append(image)
                     cmd = docker_run + cmd
                 new_env = os.environ.copy()
-                if 'image' not in cfg:
+                if image is None:
                     new_env.update(env)
                 try:
                     echo_cmd(subprocess.check_call, cmd, env=new_env)
