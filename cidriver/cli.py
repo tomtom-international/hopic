@@ -556,7 +556,7 @@ def build(ctx, phase, variant):
                 if image is None:
                     new_env.update(env)
                 try:
-                    echo_cmd(subprocess.check_call, cmd, env=new_env)
+                    echo_cmd(subprocess.check_call, cmd, env=new_env, cwd=ctx.obj.workspace)
                 except subprocess.CalledProcessError as e:
                     click.secho("Command fatally terminated with exit code {}".format(e.returncode), fg='red', err=True)
                     sys.exit(e.returncode)
