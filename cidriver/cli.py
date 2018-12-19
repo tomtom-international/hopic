@@ -498,6 +498,13 @@ def build(ctx, phase, variant):
                     image = image[curvariant]
                 except KeyError:
                     image = image.get('default', None)
+
+            volume_vars = ctx.obj.volume_vars
+            # Give commands executing inside a container image a different view than outside
+            if image is not None:
+                volume_vars = volume_vars.copy()
+                volume_vars['WORKSPACE'] = '/code'
+
             for cmd in cmds:
                 if not isinstance(cmd, string_types):
                     try:
@@ -517,7 +524,6 @@ def build(ctx, phase, variant):
                         _JAVA_OPTIONS   = '-Duser.home=/home/sandbox',
                     ) if image is not None else {})
                 # Strip of prefixed environment variables from this command-line and apply them
-                volume_vars = ctx.obj.volume_vars
                 while cmd:
                     m = _env_var_re.match(cmd[0])
                     if not m:
