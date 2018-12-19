@@ -1,5 +1,6 @@
 import click
 
+from . import binary_normalize
 from .config_reader import read as read_config
 from .config_reader import expand_vars
 from .execution import echo_cmd
@@ -668,6 +669,8 @@ def build(ctx, phase, variant):
                 volume_vars = volume_vars.copy()
                 volume_vars['WORKSPACE'] = '/code'
 
+            artifacts = []
+
             for cmd in cmds:
                 if not isinstance(cmd, string_types):
                     try:
@@ -676,6 +679,18 @@ def build(ctx, phase, variant):
                         pass
                     else:
                         click.echo('Performing: ' + click.style(desc, fg='cyan'), err=True)
+                    for artifact_key in (
+                            'archive',
+                            'fingerprint',
+                        ):
+                        try:
+                            af = cmd[artifact_key]['artifacts']
+                            if isinstance(af, string_types):
+                                af = [af]
+                            af = [expand_vars(volume_vars, f) for f in af]
+                            artifacts.extend(af)
+                        except (KeyError, TypeError):
+                            pass
                     try:
                         cmd = cmd['sh']
                     except (KeyError, TypeError):
@@ -728,6 +743,10 @@ def build(ctx, phase, variant):
                 except subprocess.CalledProcessError as e:
                     click.secho("Command fatally terminated with exit code {}".format(e.returncode), fg='red', err=True)
                     sys.exit(e.returncode)
+
+            # Post-processing to make these artifacts as reproducible as possible
+            for artifact in artifacts:
+                binary_normalize.normalize(os.path.join(ctx.obj.workspace, artifact), cwd=ctx.obj.workspace, source_date_epoch=ctx.obj.source_date_epoch)
 
 @cli.command()
 @click.option('--target-remote', metavar='<url>', help='''The remote to push to, if not specified this will default to the checkout remote.''')
