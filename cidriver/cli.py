@@ -746,7 +746,7 @@ def build(ctx, phase, variant):
 
             # Post-processing to make these artifacts as reproducible as possible
             for artifact in artifacts:
-                binary_normalize.normalize(os.path.join(ctx.obj.workspace, artifact), cwd=ctx.obj.workspace, source_date_epoch=ctx.obj.source_date_epoch)
+                binary_normalize.normalize(os.path.join(ctx.obj.workspace, artifact), source_date_epoch=ctx.obj.source_date_epoch)
 
 @cli.command()
 @click.option('--target-remote', metavar='<url>', help='''The remote to push to, if not specified this will default to the checkout remote.''')
