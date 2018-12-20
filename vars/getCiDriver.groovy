@@ -491,6 +491,9 @@ exec ssh -i '''
         }
       }
 
+      def artifactoryServerId = null
+      def buildInfo = null
+
       phases.each {
           def phase    = it.phase
 
@@ -618,9 +621,15 @@ exec ssh -i '''
                               }
                             ])
                           def server = steps.Artifactory.server server_id
-                          server.upload(uploadSpec)
+                          def newBuildInfo = server.upload(uploadSpec)
                           // Work around Artifactory Groovy bug
                           server = null
+                          if (buildInfo == null) {
+                            artifactoryServerId = server_id
+                            buildInfo = newBuildInfo
+                          } else {
+                            buildInfo.append(newBuildInfo)
+                          }
                         }
                       }
                     }
@@ -645,6 +654,13 @@ exec ssh -i '''
               steps.sh(script: "${cmd} submit")
             }
           }
+        }
+
+        if (buildInfo != null) {
+          def server = steps.Artifactory.server artifactoryServerId
+          server.publishBuildInfo(buildInfo)
+          // Work around Artifactory Groovy bug
+          server = null
         }
       }
     }
