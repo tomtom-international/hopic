@@ -105,6 +105,53 @@ class OptionContext(object):
                 param=param,
             )
 
+def cli_autocomplete_get_option_from_args(args, option):
+    try:
+        return args[args.index(option) + 1]
+    except Exception:
+        for arg in args:
+            if arg.startswith(option + '='):
+                return arg[len(option + '='):]
+
+def cli_autocomplet_get_config_from_args(args):
+    config = os.path.expanduser(
+            expand_vars(
+                os.environ,
+                cli_autocomplete_get_option_from_args(args, '--config'),
+            ))
+    return read_config(config, {})
+
+def cli_autocomplete_phase_from_config(ctx, args, incomplete):
+    try:
+        cfg = cli_autocomplet_get_config_from_args(args)
+        return cfg['phases'].keys()
+    except Exception:
+        return ()
+
+def cli_autocomplete_variant_from_config(ctx, args, incomplete):
+    try:
+        cfg = cli_autocomplet_get_config_from_args(args)
+        phase = cli_autocomplete_get_option_from_args(args, '--phase')
+
+        seen_variants = set()
+        for phasename, curphase in cfg['phases'].items():
+            if phase is not None and phasename != phase:
+                continue
+            for variant in curphase:
+                if variant in seen_variants:
+                    continue
+                seen_variants.add(variant)
+                yield variant
+    except Exception:
+        pass
+
+def cli_autocomplete_modality_from_config(ctx, args, incomplete):
+    try:
+        cfg = cli_autocomplet_get_config_from_args(args)
+        return cfg['modality-source-preparation'].keys()
+    except Exception:
+        return ()
+
 @click.group(context_settings=dict(help_option_names=('-h', '--help')))
 @click.option('--color', type=click.Choice(('always', 'auto', 'never')), default='auto')
 @click.option('--config', type=click.Path(exists=True, readable=True, resolve_path=True))
@@ -348,7 +395,7 @@ def merge_change_request(
 
 _env_var_re = re.compile(r'^(?P<var>[A-Za-z_][0-9A-Za-z_]*)=(?P<val>.*)$')
 @prepare_source_tree.command()
-@click.argument('modality')
+@click.argument('modality', autocompletion=cli_autocomplete_modality_from_config)
 @click.pass_context
 def apply_modality_change(
         ctx,
@@ -435,7 +482,7 @@ def phases(ctx):
         click.echo(phase)
 
 @cli.command()
-@click.option('--phase'             , metavar='<phase>'  , help='''Build phase to show variants for''')
+@click.option('--phase'             , metavar='<phase>'  , help='''Build phase to show variants for''', autocompletion=cli_autocomplete_phase_from_config)
 @click.pass_context
 def variants(ctx, phase):
     """
@@ -454,15 +501,14 @@ def variants(ctx, phase):
         click.echo(variant)
 
 @cli.command()
-@click.option('--phase'             , metavar='<phase>'  , required=True, help='''Build phase''')
-@click.option('--variant'           , metavar='<variant>', required=True, help='''Configuration variant''')
+@click.option('--phase'             , metavar='<phase>'  , required=True, help='''Build phase''', autocompletion=cli_autocomplete_phase_from_config)
+@click.option('--variant'           , metavar='<variant>', required=True, help='''Configuration variant''', autocompletion=cli_autocomplete_variant_from_config)
 @click.pass_context
 def getinfo(ctx, phase, variant):
     """
     Display meta-data associated with the specified variant in the given phase as JSON.
     """
 
-    variants = []
     info = {}
     for var in ctx.obj.config['phases'][phase][variant]:
         if isinstance(var, string_types):
@@ -472,8 +518,8 @@ def getinfo(ctx, phase, variant):
     click.echo(json.dumps(info))
 
 @cli.command()
-@click.option('--phase'             , metavar='<phase>'  , help='''Build phase to execute''')
-@click.option('--variant'           , metavar='<variant>', help='''Configuration variant to build''')
+@click.option('--phase'             , metavar='<phase>'  , help='''Build phase to execute''', autocompletion=cli_autocomplete_phase_from_config)
+@click.option('--variant'           , metavar='<variant>', help='''Configuration variant to build''', autocompletion=cli_autocomplete_variant_from_config)
 @click.pass_context
 def build(ctx, phase, variant):
     """
