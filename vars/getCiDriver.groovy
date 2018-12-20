@@ -13,6 +13,7 @@
  * limitations under the License.
  */
 
+import groovy.json.JsonOutput
 import org.jenkinsci.plugins.credentialsbinding.impl.CredentialNotFoundException
 
 class ChangeRequest
@@ -578,8 +579,9 @@ exec ssh -i '''
                       }
                       this.stashes[name] = [dir: dir, nodes: [(steps.env.NODE_NAME): true]]
                     }
-                    if (meta.containsKey('archive')) {
-                      def artifacts = meta.archive.artifacts
+                    def archiving_cfg = meta.containsKey('archive') ? 'archive' : meta.containsKey('fingerprint') ? 'fingerprint' : null
+                    if (archiving_cfg) {
+                      def artifacts = meta[archiving_cfg].artifacts
                       if (artifacts == null) {
                         steps.error("Archive configuration entry for ${phase}.${variant} does not contain 'artifacts' property")
                       }
@@ -588,24 +590,37 @@ exec ssh -i '''
                       }
                       steps.dir(this.checkouts[steps.env.NODE_NAME].workspace) {
                         artifacts.each { artifact ->
-                          steps.archiveArtifacts(
-                              artifacts: artifact,
-                              fingerprint: meta.archive.getOrDefault('fingerprint', true),
-                            )
+                          if (archiving_cfg == 'archive') {
+                            steps.archiveArtifacts(
+                                artifacts: artifact,
+                                fingerprint: meta.archive.getOrDefault('fingerprint', true),
+                              )
+                          } else (archiving_cfg == 'fingerprint') {
+                            steps.fingerprint(targets: artifact)
+                          }
                         }
-                      }
-                    }
-                    if (meta.containsKey('fingerprint')) {
-                      def artifacts = meta.fingerprint.artifacts
-                      if (artifacts == null) {
-                        steps.error("Fingerprint configuration entry for ${phase}.${variant} does not contain 'artifacts' property")
-                      }
-                      if (artifacts instanceof String) {
-                        artifacts = [artifacts]
-                      }
-                      steps.dir(this.checkouts[steps.env.NODE_NAME].workspace) {
-                        artifacts.each { artifact ->
-                          steps.fingerprint(targets: artifact)
+                        if (meta[archiving_cfg].containsKey('upload-artifactory')) {
+                          def server_id = meta[archiving_cfg]['upload-artifactory'].id
+                          if (server_id == null) {
+                            steps.error("Artifactory upload configuration entry for ${phase}.${variant} does not contain 'id' property to identify Artifactory server")
+                          }
+                          def target = meta[archiving_cfg]['upload-artifactory'].target
+                          if (target == null) {
+                            steps.error("Artifactory upload configuration entry for ${phase}.${variant} does not contain 'target' property to identify target repository")
+                          }
+
+                          def uploadSpec = JsonOutput.toJson([
+                              files: artifacts.collect { artifact ->
+                                [
+                                  pattern: artifact,
+                                  target: target,
+                                ]
+                              }
+                            ])
+                          def server = steps.Artifactory.server server_id
+                          server.upload(uploadSpec)
+                          // Work around Artifactory Groovy bug
+                          server = null
                         }
                       }
                     }
