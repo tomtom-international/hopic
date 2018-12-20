@@ -235,6 +235,17 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
     """
 
     workspace = ctx.obj.workspace
+
+    try:
+        git_cfg = ctx.obj.config.get('scm', {}).get('git', {})
+    except:
+        pass
+    else:
+        if target_remote is None:
+            target_remote = git_cfg.get('remote')
+        if target_ref is None:
+            target_ref = git_cfg.get('ref')
+
     if not git_has_work_tree(workspace):
         echo_cmd(subprocess.check_call, ('git', 'clone', '-c' 'color.ui=always', target_remote, workspace))
     echo_cmd(subprocess.check_call, ('git', 'config', 'color.ui', 'always'), cwd=workspace)
@@ -514,7 +525,10 @@ def getinfo(ctx, phase, variant):
         if isinstance(var, string_types):
             continue
         for key, val in var.items():
-            info[key] = expand_vars(ctx.obj.volume_vars, val)
+            try:
+                info[key] = expand_vars(ctx.obj.volume_vars, val)
+            except KeyError:
+                pass
     click.echo(json.dumps(info))
 
 @cli.command()

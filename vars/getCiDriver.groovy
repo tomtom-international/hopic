@@ -40,7 +40,7 @@ class ChangeRequest
     return this.maySubmitImpl(target_commit, source_commit, allow_cache)
   }
 
-  public def apply(venv, workspace, source_remote = null) {
+  public def apply(cmd, source_remote = null) {
     assert false : "Change request instance does not override apply()"
   }
 }
@@ -96,22 +96,17 @@ class BitbucketPullRequest extends ChangeRequest
           || !cur_cr_info.canMerge)
   }
 
-  public def apply(venv, workspace, source_remote) {
+  public def apply(cmd, source_remote) {
     def change_request = this.get_info()
-    def conf_params = ''
-    if (steps.fileExists("${workspace}/cfg.yml")) {
-      conf_params += " --config=\"${workspace}/cfg.yml\""
-    }
     def extra_params = ''
     if (change_request.containsKey('description')) {
-      extra_params += " --description=\"${change_request.description}\""
+      extra_params += ' --description=' + shell_quote(change_request.description)
     }
     def source_refspec = steps.scm.userRemoteConfigs[0].refspec
     def (remote_ref, local_ref) = source_refspec.tokenize(':')
     if (remote_ref.startsWith('+'))
       remote_ref = remote_ref.substring(1)
-    def output = steps.sh(script: shell_quote("${venv}/bin/python") + ' -m cidriver --color=always --workspace=' + shell_quote(workspace)
-                                + conf_params
+    def output = steps.sh(script: cmd
                                 + ' prepare-source-tree'
                                 + ' --author-name=' + shell_quote(steps.env.CHANGE_AUTHOR)
                                 + ' --author-email=' + shell_quote(steps.env.CHANGE_AUTHOR_EMAIL)
@@ -147,15 +142,10 @@ class SpecialModalityRequest extends ChangeRequest
     this.modality = modality
   }
 
-  public def apply(venv, workspace, source_remote = null) {
+  public def apply(cmd, source_remote = null) {
     def author_time = steps.currentBuild.timeInMillis / 1000.0
     def commit_time = steps.currentBuild.startTimeInMillis / 1000.0
-    def conf_params = ''
-    if (steps.fileExists("${workspace}/cfg.yml")) {
-      conf_params += " --config=\"${workspace}/cfg.yml\""
-    }
-    def output = steps.sh(script: shell_quote("${venv}/bin/python") + ' -m cidriver --color=always --workspace=' + shell_quote(workspace)
-                                + conf_params
+    def output = steps.sh(script: cmd
                                 + ' prepare-source-tree'
                                 + ' --author-date=' + shell_quote('@' + author_time)
                                 + ' --commit-date=' + shell_quote('@' + commit_time)
@@ -178,10 +168,12 @@ class CiDriver
 {
   private repo
   private steps
+  private base_cmds       = [:]
   private cmds            = [:]
   private nodes           = [:]
-  private workspaces      = [:]
+  private checkouts       = [:]
   private stashes         = [:]
+  private config          = null
   private submit_version  = null
   private change          = null
   private source_commit   = "HEAD"
@@ -238,14 +230,14 @@ class CiDriver
   }
 
   public def install_prerequisites() {
-    if (!this.cmds.containsKey(steps.env.NODE_NAME)) {
+    if (!this.base_cmds.containsKey(steps.env.NODE_NAME)) {
       def venv = steps.pwd(tmp: true) + "/cidriver-venv"
       def workspace = steps.pwd()
       steps.sh(script: 'python -m virtualenv --clear ' + shell_quote(venv) + '\n'
                      + shell_quote("${venv}/bin/python") + ' -m pip install ' + shell_quote(this.repo))
-      this.cmds[steps.env.NODE_NAME] = "${venv}/bin/python ${venv}/bin/ci-driver --color=always --config=\"${workspace}/cfg.yml\" --workspace=\"${workspace}\""
+      this.base_cmds[steps.env.NODE_NAME] = shell_quote("${venv}/bin/python") + ' ' + shell_quote("${venv}/bin/ci-driver") + ' --color=always'
     }
-    return this.cmds[steps.env.NODE_NAME]
+    return this.base_cmds[steps.env.NODE_NAME]
   }
 
   private def with_credentials(closure) {
@@ -325,19 +317,39 @@ exec ssh -i '''
     def cmd = this.install_prerequisites()
 
     def venv = steps.pwd(tmp: true) + "/cidriver-venv"
-    def workspace = steps.pwd()
-    this.with_credentials() {
-      def target_remote = steps.scm.userRemoteConfigs[0].url
-      def target_ref    = steps.env.CHANGE_TARGET ?: steps.env.BRANCH_NAME
-      def clean_param = clean ? " --clean" : ""
-      this.target_commit = steps.sh(script: shell_quote("${venv}/bin/python") + ' -m cidriver --color=always --workspace=' + shell_quote(workspace)
+    def base_dir = steps.pwd()
+    def have_remote_code_config = this.config.containsKey('scm') && this.config.scm.containsKey('git')
+    def workspace = have_remote_code_config ? "${base_dir}/code" : base_dir
+
+    cmd += ' --workspace=' + shell_quote(workspace)
+
+    def params = ''
+    if (clean) {
+      params += ' --clean'
+    }
+    if (have_remote_code_config) {
+      steps.checkout(scm: [
+          $class: 'GitSCM',
+          userRemoteConfigs: [steps.scm.userRemoteConfigs[0]],
+          extensions: [[$class: 'RelativeTargetDirectory', relativeTargetDir: 'config']],
+        ])
+      steps.println(steps.scm.branches)
+      cmd += ' --config=' + shell_quote("${base_dir}/config/cfg.yml")
+    } else {
+      params += ' --target-remote=' + shell_quote(steps.scm.userRemoteConfigs[0].url)
+      params += ' --target-ref='    + shell_quote(steps.env.CHANGE_TARGET ?: steps.env.BRANCH_NAME)
+    }
+
+    steps.env.GIT_COMMIT = this.with_credentials() {
+      this.target_commit = steps.sh(script: cmd
                                           + ' checkout-source-tree'
-                                          + ' --target-remote=' + shell_quote(target_remote)
-                                          + ' --target-ref=' + shell_quote(target_ref)
-                                          + clean_param,
+                                          + params,
                                     returnStdout: true).trim()
+      if (!have_remote_code_config) {
+        cmd += ' --config=' + shell_quote("${workspace}/cfg.yml")
+      }
       if (this.get_change() != null) {
-        def submit_info = this.get_change().apply(venv, workspace, target_remote)
+        def submit_info = this.get_change().apply(cmd, target_remote)
         if (submit_info == null)
         {
           try {
@@ -351,18 +363,16 @@ exec ssh -i '''
           steps.error('No changes to build')
         }
 
-        steps.checkout(scm: [
-            $class: 'GitSCM',
-            userRemoteConfigs: [[
-                url: workspace,
-              ]],
-            branches: [[name: submit_info.commit]],
-          ])
-
         this.submit_version = submit_info.version
+        return submit_info.commit
       }
+      return this.target_commit
     }
-    return workspace
+
+    return [
+        workspace: workspace,
+        cmd: cmd,
+      ]
   }
 
   public def get_submit_version() {
@@ -370,12 +380,18 @@ exec ssh -i '''
   }
 
   public def get_variants(phase = null) {
-    def phase_arg = phase ? ' --phase=' + shell_quote(phase) : ""
-    def cmd = this.install_prerequisites()
-    return steps.sh(
-        script: "${cmd} variants" + phase_arg,
-        returnStdout: true,
-      ).split("\\r?\\n")
+    def variants = []
+    this.config.getOrDefault('phases', [:]).each { curphase ->
+      if (phase && curphase.key != phase) {
+        return
+      }
+      curphase.value.each { -> variant
+        if (!variants.contains(variant.key)) {
+          variants.add(variant.key)
+        }
+      }
+    }
+    return variants
   }
 
   public def has_change() {
@@ -391,9 +407,10 @@ exec ssh -i '''
   }
 
   private def ensure_checkout(clean = false) {
-    if (!this.workspaces.containsKey(steps.env.NODE_NAME)) {
-      this.workspaces[steps.env.NODE_NAME] = this.checkout(clean)
+    if (!this.checkouts.containsKey(steps.env.NODE_NAME)) {
+      this.checkouts[steps.env.NODE_NAME] = this.checkout(clean)
     }
+    return this.checkouts[steps.env.NODE_NAME]
   }
 
   /**
@@ -443,15 +460,18 @@ exec ssh -i '''
           this.source_commit = scm.GIT_COMMIT
         }
 
-        def phases = steps.sh(
-            script: "${cmd} phases",
+        cmd += ' --config=' + shell_quote("${workspace}/cfg.yml")
+        this.config = steps.readJSON(text: steps.sh(
+            script: "${cmd} show-config",
             returnStdout: true,
-          ).split("\\r?\\n").collect { phase ->
+          ))
+
+        return this.config.getOrDefault('phases', [:]).collect { phase ->
           [
-            phase: phase,
-            variants: this.get_variants(phase).collect { variant ->
+            phase: phase.key,
+            variants: phase.value.collect { variant ->
               def meta = steps.readJSON(text: steps.sh(
-                  script: "${cmd} getinfo --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant),
+                  script: "${cmd} getinfo --phase=" + shell_quote(phase.key) + ' --variant=' + shell_quote(variant.key),
                   returnStdout: true,
                 ))
               def run_on_change = meta.getOrDefault('run-on-change', 'always')
@@ -459,14 +479,13 @@ exec ssh -i '''
                 run_on_change = run_on_change ? 'always' : 'never'
               }
               [
-                variant: variant,
+                variant: variant.key,
                 label: meta.getOrDefault('node-label', default_node_expr),
                 run_on_change: run_on_change,
               ]
-            },
+            }
           ]
         }
-        return phases
       }
 
       phases.each {
@@ -513,8 +532,7 @@ exec ssh -i '''
                 }
                 steps.node(label) {
                   steps.stage("${phase}-${variant}") {
-                    def cmd = this.install_prerequisites()
-                    ensure_checkout(clean)
+                    def cmd = this.ensure_checkout(clean).cmd
                     if (!this.nodes.containsKey(variant)) {
                       this.nodes[variant] = steps.env.NODE_NAME
                     }
@@ -531,7 +549,7 @@ exec ssh -i '''
 
                     // FIXME: re-evaluate if we can and need to get rid of special casing for stashing
                     if (meta.containsKey('stash')) {
-                      def dir   = meta.stash.getOrDefault('dir', this.workspaces[steps.env.NODE_NAME])
+                      def dir   = meta.stash.getOrDefault('dir', this.checkouts[steps.env.NODE_NAME].workspace)
                       def name  = "${phase}-${variant}"
                       steps.dir(dir) {
                         def params = [
@@ -561,7 +579,7 @@ exec ssh -i '''
           steps.stage('submit') {
             this.with_credentials() {
               // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
-              def cmd = this.install_prerequisites()
+              def cmd = this.ensure_checkout(clean).cmd
               steps.sh(script: "${cmd} submit")
             }
           }
