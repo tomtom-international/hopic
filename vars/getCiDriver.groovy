@@ -547,7 +547,21 @@ exec ssh -i '''
                         returnStdout: true,
                       ))
 
-                    steps.sh(script: "${cmd} build --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant))
+                    try {
+                      steps.sh(script: "${cmd} build --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant))
+                    } finally {
+                      if (meta.containsKey('junit')) {
+                        def results = meta.junit
+                        if (results instanceof String) {
+                          results = [results]
+                        }
+                        steps.dir(this.checkouts[steps.env.NODE_NAME].workspace) {
+                          results.each { result ->
+                            steps.junit(result)
+                          }
+                        }
+                      }
+                    }
 
                     // FIXME: re-evaluate if we can and need to get rid of special casing for stashing
                     if (meta.containsKey('stash')) {
