@@ -182,10 +182,10 @@ class CiDriver
 
   private final default_node_expr = "Linux && Docker"
 
-  CiDriver(steps, repo, change = null) {
+  CiDriver(Map params = [:], steps, repo) {
     this.repo = repo
     this.steps = steps
-    this.change = change
+    this.change = params.change
   }
 
   private def get_change() {
@@ -593,6 +593,6 @@ exec ssh -i '''
   * getCiDriver()
   */
 
-def call(repo) {
-  return new CiDriver(this, repo)
+def call(Map params = [:], repo) {
+  return new CiDriver(params, this, repo)
 }
