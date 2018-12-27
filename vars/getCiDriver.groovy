@@ -81,7 +81,7 @@ class BitbucketPullRequest extends ChangeRequest
     if (merge.containsKey('canMerge')) {
       info['canMerge'] = merge['canMerge']
     }
-    info['author_time'] = info.get('updatedDate', steps.currentBuild.timeInMillis) / 1000.0
+    info['author_time'] = info.getOrDefault('updatedDate', steps.currentBuild.timeInMillis) / 1000.0
     info['commit_time'] = steps.currentBuild.startTimeInMillis / 1000.0
     this.info = info
     return info
@@ -411,9 +411,9 @@ exec ssh -i '''
   }
 
   public def on_build_node(Map params = [:], closure) {
-    def node_expr = this.nodes.collect { variant, node -> node }.join(" || ") ?: params.get('default_node_expr', this.default_node_expr)
+    def node_expr = this.nodes.collect { variant, node -> node }.join(" || ") ?: params.getOrDefault('default_node_expr', this.default_node_expr)
     return steps.node(node_expr) {
-      this.ensure_checkout(params.get('clean', false))
+      this.ensure_checkout(params.getOrDefault('clean', false))
       this.ensure_unstashed()
       return closure()
     }
@@ -453,13 +453,13 @@ exec ssh -i '''
                   script: "${cmd} getinfo --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant),
                   returnStdout: true,
                 ))
-              def run_on_change = meta.get('run-on-change', 'always')
+              def run_on_change = meta.getOrDefault('run-on-change', 'always')
               if (run_on_change instanceof Boolean) {
                 run_on_change = run_on_change ? 'always' : 'never'
               }
               [
                 variant: variant,
-                label: meta.get('node-label', default_node_expr),
+                label: meta.getOrDefault('node-label', default_node_expr),
                 run_on_change: run_on_change,
               ]
             },
@@ -530,7 +530,7 @@ exec ssh -i '''
 
                     // FIXME: re-evaluate if we can and need to get rid of special casing for stashing
                     if (meta.containsKey('stash')) {
-                      def dir   = meta.stash.get('dir', this.workspaces[steps.env.NODE_NAME])
+                      def dir   = meta.stash.getOrDefault('dir', this.workspaces[steps.env.NODE_NAME])
                       def name  = "${phase}-${variant}"
                       steps.dir(dir) {
                         def params = [
