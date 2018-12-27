@@ -179,6 +179,7 @@ class CiDriver
   private source_commit   = "HEAD"
   private target_commit   = null
   private may_submit_result = null
+  private config_file
 
   private final default_node_expr = "Linux && Docker"
 
@@ -186,6 +187,7 @@ class CiDriver
     this.repo = repo
     this.steps = steps
     this.change = params.change
+    this.config_file = params.getOrDefault('config', 'cfg.yml')
   }
 
   private def get_change() {
@@ -334,7 +336,7 @@ exec ssh -i '''
           extensions: [[$class: 'RelativeTargetDirectory', relativeTargetDir: 'config']],
         ])
       steps.println(steps.scm.branches)
-      cmd += ' --config=' + shell_quote("${base_dir}/config/cfg.yml")
+      cmd += ' --config=' + shell_quote("${base_dir}/config/${config_file}")
     } else {
       params += ' --target-remote=' + shell_quote(steps.scm.userRemoteConfigs[0].url)
       params += ' --target-ref='    + shell_quote(steps.env.CHANGE_TARGET ?: steps.env.BRANCH_NAME)
@@ -346,7 +348,7 @@ exec ssh -i '''
                                           + params,
                                     returnStdout: true).trim()
       if (!have_remote_code_config) {
-        cmd += ' --config=' + shell_quote("${workspace}/cfg.yml")
+        cmd += ' --config=' + shell_quote("${workspace}/${config_file}")
       }
       if (this.get_change() != null) {
         def submit_info = this.get_change().apply(cmd, target_remote)
@@ -460,7 +462,7 @@ exec ssh -i '''
           this.source_commit = scm.GIT_COMMIT
         }
 
-        cmd += ' --config=' + shell_quote("${workspace}/cfg.yml")
+        cmd += ' --config=' + shell_quote("${workspace}/${config_file}")
         this.config = steps.readJSON(text: steps.sh(
             script: "${cmd} show-config",
             returnStdout: true,
