@@ -187,7 +187,8 @@ class CiDriver
   private source_commit   = "HEAD"
   private target_commit   = null
   private may_submit_result = null
-  private default_node_expr = "Linux && Docker"
+
+  private final default_node_expr = "Linux && Docker"
 
   CiDriver(steps, repo, change = null) {
     this.repo = repo
