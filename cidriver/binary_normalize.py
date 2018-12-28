@@ -39,7 +39,7 @@ def normalize(filename, source_date_epoch=0):
     if filename.endswith('.tar') or filename.endswith('.tar.gz'):
         with TarFile.open(filename) as in_archive, open(filename + '.tmp', 'wb') as outfile:
             if filename.endswith('.gz'):
-                outfile = GzipFile(filename=filename, mode='wb', compresslevel=9, fileobj=outfile, mtime=source_date_epoch)
+                outfile = GzipFile(filename='', mode='wb', compresslevel=9, fileobj=outfile, mtime=source_date_epoch)
             try:
                 with TarFile.open('', fileobj=outfile, format=tarfile.USTAR_FORMAT, mode='w', encoding='UTF-8') as out_archive:
                     # Sorting the file list ensures that we don't depend on the order that files appear on disk
