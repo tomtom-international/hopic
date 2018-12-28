@@ -10,7 +10,7 @@ __all__ = (
         'read',
     )
 
-_var_re = re.compile(r'\$(?:(\w+)|\{([^}]+)\})')
+_var_re = re.compile(r'(?<!\$)\$(?:(\w+)|\{([^}]+)\})')
 def expand_vars(vars, expr):
     if isinstance(expr, string_types):
         # Expand variables from our "virtual" environment
@@ -19,10 +19,10 @@ def expand_vars(vars, expr):
         for var in _var_re.finditer(expr):
             name = var.group(1) or var.group(2)
             value = vars[name]
-            new_val = new_val + expr[last_idx:var.start()] + value
+            new_val = new_val + expr[last_idx:var.start()].replace('$$', '$') + value
             last_idx = var.end()
 
-        new_val = new_val + expr[last_idx:]
+        new_val = new_val + expr[last_idx:].replace('$$', '$')
         return new_val
     if hasattr(expr, 'items'):
         expr = expr.copy()
