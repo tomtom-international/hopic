@@ -298,6 +298,9 @@ def cli(ctx, color, config, workspace):
     if ctx.obj.version is not None:
         click.echo("[DEBUG]: read version: \x1B[34m{ctx.obj.version}\x1B[39m".format(**locals()), err=True)
         ctx.obj.volume_vars['VERSION'] = str(ctx.obj.version)
+        # FIXME: make this conversion work even when not using SemVer as versioning policy
+        # Convert SemVer to Debian version: '~' for pre-release instead of '-'
+        ctx.obj.volume_vars['DEBVERSION'] = ctx.obj.volume_vars['VERSION'].replace('-', '~', 1).replace('.dirty.', '+dirty', 1)
 
 @cli.command()
 @click.option('--target-remote'     , metavar='<url>')
