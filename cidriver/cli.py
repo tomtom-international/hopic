@@ -268,6 +268,7 @@ def cli(ctx, color, config, workspace):
             pass
 
     if config is not None:
+        ctx.obj.volume_vars['CFGDIR'] = os.path.dirname(config)
         cfg = ctx.obj.config = read_config(config, ctx.obj.volume_vars)
     else:
         cfg = {}
