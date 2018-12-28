@@ -41,7 +41,7 @@ class ChangeRequest
     return this.maySubmitImpl(target_commit, source_commit, allow_cache)
   }
 
-  public def apply(cmd, source_remote = null) {
+  public def apply(cmd, source_remote) {
     assert false : "Change request instance does not override apply()"
   }
 }
@@ -143,7 +143,7 @@ class SpecialModalityRequest extends ChangeRequest
     this.modality = modality
   }
 
-  public def apply(cmd, source_remote = null) {
+  public def apply(cmd, source_remote) {
     def author_time = steps.currentBuild.timeInMillis / 1000.0
     def commit_time = steps.currentBuild.startTimeInMillis / 1000.0
     def output = steps.sh(script: cmd
@@ -352,7 +352,7 @@ exec ssh -i '''
         cmd += ' --config=' + shell_quote("${workspace}/${config_file}")
       }
       if (this.get_change() != null) {
-        def submit_info = this.get_change().apply(cmd, target_remote)
+        def submit_info = this.get_change().apply(cmd, steps.scm.userRemoteConfigs[0].url)
         if (submit_info == null)
         {
           try {
