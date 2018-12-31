@@ -248,14 +248,26 @@ def cli(ctx, color, config, workspace):
 
     ctx.obj.volume_vars = {}
     if workspace is not None:
-        ctx.obj.volume_vars['WORKSPACE'] = workspace
-        source_date = determine_source_date(workspace)
+        if git_has_work_tree(workspace):
+            try:
+                code_dir = subprocess.check_output((
+                        'git', 'config', '--get', '--null',
+                        'ci-driver.code-dir',
+                    ), cwd=workspace).rstrip(b'\0').decode('UTF-8')
+            except subprocess.CalledProcessError:
+                code_dir = workspace
+            else:
+                code_dir = os.path.join(workspace, code_dir)
+
+        ctx.obj.code_dir = ctx.obj.volume_vars['WORKSPACE'] = code_dir
+        source_date = determine_source_date(code_dir)
         if source_date is not None:
             ctx.obj.source_date = source_date
             ctx.obj.source_date_epoch = int((
                     source_date - datetime(1970, 1, 1, 0, 0, 0)
                 ).total_seconds())
             ctx.obj.volume_vars['SOURCE_DATE_EPOCH'] = str(ctx.obj.source_date_epoch)
+    ctx.obj.register_dependent_attribute('code_dir', 'workspace')
     ctx.obj.register_dependent_attribute('source_date', 'workspace')
     ctx.obj.register_dependent_attribute('source_date_epoch', 'workspace')
 
@@ -282,12 +294,12 @@ def cli(ctx, color, config, workspace):
         fname = version_info['file']
         if os.path.isfile(fname):
             ctx.obj.version = read_version(fname, **params)
-    if 'tag' in version_info and ctx.obj.version is None and git_has_work_tree(workspace):
+    if 'tag' in version_info and ctx.obj.version is None and git_has_work_tree(ctx.obj.volume_vars.get('WORKSPACE')):
         try:
             describe_out = echo_cmd(subprocess.check_output, (
                     'git', 'describe', '--tags', '--long', '--dirty', '--always'
                 ),
-                cwd=workspace,
+                cwd=ctx.obj.code_dir,
             ).strip()
 
             params = {}
@@ -302,6 +314,53 @@ def cli(ctx, color, config, workspace):
         # FIXME: make this conversion work even when not using SemVer as versioning policy
         # Convert SemVer to Debian version: '~' for pre-release instead of '-'
         ctx.obj.volume_vars['DEBVERSION'] = ctx.obj.volume_vars['VERSION'].replace('-', '~', 1).replace('.dirty.', '+dirty', 1)
+
+def checkout_tree(tree, remote, ref, clean):
+    if not git_has_work_tree(tree):
+        echo_cmd(subprocess.check_call, ('git', 'clone', '-c' 'color.ui=always', remote, tree))
+    echo_cmd(subprocess.call, ('git', 'config', '--remove-section', 'ci-driver'), cwd=tree)
+    echo_cmd(subprocess.check_call, ('git', 'config', 'color.ui', 'always'), cwd=tree)
+    tags = tuple(tag.strip() for tag in echo_cmd(subprocess.check_output, ('git', 'tag'), cwd=tree).split('\n') if tag.strip())
+    if tags:
+        echo_cmd(subprocess.check_call, ('git', 'tag', '-d') + tags, cwd=tree, stdout=sys.stderr)
+    echo_cmd(subprocess.check_call, ('git', 'fetch', '--tags', remote, ref), cwd=tree)
+    commit = echo_cmd(subprocess.check_output, ('git', 'rev-parse', 'FETCH_HEAD'), cwd=tree).strip()
+    echo_cmd(subprocess.check_call, ('git', 'checkout', '--force', commit), cwd=tree)
+    if clean:
+      echo_cmd(subprocess.check_call, ('git', 'clean', '--force', '-xd'), cwd=tree, stdout=sys.stderr)
+
+    echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.{commit}.ref'.format(**locals()), ref), cwd=tree)
+    echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.{commit}.remote'.format(**locals()), remote), cwd=tree)
+
+    files = subprocess.check_output(('git', 'ls-files', '-z'), cwd=tree).split(b'\0')
+    if files and not files[-1]:
+        del files[-1]
+    files = set(files)
+
+    # Set all files' modification times to their last commit's time
+    encoding = sys.getfilesystemencoding() or sys.getdefaultencoding()
+    with open(os.devnull) as devnull:
+        whatchanged = subprocess.Popen(('git', 'whatchanged', '--pretty=format:%ct'), cwd=tree, stdout=subprocess.PIPE, stderr=devnull)
+        mtime = 0
+        for line in whatchanged.stdout:
+            if not files:
+                break
+
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith(b':'):
+                filename = line.split(b'\t')[-1]
+                if filename in files:
+                    files.remove(filename)
+                    os.utime(os.path.join(tree.encode(encoding), filename), (mtime, mtime))
+            else:
+                mtime = int(line)
+        try:
+            whatchanged.terminate()
+        except OSError:
+            pass
+    return commit
 
 @cli.command()
 @click.option('--target-remote'     , metavar='<url>')
@@ -318,57 +377,34 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
     try:
         git_cfg = ctx.obj.config.get('scm', {}).get('git', {})
     except:
-        pass
-    else:
+        git_cfg = {}
+        code_dir = None
+    if 'remote' in git_cfg or 'ref' in git_cfg:
         if target_remote is None:
             target_remote = git_cfg.get('remote')
         if target_ref is None:
             target_ref = git_cfg.get('ref')
 
-    if not git_has_work_tree(workspace):
-        echo_cmd(subprocess.check_call, ('git', 'clone', '-c' 'color.ui=always', target_remote, workspace))
-    echo_cmd(subprocess.check_call, ('git', 'config', 'color.ui', 'always'), cwd=workspace)
-    tags = tuple(tag.strip() for tag in echo_cmd(subprocess.check_output, ('git', 'tag'), cwd=workspace).split('\n') if tag.strip())
-    if tags:
-        echo_cmd(subprocess.check_call, ('git', 'tag', '-d') + tags, cwd=workspace, stdout=sys.stderr)
-    echo_cmd(subprocess.check_call, ('git', 'fetch', '--tags', target_remote, target_ref), cwd=workspace)
-    commit = echo_cmd(subprocess.check_output, ('git', 'rev-parse', 'FETCH_HEAD'), cwd=workspace).strip()
-    echo_cmd(subprocess.check_call, ('git', 'checkout', '--force', commit), cwd=workspace)
-    if clean:
-      echo_cmd(subprocess.check_call, ('git', 'clean', '--force', '-xd'), cwd=workspace, stdout=sys.stderr)
-    click.echo(commit)
-
-    echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.{commit}.ref'.format(**locals()), target_ref), cwd=workspace)
-    echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.{commit}.remote'.format(**locals()), target_remote), cwd=workspace)
-
-    files = subprocess.check_output(('git', 'ls-files', '-z'), cwd=workspace).split(b'\0')
-    if files and not files[-1]:
-        del files[-1]
-    files = set(files)
-
-    # Set all files' modification times to their last commit's time
-    encoding = sys.getfilesystemencoding() or sys.getdefaultencoding()
-    with open(os.devnull) as devnull:
-        whatchanged = subprocess.Popen(('git', 'whatchanged', '--pretty=format:%ct'), cwd=workspace, stdout=subprocess.PIPE, stderr=devnull)
-        mtime = 0
-        for line in whatchanged.stdout:
-            if not files:
+        code_dir_re = re.compile(r'^code(?:-\d+)$')
+        code_dirs = sorted(dir for dir in os.listdir(workspace) if code_dir_re.match(dir))
+        for dir in code_dirs:
+            if git_has_work_tree(os.path.join(workspace, dir)):
+                code_dir = dir
                 break
+        else:
+            seq = 0
+            while True:
+                dir = ('code' if seq == 0 else 'code-{seq:03}'.format(seq=seq))
+                seq += 1
+                if dir not in code_dirs:
+                    code_dir = dir
+                    break
 
-            line = line.strip()
-            if not line:
-                continue
-            if line.startswith(b':'):
-                filename = line.split(b'\t')[-1]
-                if filename in files:
-                    files.remove(filename)
-                    os.utime(os.path.join(workspace.encode(encoding), filename), (mtime, mtime))
-            else:
-                mtime = int(line)
-        try:
-            whatchanged.terminate()
-        except OSError:
-            pass
+    click.echo(checkout_tree(workspace, target_remote, target_ref, clean))
+    if code_dir:
+        code_workspace = os.path.join(workspace, code_dir)
+        echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.code-dir', code_dir), cwd=workspace)
+        checkout_tree(code_workspace, git_cfg.get('remote', target_remote), git_cfg.get('ref', target_ref), clean)
 
 @cli.group()
 # git
@@ -748,14 +784,14 @@ def build(ctx, phase, variant):
                 if image is None:
                     new_env.update(env)
                 try:
-                    echo_cmd(subprocess.check_call, cmd, env=new_env, cwd=ctx.obj.workspace)
+                    echo_cmd(subprocess.check_call, cmd, env=new_env, cwd=ctx.obj.code_dir)
                 except subprocess.CalledProcessError as e:
                     click.secho("Command fatally terminated with exit code {}".format(e.returncode), fg='red', err=True)
                     sys.exit(e.returncode)
 
             # Post-processing to make these artifacts as reproducible as possible
             for artifact in artifacts:
-                binary_normalize.normalize(os.path.join(ctx.obj.workspace, artifact), source_date_epoch=ctx.obj.source_date_epoch)
+                binary_normalize.normalize(os.path.join(ctx.obj.code_dir, artifact), source_date_epoch=ctx.obj.source_date_epoch)
 
 @cli.command()
 @click.option('--target-remote', metavar='<url>', help='''The remote to push to, if not specified this will default to the checkout remote.''')

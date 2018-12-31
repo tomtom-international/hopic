@@ -320,9 +320,8 @@ exec ssh -i '''
     def cmd = this.install_prerequisites()
 
     def venv = steps.pwd(tmp: true) + "/cidriver-venv"
-    def base_dir = steps.pwd()
+    def workspace = steps.pwd()
     def have_remote_code_config = this.config.containsKey('scm') && this.config.scm.containsKey('git')
-    def workspace = have_remote_code_config ? "${base_dir}/code" : base_dir
 
     cmd += ' --workspace=' + shell_quote(workspace)
 
@@ -331,17 +330,11 @@ exec ssh -i '''
       params += ' --clean'
     }
     if (have_remote_code_config) {
-      steps.checkout(scm: [
-          $class: 'GitSCM',
-          userRemoteConfigs: [steps.scm.userRemoteConfigs[0]],
-          extensions: [[$class: 'RelativeTargetDirectory', relativeTargetDir: 'config']],
-        ])
-      steps.println(steps.scm.branches)
-      cmd += ' --config=' + shell_quote("${base_dir}/config/${config_file}")
-    } else {
-      params += ' --target-remote=' + shell_quote(steps.scm.userRemoteConfigs[0].url)
-      params += ' --target-ref='    + shell_quote(steps.env.CHANGE_TARGET ?: steps.env.BRANCH_NAME)
+      cmd += ' --config=' + shell_quote("${workspace}/${config_file}")
     }
+
+    params += ' --target-remote=' + shell_quote(steps.scm.userRemoteConfigs[0].url)
+    params += ' --target-ref='    + shell_quote(steps.env.CHANGE_TARGET ?: steps.env.BRANCH_NAME)
 
     steps.env.GIT_COMMIT = this.with_credentials() {
       this.target_commit = steps.sh(script: cmd
@@ -370,6 +363,10 @@ exec ssh -i '''
         return submit_info.commit
       }
       return this.target_commit
+    }
+
+    if (have_remote_code_config) {
+      workspace = steps.sh(script: 'git config --get ci-driver.code-dir', returnStdout: true).trim()
     }
 
     return [
