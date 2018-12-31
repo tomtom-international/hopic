@@ -690,8 +690,13 @@ def build(ctx, phase, variant):
                         try:
                             af = cmd[artifact_key]['artifacts']
                             if isinstance(af, string_types):
-                                af = [af]
-                            af = [expand_vars(volume_vars, f) for f in af]
+                                # Convert single artifact string to list of single artifact specification
+                                af = [{'pattern': af}]
+
+                            # Expand short hand notation of just the artifact pattern to a full dictionary
+                            af = [({'pattern': f} if isinstance(f, string_types) else f) for f in af]
+
+                            af = [expand_vars(volume_vars, f['pattern']) for f in af if 'pattern' in f]
                             artifacts.extend(af)
                         except (KeyError, TypeError):
                             pass

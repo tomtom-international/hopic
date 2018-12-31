@@ -588,18 +588,26 @@ exec ssh -i '''
                       if (artifacts == null) {
                         steps.error("Archive configuration entry for ${phase}.${variant} does not contain 'artifacts' property")
                       }
+                      // Convert single artifact string to list of single artifact specification
                       if (artifacts instanceof String) {
-                        artifacts = [artifacts]
+                        artifacts = [[pattern: artifacts]]
+                      }
+                      // Expand short hand notation of just the artifact pattern to a full dictionary
+                      artifacts = artifacts.collect { artifact ->
+                        if (artifact instanceof String) {
+                          artifact = [pattern: artifact]
+                        }
+                        return artifact
                       }
                       steps.dir(this.checkouts[steps.env.NODE_NAME].workspace) {
                         artifacts.each { artifact ->
                           if (archiving_cfg == 'archive') {
                             steps.archiveArtifacts(
-                                artifacts: artifact,
+                                artifacts: artifact.pattern,
                                 fingerprint: meta.archive.getOrDefault('fingerprint', true),
                               )
                           } else (archiving_cfg == 'fingerprint') {
-                            steps.fingerprint(targets: artifact)
+                            steps.fingerprint(targets: artifact.pattern)
                           }
                         }
                         if (meta[archiving_cfg].containsKey('upload-artifactory')) {
@@ -614,10 +622,14 @@ exec ssh -i '''
 
                           def uploadSpec = JsonOutput.toJson([
                               files: artifacts.collect { artifact ->
-                                [
-                                  pattern: artifact,
+                                def fileSpec = [
+                                  pattern: artifact.pattern,
                                   target: target,
                                 ]
+                                if (artifact.props != null) {
+                                  fileSpec.props = artifact.props
+                                }
+                                return fileSpec
                               }
                             ])
                           def server = steps.Artifactory.server server_id
