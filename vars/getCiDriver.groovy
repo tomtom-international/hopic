@@ -174,7 +174,6 @@ class CiDriver
   private nodes           = [:]
   private checkouts       = [:]
   private stashes         = [:]
-  private config          = null
   private submit_version  = null
   private change          = null
   private source_commit   = "HEAD"
@@ -375,21 +374,6 @@ exec ssh -i '''
     return this.submit_version
   }
 
-  public def get_variants(phase = null) {
-    def variants = []
-    this.config.getOrDefault('phases', [:]).each { curphase ->
-      if (phase && curphase.key != phase) {
-        return
-      }
-      curphase.value.each { -> variant
-        if (!variants.contains(variant.key)) {
-          variants.add(variant.key)
-        }
-      }
-    }
-    return variants
-  }
-
   public def has_change() {
     return this.get_change() != null
   }
@@ -457,21 +441,17 @@ exec ssh -i '''
         }
 
         cmd += ' --config=' + shell_quote("${workspace}/${config_file}")
-        this.config = steps.readJSON(text: steps.sh(
-            script: "${cmd} show-config",
-            returnStdout: true,
-          ))
 
-        return this.config.getOrDefault('phases', [:]).collect { phase ->
+        return steps.sh(script: "${cmd} phases", returnStdout: true).split("\\r?\\n").collect { phase ->
           [
-            phase: phase.key,
-            variants: phase.value.collect { variant ->
+            phase: phase,
+            variants: steps.sh(script: "${cmd} variants --phase=" + shell_quote(phase), returnStdout: true).split("\\r?\\n").collect { variant ->
               def meta = steps.readJSON(text: steps.sh(
-                  script: "${cmd} getinfo --phase=" + shell_quote(phase.key) + ' --variant=' + shell_quote(variant.key),
+                  script: "${cmd} getinfo --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant),
                   returnStdout: true,
                 ))
               [
-                variant: variant.key,
+                variant: variant,
                 label: meta.getOrDefault('node-label', default_node_expr),
                 run_on_change: meta.getOrDefault('run-on-change', 'always'),
               ]
