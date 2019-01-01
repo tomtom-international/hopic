@@ -219,7 +219,7 @@ def cli_autocomplete_modality_from_config(ctx, args, incomplete):
 
 @click.group(context_settings=dict(help_option_names=('-h', '--help')))
 @click.option('--color', type=click.Choice(('always', 'auto', 'never')), default='auto')
-@click.option('--config', type=click.Path(exists=True, readable=True, resolve_path=True))
+@click.option('--config', type=click.Path(exists=False, file_okay=True, dir_okay=False, readable=True, resolve_path=True))
 @click.option('--workspace', type=click.Path(exists=False, file_okay=False, dir_okay=True))
 @click.pass_context
 def cli(ctx, color, config, workspace):
@@ -245,19 +245,29 @@ def cli(ctx, color, config, workspace):
                             ctx=ctx, param=param
                         )
             ctx.obj.workspace = workspace
+        elif param.human_readable_name == 'config' and config is not None:
+            if ctx.invoked_subcommand != 'checkout-source-tree':
+                # Require the config file to exist for anything but the checkout command
+                try:
+                    os.stat(config)
+                except OSError:
+                    raise click.BadParameter(
+                            'File "{config}" does not exist.'.format(**locals()),
+                            ctx=ctx, param=param
+                        )
 
     ctx.obj.volume_vars = {}
     if workspace is not None:
+        code_dir = workspace
         if git_has_work_tree(workspace):
             try:
-                code_dir = subprocess.check_output((
+                code_dir = os.path.join(workspace,
+                    subprocess.check_output((
                         'git', 'config', '--get', '--null',
                         'ci-driver.code-dir',
-                    ), cwd=workspace).rstrip(b'\0').decode('UTF-8')
+                    ), cwd=workspace).rstrip(b'\0').decode('UTF-8'))
             except subprocess.CalledProcessError:
-                code_dir = workspace
-            else:
-                code_dir = os.path.join(workspace, code_dir)
+                pass
 
         ctx.obj.code_dir = ctx.obj.volume_vars['WORKSPACE'] = code_dir
         source_date = determine_source_date(code_dir)
@@ -279,11 +289,13 @@ def cli(ctx, color, config, workspace):
         except KeyError:
             pass
 
+    cfg = {}
     if config is not None:
+        ctx.obj.config_file = config
         ctx.obj.volume_vars['CFGDIR'] = os.path.dirname(config)
-        cfg = ctx.obj.config = read_config(config, ctx.obj.volume_vars)
-    else:
-        cfg = {}
+        if os.path.isfile(config):
+            cfg = ctx.obj.config = read_config(config, ctx.obj.volume_vars)
+    ctx.obj.register_dependent_attribute('config_file', 'config')
 
     ctx.obj.version = None
     version_info = cfg.get('version', {})
@@ -374,37 +386,37 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
 
     workspace = ctx.obj.workspace
 
-    try:
-        git_cfg = ctx.obj.config.get('scm', {}).get('git', {})
-    except:
-        git_cfg = {}
-        code_dir = None
-    if 'remote' in git_cfg or 'ref' in git_cfg:
-        if target_remote is None:
-            target_remote = git_cfg.get('remote')
-        if target_ref is None:
-            target_ref = git_cfg.get('ref')
+    # Check out specified repository
+    click.echo(checkout_tree(workspace, target_remote, target_ref, clean))
 
-        code_dir_re = re.compile(r'^code(?:-\d+)$')
-        code_dirs = sorted(dir for dir in os.listdir(workspace) if code_dir_re.match(dir))
-        for dir in code_dirs:
-            if git_has_work_tree(os.path.join(workspace, dir)):
+    try:
+        ctx.obj.config = read_config(ctx.obj.config_file, ctx.obj.volume_vars)
+        git_cfg = ctx.obj.config['scm']['git']
+    except:
+        return
+
+    if 'remote' not in git_cfg and 'ref' not in git_cfg:
+        return
+
+    code_dir_re = re.compile(r'^code(?:-\d+)$')
+    code_dirs = sorted(dir for dir in os.listdir(workspace) if code_dir_re.match(dir))
+    for dir in code_dirs:
+        if git_has_work_tree(os.path.join(workspace, dir)):
+            code_dir = dir
+            break
+    else:
+        seq = 0
+        while True:
+            dir = ('code' if seq == 0 else 'code-{seq:03}'.format(seq=seq))
+            seq += 1
+            if dir not in code_dirs:
                 code_dir = dir
                 break
-        else:
-            seq = 0
-            while True:
-                dir = ('code' if seq == 0 else 'code-{seq:03}'.format(seq=seq))
-                seq += 1
-                if dir not in code_dirs:
-                    code_dir = dir
-                    break
 
-    click.echo(checkout_tree(workspace, target_remote, target_ref, clean))
-    if code_dir:
-        code_workspace = os.path.join(workspace, code_dir)
-        echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.code-dir', code_dir), cwd=workspace)
-        checkout_tree(code_workspace, git_cfg.get('remote', target_remote), git_cfg.get('ref', target_ref), clean)
+    # Check out configured repository and mark it as the code directory of this one
+    code_workspace = os.path.join(workspace, code_dir)
+    echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.code-dir', code_dir), cwd=workspace)
+    checkout_tree(code_workspace, git_cfg.get('remote', target_remote), git_cfg.get('ref', target_ref), clean)
 
 @cli.group()
 # git

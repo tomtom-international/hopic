@@ -319,18 +319,16 @@ exec ssh -i '''
   private def checkout(clean = false) {
     def cmd = this.install_prerequisites()
 
-    def venv = steps.pwd(tmp: true) + "/cidriver-venv"
+    def tmpdir = steps.pwd(tmp: true)
+    def venv = tmpdir + "/cidriver-venv"
     def workspace = steps.pwd()
-    def have_remote_code_config = this.config.containsKey('scm') && this.config.scm.containsKey('git')
 
     cmd += ' --workspace=' + shell_quote(workspace)
+    cmd += ' --config=' + shell_quote("${workspace}/${config_file}")
 
     def params = ''
     if (clean) {
       params += ' --clean'
-    }
-    if (have_remote_code_config) {
-      cmd += ' --config=' + shell_quote("${workspace}/${config_file}")
     }
 
     params += ' --target-remote=' + shell_quote(steps.scm.userRemoteConfigs[0].url)
@@ -341,9 +339,6 @@ exec ssh -i '''
                                           + ' checkout-source-tree'
                                           + params,
                                     returnStdout: true).trim()
-      if (!have_remote_code_config) {
-        cmd += ' --config=' + shell_quote("${workspace}/${config_file}")
-      }
       if (this.get_change() != null) {
         def submit_info = this.get_change().apply(cmd, steps.scm.userRemoteConfigs[0].url)
         if (submit_info == null)
@@ -365,8 +360,9 @@ exec ssh -i '''
       return this.target_commit
     }
 
-    if (have_remote_code_config) {
-      workspace = steps.sh(script: 'git config --get ci-driver.code-dir', returnStdout: true).trim()
+    def code_dir_output = tmpdir + '/code-dir.txt'
+    if (steps.sh(script: 'git config --get ci-driver.code-dir > ' + shell_quote(code_dir_output), returnStatus: true) == 0) {
+      workspace = steps.readFile(code_dir_output).trim()
     }
 
     return [
