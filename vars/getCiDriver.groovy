@@ -474,14 +474,10 @@ exec ssh -i '''
                   script: "${cmd} getinfo --phase=" + shell_quote(phase.key) + ' --variant=' + shell_quote(variant.key),
                   returnStdout: true,
                 ))
-              def run_on_change = meta.getOrDefault('run-on-change', 'always')
-              if (run_on_change instanceof Boolean) {
-                run_on_change = run_on_change ? 'always' : 'never'
-              }
               [
                 variant: variant.key,
                 label: meta.getOrDefault('node-label', default_node_expr),
-                run_on_change: run_on_change,
+                run_on_change: meta.getOrDefault('run-on-change', 'always'),
               ]
             }
           ]
@@ -553,11 +549,8 @@ exec ssh -i '''
                     } finally {
                       if (meta.containsKey('junit')) {
                         def results = meta.junit
-                        if (results instanceof String) {
-                          results = [results]
-                        }
                         steps.dir(this.checkouts[steps.env.NODE_NAME].workspace) {
-                          results.each { result ->
+                          meta.junit.each { result ->
                             steps.junit(result)
                           }
                         }
@@ -584,17 +577,6 @@ exec ssh -i '''
                       def artifacts = meta[archiving_cfg].artifacts
                       if (artifacts == null) {
                         steps.error("Archive configuration entry for ${phase}.${variant} does not contain 'artifacts' property")
-                      }
-                      // Convert single artifact string to list of single artifact specification
-                      if (artifacts instanceof String) {
-                        artifacts = [[pattern: artifacts]]
-                      }
-                      // Expand short hand notation of just the artifact pattern to a full dictionary
-                      artifacts = artifacts.collect { artifact ->
-                        if (artifact instanceof String) {
-                          artifact = [pattern: artifact]
-                        }
-                        return artifact
                       }
                       steps.dir(this.checkouts[steps.env.NODE_NAME].workspace) {
                         artifacts.each { artifact ->

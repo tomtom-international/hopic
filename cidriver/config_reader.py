@@ -155,4 +155,30 @@ def read(config, volume_vars):
         cfg = yaml.load(f, OrderedImageLoader)
 
     cfg['volumes'] = expand_docker_volume_spec(config_dir, volume_vars, cfg.get('volumes', ()))
+
+    # Convert multiple different syntaxes into a single one
+    for phase in cfg.get('phases', {}).values():
+        for variant in phase.values():
+            for var in variant:
+                if isinstance(var, string_types):
+                    continue
+                if isinstance(var, (OrderedDict, dict)):
+                    for var_key in var:
+                        if var_key == 'run-on-change' and isinstance(var[var_key], bool):
+                            var[var_key] = 'always' if var[var_key] else 'never'
+                        if var_key in ('archive', 'fingerprint') and isinstance(var[var_key], (OrderedDict, dict)) and 'artifacts' in var[var_key]:
+                            artifacts = var[var_key]['artifacts']
+
+                            # Convert single artifact string to list of single artifact specification
+                            if isinstance(artifacts, string_types):
+                                artifacts = [{'pattern': artifacts}]
+
+                            # Expand short hand notation of just the artifact pattern to a full dictionary
+                            artifacts = [({'pattern': artifact} if isinstance(artifact, string_types) else artifact) for artifact in artifacts]
+
+                            var[var_key]['artifacts'] = artifacts
+                        if var_key == 'junit':
+                            if isinstance(var[var_key], string_types):
+                                var[var_key] = [var[var_key]]
+
     return cfg
