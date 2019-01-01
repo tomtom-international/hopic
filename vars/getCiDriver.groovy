@@ -561,7 +561,7 @@ exec ssh -i '''
                                 artifacts: artifact.pattern,
                                 fingerprint: meta.archive.getOrDefault('fingerprint', true),
                               )
-                          } else (archiving_cfg == 'fingerprint') {
+                          } else if (archiving_cfg == 'fingerprint') {
                             steps.fingerprint(targets: artifact.pattern)
                           }
                         }
