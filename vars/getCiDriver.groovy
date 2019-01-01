@@ -360,7 +360,7 @@ exec ssh -i '''
     }
 
     def code_dir_output = tmpdir + '/code-dir.txt'
-    if (steps.sh(script: 'git config --get ci-driver.code-dir > ' + shell_quote(code_dir_output), returnStatus: true) == 0) {
+    if (steps.sh(script: 'git config --get ci-driver.code.dir > ' + shell_quote(code_dir_output), returnStatus: true) == 0) {
       workspace = steps.readFile(code_dir_output).trim()
     }
 

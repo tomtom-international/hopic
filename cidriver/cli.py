@@ -264,7 +264,7 @@ def cli(ctx, color, config, workspace):
                 code_dir = os.path.join(workspace,
                     subprocess.check_output((
                         'git', 'config', '--get', '--null',
-                        'ci-driver.code-dir',
+                        'ci-driver.code.dir',
                     ), cwd=workspace).rstrip(b'\0').decode('UTF-8'))
             except subprocess.CalledProcessError:
                 pass
@@ -330,7 +330,7 @@ def cli(ctx, color, config, workspace):
 def checkout_tree(tree, remote, ref, clean):
     if not git_has_work_tree(tree):
         echo_cmd(subprocess.check_call, ('git', 'clone', '-c' 'color.ui=always', remote, tree))
-    echo_cmd(subprocess.call, ('git', 'config', '--remove-section', 'ci-driver'), cwd=tree)
+    echo_cmd(subprocess.call, ('git', 'config', '--remove-section', 'ci-driver.code'), cwd=tree)
     echo_cmd(subprocess.check_call, ('git', 'config', 'color.ui', 'always'), cwd=tree)
     tags = tuple(tag.strip() for tag in echo_cmd(subprocess.check_output, ('git', 'tag'), cwd=tree).split('\n') if tag.strip())
     if tags:
@@ -414,9 +414,13 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
                 break
 
     # Check out configured repository and mark it as the code directory of this one
-    code_workspace = os.path.join(workspace, code_dir)
-    echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.code-dir', code_dir), cwd=workspace)
-    checkout_tree(code_workspace, git_cfg.get('remote', target_remote), git_cfg.get('ref', target_ref), clean)
+    ctx.obj.code_dir = os.path.join(workspace, code_dir)
+    echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.code.dir', code_dir), cwd=workspace)
+    echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.code.cfg-remote', target_remote), cwd=workspace)
+    echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.code.cfg-ref', target_ref), cwd=workspace)
+    echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.code.cfg-clean', str(clean)), cwd=workspace)
+
+    checkout_tree(ctx.obj.code_dir, git_cfg.get('remote', target_remote), git_cfg.get('ref', target_ref), clean)
 
 @cli.group()
 # git
@@ -441,7 +445,6 @@ def process_prepare_source_tree(
         author_date,
         commit_date,
     ):
-    cfg = getattr(ctx.obj, 'config', {})
     workspace = ctx.obj.workspace
     assert git_has_work_tree(workspace)
 
@@ -464,7 +467,26 @@ def process_prepare_source_tree(
     if msg is None:
         return
 
-    version_info = cfg.get('version', {})
+    # Ensure that, when we're dealing with a separated config and code repository, that the code repository is checked out again to the newer version
+    if ctx.obj.code_dir != ctx.obj.workspace:
+        # Re-read config
+        ctx.obj.config = read_config(ctx.obj.config_file, ctx.obj.volume_vars)
+
+        try:
+            code_remote = ctx.obj.config['scm']['git']['remote']
+        except (KeyError, TypeError):
+            code_remote = echo_cmd(subprocess.check_output, ('git', 'config', '--get', 'ci-driver.code.cfg-remote'), cwd=workspace).strip()
+        try:
+            code_commit = ctx.obj.config['scm']['git']['ref']
+        except (KeyError, TypeError):
+            code_commit = echo_cmd(subprocess.check_output, ('git', 'config', '--get', 'ci-driver.code.cfg-ref'), cwd=workspace).strip()
+        code_clean = {'true': True,
+                'false': False,
+            }[echo_cmd(subprocess.check_output, ('git', 'config', '--get', '--bool', 'ci-driver.code.cfg-clean'), cwd=workspace).strip()]
+
+        checkout_tree(ctx.obj.code_dir, code_remote, code_commit, code_clean)
+
+    version_info = ctx.obj.config.get('version', {})
     version_tag  = version_info.get('tag', False)
     if version_tag and not isinstance(version_tag, string_types):
         version_tag = '{version.major}.{version.minor}.{version.patch}'
