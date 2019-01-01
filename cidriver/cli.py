@@ -701,6 +701,19 @@ def build(ctx, phase, variant):
     """
 
     cfg = ctx.obj.config
+
+    submit_commit = echo_cmd(subprocess.check_output, ('git', 'rev-parse', 'HEAD'), cwd=ctx.obj.workspace).strip()
+    try:
+        refspecs = tuple(refspec for refspec in
+            echo_cmd(subprocess.check_output, (
+                'git', 'config', '--get-all', '--null',
+                'ci-driver.{submit_commit}.refspec'.format(**locals())
+            )
+            , cwd=ctx.obj.workspace).split('\0') if refspec)
+    except subprocess.CalledProcessError as e:
+        refspecs = ()
+    has_change = bool(refspecs)
+
     for phasename, curphase in cfg['phases'].items():
         if phase is not None and phasename != phase:
             continue
@@ -725,6 +738,17 @@ def build(ctx, phase, variant):
 
             for cmd in cmds:
                 if not isinstance(cmd, string_types):
+                    try:
+                        run_on_change = cmd['run-on-change']
+                    except (KeyError, TypeError):
+                        pass
+                    else:
+                        if run_on_change == 'always':
+                            pass
+                        elif run_on_change == 'never' and has_change:
+                            break
+                        elif run_on_change == 'only' and not has_change:
+                            break
                     try:
                         desc = cmd['description']
                     except (KeyError, TypeError):
