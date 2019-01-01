@@ -562,7 +562,7 @@ exec ssh -i '''
                                 fingerprint: meta.archive.getOrDefault('fingerprint', true),
                               )
                           } else if (archiving_cfg == 'fingerprint') {
-                            steps.fingerprint(targets: artifact.pattern)
+                            steps.fingerprint(artifact.pattern)
                           }
                         }
                         if (meta[archiving_cfg].containsKey('upload-artifactory')) {
