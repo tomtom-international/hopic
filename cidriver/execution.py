@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import click
+import logging
 import os
 
 try:
@@ -20,8 +21,11 @@ try:
 except ImportError:
     from pipes import quote as shquote
 
+log = logging.getLogger(__name__)
+log.addHandler(logging.NullHandler())
+
 def echo_cmd(fun, cmd, *args, **kwargs):
-    click.echo('Executing: ' + click.style(' '.join(shquote(word) for word in cmd), fg='yellow'), err=True)
+    log.info('Executing: %s', click.style(' '.join(shquote(word) for word in cmd), fg='yellow'))
 
     # Set our locale for machine readability with UTF-8
     kwargs = kwargs.copy()
@@ -40,5 +44,5 @@ def echo_cmd(fun, cmd, *args, **kwargs):
         return (output.decode('UTF-8') if isinstance(output, bytes) else output)
     except Exception as e:
         if hasattr(e, 'child_traceback'):
-            click.echo("Child traceback: {}".format(e.child_traceback), err=True)
+            log.exception('Child traceback: %s', e.child_traceback)
         raise

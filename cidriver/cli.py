@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import click
+import click_log
 
 from . import binary_normalize
 from .config_reader import read as read_config
@@ -24,12 +25,16 @@ from dateutil.parser import parse as date_parse
 from dateutil.tz import (tzoffset, tzlocal, tzutc)
 from itertools import chain
 import json
+import logging
 import os
 import re
 import shlex
 from six import string_types
 import subprocess
 import sys
+
+log = logging.getLogger(__name__)
+log.addHandler(logging.NullHandler())
 
 class DateTime(click.ParamType):
     name = 'date'
@@ -131,7 +136,7 @@ def determine_source_date(workspace):
             file_date = datetime.utcfromtimestamp(st.st_mtime).replace(tzinfo=tzutc())
             source_date = max(source_date, file_date)
 
-    click.echo("[DEBUG]: Date of last modification to source: {source_date}".format(**locals()), err=True)
+    log.debug("Date of last modification to source: %s", source_date)
     return source_date
 
 def volume_spec_to_docker_param(volume):
@@ -231,10 +236,20 @@ def cli_autocomplete_modality_from_config(ctx, args, incomplete):
     except Exception:
         return ()
 
+def cli_autocomplete_click_log_verbosity(ctx, args, incomplete):
+    return (
+            'DEBUG',
+            'INFO',
+            'WARNING',
+            'ERROR',
+            'CRITICAL',
+        )
+
 @click.group(context_settings=dict(help_option_names=('-h', '--help')))
 @click.option('--color', type=click.Choice(('always', 'auto', 'never')), default='auto')
 @click.option('--config', type=click.Path(exists=False, file_okay=True, dir_okay=False, readable=True, resolve_path=True))
 @click.option('--workspace', type=click.Path(exists=False, file_okay=False, dir_okay=True))
+@click_log.simple_verbosity_option(__package__, autocompletion=cli_autocomplete_click_log_verbosity)
 @click.pass_context
 def cli(ctx, color, config, workspace):
     if color == 'always':
@@ -244,6 +259,8 @@ def cli(ctx, color, config, workspace):
     else:
         # leave as is: 'auto' is the default for Click
         pass
+
+    click_log.basic_config()
 
     ctx.obj = OptionContext()
     for param in ctx.command.params:
@@ -335,7 +352,7 @@ def cli(ctx, color, config, workspace):
         except subprocess.CalledProcessError:
             pass
     if ctx.obj.version is not None:
-        click.echo("[DEBUG]: read version: \x1B[34m{ctx.obj.version}\x1B[39m".format(**locals()), err=True)
+        log.debug("read version: \x1B[34m%s\x1B[39m", ctx.obj.version)
         ctx.obj.volume_vars['VERSION'] = str(ctx.obj.version)
         # FIXME: make this conversion work even when not using SemVer as versioning policy
         # Convert SemVer to Debian version: '~' for pre-release instead of '-'
@@ -510,7 +527,7 @@ def process_prepare_source_tree(
         if 'bump' in version_info:
             params['bump'] = version_info['bump']
         ctx.obj.version = ctx.obj.version.next_version(**params)
-        click.echo("[DEBUG]: bumped version to: \x1B[34m{ctx.obj.version}\x1B[39m".format(**locals()), err=True)
+        log.debug("bumped version to: \x1B[34m%s\x1B[39m", ctx.obj.version)
 
         if 'file' in version_info:
             replace_version(version_info['file'], ctx.obj.version)
@@ -636,7 +653,7 @@ def apply_modality_change(
 
             if 'description' in cmd:
                 desc = cmd['description']
-                click.echo('Performing: ' + click.style(desc, fg='cyan'), err=True)
+                log.info('Performing: %s', click.style(desc, fg='cyan'))
 
             if 'sh' in cmd:
                 args = shlex.split(cmd['sh'])
@@ -669,7 +686,7 @@ def apply_modality_change(
                 stdout=sys.stderr,
             )
         if changed is None or changed == 0:
-            click.echo("No changes introduced by '{commit_message}'".format(**locals()), err=True)
+            log.info("No changes introduced by '%s'", commit_message)
             return None
         return commit_message
     return change_applicator
@@ -790,7 +807,7 @@ def build(ctx, phase, variant):
                     except (KeyError, TypeError):
                         pass
                     else:
-                        click.echo('Performing: ' + click.style(desc, fg='cyan'), err=True)
+                        log.info('Performing: %s', click.style(desc, fg='cyan'))
                     for artifact_key in (
                             'archive',
                             'fingerprint',
@@ -850,7 +867,7 @@ def build(ctx, phase, variant):
                 try:
                     echo_cmd(subprocess.check_call, cmd, env=new_env, cwd=ctx.obj.code_dir)
                 except subprocess.CalledProcessError as e:
-                    click.secho("Command fatally terminated with exit code {}".format(e.returncode), fg='red', err=True)
+                    log.exception("Command fatally terminated with exit code %d", e.returncode)
                     sys.exit(e.returncode)
 
             # Post-processing to make these artifacts as reproducible as possible

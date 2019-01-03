@@ -20,6 +20,7 @@ setup(
     py_modules=('cidriver',),
     install_requires=(
       'Click>=7.0,<8.0',
+      'click-log',
       'python-dateutil',
       'PyYAML',
       'six',
