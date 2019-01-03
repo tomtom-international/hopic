@@ -21,7 +21,7 @@ from .execution import echo_cmd
 from .versioning import *
 from datetime import (datetime, timedelta)
 from dateutil.parser import parse as date_parse
-from dateutil.tz import (tzoffset, tzlocal)
+from dateutil.tz import (tzoffset, tzlocal, tzutc)
 from itertools import chain
 import json
 import os
@@ -86,7 +86,7 @@ def determine_source_date(workspace):
                     ),
                     cwd=workspace,
                 ).strip().decode('UTF-8'))
-            )
+            ).replace(tzinfo=tzutc())
     except TypeError:
         return None
 
@@ -128,7 +128,7 @@ def determine_source_date(workspace):
                 st = os.lstat(os.path.join(workspace, filename))
             except OSError:
                 pass
-            file_date = datetime.utcfromtimestamp(st.st_mtime)
+            file_date = datetime.utcfromtimestamp(st.st_mtime).replace(tzinfo=tzutc())
             source_date = max(source_date, file_date)
 
     click.echo("[DEBUG]: Date of last modification to source: {source_date}".format(**locals()), err=True)
@@ -288,7 +288,7 @@ def cli(ctx, color, config, workspace):
         if source_date is not None:
             ctx.obj.source_date = source_date
             ctx.obj.source_date_epoch = int((
-                    source_date - datetime(1970, 1, 1, 0, 0, 0)
+                    source_date - datetime.utcfromtimestamp(0).replace(tzinfo=tzutc())
                 ).total_seconds())
             ctx.obj.volume_vars['SOURCE_DATE_EPOCH'] = str(ctx.obj.source_date_epoch)
     ctx.obj.register_dependent_attribute('code_dir', 'workspace')
