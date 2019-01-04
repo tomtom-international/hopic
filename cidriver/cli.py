@@ -34,6 +34,12 @@ from six import string_types
 import subprocess
 import sys
 
+try:
+    from ConfigParser import NoSectionError
+except ImportError:
+    # PY3
+    from configparser import NoSectionError
+
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
 
@@ -258,15 +264,11 @@ def cli(ctx, color, config, workspace):
     ctx.obj.volume_vars = {}
     if workspace is not None:
         code_dir = workspace
-        if git_has_work_tree(workspace):
-            try:
-                code_dir = os.path.join(workspace,
-                    subprocess.check_output((
-                        'git', 'config', '--get', '--null',
-                        'ci-driver.code.dir',
-                    ), cwd=workspace).rstrip(b'\0').decode('UTF-8'))
-            except subprocess.CalledProcessError:
-                pass
+        try:
+            with git.Repo(workspace) as repo, repo.config_reader() as cfg:
+                code_dir = os.path.join(workspace, cfg.get_value('ci-driver.code', 'dir'))
+        except (git.InvalidGitRepositoryError, git.NoSuchPathError, NoSectionError):
+            pass
 
         ctx.obj.code_dir = ctx.obj.volume_vars['WORKSPACE'] = code_dir
         source_date = determine_source_date(code_dir)
@@ -305,20 +307,17 @@ def cli(ctx, color, config, workspace):
         fname = version_info['file']
         if os.path.isfile(fname):
             ctx.obj.version = read_version(fname, **params)
-    if 'tag' in version_info and ctx.obj.version is None and git_has_work_tree(ctx.obj.volume_vars.get('WORKSPACE')):
+    if 'tag' in version_info and ctx.obj.version is None and workspace is not None:
         try:
-            describe_out = echo_cmd(subprocess.check_output, (
-                    'git', 'describe', '--tags', '--long', '--dirty', '--always'
-                ),
-                cwd=ctx.obj.code_dir,
-            ).strip()
-
+            with git.Repo(ctx.obj.code_dir) as repo:
+                describe_out = repo.git.describe(tags=True, long=True, dirty=True, always=True)
+        except (git.InvalidGitRepositoryError, git.NoSuchPathError):
+            pass
+        else:
             params = {}
             if 'format' in version_info:
                 params['format'] = version_info['format']
             ctx.obj.version = parse_git_describe_version(describe_out, dirty_date=ctx.obj.source_date, **params)
-        except subprocess.CalledProcessError:
-            pass
     if ctx.obj.version is not None:
         log.debug("read version: \x1B[34m%s\x1B[39m", ctx.obj.version)
         ctx.obj.volume_vars['VERSION'] = str(ctx.obj.version)
