@@ -35,6 +35,11 @@ import subprocess
 import sys
 
 try:
+    from shlex import quote as shquote
+except ImportError:
+    from pipes import quote as shquote
+
+try:
     from ConfigParser import NoSectionError
 except ImportError:
     # PY3
@@ -544,23 +549,18 @@ def process_prepare_source_tree(
 
     echo_cmd(subprocess.check_call, ('git', 'show', '--format=fuller', '--stat', submit_commit), cwd=workspace, stdout=sys.stderr)
 
-    echo_cmd(subprocess.call, ('git', 'config', '--unset-all', 'ci-driver.{submit_commit}.refspec'.format(**locals())), cwd=workspace)
     echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.{submit_commit}.remote'.format(**locals()), target_remote), cwd=workspace)
+    refspecs = ['{submit_commit}:{target_ref}'.format(**locals())]
+    if tagname is not None:
+        refspecs.append('refs/tags/{tagname}:refs/tags/{tagname}'.format(**locals()))
     echo_cmd(subprocess.check_call, (
             'git', 'config', '--add',
-            'ci-driver.{submit_commit}.refspec'.format(**locals()),
-            '{submit_commit}:{target_ref}'.format(**locals()),
+            'ci-driver.{submit_commit}.refspecs'.format(**locals()),
+            ' '.join(shquote(refspec) for refspec in refspecs),
         ),
         cwd=workspace)
     if ctx.obj.version is not None:
         click.echo(ctx.obj.version)
-    if tagname is not None:
-        echo_cmd(subprocess.check_call, (
-                'git', 'config', '--add',
-                'ci-driver.{submit_commit}.refspec'.format(**locals()),
-                'refs/tags/{tagname}:refs/tags/{tagname}'.format(**locals()),
-            ),
-            cwd=workspace)
 
 @prepare_source_tree.command()
 # git
@@ -745,12 +745,11 @@ def build(ctx, phase, variant):
 
     submit_commit = echo_cmd(subprocess.check_output, ('git', 'rev-parse', 'HEAD'), cwd=ctx.obj.workspace).strip()
     try:
-        refspecs = tuple(refspec for refspec in
-            echo_cmd(subprocess.check_output, (
-                'git', 'config', '--get-all', '--null',
-                'ci-driver.{submit_commit}.refspec'.format(**locals())
-            )
-            , cwd=ctx.obj.workspace).split('\0') if refspec)
+        refspecs = tuple(shlex.split(echo_cmd(subprocess.check_output, (
+                'git', 'config', '--get',
+                'ci-driver.{submit_commit}.refspecs'.format(**locals())
+            ),
+            cwd=workspace)))
     except subprocess.CalledProcessError as e:
         refspecs = ()
     has_change = bool(refspecs)
@@ -877,12 +876,11 @@ def submit(ctx, target_remote):
     if target_remote is None:
         target_remote = echo_cmd(subprocess.check_output, ('git', 'config', '--get', 'ci-driver.{submit_commit}.remote'.format(**locals())), cwd=workspace).strip()
 
-    refspecs = tuple(refspec for refspec in
-        echo_cmd(subprocess.check_output, (
-            'git', 'config', '--get-all', '--null',
-            'ci-driver.{submit_commit}.refspec'.format(**locals())
-        )
-        , cwd=workspace).split('\0') if refspec)
+    refspecs = tuple(shlex.split(echo_cmd(subprocess.check_output, (
+            'git', 'config', '--get',
+            'ci-driver.{submit_commit}.refspecs'.format(**locals())
+        ),
+        cwd=workspace)))
     echo_cmd(subprocess.check_call, ('git', 'config', '--remove-section', 'ci-driver.{submit_commit}'.format(**locals())), cwd=workspace)
 
     echo_cmd(subprocess.check_call, ('git', 'push', '--atomic', target_remote) + refspecs, cwd=workspace)
