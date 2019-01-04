@@ -81,13 +81,6 @@ class DateTime(click.ParamType):
         except ValueError as e:
             self.fail('Could not parse datetime string "{value}": {e}'.format(value=value, e=' '.join(e.args)), param, ctx)
 
-def git_has_work_tree(workspace):
-    try:
-        with git.Repo(workspace):
-            return True
-    except (git.InvalidGitRepositoryError, git.NoSuchPathError):
-        return False
-
 def determine_source_date(workspace):
     """Determine the date of most recent change to the sources in the given workspace"""
     try:
@@ -748,14 +741,13 @@ def build(ctx, phase, variant):
 
     cfg = ctx.obj.config
 
-    submit_commit = echo_cmd(subprocess.check_output, ('git', 'rev-parse', 'HEAD'), cwd=ctx.obj.workspace).strip()
     try:
-        refspecs = tuple(shlex.split(echo_cmd(subprocess.check_output, (
-                'git', 'config', '--get',
-                'ci-driver.{submit_commit}.refspecs'.format(**locals())
-            ),
-            cwd=workspace)))
-    except subprocess.CalledProcessError as e:
+        with git.Repo(workspace) as repo:
+            submit_commit = repo.head.commit
+            section = 'ci-driver.{submit_commit}'.format(**locals())
+            with repo.config_reader() as git_cfg:
+                refspecs = tuple(shlex.split(cfg.get_value(section, 'refspecs')))
+    except:
         refspecs = ()
     has_change = bool(refspecs)
 
@@ -874,21 +866,22 @@ def submit(ctx, target_remote):
     Submit the changes created by prepare-source-tree to the target remote.
     """
 
-    workspace = ctx.obj.workspace
-    assert git_has_work_tree(workspace)
+    with git.Repo(ctx.obj.workspace) as repo:
+        section = 'ci-driver.{repo.head.commit}'.format(**locals())
+        with repo.config_writer() as cfg:
+            if target_remote is None:
+                target_remote = cfg.get_value(section, 'remote')
+            refspecs = shlex.split(cfg.get_value(section, 'refspecs'))
+            cfg.remove_section(section)
 
-    submit_commit = echo_cmd(subprocess.check_output, ('git', 'rev-parse', 'HEAD'), cwd=workspace).strip()
-    if target_remote is None:
-        target_remote = echo_cmd(subprocess.check_output, ('git', 'config', '--get', 'ci-driver.{submit_commit}.remote'.format(**locals())), cwd=workspace).strip()
+        try:
+            origin = repo.remotes.origin
+        except AttributeError:
+            origin = repo.create_remote('origin', target_remote)
+        else:
+            origin.set_url(target_remote)
 
-    refspecs = tuple(shlex.split(echo_cmd(subprocess.check_output, (
-            'git', 'config', '--get',
-            'ci-driver.{submit_commit}.refspecs'.format(**locals())
-        ),
-        cwd=workspace)))
-    echo_cmd(subprocess.check_call, ('git', 'config', '--remove-section', 'ci-driver.{submit_commit}'.format(**locals())), cwd=workspace)
-
-    echo_cmd(subprocess.check_call, ('git', 'push', '--atomic', target_remote) + refspecs, cwd=workspace)
+        origin.push(refspecs, atomic=True)
 
 @cli.command()
 @click.pass_context
