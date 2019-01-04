@@ -549,7 +549,7 @@ def process_prepare_source_tree(
 @click.option('--source-ref'    , metavar='<ref>', help='ref of <source> remote to merge into <target>')
 @click.option('--change-request', metavar='<identifier>'           , help='Identifier of change-request to use in merge commit message')
 @click.option('--title'         , metavar='<title>'                , help='''Change request title to incorporate in merge commit's subject line''')
-@click.option('--description'   , metavar='<description>'          , help='''Change request title to incorporate in merge commit's subject line''')
+@click.option('--description'   , metavar='<description>'          , help='''Change request description to incorporate in merge commit message's body''')
 def merge_change_request(
         source_remote,
         source_ref,
