@@ -597,7 +597,7 @@ def apply_modality_change(
     modality_cmds = ctx.obj.config.get('modality-source-preparation', {}).get(modality, ())
     def change_applicator(workspace):
         has_changed_files = False
-        message = modality
+        commit_message = modality
         for cmd in modality_cmds:
             try:
                 cmd["changed-files"]
@@ -606,7 +606,7 @@ def apply_modality_change(
             else:
                 has_changed_files = True
             try:
-                message = cmd["message"]
+                commit_message = cmd["commit-message"]
             except (KeyError, TypeError):
                 pass
 
@@ -655,9 +655,9 @@ def apply_modality_change(
                 stdout=sys.stderr,
             )
         if changed is None or changed == 0:
-            click.echo("No changes introduced by '{message}'".format(**locals()), err=True)
+            click.echo("No changes introduced by '{commit_message}'".format(**locals()), err=True)
             return None
-        return message
+        return commit_message
     return change_applicator
 
 @cli.command()
