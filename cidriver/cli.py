@@ -23,6 +23,7 @@ from .versioning import *
 from datetime import (datetime, timedelta)
 from dateutil.parser import parse as date_parse
 from dateutil.tz import (tzoffset, tzlocal, tzutc)
+import git
 from itertools import chain
 import json
 import logging
@@ -70,13 +71,11 @@ class DateTime(click.ParamType):
             self.fail('Could not parse datetime string "{value}": {e}'.format(value=value, e=' '.join(e.args)), param, ctx)
 
 def git_has_work_tree(workspace):
-    if not workspace or not os.path.isdir(os.path.join(workspace, '.git')):
-        return False
     try:
-        output = echo_cmd(subprocess.check_output, ('git', 'rev-parse', '--is-inside-work-tree'), cwd=workspace)
-    except subprocess.CalledProcessError:
+        with git.Repo(workspace):
+            return True
+    except (git.InvalidGitRepositoryError, git.NoSuchPathError):
         return False
-    return output.strip().lower() == 'true'
 
 def determine_source_date(workspace):
     """Determine the date of most recent change to the sources in the given workspace"""
@@ -250,6 +249,7 @@ def cli_autocomplete_click_log_verbosity(ctx, args, incomplete):
 @click.option('--config', type=click.Path(exists=False, file_okay=True, dir_okay=False, readable=True, resolve_path=True))
 @click.option('--workspace', type=click.Path(exists=False, file_okay=False, dir_okay=True))
 @click_log.simple_verbosity_option(__package__, autocompletion=cli_autocomplete_click_log_verbosity)
+@click_log.simple_verbosity_option('git', '--git-verbosity', autocompletion=cli_autocomplete_click_log_verbosity)
 @click.pass_context
 def cli(ctx, color, config, workspace):
     if color == 'always':
