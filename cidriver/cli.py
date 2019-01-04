@@ -326,31 +326,45 @@ def cli(ctx, color, config, workspace):
         ctx.obj.volume_vars['DEBVERSION'] = ctx.obj.volume_vars['VERSION'].replace('-', '~', 1).replace('.dirty.', '+dirty', 1)
 
 def checkout_tree(tree, remote, ref, clean):
-    if not git_has_work_tree(tree):
-        echo_cmd(subprocess.check_call, ('git', 'clone', '-c' 'color.ui=always', remote, tree))
-    echo_cmd(subprocess.call, ('git', 'config', '--remove-section', 'ci-driver.code'), cwd=tree)
-    echo_cmd(subprocess.check_call, ('git', 'config', 'color.ui', 'always'), cwd=tree)
-    tags = tuple(tag.strip() for tag in echo_cmd(subprocess.check_output, ('git', 'tag'), cwd=tree).split('\n') if tag.strip())
-    if tags:
-        echo_cmd(subprocess.check_call, ('git', 'tag', '-d') + tags, cwd=tree, stdout=sys.stderr)
-    echo_cmd(subprocess.check_call, ('git', 'fetch', '--tags', remote, ref), cwd=tree)
-    commit = echo_cmd(subprocess.check_output, ('git', 'rev-parse', 'FETCH_HEAD'), cwd=tree).strip()
-    echo_cmd(subprocess.check_call, ('git', 'checkout', '--force', commit), cwd=tree)
-    if clean:
-      echo_cmd(subprocess.check_call, ('git', 'clean', '--force', '-xd'), cwd=tree, stdout=sys.stderr)
+    try:
+        repo = git.Repo(tree)
+    except (git.InvalidGitRepositoryError, git.NoSuchPathError):
+        repo = git.Repo.clone_from(remote, tree)
 
-    echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.{commit}.ref'.format(**locals()), ref), cwd=tree)
-    echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.{commit}.remote'.format(**locals()), remote), cwd=tree)
+    with repo:
+        with repo.config_writer() as cfg:
+            cfg.remove_section('ci-driver.code')
+            cfg.set_value('color', 'ui', 'always')
 
-    files = subprocess.check_output(('git', 'ls-files', '-z'), cwd=tree).split(b'\0')
-    if files and not files[-1]:
-        del files[-1]
-    files = set(files)
+        tags = repo.tags
+        if tags:
+            repo.delete_tag(*repo.tags)
 
-    # Set all files' modification times to their last commit's time
-    encoding = sys.getfilesystemencoding() or sys.getdefaultencoding()
-    with open(os.devnull) as devnull:
-        whatchanged = subprocess.Popen(('git', 'whatchanged', '--pretty=format:%ct'), cwd=tree, stdout=subprocess.PIPE, stderr=devnull)
+        try:
+            origin = repo.remotes.origin
+        except AttributeError:
+            origin = repo.create_remote('origin', remote)
+        else:
+            origin.set_url(remote)
+
+        commit = origin.fetch(ref, tags=True)[0].commit
+        repo.head.reference = commit
+        repo.head.reset(index=True, working_tree=True)
+        if clean:
+            clean_output = repo.git.clean('-xd', force=True)
+            if clean_output:
+                log.info('%s', clean_output)
+
+        with repo.config_writer() as cfg:
+            section = 'ci-driver.{commit}'.format(**locals())
+            cfg.set_value(section, 'ref', ref)
+            cfg.set_value(section, 'remote', remote)
+
+        files = set(filter(None, repo.git.ls_files('-z', stdout_as_string=False).split(b'\0')))
+
+        # Set all files' modification times to their last commit's time
+        encoding = sys.getfilesystemencoding() or sys.getdefaultencoding()
+        whatchanged = repo.git.whatchanged(pretty='format:%ct', as_process=True)
         mtime = 0
         for line in whatchanged.stdout:
             if not files:
@@ -399,7 +413,12 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
     code_dir_re = re.compile(r'^code(?:-\d+)$')
     code_dirs = sorted(dir for dir in os.listdir(workspace) if code_dir_re.match(dir))
     for dir in code_dirs:
-        if git_has_work_tree(os.path.join(workspace, dir)):
+        try:
+            with git.Repo(os.path.join(workspace, dir)):
+                pass
+        except (git.InvalidGitRepositoryError, git.NoSuchPathError):
+            pass
+        else:
             code_dir = dir
             break
     else:
@@ -413,10 +432,12 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
 
     # Check out configured repository and mark it as the code directory of this one
     ctx.obj.code_dir = os.path.join(workspace, code_dir)
-    echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.code.dir', code_dir), cwd=workspace)
-    echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.code.cfg-remote', target_remote), cwd=workspace)
-    echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.code.cfg-ref', target_ref), cwd=workspace)
-    echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.code.cfg-clean', str(clean)), cwd=workspace)
+    with git.Repo(workspace) as repo, repo.config_writer() as cfg:
+        cfg.remove_section('ci-driver.code')
+        cfg.set_value('ci-driver.code', 'dir', code_dir)
+        cfg.set_value('ci-driver.code', 'cfg-remote', target_remote)
+        cfg.set_value('ci-driver.code', 'cfg-ref', target_ref)
+        cfg.set_value('ci-driver.code', 'cfg-clean', str(clean))
 
     checkout_tree(ctx.obj.code_dir, git_cfg.get('remote', target_remote), git_cfg.get('ref', target_ref), clean)
 
