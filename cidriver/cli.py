@@ -79,64 +79,32 @@ def git_has_work_tree(workspace):
 
 def determine_source_date(workspace):
     """Determine the date of most recent change to the sources in the given workspace"""
-    if not git_has_work_tree(workspace):
-        return None
-
     try:
-        # Time of last commit as reported by Git
-        source_date = datetime.utcfromtimestamp(int(
-                    subprocess.check_output((
-                        'git', 'log', '-1', '--pretty=%ct'
-                    ),
-                    cwd=workspace,
-                ).strip().decode('UTF-8'))
-            ).replace(tzinfo=tzutc())
-    except TypeError:
+        with git.Repo(workspace) as repo:
+            source_date = repo.head.commit.committed_datetime
+
+            changes = repo.index.diff(None)
+            if changes:
+                # Ensure that, no matter what happens, the source date is more recent than the check-in date
+                source_date = source_date + timedelta(seconds=1)
+
+            # Ensure a more accurate source date is used if there have been any changes to the tracked sources
+            for diff in changes:
+                if diff.deleted_file:
+                    continue
+
+                try:
+                    st = os.lstat(os.path.join(repo.working_dir, diff.b_path))
+                except OSError:
+                    pass
+                else:
+                    file_date = datetime.utcfromtimestamp(st.st_mtime).replace(tzinfo=tzlocal())
+                    source_date = max(source_date, file_date)
+
+            log.debug("Date of last modification to source: %s", source_date)
+            return source_date
+    except (git.InvalidGitRepositoryError, git.NoSuchPathError):
         return None
-
-    # Ensure a more accurate source date is used if there have been any changes to the tracked sources
-    status_entries = subprocess.check_output((
-                'git', 'status', '--untracked-files=no', '--porcelain=v1', '-z',
-            )
-            , cwd=workspace).split(b'\0')
-    if status_entries and not status_entries[-1]:
-        del status_entries[-1]
-    encoding = sys.getfilesystemencoding() or sys.getdefaultencoding()
-    have_changes = False
-    modified_files = []
-    while status_entries:
-        entry = status_entries.pop(0)
-        if not status_entries and not entry:
-            # End of list
-            break
-
-        assert entry[2:3] == b' ', 'git-status entry {entry!r} does not separate status flags from filename by space'.format(**locals())
-        status, filename = entry[:2], entry[3:].decode(encoding)
-
-        if status in (b'  ', b'??', b'!!'):
-            continue
-        have_changes = True
-        if b'R' in status:
-            # This is the, NUL-terminated, renamed-from filename
-            status_entries.pop(0)
-        if b'D' in status:
-            continue
-        modified_files.append(filename)
-
-    if have_changes:
-        # Ensure that, no matter what happens, the source date is more recent than the check-in date
-        source_date = source_date + timedelta(seconds=1)
-
-        for filename in modified_files:
-            try:
-                st = os.lstat(os.path.join(workspace, filename))
-            except OSError:
-                pass
-            file_date = datetime.utcfromtimestamp(st.st_mtime).replace(tzinfo=tzutc())
-            source_date = max(source_date, file_date)
-
-    log.debug("Date of last modification to source: %s", source_date)
-    return source_date
 
 def volume_spec_to_docker_param(volume):
     if not os.path.exists(volume['source']):
