@@ -460,10 +460,45 @@ exec ssh -i '''
         }
       }
 
+      // NOP as default
+      def lock_if_necessary = { closure -> closure() }
+
+      def has_change_only_step = phases.findAll { phase ->
+          phase.variants.findAll { variant ->
+            variant.run_on_change == 'only'
+          }
+        }
+      if (has_change_only_step) {
+        def variant = has_change_only_step[0].variants[0]
+        def is_submittable_change = steps.node(variant.label) {
+            this.ensure_checkout(clean)
+            // FIXME: factor out this duplication of node pinning (same occurs below)
+            if (!this.nodes.containsKey(variant.variant)) {
+              this.nodes[variant.variant] = steps.env.NODE_NAME
+            }
+
+            // NOTE: side-effect of calling this.has_submittable_change() allows usage of this.may_submit_result below
+            this.has_submittable_change()
+          }
+        if (is_submittable_change) {
+          lock_if_necessary = { closure ->
+            def lock_name = steps.scm.userRemoteConfigs[0].url.tokenize('/').last().split("\\.")[0]
+            return steps.lock(lock_name) {
+              // Ensure a new checkout is performed because the target repository may change while waiting for the lock
+              this.checkouts.remove(this.nodes[variant.variant])
+              this.nodes.remove(variant.variant)
+
+              return closure()
+            }
+          }
+        }
+      }
+
       def artifactoryServerId = null
       def buildInfo = null
 
-      phases.each {
+      lock_if_necessary {
+        phases.each {
           def phase    = it.phase
 
           // Make sure steps exclusive to changes, or not intended to execute for changes, are skipped when appropriate
@@ -481,14 +516,7 @@ exec ssh -i '''
                 return true
               }
 
-              // Only allocate a node to determine submittability once
-              if (this.may_submit_result == null) {
-                this.on_build_node(default_node_expr: it.label, clean: clean) {
-                  this.has_submittable_change()
-                }
-              }
-
-              assert this.may_submit_result != null
+              assert this.may_submit_result != null : "submittability should already have been determined by a previous call to has_submittable_change()"
               return this.may_submit_result
             }
             assert false : "Unknown 'run-on-change' option: ${run_on_change}"
@@ -606,24 +634,26 @@ exec ssh -i '''
             }
             steps.parallel stepsForBuilding
           }
-      }
+        }
 
-      def node = this.nodes.find{true}
-      if (!node) {
-        return
-      }
-      this.on_build_node {
-        if (this.has_submittable_change()) {
-          steps.stage('submit') {
-            this.with_credentials() {
-              // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
-              def cmd = this.ensure_checkout(clean).cmd
-              steps.sh(script: "${cmd} submit")
+        if (this.nodes && this.may_submit_result != false) {
+          this.on_build_node {
+            if (this.has_submittable_change()) {
+              steps.stage('submit') {
+                this.with_credentials() {
+                  // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
+                  def cmd = this.ensure_checkout(clean).cmd
+                  steps.sh(script: "${cmd} submit")
+                }
+              }
             }
           }
         }
+      }
 
-        if (buildInfo != null) {
+      if (buildInfo != null) {
+        assert this.nodes : "When we have buildInfo we expect to have execution nodes that it got produced on"
+        this.on_build_node {
           def server = steps.Artifactory.server artifactoryServerId
           server.publishBuildInfo(buildInfo)
           // Work around Artifactory Groovy bug
