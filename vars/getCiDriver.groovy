@@ -417,7 +417,8 @@ exec ssh -i '''
     }
   }
 
-  public def build(clean = false) {
+  public def build(Map buildParams = [:]) {
+    def clean = buildParams.getOrDefault('clean', false)
     steps.ansiColor('xterm') {
       def phases = steps.node(default_node_expr) {
         def cmd = this.install_prerequisites()
