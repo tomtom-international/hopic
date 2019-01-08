@@ -23,6 +23,7 @@ from .versioning import *
 from datetime import (datetime, timedelta)
 from dateutil.parser import parse as date_parse
 from dateutil.tz import (tzoffset, tzlocal, tzutc)
+import git
 from itertools import chain
 import json
 import logging
@@ -32,6 +33,17 @@ import shlex
 from six import string_types
 import subprocess
 import sys
+
+try:
+    from shlex import quote as shquote
+except ImportError:
+    from pipes import quote as shquote
+
+try:
+    from ConfigParser import NoSectionError
+except ImportError:
+    # PY3
+    from configparser import NoSectionError
 
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
@@ -69,75 +81,34 @@ class DateTime(click.ParamType):
         except ValueError as e:
             self.fail('Could not parse datetime string "{value}": {e}'.format(value=value, e=' '.join(e.args)), param, ctx)
 
-def git_has_work_tree(workspace):
-    if not workspace or not os.path.isdir(os.path.join(workspace, '.git')):
-        return False
-    try:
-        output = echo_cmd(subprocess.check_output, ('git', 'rev-parse', '--is-inside-work-tree'), cwd=workspace)
-    except subprocess.CalledProcessError:
-        return False
-    return output.strip().lower() == 'true'
-
 def determine_source_date(workspace):
     """Determine the date of most recent change to the sources in the given workspace"""
-    if not git_has_work_tree(workspace):
-        return None
-
     try:
-        # Time of last commit as reported by Git
-        source_date = datetime.utcfromtimestamp(int(
-                    subprocess.check_output((
-                        'git', 'log', '-1', '--pretty=%ct'
-                    ),
-                    cwd=workspace,
-                ).strip().decode('UTF-8'))
-            ).replace(tzinfo=tzutc())
-    except TypeError:
+        with git.Repo(workspace) as repo:
+            source_date = repo.head.commit.committed_datetime
+
+            changes = repo.index.diff(None)
+            if changes:
+                # Ensure that, no matter what happens, the source date is more recent than the check-in date
+                source_date = source_date + timedelta(seconds=1)
+
+            # Ensure a more accurate source date is used if there have been any changes to the tracked sources
+            for diff in changes:
+                if diff.deleted_file:
+                    continue
+
+                try:
+                    st = os.lstat(os.path.join(repo.working_dir, diff.b_path))
+                except OSError:
+                    pass
+                else:
+                    file_date = datetime.utcfromtimestamp(st.st_mtime).replace(tzinfo=tzlocal())
+                    source_date = max(source_date, file_date)
+
+            log.debug("Date of last modification to source: %s", source_date)
+            return source_date
+    except (git.InvalidGitRepositoryError, git.NoSuchPathError):
         return None
-
-    # Ensure a more accurate source date is used if there have been any changes to the tracked sources
-    status_entries = subprocess.check_output((
-                'git', 'status', '--untracked-files=no', '--porcelain=v1', '-z',
-            )
-            , cwd=workspace).split(b'\0')
-    if status_entries and not status_entries[-1]:
-        del status_entries[-1]
-    encoding = sys.getfilesystemencoding() or sys.getdefaultencoding()
-    have_changes = False
-    modified_files = []
-    while status_entries:
-        entry = status_entries.pop(0)
-        if not status_entries and not entry:
-            # End of list
-            break
-
-        assert entry[2:3] == b' ', 'git-status entry {entry!r} does not separate status flags from filename by space'.format(**locals())
-        status, filename = entry[:2], entry[3:].decode(encoding)
-
-        if status in (b'  ', b'??', b'!!'):
-            continue
-        have_changes = True
-        if b'R' in status:
-            # This is the, NUL-terminated, renamed-from filename
-            status_entries.pop(0)
-        if b'D' in status:
-            continue
-        modified_files.append(filename)
-
-    if have_changes:
-        # Ensure that, no matter what happens, the source date is more recent than the check-in date
-        source_date = source_date + timedelta(seconds=1)
-
-        for filename in modified_files:
-            try:
-                st = os.lstat(os.path.join(workspace, filename))
-            except OSError:
-                pass
-            file_date = datetime.utcfromtimestamp(st.st_mtime).replace(tzinfo=tzutc())
-            source_date = max(source_date, file_date)
-
-    log.debug("Date of last modification to source: %s", source_date)
-    return source_date
 
 def volume_spec_to_docker_param(volume):
     if not os.path.exists(volume['source']):
@@ -250,6 +221,7 @@ def cli_autocomplete_click_log_verbosity(ctx, args, incomplete):
 @click.option('--config', type=click.Path(exists=False, file_okay=True, dir_okay=False, readable=True, resolve_path=True))
 @click.option('--workspace', type=click.Path(exists=False, file_okay=False, dir_okay=True))
 @click_log.simple_verbosity_option(__package__, autocompletion=cli_autocomplete_click_log_verbosity)
+@click_log.simple_verbosity_option('git', '--git-verbosity', autocompletion=cli_autocomplete_click_log_verbosity)
 @click.pass_context
 def cli(ctx, color, config, workspace):
     if color == 'always':
@@ -290,15 +262,11 @@ def cli(ctx, color, config, workspace):
     ctx.obj.volume_vars = {}
     if workspace is not None:
         code_dir = workspace
-        if git_has_work_tree(workspace):
-            try:
-                code_dir = os.path.join(workspace,
-                    subprocess.check_output((
-                        'git', 'config', '--get', '--null',
-                        'ci-driver.code.dir',
-                    ), cwd=workspace).rstrip(b'\0').decode('UTF-8'))
-            except subprocess.CalledProcessError:
-                pass
+        try:
+            with git.Repo(workspace) as repo, repo.config_reader() as cfg:
+                code_dir = os.path.join(workspace, cfg.get_value('ci-driver.code', 'dir'))
+        except (git.InvalidGitRepositoryError, git.NoSuchPathError, NoSectionError):
+            pass
 
         ctx.obj.code_dir = ctx.obj.volume_vars['WORKSPACE'] = code_dir
         source_date = determine_source_date(code_dir)
@@ -337,20 +305,17 @@ def cli(ctx, color, config, workspace):
         fname = version_info['file']
         if os.path.isfile(fname):
             ctx.obj.version = read_version(fname, **params)
-    if 'tag' in version_info and ctx.obj.version is None and git_has_work_tree(ctx.obj.volume_vars.get('WORKSPACE')):
+    if 'tag' in version_info and ctx.obj.version is None and workspace is not None:
         try:
-            describe_out = echo_cmd(subprocess.check_output, (
-                    'git', 'describe', '--tags', '--long', '--dirty', '--always'
-                ),
-                cwd=ctx.obj.code_dir,
-            ).strip()
-
+            with git.Repo(ctx.obj.code_dir) as repo:
+                describe_out = repo.git.describe(tags=True, long=True, dirty=True, always=True)
+        except (git.InvalidGitRepositoryError, git.NoSuchPathError):
+            pass
+        else:
             params = {}
             if 'format' in version_info:
                 params['format'] = version_info['format']
             ctx.obj.version = parse_git_describe_version(describe_out, dirty_date=ctx.obj.source_date, **params)
-        except subprocess.CalledProcessError:
-            pass
     if ctx.obj.version is not None:
         log.debug("read version: \x1B[34m%s\x1B[39m", ctx.obj.version)
         ctx.obj.volume_vars['VERSION'] = str(ctx.obj.version)
@@ -359,31 +324,45 @@ def cli(ctx, color, config, workspace):
         ctx.obj.volume_vars['DEBVERSION'] = ctx.obj.volume_vars['VERSION'].replace('-', '~', 1).replace('.dirty.', '+dirty', 1)
 
 def checkout_tree(tree, remote, ref, clean):
-    if not git_has_work_tree(tree):
-        echo_cmd(subprocess.check_call, ('git', 'clone', '-c' 'color.ui=always', remote, tree))
-    echo_cmd(subprocess.call, ('git', 'config', '--remove-section', 'ci-driver.code'), cwd=tree)
-    echo_cmd(subprocess.check_call, ('git', 'config', 'color.ui', 'always'), cwd=tree)
-    tags = tuple(tag.strip() for tag in echo_cmd(subprocess.check_output, ('git', 'tag'), cwd=tree).split('\n') if tag.strip())
-    if tags:
-        echo_cmd(subprocess.check_call, ('git', 'tag', '-d') + tags, cwd=tree, stdout=sys.stderr)
-    echo_cmd(subprocess.check_call, ('git', 'fetch', '--tags', remote, ref), cwd=tree)
-    commit = echo_cmd(subprocess.check_output, ('git', 'rev-parse', 'FETCH_HEAD'), cwd=tree).strip()
-    echo_cmd(subprocess.check_call, ('git', 'checkout', '--force', commit), cwd=tree)
-    if clean:
-      echo_cmd(subprocess.check_call, ('git', 'clean', '--force', '-xd'), cwd=tree, stdout=sys.stderr)
+    try:
+        repo = git.Repo(tree)
+    except (git.InvalidGitRepositoryError, git.NoSuchPathError):
+        repo = git.Repo.clone_from(remote, tree)
 
-    echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.{commit}.ref'.format(**locals()), ref), cwd=tree)
-    echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.{commit}.remote'.format(**locals()), remote), cwd=tree)
+    with repo:
+        with repo.config_writer() as cfg:
+            cfg.remove_section('ci-driver.code')
+            cfg.set_value('color', 'ui', 'always')
 
-    files = subprocess.check_output(('git', 'ls-files', '-z'), cwd=tree).split(b'\0')
-    if files and not files[-1]:
-        del files[-1]
-    files = set(files)
+        tags = repo.tags
+        if tags:
+            repo.delete_tag(*repo.tags)
 
-    # Set all files' modification times to their last commit's time
-    encoding = sys.getfilesystemencoding() or sys.getdefaultencoding()
-    with open(os.devnull) as devnull:
-        whatchanged = subprocess.Popen(('git', 'whatchanged', '--pretty=format:%ct'), cwd=tree, stdout=subprocess.PIPE, stderr=devnull)
+        try:
+            origin = repo.remotes.origin
+        except AttributeError:
+            origin = repo.create_remote('origin', remote)
+        else:
+            origin.set_url(remote)
+
+        commit = origin.fetch(ref, tags=True)[0].commit
+        repo.head.reference = commit
+        repo.head.reset(index=True, working_tree=True)
+        if clean:
+            clean_output = repo.git.clean('-xd', force=True)
+            if clean_output:
+                log.info('%s', clean_output)
+
+        with repo.config_writer() as cfg:
+            section = 'ci-driver.{commit}'.format(**locals())
+            cfg.set_value(section, 'ref', ref)
+            cfg.set_value(section, 'remote', remote)
+
+        files = set(filter(None, repo.git.ls_files('-z', stdout_as_string=False).split(b'\0')))
+
+        # Set all files' modification times to their last commit's time
+        encoding = sys.getfilesystemencoding() or sys.getdefaultencoding()
+        whatchanged = repo.git.whatchanged(pretty='format:%ct', as_process=True)
         mtime = 0
         for line in whatchanged.stdout:
             if not files:
@@ -432,7 +411,12 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
     code_dir_re = re.compile(r'^code(?:-\d+)$')
     code_dirs = sorted(dir for dir in os.listdir(workspace) if code_dir_re.match(dir))
     for dir in code_dirs:
-        if git_has_work_tree(os.path.join(workspace, dir)):
+        try:
+            with git.Repo(os.path.join(workspace, dir)):
+                pass
+        except (git.InvalidGitRepositoryError, git.NoSuchPathError):
+            pass
+        else:
             code_dir = dir
             break
     else:
@@ -446,10 +430,12 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
 
     # Check out configured repository and mark it as the code directory of this one
     ctx.obj.code_dir = os.path.join(workspace, code_dir)
-    echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.code.dir', code_dir), cwd=workspace)
-    echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.code.cfg-remote', target_remote), cwd=workspace)
-    echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.code.cfg-ref', target_ref), cwd=workspace)
-    echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.code.cfg-clean', str(clean)), cwd=workspace)
+    with git.Repo(workspace) as repo, repo.config_writer() as cfg:
+        cfg.remove_section('ci-driver.code')
+        cfg.set_value('ci-driver.code', 'dir', code_dir)
+        cfg.set_value('ci-driver.code', 'cfg-remote', target_remote)
+        cfg.set_value('ci-driver.code', 'cfg-ref', target_ref)
+        cfg.set_value('ci-driver.code', 'cfg-clean', str(clean))
 
     checkout_tree(ctx.obj.code_dir, git_cfg.get('remote', target_remote), git_cfg.get('ref', target_ref), clean)
 
@@ -476,103 +462,87 @@ def process_prepare_source_tree(
         author_date,
         commit_date,
     ):
-    workspace = ctx.obj.workspace
-    assert git_has_work_tree(workspace)
+    with git.Repo(ctx.obj.workspace) as repo:
+        target_commit = repo.head.commit
 
-    target_commit = echo_cmd(subprocess.check_output, ('git', 'rev-parse', 'HEAD'), cwd=workspace).strip()
-    target_ref    = echo_cmd(subprocess.check_output, ('git', 'config', '--get', 'ci-driver.{target_commit}.ref'.format(**locals())), cwd=workspace).strip()
-    target_remote = echo_cmd(subprocess.check_output, ('git', 'config', '--get', 'ci-driver.{target_commit}.remote'.format(**locals())), cwd=workspace).strip()
-    echo_cmd(subprocess.check_call, ('git', 'config', '--remove-section', 'ci-driver.{target_commit}'.format(**locals())), cwd=workspace)
+        with repo.config_writer() as cfg:
+            section = 'ci-driver.{target_commit}'.format(**locals())
+            target_ref    = cfg.get_value(section, 'ref')
+            target_remote = cfg.get_value(section, 'remote')
+            cfg.remove_section(section)
 
-    env = os.environ.copy()
-    if author_name is not None:
-        env['GIT_AUTHOR_NAME'] = author_name
-    if author_email is not None:
-        env['GIT_AUTHOR_EMAIL'] = author_email
-    if author_date is not None:
-        env['GIT_AUTHOR_DATE'] = author_date.strftime('%Y-%m-%d %H:%M:%S.%f %z')
-    if commit_date is not None:
-        env['GIT_COMMITTER_DATE'] = commit_date.strftime('%Y-%m-%d %H:%M:%S.%f %z')
+        commit_params = change_applicator(repo)
+        if not commit_params:
+            return
 
-    msg = change_applicator(workspace)
-    if msg is None:
-        return
+        # Ensure that, when we're dealing with a separated config and code repository, that the code repository is checked out again to the newer version
+        if ctx.obj.code_dir != ctx.obj.workspace:
+            # Re-read config
+            ctx.obj.config = read_config(ctx.obj.config_file, ctx.obj.volume_vars)
 
-    # Ensure that, when we're dealing with a separated config and code repository, that the code repository is checked out again to the newer version
-    if ctx.obj.code_dir != ctx.obj.workspace:
-        # Re-read config
-        ctx.obj.config = read_config(ctx.obj.config_file, ctx.obj.volume_vars)
+            with repo.config_reader() as cfg:
+                try:
+                    code_remote = ctx.obj.config['scm']['git']['remote']
+                except (KeyError, TypeError):
+                    code_remote = cfg.get_value('ci-driver.code', 'cfg-remote')
+                try:
+                    code_commit = ctx.obj.config['scm']['git']['ref']
+                except (KeyError, TypeError):
+                    code_commit = cfg.get_value('ci-driver.code', 'cfg-ref')
+                code_clean = cfg.getboolean('ci-driver.code', 'cfg-clean')
 
-        try:
-            code_remote = ctx.obj.config['scm']['git']['remote']
-        except (KeyError, TypeError):
-            code_remote = echo_cmd(subprocess.check_output, ('git', 'config', '--get', 'ci-driver.code.cfg-remote'), cwd=workspace).strip()
-        try:
-            code_commit = ctx.obj.config['scm']['git']['ref']
-        except (KeyError, TypeError):
-            code_commit = echo_cmd(subprocess.check_output, ('git', 'config', '--get', 'ci-driver.code.cfg-ref'), cwd=workspace).strip()
-        code_clean = {'true': True,
-                'false': False,
-            }[echo_cmd(subprocess.check_output, ('git', 'config', '--get', '--bool', 'ci-driver.code.cfg-clean'), cwd=workspace).strip()]
+            checkout_tree(ctx.obj.code_dir, code_remote, code_commit, code_clean)
 
-        checkout_tree(ctx.obj.code_dir, code_remote, code_commit, code_clean)
+        version_info = ctx.obj.config.get('version', {})
+        version_tag  = version_info.get('tag', False)
+        if version_tag and not isinstance(version_tag, string_types):
+            version_tag = '{version.major}.{version.minor}.{version.patch}'
 
-    version_info = ctx.obj.config.get('version', {})
-    version_tag  = version_info.get('tag', False)
-    if version_tag and not isinstance(version_tag, string_types):
-        version_tag = '{version.major}.{version.minor}.{version.patch}'
+        if ctx.obj.version is not None and version_info.get('bump', True):
+            params = {}
+            if 'bump' in version_info:
+                params['bump'] = version_info['bump']
+            ctx.obj.version = ctx.obj.version.next_version(**params)
+            log.debug("bumped version to: \x1B[34m%s\x1B[39m", ctx.obj.version)
 
-    if ctx.obj.version is not None and version_info.get('bump', True):
-        params = {}
-        if 'bump' in version_info:
-            params['bump'] = version_info['bump']
-        ctx.obj.version = ctx.obj.version.next_version(**params)
-        log.debug("bumped version to: \x1B[34m%s\x1B[39m", ctx.obj.version)
+            if 'file' in version_info:
+                replace_version(version_info['file'], ctx.obj.version)
+                repo.index.add(version_info['file'])
 
-        if 'file' in version_info:
-            replace_version(version_info['file'], ctx.obj.version)
-            echo_cmd(subprocess.check_call, ('git', 'add', version_info['file']), cwd=workspace)
+        env = os.environ.copy()
+        author = git.Actor.author(repo.config_reader())
+        if author_name is not None:
+            author.name = author_name
+        if author_email is not None:
+            author.email = author_email
+        commit_params.setdefault('author', author)
+        if author_date is not None:
+            commit_params['author_date'] = author_date.strftime('%Y-%m-%dT%H:%M:%S %z')
+        if commit_date is not None:
+            commit_params['commit_date'] = commit_date.strftime('%Y-%m-%dT%H:%M:%S %z')
 
-    echo_cmd(subprocess.check_call, (
-            'git',
-            'commit',
-            '-m', msg,
-        ),
-        cwd=workspace,
-        env=env,
-        stdout=sys.stderr,
-    )
+        submit_commit = repo.index.commit(**commit_params)
+        click.echo(submit_commit)
 
-    submit_commit = echo_cmd(subprocess.check_output, ('git', 'rev-parse', 'HEAD'), cwd=workspace).strip()
-    click.echo(submit_commit)
+        tagname = None
+        if ctx.obj.version is not None and not ctx.obj.version.prerelease and version_tag:
+            tagname = version_tag.format(
+                    version        = ctx.obj.version,
+                    build_sep      = ('+' if ctx.obj.version.build else ''),
+                )
+            repo.create_tag(tagname, submit_commit, force=True)
 
-    tagname = None
-    if ctx.obj.version is not None and not ctx.obj.version.prerelease and version_tag:
-        tagname = version_tag.format(
-                version        = ctx.obj.version,
-                build_sep      = ('+' if ctx.obj.version.build else ''),
-            )
-        echo_cmd(subprocess.check_call, ('git', 'tag', '-f', tagname, submit_commit), cwd=workspace, stdout=sys.stderr)
+        log.info('%s', repo.git.show(submit_commit, format='fuller', stat=True))
 
-    echo_cmd(subprocess.check_call, ('git', 'show', '--format=fuller', '--stat', submit_commit), cwd=workspace, stdout=sys.stderr)
-
-    echo_cmd(subprocess.call, ('git', 'config', '--unset-all', 'ci-driver.{submit_commit}.refspec'.format(**locals())), cwd=workspace)
-    echo_cmd(subprocess.check_call, ('git', 'config', 'ci-driver.{submit_commit}.remote'.format(**locals()), target_remote), cwd=workspace)
-    echo_cmd(subprocess.check_call, (
-            'git', 'config', '--add',
-            'ci-driver.{submit_commit}.refspec'.format(**locals()),
-            '{submit_commit}:{target_ref}'.format(**locals()),
-        ),
-        cwd=workspace)
-    if ctx.obj.version is not None:
-        click.echo(ctx.obj.version)
-    if tagname is not None:
-        echo_cmd(subprocess.check_call, (
-                'git', 'config', '--add',
-                'ci-driver.{submit_commit}.refspec'.format(**locals()),
-                'refs/tags/{tagname}:refs/tags/{tagname}'.format(**locals()),
-            ),
-            cwd=workspace)
+        with repo.config_writer() as cfg:
+            section = 'ci-driver.{submit_commit}'.format(**locals())
+            cfg.set_value(section, 'remote', target_remote)
+            refspecs = ['{submit_commit}:{target_ref}'.format(**locals())]
+            if tagname is not None:
+                refspecs.append('refs/tags/{tagname}:refs/tags/{tagname}'.format(**locals()))
+            cfg.set_value(section, 'refspecs', ' '.join(shquote(refspec) for refspec in refspecs))
+        if ctx.obj.version is not None:
+            click.echo(ctx.obj.version)
 
 @prepare_source_tree.command()
 # git
@@ -592,25 +562,30 @@ def merge_change_request(
     Merges the change request from the specified branch.
     """
 
-    def change_applicator(workspace):
-        echo_cmd(subprocess.check_call, ('git', 'fetch', source_remote, source_ref), cwd=workspace)
-        echo_cmd(subprocess.check_call, (
-                'git',
-                'merge',
-                '--no-ff',
-                '--no-commit',
-                'FETCH_HEAD',
-            ),
-            cwd=workspace,
-            stdout=sys.stderr,
-        )
+    def change_applicator(repo):
+        try:
+            source = repo.remotes.source
+        except AttributeError:
+            source = repo.create_remote('source', source_remote)
+        else:
+            source.set_url(source_remote)
+        source_commit = source.fetch(source_ref)[0].commit
+
+        merge_base = repo.merge_base(repo.head.commit, source_commit)
+        repo.index.merge_tree(source_commit, base=merge_base)
 
         msg = "Merge #{}".format(change_request)
         if title is not None:
             msg = "{msg}: {title}".format(msg=msg, title=title)
         if description is not None:
             msg = "{msg}\n\n{description}".format(msg=msg, description=description)
-        return msg
+        return {
+                'message': msg,
+                'parent_commits': (
+                    repo.head.commit,
+                    source_commit,
+                ),
+            }
     return change_applicator
 
 _env_var_re = re.compile(r'^(?P<var>[A-Za-z_][0-9A-Za-z_]*)=(?P<val>.*)$')
@@ -626,7 +601,7 @@ def apply_modality_change(
     """
 
     modality_cmds = ctx.obj.config.get('modality-source-preparation', {}).get(modality, ())
-    def change_applicator(workspace):
+    def change_applicator(repo):
         has_changed_files = False
         commit_message = modality
         for cmd in modality_cmds:
@@ -643,7 +618,7 @@ def apply_modality_change(
 
         if not has_changed_files:
             # Force clean builds when we don't know how to discover changed files
-            echo_cmd(subprocess.check_call, ('git', 'clean', '--force', '-xd'), cwd=workspace, stdout=sys.stderr)
+            repo.git.clean('-xd', force=True)
 
         volume_vars = ctx.obj.volume_vars
 
@@ -666,29 +641,40 @@ def apply_modality_change(
                     args.pop(0)
 
                 args = [expand_vars(volume_vars, arg) for arg in args]
-                echo_cmd(subprocess.check_call, args, cwd=workspace, env=env, stdout=sys.stderr)
+                echo_cmd(subprocess.check_call, args, cwd=repo.working_dir, env=env, stdout=sys.stderr)
 
             if 'changed-files' in cmd:
                 changed_files = cmd["changed-files"]
                 if isinstance(changed_files, string_types):
                     changed_files = [changed_files]
                 changed_files = [expand_vars(volume_vars, f) for f in changed_files]
-                echo_cmd(subprocess.check_call, ['git', 'add'] + changed_files, cwd=workspace, stdout=sys.stderr)
+                repo.index.add(changed_files)
 
         if not has_changed_files:
-            # Force clean builds when we don't know how to discover changed files
-            echo_cmd(subprocess.check_call, ('git', 'add', '--all'), cwd=workspace, stdout=sys.stderr)
+            # 'git add --all' equivalent (excluding the code_dir)
+            add_files = set(repo.untracked_files)
+            remove_files = set()
+            with repo.config_reader() as cfg:
+                try:
+                    code_dir = cfg.get_value('ci-driver.code', 'dir')
+                except:
+                    pass
+                else:
+                    if code_dir in add_files:
+                        add_files.remove(code_dir)
+                    if (code_dir + '/') in add_files:
+                        add_files.remove(code_dir + '/')
 
-        changed = echo_cmd(subprocess.call, (
-                    'git', 'diff', '--exit-code', '--ignore-all-space', '--quiet', '--cached',
-                ),
-                cwd=workspace,
-                stdout=sys.stderr,
-            )
-        if changed is None or changed == 0:
+            for diff in repo.index.diff(None):
+                add_files.add(diff.b_path)
+                remove_files.add(diff.a_path)
+            repo.index.remove(remove_files)
+            repo.index.add(add_files)
+
+        if not repo.index.diff(repo.head.commit):
             log.info("No changes introduced by '%s'", commit_message)
             return None
-        return commit_message
+        return {'message': commit_message}
     return change_applicator
 
 @cli.command()
@@ -755,15 +741,13 @@ def build(ctx, phase, variant):
 
     cfg = ctx.obj.config
 
-    submit_commit = echo_cmd(subprocess.check_output, ('git', 'rev-parse', 'HEAD'), cwd=ctx.obj.workspace).strip()
     try:
-        refspecs = tuple(refspec for refspec in
-            echo_cmd(subprocess.check_output, (
-                'git', 'config', '--get-all', '--null',
-                'ci-driver.{submit_commit}.refspec'.format(**locals())
-            )
-            , cwd=ctx.obj.workspace).split('\0') if refspec)
-    except subprocess.CalledProcessError as e:
+        with git.Repo(workspace) as repo:
+            submit_commit = repo.head.commit
+            section = 'ci-driver.{submit_commit}'.format(**locals())
+            with repo.config_reader() as git_cfg:
+                refspecs = tuple(shlex.split(cfg.get_value(section, 'refspecs')))
+    except:
         refspecs = ()
     has_change = bool(refspecs)
 
@@ -882,22 +866,22 @@ def submit(ctx, target_remote):
     Submit the changes created by prepare-source-tree to the target remote.
     """
 
-    workspace = ctx.obj.workspace
-    assert git_has_work_tree(workspace)
+    with git.Repo(ctx.obj.workspace) as repo:
+        section = 'ci-driver.{repo.head.commit}'.format(**locals())
+        with repo.config_writer() as cfg:
+            if target_remote is None:
+                target_remote = cfg.get_value(section, 'remote')
+            refspecs = shlex.split(cfg.get_value(section, 'refspecs'))
+            cfg.remove_section(section)
 
-    submit_commit = echo_cmd(subprocess.check_output, ('git', 'rev-parse', 'HEAD'), cwd=workspace).strip()
-    if target_remote is None:
-        target_remote = echo_cmd(subprocess.check_output, ('git', 'config', '--get', 'ci-driver.{submit_commit}.remote'.format(**locals())), cwd=workspace).strip()
+        try:
+            origin = repo.remotes.origin
+        except AttributeError:
+            origin = repo.create_remote('origin', target_remote)
+        else:
+            origin.set_url(target_remote)
 
-    refspecs = tuple(refspec for refspec in
-        echo_cmd(subprocess.check_output, (
-            'git', 'config', '--get-all', '--null',
-            'ci-driver.{submit_commit}.refspec'.format(**locals())
-        )
-        , cwd=workspace).split('\0') if refspec)
-    echo_cmd(subprocess.check_call, ('git', 'config', '--remove-section', 'ci-driver.{submit_commit}'.format(**locals())), cwd=workspace)
-
-    echo_cmd(subprocess.check_call, ('git', 'push', '--atomic', target_remote) + refspecs, cwd=workspace)
+        origin.push(refspecs, atomic=True)
 
 @cli.command()
 @click.pass_context

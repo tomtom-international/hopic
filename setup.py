@@ -21,6 +21,7 @@ setup(
     install_requires=(
       'Click>=7.0,<8.0',
       'click-log',
+      'GitPython>=2.1.3,<3',
       'python-dateutil',
       'PyYAML',
       'six',
