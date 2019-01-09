@@ -783,11 +783,11 @@ def build(ctx, phase, variant):
     cfg = ctx.obj.config
 
     try:
-        with git.Repo(workspace) as repo:
+        with git.Repo(ctx.obj.workspace) as repo:
             submit_commit = repo.head.commit
             section = 'ci-driver.{submit_commit}'.format(**locals())
             with repo.config_reader() as git_cfg:
-                refspecs = tuple(shlex.split(cfg.get_value(section, 'refspecs')))
+                refspecs = tuple(shlex.split(git_cfg.get_value(section, 'refspecs')))
     except:
         refspecs = ()
     has_change = bool(refspecs)
