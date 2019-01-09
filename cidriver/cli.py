@@ -507,7 +507,7 @@ def process_prepare_source_tree(
 
             if 'file' in version_info:
                 replace_version(version_info['file'], ctx.obj.version)
-                repo.index.add(version_info['file'])
+                repo.index.add([version_info['file']])
 
         env = os.environ.copy()
         author = git.Actor.author(repo.config_reader())
