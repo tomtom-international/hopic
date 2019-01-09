@@ -24,6 +24,11 @@ from datetime import (datetime, timedelta)
 from dateutil.parser import parse as date_parse
 from dateutil.tz import (tzoffset, tzlocal, tzutc)
 import git
+import gitdb
+from io import (
+        BytesIO,
+        StringIO,
+    )
 from itertools import chain
 import json
 import logging
@@ -291,10 +296,11 @@ def cli(ctx, color, config, workspace):
     cfg = {}
     if config is not None:
         ctx.obj.config_file = config
-        ctx.obj.volume_vars['CFGDIR'] = os.path.dirname(config)
+        ctx.obj.volume_vars['CFGDIR'] = ctx.obj.config_dir = os.path.dirname(config)
         if os.path.isfile(config):
             cfg = ctx.obj.config = read_config(config, ctx.obj.volume_vars)
     ctx.obj.register_dependent_attribute('config_file', 'config')
+    ctx.obj.register_dependent_attribute('config_dir', 'config')
 
     ctx.obj.version = None
     version_info = cfg.get('version', {})
@@ -305,7 +311,7 @@ def cli(ctx, color, config, workspace):
         fname = version_info['file']
         if os.path.isfile(fname):
             ctx.obj.version = read_version(fname, **params)
-    if 'tag' in version_info and ctx.obj.version is None and workspace is not None:
+    if version_info.get('tag', False) and ctx.obj.version is None and workspace is not None:
         try:
             with git.Repo(ctx.obj.code_dir) as repo:
                 describe_out = repo.git.describe(tags=True, long=True, dirty=True, always=True)
@@ -506,7 +512,7 @@ def process_prepare_source_tree(
             log.debug("bumped version to: \x1B[34m%s\x1B[39m", ctx.obj.version)
 
             if 'file' in version_info:
-                replace_version(version_info['file'], ctx.obj.version)
+                replace_version(os.path.join(ctx.obj.config_dir, version_info['file']), ctx.obj.version)
                 repo.index.add([version_info['file']])
 
         env = os.environ.copy()
@@ -534,10 +540,45 @@ def process_prepare_source_tree(
 
         log.info('%s', repo.git.show(submit_commit, format='fuller', stat=True))
 
+        push_commit = submit_commit
+        if ctx.obj.version is not None and 'file' in version_info and 'bump' in version_info.get('after-submit', {}):
+            params = {'bump': version_info['after-submit']['bump']}
+            try:
+                params['prerelease_seed'] = version_info['after-submit']['prerelease-seed']
+            except KeyError:
+                pass
+            after_submit_version = ctx.obj.version.next_version(**params)
+            log.debug("bumped post-submit version to: %s", click.style(str(after_submit_version), fg='blue'))
+
+            new_version_file = StringIO()
+            replace_version(os.path.join(ctx.obj.config_dir, version_info['file']), after_submit_version, outfile=new_version_file)
+            new_version_file = new_version_file.getvalue().encode(sys.getdefaultencoding())
+
+            old_version_blob = submit_commit.tree[version_info['file']]
+            new_version_blob = git.Blob(
+                    repo=repo,
+                    binsha=repo.odb.store(gitdb.IStream(git.Blob.type, len(new_version_file), BytesIO(new_version_file))).binsha,
+                    mode=old_version_blob.mode,
+                    path=old_version_blob.path,
+                )
+            new_index = repo.index.from_tree(repo, submit_commit)
+            new_index.add([new_version_blob], write=False)
+
+            del commit_params['author']
+            if 'author_date' in commit_params and 'commit_date' in commit_params:
+                commit_params['author_date'] = commit_params['commit_date']
+            commit_params['message'] = '[ Release build ] new version commit: {after_submit_version}'.format(**locals())
+            commit_params['parent_commits'] = (submit_commit,)
+            # Prevent advancing HEAD
+            commit_params['head'] = False
+
+            push_commit = new_index.commit(**commit_params)
+            log.info('%s', repo.git.show(push_commit, format='fuller', stat=True))
+
         with repo.config_writer() as cfg:
             section = 'ci-driver.{submit_commit}'.format(**locals())
             cfg.set_value(section, 'remote', target_remote)
-            refspecs = ['{submit_commit}:{target_ref}'.format(**locals())]
+            refspecs = ['{push_commit}:{target_ref}'.format(**locals())]
             if tagname is not None:
                 refspecs.append('refs/tags/{tagname}:refs/tags/{tagname}'.format(**locals()))
             cfg.set_value(section, 'refspecs', ' '.join(shquote(refspec) for refspec in refspecs))
