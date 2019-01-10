@@ -490,11 +490,12 @@ def process_prepare_source_tree(
         if not commit_params:
             return
 
-        # Ensure that, when we're dealing with a separated config and code repository, that the code repository is checked out again to the newer version
-        if ctx.obj.code_dir != ctx.obj.workspace:
-            # Re-read config
+        # Re-read config
+        if os.path.isfile(ctx.obj.config_file):
             ctx.obj.config = read_config(ctx.obj.config_file, ctx.obj.volume_vars)
 
+        # Ensure that, when we're dealing with a separated config and code repository, that the code repository is checked out again to the newer version
+        if ctx.obj.code_dir != ctx.obj.workspace:
             with repo.config_reader() as cfg:
                 try:
                     code_remote = ctx.obj.config['scm']['git']['remote']
@@ -623,6 +624,7 @@ def merge_change_request(
 
         merge_base = repo.merge_base(repo.head.commit, source_commit)
         repo.index.merge_tree(source_commit, base=merge_base)
+        repo.index.checkout(force=True)
 
         msg = "Merge #{}".format(change_request)
         if title is not None:
