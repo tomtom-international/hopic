@@ -140,9 +140,12 @@ class OptionContext(object):
         except KeyError:
             pass
         try:
-            raise click.MissingParameter(**self._missing_parameters[name])
+            missing_param = self._missing_parameters[name].copy()
         except KeyError:
             raise AttributeError("'{}' object has no attribute '{}'.".format(self.__class__.__name__, name))
+        else:
+            exception_raiser = missing_param.pop('exception_raiser')
+            exception_raiser(**missing_param)
 
     def __setattr__(self, name, value):
         if name in frozenset({'_opts', '_missing_parameters'}):
@@ -153,13 +156,18 @@ class OptionContext(object):
     def __delattr__(self, name):
         del self._opts[name]
 
-    def register_parameter(self, ctx, param, name=None):
+    def register_parameter(self, ctx, param, name=None, exception_raiser=None):
         if name is None:
             name = param.human_readable_name
+
+        if exception_raiser is None:
+            def exception_raiser(**kwargs):
+                raise click.MissingParameter(**kwargs)
 
         self._missing_parameters[name] = dict(
                 ctx=ctx,
                 param=param,
+                exception_raiser=exception_raiser,
             )
 
     def register_dependent_attribute(self, name, dependency):
@@ -254,15 +262,16 @@ def cli(ctx, color, config, workspace):
                         )
             ctx.obj.workspace = workspace
         elif param.human_readable_name == 'config' and config is not None:
-            if ctx.invoked_subcommand != 'checkout-source-tree':
-                # Require the config file to exist for anything but the checkout command
-                try:
-                    os.stat(config)
-                except OSError:
+            # Require the config file to exist everywhere that it's used
+            try:
+                os.stat(config)
+            except OSError:
+                def exception_raiser(ctx, param):
                     raise click.BadParameter(
-                            'File "{config}" does not exist.'.format(**locals()),
+                            'File "{config}" does not exist.'.format(config=config),
                             ctx=ctx, param=param
                         )
+                ctx.obj.register_parameter(ctx=ctx, param=param, exception_raiser=exception_raiser)
 
     ctx.obj.volume_vars = {}
     if workspace is not None:
