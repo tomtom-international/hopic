@@ -404,7 +404,11 @@ exec ssh -i '''
       if (stash.nodes[steps.env.NODE_NAME]) {
         return
       }
-      steps.dir(stash.dir) {
+      if (stash.dir) {
+        steps.dir(stash.dir) {
+          steps.unstash(name)
+        }
+      } else {
         steps.unstash(name)
       }
       this.stashes[name].nodes[steps.env.NODE_NAME] = true
@@ -567,18 +571,21 @@ exec ssh -i '''
 
                     // FIXME: re-evaluate if we can and need to get rid of special casing for stashing
                     if (meta.containsKey('stash')) {
-                      def dir   = meta.stash.getOrDefault('dir', this.checkouts[steps.env.NODE_NAME].workspace)
                       def name  = "${phase}-${variant}"
-                      steps.dir(dir) {
-                        def params = [
-                            name: name,
-                          ]
-                        if (meta.stash.containsKey('includes')) {
-                          params['includes'] = meta.stash.includes
+                      def params = [
+                          name: name,
+                        ]
+                      if (meta.stash.containsKey('includes')) {
+                        params['includes'] = meta.stash.includes
+                      }
+                      if (meta.stash.dir) {
+                        steps.dir(meta.stash.dir) {
+                          steps.stash(params)
                         }
+                      } else {
                         steps.stash(params)
                       }
-                      this.stashes[name] = [dir: dir, nodes: [(steps.env.NODE_NAME): true]]
+                      this.stashes[name] = [dir: meta.stash.dir, nodes: [(steps.env.NODE_NAME): true]]
                     }
                     def archiving_cfg = meta.containsKey('archive') ? 'archive' : meta.containsKey('fingerprint') ? 'fingerprint' : null
                     if (archiving_cfg) {
