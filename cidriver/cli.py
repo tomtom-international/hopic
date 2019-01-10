@@ -338,6 +338,33 @@ def cli(ctx, color, config, workspace):
         # Convert SemVer to Debian version: '~' for pre-release instead of '-'
         ctx.obj.volume_vars['DEBVERSION'] = ctx.obj.volume_vars['VERSION'].replace('-', '~', 1).replace('.dirty.', '+dirty', 1)
 
+def restore_mtime_from_git(repo, files=None):
+    if files is None:
+        files = set(filter(None, repo.git.ls_files('-z', stdout_as_string=False).split(b'\0')))
+
+    # Set all files' modification times to their last commit's time
+    encoding = sys.getfilesystemencoding() or sys.getdefaultencoding()
+    whatchanged = repo.git.whatchanged(pretty='format:%ct', as_process=True)
+    mtime = 0
+    for line in whatchanged.stdout:
+        if not files:
+            break
+
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith(b':'):
+            filename = line.split(b'\t')[-1]
+            if filename in files:
+                files.remove(filename)
+                os.utime(os.path.join(repo.working_tree_dir.encode(encoding), filename), (mtime, mtime))
+        else:
+            mtime = int(line)
+    try:
+        whatchanged.terminate()
+    except OSError:
+        pass
+
 def checkout_tree(tree, remote, ref, clean):
     try:
         repo = git.Repo(tree)
@@ -373,30 +400,7 @@ def checkout_tree(tree, remote, ref, clean):
             cfg.set_value(section, 'ref', ref)
             cfg.set_value(section, 'remote', remote)
 
-        files = set(filter(None, repo.git.ls_files('-z', stdout_as_string=False).split(b'\0')))
-
-        # Set all files' modification times to their last commit's time
-        encoding = sys.getfilesystemencoding() or sys.getdefaultencoding()
-        whatchanged = repo.git.whatchanged(pretty='format:%ct', as_process=True)
-        mtime = 0
-        for line in whatchanged.stdout:
-            if not files:
-                break
-
-            line = line.strip()
-            if not line:
-                continue
-            if line.startswith(b':'):
-                filename = line.split(b'\t')[-1]
-                if filename in files:
-                    files.remove(filename)
-                    os.utime(os.path.join(tree.encode(encoding), filename), (mtime, mtime))
-            else:
-                mtime = int(line)
-        try:
-            whatchanged.terminate()
-        except OSError:
-            pass
+        restore_mtime_from_git(repo)
     return commit
 
 @cli.command()
@@ -539,6 +543,7 @@ def process_prepare_source_tree(
 
         submit_commit = repo.index.commit(**commit_params)
         click.echo(submit_commit)
+        restore_mtime_from_git(repo)
 
         tagname = None
         if ctx.obj.version is not None and not ctx.obj.version.prerelease and version_tag:
