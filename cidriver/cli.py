@@ -627,9 +627,7 @@ def merge_change_request(
             source.set_url(source_remote)
         source_commit = source.fetch(source_ref)[0].commit
 
-        merge_base = repo.merge_base(repo.head.commit, source_commit)
-        repo.index.merge_tree(source_commit, base=merge_base)
-        repo.index.checkout(force=True)
+        repo.git.merge(source_commit, no_ff=True, no_commit=True)
 
         msg = "Merge #{}".format(change_request)
         if title is not None:
