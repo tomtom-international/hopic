@@ -2,3 +2,4 @@ method hudson.plugins.git.GitSCM getUserRemoteConfigs
 method hudson.plugins.git.UserRemoteConfig getCredentialsId
 method hudson.plugins.git.UserRemoteConfig getRefspec
 method hudson.plugins.git.UserRemoteConfig getUrl
+method java.util.Map getOrDefault
