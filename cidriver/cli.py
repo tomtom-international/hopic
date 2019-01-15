@@ -45,10 +45,16 @@ except ImportError:
     from pipes import quote as shquote
 
 try:
-    from ConfigParser import NoSectionError
+    from ConfigParser import (
+            NoOptionError,
+            NoSectionError,
+        )
 except ImportError:
     # PY3
-    from configparser import NoSectionError
+    from configparser import (
+            NoOptionError,
+            NoSectionError,
+        )
 
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
@@ -712,7 +718,7 @@ def apply_modality_change(
             with repo.config_reader() as cfg:
                 try:
                     code_dir = cfg.get_value('ci-driver.code', 'dir')
-                except:
+                except (NoOptionError, NoSectionError):
                     pass
                 else:
                     if code_dir in add_files:
@@ -802,7 +808,7 @@ def build(ctx, phase, variant):
             section = 'ci-driver.{submit_commit}'.format(**locals())
             with repo.config_reader() as git_cfg:
                 refspecs = tuple(shlex.split(git_cfg.get_value(section, 'refspecs')))
-    except:
+    except (NoOptionError, NoSectionError):
         refspecs = ()
     has_change = bool(refspecs)
 
