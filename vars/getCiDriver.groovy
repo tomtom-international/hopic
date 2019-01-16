@@ -345,13 +345,13 @@ exec ssh -i '''
         def submit_info = this.get_change().apply(cmd, steps.scm.userRemoteConfigs[0].url)
         if (submit_info == null)
         {
-          try {
-              if (steps.currentBuild.rawBuild.getCauses().get(0).properties['shortDescription'].contains('Started by timer')) {
-                steps.currentBuild.rawBuild.delete()
-              }
-          } catch (Exception ex) {
-            // Ignore issues
+          def timerCauses = steps.currentBuild.buildCauses.findAll { cause ->
+            cause._class.contains('TimerTriggerCause')
           }
+          if (timerCauses) {
+            steps.currentBuild.rawBuild.delete()
+          }
+
           steps.currentBuild.result = 'ABORTED'
           steps.error('No changes to build')
         }
