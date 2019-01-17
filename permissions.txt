@@ -5,3 +5,4 @@ method hudson.plugins.git.UserRemoteConfig getUrl
 method java.util.Map getOrDefault
 method org.jenkinsci.plugins.workflow.support.steps.build.RunWrapper getRawBuild
 method hudson.model.Run delete
+staticMethod groovy.json.JsonOutput toJson java.lang.Object
