@@ -103,6 +103,21 @@ class BitbucketPullRequest extends ChangeRequest
     if (change_request.containsKey('description')) {
       extra_params += ' --description=' + shell_quote(change_request.description)
     }
+
+    // Record approving reviewers for auditing purposes
+    def approvers = change_request.getOrDefault('reviewers', []).findAll { reviewer ->
+        return reviewer.approved && reviewer.lastReviewedCommit == change_request.fromRef.latestCommit
+      }.collect { reviewer ->
+        def str = reviewer.user.getOrDefault('displayName', reviewer.user.name)
+        if (reviewer.user.emailAddress) {
+          str = "${str} <${reviewer.user.emailAddress}>"
+        }
+        return str
+      }.sort()
+    approvers.each { approver ->
+      extra_params += ' --approved-by=' + shell_quote(approver)
+    }
+
     def source_refspec = steps.scm.userRemoteConfigs[0].refspec
     def (remote_ref, local_ref) = source_refspec.tokenize(':')
     if (remote_ref.startsWith('+'))

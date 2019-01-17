@@ -613,12 +613,14 @@ def process_prepare_source_tree(
 @click.option('--change-request', metavar='<identifier>'           , help='Identifier of change-request to use in merge commit message')
 @click.option('--title'         , metavar='<title>'                , help='''Change request title to incorporate in merge commit's subject line''')
 @click.option('--description'   , metavar='<description>'          , help='''Change request description to incorporate in merge commit message's body''')
+@click.option('--approved-by'   , metavar='<approver>'             , help='''Name of approving reviewer (can be provided multiple times).''', multiple=True)
 def merge_change_request(
         source_remote,
         source_ref,
         change_request,
         title,
         description,
+        approved_by,
     ):
     """
     Merges the change request from the specified branch.
@@ -640,6 +642,8 @@ def merge_change_request(
             msg = "{msg}: {title}".format(msg=msg, title=title)
         if description is not None:
             msg = "{msg}\n\n{description}".format(msg=msg, description=description)
+        if approved_by:
+            msg += '\n\n' + '\n'.join('Acked-by: {approval}'.format(**locals()) for approval in approved_by)
         return {
                 'message': msg,
                 'parent_commits': (
