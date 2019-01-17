@@ -588,7 +588,7 @@ def process_prepare_source_tree(
             del commit_params['author']
             if 'author_date' in commit_params and 'commit_date' in commit_params:
                 commit_params['author_date'] = commit_params['commit_date']
-            commit_params['message'] = '[ Release build ] new version commit: {after_submit_version}'.format(**locals())
+            commit_params['message'] = '[ Release build ] new version commit: {after_submit_version}\n'.format(**locals())
             commit_params['parent_commits'] = (submit_commit,)
             # Prevent advancing HEAD
             commit_params['head'] = False
@@ -639,11 +639,11 @@ def merge_change_request(
 
         msg = "Merge #{}".format(change_request)
         if title is not None:
-            msg = "{msg}: {title}".format(msg=msg, title=title)
+            msg = "{msg}: {title}\n".format(msg=msg, title=title)
         if description is not None:
-            msg = "{msg}\n\n{description}".format(msg=msg, description=description)
+            msg = "{msg}\n{description}\n".format(msg=msg, description=description)
         if approved_by:
-            msg += '\n\n' + '\n'.join('Acked-by: {approval}'.format(**locals()) for approval in approved_by)
+            msg += '\n' + '\n'.join('Acked-by: {approval}'.format(**locals()) for approval in approved_by) + '\n'
         return {
                 'message': msg,
                 'parent_commits': (
@@ -739,6 +739,8 @@ def apply_modality_change(
         if not repo.index.diff(repo.head.commit):
             log.info("No changes introduced by '%s'", commit_message)
             return None
+        if not commit_message.endswith('\n'):
+            commit_message += '\n'
         return {'message': commit_message}
     return change_applicator
 
