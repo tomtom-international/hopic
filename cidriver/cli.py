@@ -59,6 +59,7 @@ except ImportError:
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
 
+
 class DateTime(click.ParamType):
     name = 'date'
     stamp_re = re.compile(r'^@(?P<utcstamp>\d+(?:\.\d+)?)(?:\s+(?P<tzdir>[-+])(?P<tzhour>\d{1,2}):?(?P<tzmin>\d{2}))?$')
@@ -77,7 +78,7 @@ class DateTime(click.ParamType):
 
                 tzdir  = (-1 if stamp.group('tzdir') == '-' else 1)
                 tzhour = int_or_none(stamp.group('tzhour'))
-                tzmin  = int_or_none(stamp.group('tzmin' ))
+                tzmin  = int_or_none(stamp.group('tzmin'))
 
                 if tzhour is not None:
                     tz = tzoffset(None, tzdir * (tzhour * 3600 + tzmin * 60))
@@ -91,6 +92,7 @@ class DateTime(click.ParamType):
             return dt
         except ValueError as e:
             self.fail('Could not parse datetime string "{value}": {e}'.format(value=value, e=' '.join(e.args)), param, ctx)
+
 
 def determine_source_date(workspace):
     """Determine the date of most recent change to the sources in the given workspace"""
@@ -121,6 +123,7 @@ def determine_source_date(workspace):
     except (git.InvalidGitRepositoryError, git.NoSuchPathError):
         return None
 
+
 def volume_spec_to_docker_param(volume):
     if not os.path.exists(volume['source']):
         os.makedirs(volume['source'])
@@ -130,6 +133,7 @@ def volume_spec_to_docker_param(volume):
     except KeyError:
         pass
     return param
+
 
 class OptionContext(object):
     def __init__(self):
@@ -171,13 +175,14 @@ class OptionContext(object):
                 raise click.MissingParameter(**kwargs)
 
         self._missing_parameters[name] = dict(
-                ctx=ctx,
-                param=param,
-                exception_raiser=exception_raiser,
-            )
+            ctx=ctx,
+            param=param,
+            exception_raiser=exception_raiser,
+        )
 
     def register_dependent_attribute(self, name, dependency):
         self._missing_parameters[name] = self._missing_parameters[dependency]
+
 
 def cli_autocomplete_get_option_from_args(args, option):
     try:
@@ -187,13 +192,15 @@ def cli_autocomplete_get_option_from_args(args, option):
             if arg.startswith(option + '='):
                 return arg[len(option + '='):]
 
+
 def cli_autocomplet_get_config_from_args(args):
     config = os.path.expanduser(
-            expand_vars(
-                os.environ,
-                cli_autocomplete_get_option_from_args(args, '--config'),
-            ))
+        expand_vars(
+            os.environ,
+            cli_autocomplete_get_option_from_args(args, '--config'),
+        ))
     return read_config(config, {})
+
 
 def cli_autocomplete_phase_from_config(ctx, args, incomplete):
     try:
@@ -201,6 +208,7 @@ def cli_autocomplete_phase_from_config(ctx, args, incomplete):
         return cfg['phases'].keys()
     except Exception:
         return ()
+
 
 def cli_autocomplete_variant_from_config(ctx, args, incomplete):
     try:
@@ -219,6 +227,7 @@ def cli_autocomplete_variant_from_config(ctx, args, incomplete):
     except Exception:
         pass
 
+
 def cli_autocomplete_modality_from_config(ctx, args, incomplete):
     try:
         cfg = cli_autocomplet_get_config_from_args(args)
@@ -228,12 +237,12 @@ def cli_autocomplete_modality_from_config(ctx, args, incomplete):
 
 def cli_autocomplete_click_log_verbosity(ctx, args, incomplete):
     return (
-            'DEBUG',
-            'INFO',
-            'WARNING',
-            'ERROR',
-            'CRITICAL',
-        )
+        'DEBUG',
+        'INFO',
+        'WARNING',
+        'ERROR',
+        'CRITICAL',
+    )
 
 @click.group(context_settings=dict(help_option_names=('-h', '--help')))
 @click.option('--color', type=click.Choice(('always', 'auto', 'never')), default='auto')
@@ -259,24 +268,20 @@ def cli(ctx, color, config, workspace):
         if param.human_readable_name == 'workspace' and workspace is not None:
             if ctx.invoked_subcommand != 'checkout-source-tree':
                 # Require the workspace directory to exist for anything but the checkout command
-                try:
-                    os.stat(workspace)
-                except OSError:
+                if not os.path.isdir(workspace):
                     raise click.BadParameter(
-                            'Directory "{workspace}" does not exist.'.format(**locals()),
-                            ctx=ctx, param=param
-                        )
+                        'Directory "{workspace}" does not exist.'.format(**locals()),
+                        ctx=ctx, param=param
+                    )
             ctx.obj.workspace = workspace
         elif param.human_readable_name == 'config' and config is not None:
             # Require the config file to exist everywhere that it's used
-            try:
-                os.stat(config)
-            except OSError:
+            if not os.path.isfile(config):
                 def exception_raiser(ctx, param):
                     raise click.BadParameter(
-                            'File "{config}" does not exist.'.format(config=config),
-                            ctx=ctx, param=param
-                        )
+                        'File "{config}" does not exist.'.format(config=config),
+                        ctx=ctx, param=param
+                    )
                 ctx.obj.register_parameter(ctx=ctx, param=param, exception_raiser=exception_raiser)
 
     ctx.obj.volume_vars = {}
@@ -293,8 +298,8 @@ def cli(ctx, color, config, workspace):
         if source_date is not None:
             ctx.obj.source_date = source_date
             ctx.obj.source_date_epoch = int((
-                    source_date - datetime.utcfromtimestamp(0).replace(tzinfo=tzutc())
-                ).total_seconds())
+                source_date - datetime.utcfromtimestamp(0).replace(tzinfo=tzutc())
+            ).total_seconds())
             ctx.obj.volume_vars['SOURCE_DATE_EPOCH'] = str(ctx.obj.source_date_epoch)
     ctx.obj.register_dependent_attribute('code_dir', 'workspace')
     ctx.obj.register_dependent_attribute('source_date', 'workspace')
@@ -409,6 +414,7 @@ def checkout_tree(tree, remote, ref, clean):
         restore_mtime_from_git(repo)
     return commit
 
+
 @cli.command()
 @click.option('--target-remote'     , metavar='<url>')
 @click.option('--target-ref'        , metavar='<ref>')
@@ -427,7 +433,7 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
     try:
         ctx.obj.config = read_config(ctx.obj.config_file, ctx.obj.volume_vars)
         git_cfg = ctx.obj.config['scm']['git']
-    except:
+    except (click.BadParameter, KeyError, TypeError, OSError):
         return
 
     if 'remote' not in git_cfg and 'ref' not in git_cfg:
@@ -464,6 +470,7 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
 
     checkout_tree(ctx.obj.code_dir, git_cfg.get('remote', target_remote), git_cfg.get('ref', target_ref), clean)
 
+
 @cli.group()
 # git
 @click.option('--author-name'               , metavar='<name>'                 , help='''Name of change-request's author''')
@@ -472,10 +479,11 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
 @click.option('--commit-date'               , metavar='<date>', type=DateTime(), help='''Time of starting to build this change-request''')
 def prepare_source_tree(*args, **kwargs):
     """
-    Prepares the source tree for building with some change.
+    Prepares the source tree for building a change performed by a subcommand.
     """
 
     pass
+
 
 @prepare_source_tree.resultcallback()
 @click.pass_context
@@ -606,6 +614,7 @@ def process_prepare_source_tree(
         if ctx.obj.version is not None:
             click.echo(ctx.obj.version)
 
+
 @prepare_source_tree.command()
 # git
 @click.option('--source-remote' , metavar='<url>', help='<source> remote to merge into <target>')
@@ -653,6 +662,7 @@ def merge_change_request(
             }
     return change_applicator
 
+
 _env_var_re = re.compile(r'^(?P<var>[A-Za-z_][0-9A-Za-z_]*)=(?P<val>.*)$')
 @prepare_source_tree.command()
 @click.argument('modality', autocompletion=cli_autocomplete_modality_from_config)
@@ -666,6 +676,7 @@ def apply_modality_change(
     """
 
     modality_cmds = ctx.obj.config.get('modality-source-preparation', {}).get(modality, ())
+
     def change_applicator(repo):
         has_changed_files = False
         commit_message = modality
@@ -744,6 +755,7 @@ def apply_modality_change(
         return {'message': commit_message}
     return change_applicator
 
+
 @cli.command()
 @click.pass_context
 def phases(ctx):
@@ -753,6 +765,7 @@ def phases(ctx):
 
     for phase in ctx.obj.config['phases']:
         click.echo(phase)
+
 
 @cli.command()
 @click.option('--phase'             , metavar='<phase>'  , help='''Build phase to show variants for''', autocompletion=cli_autocomplete_phase_from_config)
@@ -773,6 +786,7 @@ def variants(ctx, phase):
     for variant in variants:
         click.echo(variant)
 
+
 @cli.command()
 @click.option('--phase'             , metavar='<phase>'  , required=True, help='''Build phase''', autocompletion=cli_autocomplete_phase_from_config)
 @click.option('--variant'           , metavar='<variant>', required=True, help='''Configuration variant''', autocompletion=cli_autocomplete_variant_from_config)
@@ -792,6 +806,7 @@ def getinfo(ctx, phase, variant):
             except KeyError:
                 pass
     click.echo(json.dumps(info))
+
 
 @cli.command()
 @click.option('--phase'             , metavar='<phase>'  , help='''Build phase to execute''', autocompletion=cli_autocomplete_phase_from_config)
@@ -875,12 +890,12 @@ def build(ctx, phase, variant):
 
                 cmd = shlex.split(cmd)
                 env = (dict(
-                        HOME            = '/home/sandbox',
-                        _JAVA_OPTIONS   = '-Duser.home=/home/sandbox',
-                    ) if image is not None else {})
+                    HOME            = '/home/sandbox',
+                    _JAVA_OPTIONS   = '-Duser.home=/home/sandbox',
+                ) if image is not None else {})
                 try:
                     env['SOURCE_DATE_EPOCH'] = str(ctx.obj.source_date_epoch)
-                except:
+                except click.BadParameter:
                     pass
 
                 # Strip off prefixed environment variables from this command-line and apply them
@@ -896,18 +911,18 @@ def build(ctx, phase, variant):
                 if image is not None:
                     uid, gid = os.getuid(), os.getgid()
                     docker_run = ['docker', 'run',
-                            '--rm',
-                            '--net=host',
-                            '--tty',
-                            '--tmpfs', '{}:uid={},gid={}'.format(env['HOME'], uid, gid),
-                            '-u', '{}:{}'.format(uid, gid),
-                            '-v', '/etc/passwd:/etc/passwd:ro',
-                            '-v', '/etc/group:/etc/group:ro',
-                            '-w', '/code',
-                            '-v', '{WORKSPACE}:/code:rw'.format(**ctx.obj.volume_vars)
-                        ] + list(chain(*[
-                            ['-e', '{}={}'.format(k, v)] for k, v in env.items()
-                        ]))
+                                  '--rm',
+                                  '--net=host',
+                                  '--tty',
+                                  '--tmpfs', '{}:uid={},gid={}'.format(env['HOME'], uid, gid),
+                                  '-u', '{}:{}'.format(uid, gid),
+                                  '-v', '/etc/passwd:/etc/passwd:ro',
+                                  '-v', '/etc/group:/etc/group:ro',
+                                  '-w', '/code',
+                                  '-v', '{WORKSPACE}:/code:rw'.format(**ctx.obj.volume_vars)
+                                  ] + list(chain(*[
+                                      ['-e', '{}={}'.format(k, v)] for k, v in env.items()
+                                  ]))
                     for volume in cfg['volumes']:
                         docker_run += ['-v', volume_spec_to_docker_param(volume)]
                     docker_run.append(image)
@@ -924,6 +939,7 @@ def build(ctx, phase, variant):
             # Post-processing to make these artifacts as reproducible as possible
             for artifact in artifacts:
                 binary_normalize.normalize(os.path.join(ctx.obj.code_dir, artifact), source_date_epoch=ctx.obj.source_date_epoch)
+
 
 @cli.command()
 @click.option('--target-remote', metavar='<url>', help='''The remote to push to, if not specified this will default to the checkout remote.''')
@@ -950,6 +966,7 @@ def submit(ctx, target_remote):
 
         origin.push(refspecs, atomic=True)
 
+
 @cli.command()
 @click.pass_context
 def show_config(ctx):
@@ -958,6 +975,7 @@ def show_config(ctx):
     """
 
     click.echo(json.dumps(ctx.obj.config, indent=4, separators=(',', ': ')))
+
 
 @cli.command()
 @click.pass_context

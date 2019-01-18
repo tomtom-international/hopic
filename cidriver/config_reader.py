@@ -20,17 +20,18 @@ import xml.etree.ElementTree as ET
 import yaml
 
 __all__ = (
-        'expand_vars',
-        'read',
-    )
+    'expand_vars',
+    'read',
+)
 
-_var_re = re.compile(r'(?<!\$)\$(?:(\w+)|\{([^}]+)\})')
+
+_variable_interpolation_re = re.compile(r'(?<!\$)\$(?:(\w+)|\{([^}]+)\})')
 def expand_vars(vars, expr):
     if isinstance(expr, string_types):
         # Expand variables from our "virtual" environment
         last_idx = 0
         new_val = expr[:last_idx]
-        for var in _var_re.finditer(expr):
+        for var in _variable_interpolation_re.finditer(expr):
             name = var.group(1) or var.group(2)
             value = vars[name]
             new_val = new_val + expr[last_idx:var.start()].replace('$$', '$') + value
@@ -48,12 +49,18 @@ def expand_vars(vars, expr):
     except TypeError:
         return expr
 
+
 class OrderedLoader(yaml.SafeLoader):
     pass
+
+
 def __yaml_construct_mapping(loader, node):
     loader.flatten_mapping(node)
     return OrderedDict(loader.construct_pairs(node))
+
+
 OrderedLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, __yaml_construct_mapping)
+
 
 def get_toolchain_image_information(dependency_manifest):
     """Returns, as a dictionary, the dependency in the given manifest that refers to the toolchain image to be used."""
@@ -75,6 +82,7 @@ def get_toolchain_image_information(dependency_manifest):
         dep.attrib for dep in tree.getroot().find("dependencies") if refers_to_toolchain(dep))
 
     return toolchain_dep
+
 
 def image_from_ivy_manifest(volume_vars, loader, node):
     props = loader.construct_mapping(node) if node.value else {}
@@ -102,18 +110,20 @@ def image_from_ivy_manifest(volume_vars, loader, node):
 
     return '{image}:{rev}'.format(**image)
 
+
 def ordered_image_ivy_loader(volume_vars):
     OrderedImageLoader = type('OrderedImageLoader', (OrderedLoader,), {})
     OrderedImageLoader.add_constructor(
-            '!image-from-ivy-manifest',
-            lambda *args: image_from_ivy_manifest(volume_vars, *args)
-        )
+        '!image-from-ivy-manifest',
+        lambda *args: image_from_ivy_manifest(volume_vars, *args)
+    )
     return OrderedImageLoader
+
 
 def expand_docker_volume_spec(config_dir, volume_vars, volume_specs):
     guest_volume_vars = {
-            'WORKSPACE': '/code',
-        }
+        'WORKSPACE': '/code',
+    }
     volumes = []
     for volume in volume_specs:
         # Expand string format to dictionary format
@@ -129,9 +139,9 @@ def expand_docker_volume_spec(config_dir, volume_vars, volume_specs):
             except IndexError:
                 read_only = None
             volume = {
-                    'source': source,
-                    'target': target,
-                }
+                'source': source,
+                'target': target,
+            }
             if read_only is not None:
                 volume['read-only'] = read_only
 
@@ -158,6 +168,7 @@ def expand_docker_volume_spec(config_dir, volume_vars, volume_specs):
         volumes.append(volume)
     return volumes
 
+
 def read(config, volume_vars):
     config_dir = os.path.dirname(config)
 
@@ -178,8 +189,6 @@ def read(config, volume_vars):
                     continue
                 if isinstance(var, (OrderedDict, dict)):
                     for var_key in var:
-                        if var_key == 'run-on-change' and isinstance(var[var_key], bool):
-                            var[var_key] = 'always' if var[var_key] else 'never'
                         if var_key in ('archive', 'fingerprint') and isinstance(var[var_key], (OrderedDict, dict)) and 'artifacts' in var[var_key]:
                             artifacts = var[var_key]['artifacts']
 

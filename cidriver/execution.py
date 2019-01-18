@@ -24,6 +24,7 @@ except ImportError:
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
 
+
 def echo_cmd(fun, cmd, *args, **kwargs):
     log.info('Executing: %s', click.style(' '.join(shquote(word) for word in cmd), fg='yellow'))
 

@@ -36,7 +36,7 @@ library(
         $class: 'GitSCMSource',
         remote: repo
   ]))
-def cidriver = getCiDriver("git+${repo}@${version}")
+def cidriver = getCiDriver("git+${repo}@${version}", "hopic-ci-config.yml")
 
 pipeline {
   // Build agents/nodes get allocated when required, not before.

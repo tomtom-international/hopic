@@ -33,7 +33,7 @@ if sys.version_info < (3,5,2):
             """
             prefix = name[:-tarfile.LENGTH_NAME]
             while prefix and prefix[-1] != "/" and len(prefix) < len(name):
-                prefix = name[:len(prefix)+1]
+                prefix = name[:len(prefix) + 1]
 
             name = name[len(prefix):]
             prefix = prefix[:-1]
@@ -46,6 +46,7 @@ if sys.version_info < (3,5,2):
         tarinfo = TarInfoWithoutGreedyNameSplitting
 else:
     TarFile = tarfile.TarFile
+
 
 class ArInfo(object):
     """Represents a single member in an ar archive."""
@@ -133,14 +134,14 @@ class ArInfo(object):
         if len(buf) != cls.HEADER_SIZE:
             raise IOError("Too short a header for ar file: {} instead of {}".format(len(buf), HEADER_SIZE))
         member_name, mtime, uid, gid, perm, size, ending = (
-                buf[ 0:16],
-                buf[16:28],
-                buf[28:34],
-                buf[34:40],
-                buf[40:48],
-                buf[48:58],
-                buf[58:60],
-            )
+            buf[ 0:16],
+            buf[16:28],
+            buf[28:34],
+            buf[34:40],
+            buf[40:48],
+            buf[48:58],
+            buf[58:60],
+        )
         member_name = member_name.rstrip(b' ').rstrip(b'/').decode('ASCII')
 
         try:
@@ -151,7 +152,7 @@ class ArInfo(object):
         arinfo = cls(fileobj, data_offset, size, member_name or None)
 
         arinfo.mtime = int(mtime)
-        arinfo.uid   = int(uid  )
+        arinfo.uid   = int(uid)
         arinfo.gid   = int(gid)
         arinfo.perm  = int(perm, 8)
 
@@ -162,6 +163,7 @@ class ArInfo(object):
         if len(buf) != self.HEADER_SIZE:
             raise IOError("Exceeding maximum header size: {buf}".format(buf=buf))
         return buf
+
 
 class ArFile(object):
     """Provides an interface to ar archives."""
@@ -191,7 +193,7 @@ class ArFile(object):
             if mode == 'w':
                 self.fileobj.write(b'!<arch>\n')
             self.offset = self.fileobj.tell()
-        except:
+        except:  # ignore E722 here: we re-raise, so it's not a problem
             if not self._extfileobj:
                 fileobj.close()
             self.closed = True
@@ -229,6 +231,7 @@ class ArFile(object):
         arinfo = self.arinfo.frombuf(self.fileobj, file_header, self.offset)
         self.offset += arinfo.padded_size
         return arinfo
+
     def __next__(self):
         return self.next()
 
@@ -241,7 +244,6 @@ class ArFile(object):
         self.offset = 0
         self.read_signature = False
         return self
-
 
     def appendfile(self, arinfo):
         if self.closed:
@@ -273,6 +275,7 @@ class ArFile(object):
 
     def __exit__(self, type, value, traceback):
         self.close()
+
 
 def normalize(filename, fileobj=None, outname='', outfileobj=None, source_date_epoch=0):
     """Make the given file as close to reproducible as possible. Mostly be clamping timestamps to source_date_epoch."""
@@ -319,10 +322,10 @@ def normalize(filename, fileobj=None, outname='', outfileobj=None, source_date_e
         with ArFile(filename) as in_pkg, ArFile(filename + '.tmp', 'w') as out_pkg:
             # A valid Debian package contains these files in this order
             expected_files = [
-                    (u'debian-binary',),
-                    (u'control.tar', u'control.tar.gz', u'control.tar.xz'),
-                    (u'data.tar', u'data.tar.gz', u'data.tar.bz2', u'data.tar.xz'),
-                ]
+                (u'debian-binary',),
+                (u'control.tar', u'control.tar.gz', u'control.tar.xz'),
+                (u'data.tar', u'data.tar.gz', u'data.tar.bz2', u'data.tar.xz'),
+            ]
             for pkg_member in in_pkg:
                 if expected_files:
                     expected = expected_files.pop(0)

@@ -149,11 +149,11 @@ class BitbucketPullRequest extends ChangeRequest
 
 }
 
-class SpecialModalityRequest extends ChangeRequest
+class ModalityRequest extends ChangeRequest
 {
   private modality
 
-  SpecialModalityRequest(steps, modality) {
+  ModalityRequest(steps, modality) {
     super(steps)
     this.modality = modality
   }
@@ -235,7 +235,7 @@ class CiDriver
       // FIXME: Don't rely on hard-coded build parameter, externalize this instead.
       else if (steps.params.MODALITY != null && steps.params.MODALITY != "NORMAL")
       {
-        this.change = new SpecialModalityRequest(steps, steps.params.MODALITY)
+        this.change = new ModalityRequest(steps, steps.params.MODALITY)
       }
     }
 
