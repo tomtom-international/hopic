@@ -637,13 +637,13 @@ def merge_change_request(
 
         repo.git.merge(source_commit, no_ff=True, no_commit=True)
 
-        msg = "Merge #{}".format(change_request)
+        msg = u"Merge #{}".format(change_request)
         if title is not None:
-            msg = "{msg}: {title}\n".format(msg=msg, title=title)
+            msg = u"{msg}: {title}\n".format(msg=msg, title=title)
         if description is not None:
-            msg = "{msg}\n{description}\n".format(msg=msg, description=description)
+            msg = u"{msg}\n{description}\n".format(msg=msg, description=description)
         if approved_by:
-            msg += '\n' + '\n'.join('Acked-by: {approval}'.format(**locals()) for approval in approved_by) + '\n'
+            msg += u'\n' + u'\n'.join(u'Acked-by: {approval}'.format(**locals()) for approval in approved_by) + u'\n'
         return {
                 'message': msg,
                 'parent_commits': (
@@ -739,8 +739,8 @@ def apply_modality_change(
         if not repo.index.diff(repo.head.commit):
             log.info("No changes introduced by '%s'", commit_message)
             return None
-        if not commit_message.endswith('\n'):
-            commit_message += '\n'
+        if not commit_message.endswith(u'\n'):
+            commit_message += u'\n'
         return {'message': commit_message}
     return change_applicator
 
