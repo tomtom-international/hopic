@@ -16,8 +16,7 @@
 import groovy.json.JsonOutput
 import org.jenkinsci.plugins.credentialsbinding.impl.CredentialNotFoundException
 
-class ChangeRequest
-{
+class ChangeRequest {
   protected steps
 
   ChangeRequest(steps) {
@@ -46,8 +45,7 @@ class ChangeRequest
   }
 }
 
-class BitbucketPullRequest extends ChangeRequest
-{
+class BitbucketPullRequest extends ChangeRequest {
   private url
   private info = null
   private credentialsId
@@ -149,8 +147,7 @@ class BitbucketPullRequest extends ChangeRequest
 
 }
 
-class ModalityRequest extends ChangeRequest
-{
+class ModalityRequest extends ChangeRequest {
   private modality
 
   ModalityRequest(steps, modality) {
@@ -180,8 +177,7 @@ class ModalityRequest extends ChangeRequest
   }
 }
 
-class CiDriver
-{
+class CiDriver {
   private repo
   private steps
   private base_cmds       = [:]
