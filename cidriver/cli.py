@@ -957,14 +957,7 @@ def submit(ctx, target_remote):
             refspecs = shlex.split(cfg.get_value(section, 'refspecs'))
             cfg.remove_section(section)
 
-        try:
-            origin = repo.remotes.origin
-        except AttributeError:
-            origin = repo.create_remote('origin', target_remote)
-        else:
-            origin.set_url(target_remote)
-
-        origin.push(refspecs, atomic=True)
+        repo.git.push(target_remote, refspecs, atomic=True)
 
 
 @cli.command()
