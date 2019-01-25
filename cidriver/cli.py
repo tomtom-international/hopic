@@ -433,7 +433,7 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
     try:
         ctx.obj.config = read_config(ctx.obj.config_file, ctx.obj.volume_vars)
         git_cfg = ctx.obj.config['scm']['git']
-    except (click.BadParameter, KeyError, TypeError, OSError):
+    except (click.BadParameter, KeyError, TypeError, OSError, IOError):
         return
 
     if 'remote' not in git_cfg and 'ref' not in git_cfg:
@@ -509,8 +509,10 @@ def process_prepare_source_tree(
             return
 
         # Re-read config
-        if os.path.isfile(ctx.obj.config_file):
+        try:
             ctx.obj.config = read_config(ctx.obj.config_file, ctx.obj.volume_vars)
+        except (click.BadParameter, KeyError, TypeError, OSError, IOError):
+            pass
 
         # Ensure that, when we're dealing with a separated config and code repository, that the code repository is checked out again to the newer version
         if ctx.obj.code_dir != ctx.obj.workspace:
@@ -527,7 +529,10 @@ def process_prepare_source_tree(
 
             checkout_tree(ctx.obj.code_dir, code_remote, code_commit, code_clean)
 
-        version_info = ctx.obj.config.get('version', {})
+        try:
+            version_info = ctx.obj.config['version']
+        except (click.BadParameter, KeyError, TypeError):
+            version_info = {}
         version_tag  = version_info.get('tag', False)
         if version_tag and not isinstance(version_tag, string_types):
             version_tag = '{version.major}.{version.minor}.{version.patch}'
