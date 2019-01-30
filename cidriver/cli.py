@@ -235,6 +235,7 @@ def cli_autocomplete_modality_from_config(ctx, args, incomplete):
     except Exception:
         return ()
 
+
 def cli_autocomplete_click_log_verbosity(ctx, args, incomplete):
     return (
         'DEBUG',
@@ -243,6 +244,33 @@ def cli_autocomplete_click_log_verbosity(ctx, args, incomplete):
         'ERROR',
         'CRITICAL',
     )
+
+
+def determine_version(version_info, code_dir=None):
+    """
+    Determines the current version for the given version configuration snippet.
+    """
+
+    if 'file' in version_info:
+        params = {}
+        if 'format' in version_info:
+            params['format'] = version_info['format']
+        fname = version_info['file']
+        if os.path.isfile(fname):
+            return read_version(fname, **params)
+
+    if version_info.get('tag', False) and code_dir is not None:
+        try:
+            with git.Repo(code_dir) as repo:
+                describe_out = repo.git.describe(tags=True, long=True, dirty=True, always=True)
+        except (git.InvalidGitRepositoryError, git.NoSuchPathError):
+            pass
+        else:
+            params = {}
+            if 'format' in version_info:
+                params['format'] = version_info['format']
+            return parse_git_describe_version(describe_out, dirty_date=determine_source_date(code_dir), **params)
+
 
 @click.group(context_settings=dict(help_option_names=('-h', '--help')))
 @click.option('--color', type=click.Choice(('always', 'auto', 'never')), default='auto')
@@ -322,32 +350,17 @@ def cli(ctx, color, config, workspace):
     ctx.obj.register_dependent_attribute('config_file', 'config')
     ctx.obj.register_dependent_attribute('config_dir', 'config')
 
-    ctx.obj.version = None
-    version_info = cfg.get('version', {})
-    if 'file' in version_info and ctx.obj.version is None:
-        params = {}
-        if 'format' in version_info:
-            params['format'] = version_info['format']
-        fname = version_info['file']
-        if os.path.isfile(fname):
-            ctx.obj.version = read_version(fname, **params)
-    if version_info.get('tag', False) and ctx.obj.version is None and workspace is not None:
-        try:
-            with git.Repo(ctx.obj.code_dir) as repo:
-                describe_out = repo.git.describe(tags=True, long=True, dirty=True, always=True)
-        except (git.InvalidGitRepositoryError, git.NoSuchPathError):
-            pass
-        else:
-            params = {}
-            if 'format' in version_info:
-                params['format'] = version_info['format']
-            ctx.obj.version = parse_git_describe_version(describe_out, dirty_date=ctx.obj.source_date, **params)
+    ctx.obj.version = determine_version(
+            cfg.get('version', {}),
+            code_dir=(ctx.obj.code_dir if workspace is not None else None),
+        )
     if ctx.obj.version is not None:
         log.debug("read version: \x1B[34m%s\x1B[39m", ctx.obj.version)
         ctx.obj.volume_vars['VERSION'] = str(ctx.obj.version)
         # FIXME: make this conversion work even when not using SemVer as versioning policy
         # Convert SemVer to Debian version: '~' for pre-release instead of '-'
         ctx.obj.volume_vars['DEBVERSION'] = ctx.obj.volume_vars['VERSION'].replace('-', '~', 1).replace('.dirty.', '+dirty', 1)
+
 
 def restore_mtime_from_git(repo, files=None):
     if files is None:
@@ -375,6 +388,7 @@ def restore_mtime_from_git(repo, files=None):
         whatchanged.terminate()
     except OSError:
         pass
+
 
 def checkout_tree(tree, remote, ref, clean):
     try:
@@ -533,6 +547,10 @@ def process_prepare_source_tree(
             version_info = ctx.obj.config['version']
         except (click.BadParameter, KeyError, TypeError):
             version_info = {}
+
+        # Re-read version
+        ctx.obj.version = determine_version(version_info, ctx.obj.code_dir)
+
         version_tag  = version_info.get('tag', False)
         if version_tag and not isinstance(version_tag, string_types):
             version_tag = '{version.major}.{version.minor}.{version.patch}'
