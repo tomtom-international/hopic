@@ -522,7 +522,7 @@ def process_prepare_source_tree(
         if not commit_params:
             return
 
-        # Re-read config
+        # Re-read config to ensure any changes introduced by 'change_applicator' are taken into account
         try:
             ctx.obj.config = read_config(ctx.obj.config_file, ctx.obj.volume_vars)
         except (click.BadParameter, KeyError, TypeError, OSError, IOError):
@@ -548,7 +548,7 @@ def process_prepare_source_tree(
         except (click.BadParameter, KeyError, TypeError):
             version_info = {}
 
-        # Re-read version
+        # Re-read version to ensure that the version policy in the reloaded configuration is used for it
         ctx.obj.version = determine_version(version_info, ctx.obj.code_dir)
 
         version_tag  = version_info.get('tag', False)
