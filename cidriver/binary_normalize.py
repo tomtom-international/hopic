@@ -193,7 +193,7 @@ class ArFile(object):
             if mode == 'w':
                 self.fileobj.write(b'!<arch>\n')
             self.offset = self.fileobj.tell()
-        except:  # ignore E722 here: we re-raise, so it's not a problem
+        except:  # noqa: E722: we re-raise, so it's not a problem
             if not self._extfileobj:
                 fileobj.close()
             self.closed = True
