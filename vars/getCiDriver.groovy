@@ -180,15 +180,16 @@ class ModalityRequest extends ChangeRequest {
 class CiDriver {
   private repo
   private steps
-  private base_cmds       = [:]
-  private cmds            = [:]
-  private nodes           = [:]
-  private checkouts       = [:]
-  private stashes         = [:]
-  private submit_version  = null
-  private change          = null
-  private source_commit   = "HEAD"
-  private target_commit   = null
+  private base_cmds         = [:]
+  private cmds              = [:]
+  private nodes             = [:]
+  private checkouts         = [:]
+  private stashes           = [:]
+  private worktree_bundles  = [:]
+  private submit_version    = null
+  private change            = null
+  private source_commit     = "HEAD"
+  private target_commit     = null
   private may_submit_result = null
   private config_file
 
@@ -404,6 +405,17 @@ exec ssh -i '''
     if (!this.checkouts.containsKey(steps.env.NODE_NAME)) {
       this.checkouts[steps.env.NODE_NAME] = this.checkout(clean)
     }
+    this.worktree_bundles.each { name, bundle ->
+      if (bundle.nodes[steps.env.NODE_NAME]) {
+        return
+      }
+      steps.unstash(name)
+      def cmd = this.checkouts[steps.env.NODE_NAME].cmd
+      steps.sh(
+          script: "${cmd} unbundle-worktrees --bundle=worktree-transfer.bundle",
+        )
+      this.worktree_bundles[name].nodes[steps.env.NODE_NAME] = true
+    }
     return this.checkouts[steps.env.NODE_NAME]
   }
 
@@ -600,6 +612,14 @@ exec ssh -i '''
                         steps.stash(params)
                       }
                       this.stashes[name] = [dir: meta.stash.dir, nodes: [(steps.env.NODE_NAME): true]]
+                    }
+                    if (meta.containsKey('worktrees')) {
+                      def name = "${phase}-${variant}-worktree-transfer.bundle"
+                      steps.stash(
+                          name: name,
+                          includes: 'worktree-transfer.bundle',
+                        )
+                      this.worktree_bundles[name] = [nodes: [(steps.env.NODE_NAME): true]]
                     }
                     def archiving_cfg = meta.containsKey('archive') ? 'archive' : meta.containsKey('fingerprint') ? 'fingerprint' : null
                     if (archiving_cfg) {

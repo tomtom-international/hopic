@@ -45,7 +45,10 @@ import logging
 import os
 import re
 import shlex
-from six import string_types
+from six import (
+        string_types,
+        text_type,
+    )
 import subprocess
 import sys
 
@@ -400,7 +403,7 @@ def restore_mtime_from_git(repo, files=None):
         pass
 
 
-def checkout_tree(tree, remote, ref, clean):
+def checkout_tree(tree, remote, ref, clean=False, remote_name='origin'):
     try:
         repo = git.Repo(tree)
     except (git.InvalidGitRepositoryError, git.NoSuchPathError):
@@ -416,11 +419,12 @@ def checkout_tree(tree, remote, ref, clean):
             repo.delete_tag(*repo.tags)
 
         try:
-            origin = repo.remotes.origin
-        except AttributeError:
-            origin = repo.create_remote('origin', remote)
-        else:
-            origin.set_url(remote)
+            # Delete, instead of update, existing remotes.
+            # This is because of https://github.com/gitpython-developers/GitPython/issues/719
+            repo.delete_remote(remote_name)
+        except git.GitCommandError:
+            pass
+        origin = repo.create_remote(remote_name, remote)
 
         commit = origin.fetch(ref, tags=True)[0].commit
         repo.head.reference = commit
@@ -476,6 +480,29 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
         git_cfg = ctx.obj.config['scm']['git']
     except (click.BadParameter, KeyError, TypeError, OSError, IOError):
         return
+
+    if 'worktrees' in git_cfg:
+        with git.Repo(workspace) as repo:
+
+            worktrees = git_cfg['worktrees'].items()
+            fetch_result = repo.remotes.origin.fetch([ref for subdir, ref in worktrees])
+
+            worktrees = dict((subdir, fetchinfo.ref) for (subdir, refname), fetchinfo in zip(worktrees, fetch_result))
+            log.debug("Worktree config: %s", worktrees)
+
+            for subdir, ref in worktrees.items():
+                try:
+                    os.remove(os.path.join(workspace, subdir, '.git'))
+                except (OSError, IOError):
+                    pass
+                clean_output = repo.git.clean('-xd', subdir, force=True)
+                if clean_output:
+                    log.info('%s', clean_output)
+
+            repo.git.worktree('prune')
+
+            for subdir, ref in worktrees.items():
+                repo.git.worktree('add', subdir, ref.commit)
 
     if 'remote' not in git_cfg and 'ref' not in git_cfg:
         return
@@ -885,11 +912,12 @@ def build(ctx, phase, variant):
             submit_commit = repo.head.commit
             section = 'ci-driver.{submit_commit}'.format(**locals())
             with repo.config_reader() as git_cfg:
-                refspecs = tuple(shlex.split(git_cfg.get_value(section, 'refspecs')))
+                refspecs = list(shlex.split(git_cfg.get_value(section, 'refspecs')))
     except (NoOptionError, NoSectionError):
-        refspecs = ()
+        refspecs = []
     has_change = bool(refspecs)
 
+    worktree_commits = {}
     for phasename, curphase in cfg['phases'].items():
         if phase is not None and phasename != phase:
             continue
@@ -913,6 +941,7 @@ def build(ctx, phase, variant):
             artifacts = []
 
             for cmd in cmds:
+                worktrees = {}
                 if not isinstance(cmd, string_types):
                     try:
                         run_on_change = cmd['run-on-change']
@@ -940,6 +969,20 @@ def build(ctx, phase, variant):
                                 artifact['pattern'] for artifact in cmd[artifact_key]['artifacts'] if 'pattern' in artifact)))
                         except (KeyError, TypeError):
                             pass
+
+                    try:
+                        worktrees = cmd['worktrees']
+
+                        # Force clean builds when we don't know how to discover changed files
+                        for subdir, worktree in worktrees.items():
+                            if 'changed-files' not in worktree:
+                                with git.Repo(os.path.join(ctx.obj.workspace, subdir)) as repo:
+                                    clean_output = repo.git.clean('-xd', subdir, force=True)
+                                    if clean_output:
+                                        log.info('%s', clean_output)
+                    except KeyError:
+                        pass
+
                     try:
                         cmd = cmd['sh']
                     except (KeyError, TypeError):
@@ -993,10 +1036,110 @@ def build(ctx, phase, variant):
                     log.exception("Command fatally terminated with exit code %d", e.returncode)
                     sys.exit(e.returncode)
 
+                for subdir, worktree in worktrees.items():
+                    with git.Repo(os.path.join(ctx.obj.workspace, subdir)) as repo:
+                        worktree_commits.setdefault(subdir, [
+                            text_type(repo.head.commit),
+                            text_type(repo.head.commit),
+                        ])
+
+                        if 'changed-files' in worktree:
+                            changed_files = worktree["changed-files"]
+                            if isinstance(changed_files, string_types):
+                                changed_files = [changed_files]
+                            changed_files = [expand_vars(volume_vars, f) for f in changed_files]
+                            repo.index.add(changed_files)
+                        else:
+                            # 'git add --all' equivalent (excluding the code_dir)
+                            add_files = set(repo.untracked_files)
+                            remove_files = set()
+                            for diff in repo.index.diff(None):
+                                add_files.add(diff.b_path)
+                                remove_files.add(diff.a_path)
+                            repo.index.remove(remove_files)
+                            repo.index.add(add_files)
+
+                        commit_message = expand_vars(volume_vars, worktree['commit-message'])
+                        if not commit_message.endswith(u'\n'):
+                            commit_message += u'\n'
+                        with git.Repo(ctx.obj.workspace) as parent_repo:
+                            parent = parent_repo.head.commit
+                            submit_commit = repo.index.commit(
+                                    message     = commit_message,
+                                    author      = parent.author,
+                                    author_date = to_git_time(parent.authored_datetime),
+                                )
+                        restore_mtime_from_git(repo)
+                        worktree_commits[subdir][1] = text_type(submit_commit)
+                        log.info('%s', repo.git.show(submit_commit, format='fuller', stat=True))
+
+            if worktrees:
+                with git.Repo(ctx.obj.workspace) as repo, repo.config_writer() as cfg:
+                    bundle_commits = []
+                    for subdir, (base_commit, submit_commit) in worktree_commits.items():
+                        worktree_ref = ctx.obj.config['scm']['git']['worktrees'][subdir]
+                        if worktree_ref in repo.heads:
+                            repo.heads[worktree_ref].set_commit(submit_commit, logmsg='Prepare for git-bundle')
+                        else:
+                            repo.create_head(worktree_ref, submit_commit)
+                        bundle_commits.append('{base_commit}..{worktree_ref}'.format(**locals()))
+                        refspecs.append('{submit_commit}:{worktree_ref}'.format(**locals()))
+                    repo.git.bundle('create', os.path.join(ctx.obj.workspace, 'worktree-transfer.bundle'), *bundle_commits)
+
+                    submit_commit = repo.head.commit
+                    section = 'ci-driver.{submit_commit}'.format(**locals())
+                    cfg.set_value(section, 'refspecs', ' '.join(shquote(refspec) for refspec in refspecs))
+
             # Post-processing to make these artifacts as reproducible as possible
             for artifact in artifacts:
                 binary_normalize.normalize(os.path.join(ctx.obj.code_dir, artifact), source_date_epoch=ctx.obj.source_date_epoch)
 
+
+@cli.command()
+@click.option('--bundle', metavar='<file>', help='Git bundle to use', type=click.Path(file_okay=True, dir_okay=False, readable=True, resolve_path=True))
+@click.pass_context
+def unbundle_worktrees(ctx, bundle):
+    """
+    Unbundle a git bundle and fast-forward all the configured worktrees that are included in it.
+    """
+
+    with git.Repo(ctx.obj.workspace) as repo:
+        submit_commit = repo.head.commit
+        section = 'ci-driver.{submit_commit}'.format(**locals())
+        with repo.config_reader() as git_cfg:
+            try:
+                refspecs = list(shlex.split(git_cfg.get_value(section, 'refspecs')))
+            except (NoOptionError, NoSectionError):
+                refspecs = []
+
+        head_path = 'refs/heads/'
+        worktrees = dict((v,k) for k,v in ctx.obj.config['scm']['git']['worktrees'].items())
+        for headline in repo.git.bundle('list-heads', bundle).splitlines():
+            commit, ref = headline.split(' ', 1)
+            if not ref.startswith(head_path):
+                continue
+            ref = ref[len(head_path):]
+            if ref not in worktrees:
+                continue
+
+            subdir = worktrees[ref]
+            log.debug("Checkout worktree '%s' to '%s' (proposed branch '%s')", subdir, commit, ref)
+            checkout_tree(os.path.join(ctx.obj.workspace, subdir), bundle, ref, remote_name='bundle')
+            refspecs.append('{commit}:{ref}'.format(**locals()))
+
+        # Eliminate duplicate pushes to the same ref and replace it by a single push to the _last_ specified object
+        seen_refs = set()
+        new_refspecs = []
+        for refspec in reversed(refspecs):
+            _, ref = refspec.rsplit(':', 1)
+            if ref in seen_refs:
+                continue
+            new_refspecs.insert(0, refspec)
+            seen_refs.add(ref)
+        refspecs = new_refspecs
+
+        with repo.config_writer() as cfg:
+            cfg.set_value(section, 'refspecs', ' '.join(shquote(refspec) for refspec in refspecs))
 
 @cli.command()
 @click.option('--target-remote', metavar='<url>', help='''The remote to push to, if not specified this will default to the checkout remote.''')
