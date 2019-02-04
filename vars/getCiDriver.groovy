@@ -501,7 +501,10 @@ exec ssh -i '''
           }
         if (is_submittable_change) {
           lock_if_necessary = { closure ->
-            def lock_name = steps.scm.userRemoteConfigs[0].url.tokenize('/').last().split("\\.")[0]
+            def repo_url  = steps.scm.userRemoteConfigs[0].url
+            def repo_name = repo_url.tokenize('/')[-2..-1].join('/') - ~/\.git$/ // "${project}/${repo}"
+            def branch    = steps.env.CHANGE_TARGET ?: steps.env.BRANCH_NAME
+            def lock_name = "${repo_name}/${branch}"
             return steps.lock(lock_name) {
               // Ensure a new checkout is performed because the target repository may change while waiting for the lock
               this.checkouts.remove(this.nodes[variant.variant])

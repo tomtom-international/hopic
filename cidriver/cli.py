@@ -20,6 +20,16 @@ from .config_reader import read as read_config
 from .config_reader import expand_vars
 from .execution import echo_cmd
 from .versioning import *
+try:
+    from collections.abc import (
+            Mapping,
+            MutableSequence,
+        )
+except ImportError:
+    from collections import (
+            Mapping,
+            MutableSequence,
+        )
 from datetime import (datetime, timedelta)
 from dateutil.parser import parse as date_parse
 from dateutil.tz import (tzoffset, tzlocal, tzutc)
@@ -273,7 +283,7 @@ def determine_version(version_info, code_dir=None):
 
 
 @click.group(context_settings=dict(help_option_names=('-h', '--help')))
-@click.option('--color', type=click.Choice(('always', 'auto', 'never')), default='auto')
+@click.option('--color', type=click.Choice(('always', 'auto', 'never')), default='auto', show_default=True)
 @click.option('--config', type=click.Path(exists=False, file_okay=True, dir_okay=False, readable=True, resolve_path=True))
 @click.option('--workspace', type=click.Path(exists=False, file_okay=False, dir_okay=True))
 @click_log.simple_verbosity_option(__package__, autocompletion=cli_autocomplete_click_log_verbosity)
@@ -429,6 +439,23 @@ def checkout_tree(tree, remote, ref, clean):
     return commit
 
 
+def to_git_time(date):
+    """
+    Converts a datetime object to a string with Git's internal time format.
+    
+    This is necessary because GitPython, wrongly, interprets an ISO-8601 formatted time string as
+    UTC time to be converted to the specified timezone.
+
+    Git's internal time format actually is UTC time plus a timezone to be applied for display
+    purposes, so converting it to that yields correct behavior.
+    """
+
+    utctime = int((
+        date - datetime.utcfromtimestamp(0).replace(tzinfo=tzutc())
+    ).total_seconds())
+    return '{utctime} {date:%z}'.format(**locals())
+
+
 @cli.command()
 @click.option('--target-remote'     , metavar='<url>')
 @click.option('--target-ref'        , metavar='<ref>')
@@ -566,7 +593,6 @@ def process_prepare_source_tree(
                 replace_version(os.path.join(ctx.obj.config_dir, version_info['file']), ctx.obj.version)
                 repo.index.add([version_info['file']])
 
-        env = os.environ.copy()
         author = git.Actor.author(repo.config_reader())
         if author_name is not None:
             author.name = author_name
@@ -574,9 +600,9 @@ def process_prepare_source_tree(
             author.email = author_email
         commit_params.setdefault('author', author)
         if author_date is not None:
-            commit_params['author_date'] = author_date.strftime('%Y-%m-%dT%H:%M:%S %z')
+            commit_params['author_date'] = to_git_time(author_date)
         if commit_date is not None:
-            commit_params['commit_date'] = commit_date.strftime('%Y-%m-%dT%H:%M:%S %z')
+            commit_params['commit_date'] = to_git_time(commit_date)
 
         submit_commit = repo.index.commit(**commit_params)
         click.echo(submit_commit)
@@ -630,6 +656,7 @@ def process_prepare_source_tree(
         with repo.config_writer() as cfg:
             section = 'ci-driver.{submit_commit}'.format(**locals())
             cfg.set_value(section, 'remote', target_remote)
+            cfg.set_value(section, 'ref', target_ref)
             refspecs = ['{push_commit}:{target_ref}'.format(**locals())]
             if tagname is not None:
                 refspecs.append('refs/tags/{tagname}:refs/tags/{tagname}'.format(**locals()))
@@ -825,10 +852,17 @@ def getinfo(ctx, phase, variant):
             continue
         for key, val in var.items():
             try:
-                info[key] = expand_vars(ctx.obj.volume_vars, val)
+                val = expand_vars(ctx.obj.volume_vars, val)
             except KeyError:
                 pass
-    click.echo(json.dumps(info))
+            else:
+                if key in info and isinstance(info[key], Mapping):
+                    info[key].update(val)
+                elif key in info and isinstance(info[key], MutableSequence):
+                    info[key].extend(val)
+                else:
+                    info[key] = val
+    click.echo(json.dumps(info, indent=4, separators=(',', ': ')))
 
 
 @cli.command()
@@ -974,13 +1008,15 @@ def submit(ctx, target_remote):
 
     with git.Repo(ctx.obj.workspace) as repo:
         section = 'ci-driver.{repo.head.commit}'.format(**locals())
-        with repo.config_writer() as cfg:
+        with repo.config_reader() as cfg:
             if target_remote is None:
                 target_remote = cfg.get_value(section, 'remote')
             refspecs = shlex.split(cfg.get_value(section, 'refspecs'))
-            cfg.remove_section(section)
 
         repo.git.push(target_remote, refspecs, atomic=True)
+
+        with repo.config_writer() as cfg:
+            cfg.remove_section(section)
 
 
 @cli.command()
