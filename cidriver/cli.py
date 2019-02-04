@@ -273,7 +273,7 @@ def determine_version(version_info, code_dir=None):
 
 
 @click.group(context_settings=dict(help_option_names=('-h', '--help')))
-@click.option('--color', type=click.Choice(('always', 'auto', 'never')), default='auto')
+@click.option('--color', type=click.Choice(('always', 'auto', 'never')), default='auto', show_default=True)
 @click.option('--config', type=click.Path(exists=False, file_okay=True, dir_okay=False, readable=True, resolve_path=True))
 @click.option('--workspace', type=click.Path(exists=False, file_okay=False, dir_okay=True))
 @click_log.simple_verbosity_option(__package__, autocompletion=cli_autocomplete_click_log_verbosity)
