@@ -20,6 +20,16 @@ from .config_reader import read as read_config
 from .config_reader import expand_vars
 from .execution import echo_cmd
 from .versioning import *
+try:
+    from collections.abc import (
+            Mapping,
+            MutableSequence,
+        )
+except ImportError:
+    from collections import (
+            Mapping,
+            MutableSequence,
+        )
 from datetime import (datetime, timedelta)
 from dateutil.parser import parse as date_parse
 from dateutil.tz import (tzoffset, tzlocal, tzutc)
@@ -842,9 +852,16 @@ def getinfo(ctx, phase, variant):
             continue
         for key, val in var.items():
             try:
-                info[key] = expand_vars(ctx.obj.volume_vars, val)
+                val = expand_vars(ctx.obj.volume_vars, val)
             except KeyError:
                 pass
+            else:
+                if key in info and isinstance(info[key], Mapping):
+                    info[key].update(val)
+                elif key in info and isinstance(info[key], MutableSequence):
+                    info[key].extend(val)
+                else:
+                    info[key] = val
     click.echo(json.dumps(info))
 
 
