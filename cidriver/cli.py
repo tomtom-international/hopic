@@ -429,6 +429,23 @@ def checkout_tree(tree, remote, ref, clean):
     return commit
 
 
+def to_git_time(date):
+    """
+    Converts a datetime object to a string with Git's internal time format.
+    
+    This is necessary because GitPython, wrongly, interprets a ISO-8601 formatted time string as
+    UTC time to be converted to the specified timezone.
+
+    Git's internal time format actually is UTC time plus a timezone to be applied for display
+    purposes, so converting it to that yields correct behavior.
+    """
+
+    utctime = int((
+        date - datetime.utcfromtimestamp(0).replace(tzinfo=tzutc())
+    ).total_seconds())
+    return '{utctime} {date:%z}'.format(**locals())
+
+
 @cli.command()
 @click.option('--target-remote'     , metavar='<url>')
 @click.option('--target-ref'        , metavar='<ref>')
@@ -574,9 +591,9 @@ def process_prepare_source_tree(
             author.email = author_email
         commit_params.setdefault('author', author)
         if author_date is not None:
-            commit_params['author_date'] = author_date.strftime('%Y-%m-%dT%H:%M:%S %z')
+            commit_params['author_date'] = to_git_time(author_date)
         if commit_date is not None:
-            commit_params['commit_date'] = commit_date.strftime('%Y-%m-%dT%H:%M:%S %z')
+            commit_params['commit_date'] = to_git_time(commit_date)
 
         submit_commit = repo.index.commit(**commit_params)
         click.echo(submit_commit)
