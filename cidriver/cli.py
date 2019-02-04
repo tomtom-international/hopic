@@ -990,13 +990,15 @@ def submit(ctx, target_remote):
 
     with git.Repo(ctx.obj.workspace) as repo:
         section = 'ci-driver.{repo.head.commit}'.format(**locals())
-        with repo.config_writer() as cfg:
+        with repo.config_reader() as cfg:
             if target_remote is None:
                 target_remote = cfg.get_value(section, 'remote')
             refspecs = shlex.split(cfg.get_value(section, 'refspecs'))
-            cfg.remove_section(section)
 
         repo.git.push(target_remote, refspecs, atomic=True)
+
+        with repo.config_writer() as cfg:
+            cfg.remove_section(section)
 
 
 @cli.command()
