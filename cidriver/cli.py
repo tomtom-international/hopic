@@ -862,7 +862,7 @@ def getinfo(ctx, phase, variant):
                     info[key].extend(val)
                 else:
                     info[key] = val
-    click.echo(json.dumps(info))
+    click.echo(json.dumps(info, indent=4, separators=(',', ': ')))
 
 
 @cli.command()
