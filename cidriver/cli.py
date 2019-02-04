@@ -646,6 +646,7 @@ def process_prepare_source_tree(
         with repo.config_writer() as cfg:
             section = 'ci-driver.{submit_commit}'.format(**locals())
             cfg.set_value(section, 'remote', target_remote)
+            cfg.set_value(section, 'ref', target_ref)
             refspecs = ['{push_commit}:{target_ref}'.format(**locals())]
             if tagname is not None:
                 refspecs.append('refs/tags/{tagname}:refs/tags/{tagname}'.format(**locals()))
