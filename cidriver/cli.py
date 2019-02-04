@@ -583,7 +583,6 @@ def process_prepare_source_tree(
                 replace_version(os.path.join(ctx.obj.config_dir, version_info['file']), ctx.obj.version)
                 repo.index.add([version_info['file']])
 
-        env = os.environ.copy()
         author = git.Actor.author(repo.config_reader())
         if author_name is not None:
             author.name = author_name
