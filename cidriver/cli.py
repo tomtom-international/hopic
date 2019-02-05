@@ -443,7 +443,7 @@ def to_git_time(date):
     """
     Converts a datetime object to a string with Git's internal time format.
     
-    This is necessary because GitPython, wrongly, interprets a ISO-8601 formatted time string as
+    This is necessary because GitPython, wrongly, interprets an ISO-8601 formatted time string as
     UTC time to be converted to the specified timezone.
 
     Git's internal time format actually is UTC time plus a timezone to be applied for display
