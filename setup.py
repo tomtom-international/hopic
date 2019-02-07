@@ -12,10 +12,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import io
+import re
 from setuptools import setup
+
+with io.open('README.rst', encoding='UTF-8') as fh:
+    long_description = fh.read()
+
+# Remove directives
+description = re.sub(r'^[ \t]*\.\.(?:[ \t]+[^\n]*)?\n(?:[ \t]+[^\n]*\n)*', r'', long_description, flags=re.DOTALL|re.MULTILINE)
+description = description.strip()
+# Extract first paragraph
+description = re.sub(r'\n\n.*', r'', description, flags=re.DOTALL|re.MULTILINE)
+# Eliminate emphasis annotation
+description = re.sub(r'\*\*(.*?)\*\*', r'\1', description)
+# Convert line breaks into spaces
+description = description.replace('\n', ' ')
 
 setup(
     name='cidriver',
+    author='TomTom N.V.',
+    description=description,
+    long_description=long_description,
+    long_description_content_type='text/x-rst',
     packages=('cidriver',),
     py_modules=('cidriver',),
     install_requires=(
