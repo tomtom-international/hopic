@@ -794,8 +794,10 @@ def apply_modality_change(
             for diff in repo.index.diff(None):
                 add_files.add(diff.b_path)
                 remove_files.add(diff.a_path)
-            repo.index.remove(remove_files)
-            repo.index.add(add_files)
+            if remove_files:
+                repo.index.remove(remove_files)
+            if add_files:
+                repo.index.add(add_files)
 
         if not repo.index.diff(repo.head.commit):
             log.info("No changes introduced by '%s'", commit_message)
