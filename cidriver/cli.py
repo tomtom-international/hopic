@@ -376,8 +376,10 @@ def restore_mtime_from_git(repo, files=None):
     if files is None:
         files = set(filter(None, repo.git.ls_files('-z', stdout_as_string=False).split(b'\0')))
 
-    # Set all files' modification times to their last commit's time
     encoding = sys.getfilesystemencoding() or sys.getdefaultencoding()
+    workspace = repo.working_tree_dir.encode(encoding)
+
+    # Set all files' modification times to their last commit's time
     whatchanged = repo.git.whatchanged(pretty='format:%ct', as_process=True)
     mtime = 0
     for line in whatchanged.stdout:
@@ -391,7 +393,8 @@ def restore_mtime_from_git(repo, files=None):
             filename = line.split(b'\t')[-1]
             if filename in files:
                 files.remove(filename)
-                os.utime(os.path.join(repo.working_tree_dir.encode(encoding), filename), (mtime, mtime))
+                path = os.path.join(workspace, filename)
+                os.utime(path, (mtime, mtime))
         else:
             mtime = int(line)
     try:
