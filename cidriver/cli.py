@@ -379,6 +379,8 @@ def restore_mtime_from_git(repo, files=None):
     encoding = sys.getfilesystemencoding() or sys.getdefaultencoding()
     workspace = repo.working_tree_dir.encode(encoding)
 
+    symlink_mode = 0o120000
+
     # Set all files' modification times to their last commit's time
     whatchanged = repo.git.whatchanged(pretty='format:%ct', as_process=True)
     mtime = 0
@@ -404,7 +406,13 @@ def restore_mtime_from_git(repo, files=None):
             if new_filename in files:
                 files.remove(new_filename)
                 path = os.path.join(workspace, new_filename)
-                os.utime(path, (mtime, mtime))
+                if new_mode == symlink_mode:
+                    # Only attempt to modify symlinks' timestamps when the current system supports it.
+                    # E.g. Python >= 3.3 and Linux kernel >= 2.6.22
+                    if os.utime in getattr(os, 'supports_follow_symlinks', set()):
+                        os.utime(path, (mtime, mtime), follow_symlinks=False)
+                else:
+                    os.utime(path, (mtime, mtime))
         else:
             mtime = int(line)
     try:
