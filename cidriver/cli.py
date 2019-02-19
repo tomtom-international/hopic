@@ -379,8 +379,12 @@ def restore_mtime_from_git(repo, files=None):
     if files is None:
         files = set(filter(None, repo.git.ls_files('-z', stdout_as_string=False).split(b'\0')))
 
-    # Set all files' modification times to their last commit's time
     encoding = sys.getfilesystemencoding() or sys.getdefaultencoding()
+    workspace = repo.working_tree_dir.encode(encoding)
+
+    symlink_mode = 0o120000
+
+    # Set all files' modification times to their last commit's time
     whatchanged = repo.git.whatchanged(pretty='format:%ct', as_process=True)
     mtime = 0
     for line in whatchanged.stdout:
@@ -391,10 +395,27 @@ def restore_mtime_from_git(repo, files=None):
         if not line:
             continue
         if line.startswith(b':'):
-            filename = line.split(b'\t')[-1]
-            if filename in files:
-                files.remove(filename)
-                os.utime(os.path.join(repo.working_tree_dir.encode(encoding), filename), (mtime, mtime))
+            line = line[1:]
+
+            props, filenames = line.split(b'\t', 1)
+            old_mode, new_mode, old_hash, new_hash, operation = props.split(b' ')
+            old_mode, new_mode = int(old_mode, 8), int(new_mode, 8)
+
+            filenames = filenames.split(b'\t')
+            if len(filenames) == 1:
+                filenames.insert(0, None)
+            old_filename, new_filename = filenames
+
+            if new_filename in files:
+                files.remove(new_filename)
+                path = os.path.join(workspace, new_filename)
+                if new_mode == symlink_mode:
+                    # Only attempt to modify symlinks' timestamps when the current system supports it.
+                    # E.g. Python >= 3.3 and Linux kernel >= 2.6.22
+                    if os.utime in getattr(os, 'supports_follow_symlinks', set()):
+                        os.utime(path, (mtime, mtime), follow_symlinks=False)
+                else:
+                    os.utime(path, (mtime, mtime))
         else:
             mtime = int(line)
     try:
