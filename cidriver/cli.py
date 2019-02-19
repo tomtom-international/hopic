@@ -390,10 +390,20 @@ def restore_mtime_from_git(repo, files=None):
         if not line:
             continue
         if line.startswith(b':'):
-            filename = line.split(b'\t')[-1]
-            if filename in files:
-                files.remove(filename)
-                path = os.path.join(workspace, filename)
+            line = line[1:]
+
+            props, filenames = line.split(b'\t', 1)
+            old_mode, new_mode, old_hash, new_hash, operation = props.split(b' ')
+            old_mode, new_mode = int(old_mode, 8), int(new_mode, 8)
+
+            filenames = filenames.split(b'\t')
+            if len(filenames) == 1:
+                filenames.insert(0, None)
+            old_filename, new_filename = filenames
+
+            if new_filename in files:
+                files.remove(new_filename)
+                path = os.path.join(workspace, new_filename)
                 os.utime(path, (mtime, mtime))
         else:
             mtime = int(line)
