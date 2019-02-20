@@ -471,6 +471,7 @@ exec ssh -i '''
           this.source_commit = scm.GIT_COMMIT
         }
 
+        cmd += ' --workspace=' + shell_quote("${workspace}")
         cmd += ' --config=' + shell_quote("${workspace}/${config_file}")
 
         return steps.sh(script: "${cmd} phases", returnStdout: true).split("\\r?\\n").collect { phase ->
