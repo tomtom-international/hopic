@@ -583,7 +583,26 @@ exec ssh -i '''
                       ))
 
                     try {
-                      steps.sh(script: "${cmd} build --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant))
+                      if (meta.containsKey('with-credentials')) {
+                        def creds = meta['with-credentials']
+                        def user_var = creds.getOrDefault('username-variable', 'USERNAME')
+                        def pass_var = creds.getOrDefault('password-variable', 'PASSWORD')
+                        steps.withCredentials([steps.usernamePassword(
+                              credentialsId: creds['id'],
+                              usernameVariable: user_var,
+                              passwordVariable: pass_var,
+                              )]) {
+                          steps.sh(script: cmd
+                              + ' --whitelisted-var=' + shell_quote(user_var)
+                              + ' --whitelisted-var=' + shell_quote(pass_var)
+                              + ' build'
+                              + ' --phase=' + shell_quote(phase)
+                              + ' --variant=' + shell_quote(variant)
+                            )
+                        }
+                      } else {
+                        steps.sh(script: "${cmd} build --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant))
+                      }
                     } finally {
                       if (meta.containsKey('junit')) {
                         def results = meta.junit

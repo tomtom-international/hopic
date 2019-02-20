@@ -295,10 +295,11 @@ def determine_version(version_info, code_dir=None):
 @click.option('--color', type=click.Choice(('always', 'auto', 'never')), default='auto', show_default=True)
 @click.option('--config', type=click.Path(exists=False, file_okay=True, dir_okay=False, readable=True, resolve_path=True))
 @click.option('--workspace', type=click.Path(exists=False, file_okay=False, dir_okay=True))
+@click.option('--whitelisted-var', multiple=True, default=['CT_DEVENV_HOME'], show_default=True)
 @click_log.simple_verbosity_option(__package__, autocompletion=cli_autocomplete_click_log_verbosity)
 @click_log.simple_verbosity_option('git', '--git-verbosity', autocompletion=cli_autocomplete_click_log_verbosity)
 @click.pass_context
-def cli(ctx, color, config, workspace):
+def cli(ctx, color, config, workspace, whitelisted_var):
     if color == 'always':
         ctx.color = True
     elif color == 'never':
@@ -352,11 +353,9 @@ def cli(ctx, color, config, workspace):
     ctx.obj.register_dependent_attribute('source_date', 'workspace')
     ctx.obj.register_dependent_attribute('source_date_epoch', 'workspace')
 
-    for whitelisted_var in (
-            'CT_DEVENV_HOME',
-        ):
+    for var in whitelisted_var:
         try:
-            ctx.obj.volume_vars[whitelisted_var] = os.environ[whitelisted_var]
+            ctx.obj.volume_vars[var] = os.environ[var]
         except KeyError:
             pass
 
