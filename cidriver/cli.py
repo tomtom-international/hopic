@@ -215,9 +215,11 @@ def cli_autocomplet_get_config_from_args(args):
 def cli_autocomplete_phase_from_config(ctx, args, incomplete):
     try:
         cfg = cli_autocomplet_get_config_from_args(args)
-        return cfg['phases'].keys()
+        for phase in cfg['phases']:
+            if incomplete in phase:
+                yield phase
     except Exception:
-        return ()
+        pass
 
 
 def cli_autocomplete_variant_from_config(ctx, args, incomplete):
@@ -241,19 +243,23 @@ def cli_autocomplete_variant_from_config(ctx, args, incomplete):
 def cli_autocomplete_modality_from_config(ctx, args, incomplete):
     try:
         cfg = cli_autocomplet_get_config_from_args(args)
-        return cfg['modality-source-preparation'].keys()
+        for modality in cfg['modality-source-preparation']:
+            if incomplete in modality:
+                yield modality
     except Exception:
-        return ()
+        pass
 
 
 def cli_autocomplete_click_log_verbosity(ctx, args, incomplete):
-    return (
-        'DEBUG',
-        'INFO',
-        'WARNING',
-        'ERROR',
-        'CRITICAL',
-    )
+    for level in (
+            'DEBUG',
+            'INFO',
+            'WARNING',
+            'ERROR',
+            'CRITICAL',
+        ):
+        if incomplete in level:
+            yield level
 
 
 def determine_version(version_info, code_dir=None):
