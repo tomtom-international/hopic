@@ -80,6 +80,39 @@ class BitbucketPullRequest extends ChangeRequest {
     if (merge.containsKey('canMerge')) {
       info['canMerge'] = merge['canMerge']
     }
+
+    // Expand '@user' tokens in pull request description to 'Full Name <Full.Name@example.com>'
+    // because we don't have this mapping handy when reading git commit messages.
+    if (info.containsKey('description')) {
+      def users = [:]
+
+      def m = info.description =~ /(?<!\\)@(\w+)/
+      def last_idx = 0
+      def new_description = ''
+      m.each { _, username ->
+        if (!users.containsKey(username)) {
+          def baseRestUrl = url
+            .replaceFirst(/\/projects\/.*/, '/rest/api/1.0')
+          users[username] = steps.readJSON(text: steps.httpRequest(
+              url: "${baseRestUrl}/users/${username}",
+              httpMode: 'GET',
+              authentication: credentialsId,
+            ).content)
+        }
+        def user = users[username]
+
+        def str = user.getOrDefault('displayName', user.getOrDefault('name', username))
+        if (user.emailAddress) {
+          str = "${str} <${user.emailAddress}>"
+        }
+
+        new_description = new_description + info.description[last_idx..m.start() - 1] + str
+        last_idx = m.end()
+      }
+      new_description = new_description + description[last_idx..-1]
+      info.description = new_description
+    }
+
     info['author_time'] = info.getOrDefault('updatedDate', steps.currentBuild.timeInMillis) / 1000.0
     info['commit_time'] = steps.currentBuild.startTimeInMillis / 1000.0
     this.info = info
