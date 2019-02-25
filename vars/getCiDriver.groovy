@@ -462,7 +462,11 @@ exec ssh -i '''
         cmd += ' --workspace=' + shell_quote("${workspace}")
         cmd += ' --config=' + shell_quote("${workspace}/${config_file}")
 
-        return steps.sh(script: "${cmd} phases", returnStdout: true).split("\\r?\\n").collect { phase ->
+        return steps.sh(script: "${cmd} phases",
+            returnStdout: true)
+            .split("\\r?\\n")
+            .findAll{it.size() > 0}
+            .collect { phase ->
           [
             phase: phase,
             variants: steps.sh(script: "${cmd} variants --phase=" + shell_quote(phase), returnStdout: true).split("\\r?\\n").collect { variant ->
