@@ -609,7 +609,14 @@ def process_prepare_source_tree(
         if version_tag and not isinstance(version_tag, string_types):
             version_tag = '{version.major}.{version.minor}.{version.patch}'
 
-        if ctx.obj.version is not None and version_info.get('bump', True):
+        if version_info.get('bump', True):
+            if ctx.obj.version is None:
+                if 'file' in version_info:
+                    log.error("Failed to read the current version (from %r) while attempting to bump the version", version_info['file'])
+                else:
+                    log.error("Failed to determine the current version while attempting to bump the version")
+                ctx.exit(1)
+
             params = {}
             if 'bump' in version_info:
                 params['bump'] = version_info['bump']
