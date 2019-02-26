@@ -109,7 +109,7 @@ class BitbucketPullRequest extends ChangeRequest {
         new_description = new_description + info.description[last_idx..m.start() - 1] + str
         last_idx = m.end()
       }
-      new_description = new_description + description[last_idx..-1]
+      new_description = new_description + info.description[last_idx..-1]
       info.description = new_description
     }
 
