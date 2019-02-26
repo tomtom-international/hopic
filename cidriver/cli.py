@@ -363,7 +363,10 @@ def cli(ctx, color, config, workspace, whitelisted_var):
     if config is not None:
         ctx.obj.config_file = config
         ctx.obj.volume_vars['CFGDIR'] = ctx.obj.config_dir = os.path.dirname(config)
-        if os.path.isfile(config):
+        # Prevent reading the config file _before_ performing a checkout. This prevents a pre-existing file at the same
+        # location from being read as the config file. This may cause problems if that pre-checkout file has syntax
+        # errors for example.
+        if ctx.invoked_subcommand != 'checkout-source-tree' and os.path.isfile(config):
             cfg = ctx.obj.config = read_config(config, ctx.obj.volume_vars)
     ctx.obj.register_dependent_attribute('config_file', 'config')
     ctx.obj.register_dependent_attribute('config_dir', 'config')
@@ -635,7 +638,14 @@ def process_prepare_source_tree(
         if version_tag and not isinstance(version_tag, string_types):
             version_tag = '{version.major}.{version.minor}.{version.patch}'
 
-        if ctx.obj.version is not None and version_info.get('bump', True):
+        if version_info.get('bump', True):
+            if ctx.obj.version is None:
+                if 'file' in version_info:
+                    log.error("Failed to read the current version (from %r) while attempting to bump the version", version_info['file'])
+                else:
+                    log.error("Failed to determine the current version while attempting to bump the version")
+                ctx.exit(1)
+
             params = {}
             if 'bump' in version_info:
                 params['bump'] = version_info['bump']

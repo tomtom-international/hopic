@@ -182,7 +182,7 @@ def read(config, volume_vars):
     cfg['volumes'] = expand_docker_volume_spec(config_dir, volume_vars, cfg.get('volumes', ()))
 
     # Convert multiple different syntaxes into a single one
-    for phase in cfg.get('phases', {}).values():
+    for phase in cfg.setdefault('phases', OrderedDict()).values():
         for variant in phase.values():
             for var in variant:
                 if isinstance(var, string_types):
