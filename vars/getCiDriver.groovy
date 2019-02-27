@@ -491,36 +491,35 @@ exec ssh -i '''
       // NOP as default
       def lock_if_necessary = { closure -> closure() }
 
-      def has_change_only_step = phases.findAll { phase ->
-          phase.variants.findAll { variant ->
-            variant.run_on_change == 'only'
+      def is_change_only = { variant -> variant.run_on_change == 'only' }
+      def change_only_phase = phases.find { phase -> phase.variants.any is_change_only }
+      def change_only_step = change_only_phase ? change_only_phase.variants.find(is_change_only) : null
+
+      def is_submittable_change = steps.node(change_only_step ? change_only_step.label : default_node_expr) {
+          this.ensure_checkout(clean)
+          // FIXME: factor out this duplication of node pinning (same occurs below)
+          if (change_only_step && !this.nodes.containsKey(change_only_step.variant)) {
+            this.nodes[change_only_step.variant] = steps.env.NODE_NAME
           }
+
+          // NOTE: side-effect of calling this.has_submittable_change() allows usage of this.may_submit_result below
+          this.has_submittable_change()
         }
-      if (has_change_only_step) {
-        def variant = has_change_only_step[0].variants[0]
-        def is_submittable_change = steps.node(variant.label) {
-            this.ensure_checkout(clean)
-            // FIXME: factor out this duplication of node pinning (same occurs below)
-            if (!this.nodes.containsKey(variant.variant)) {
-              this.nodes[variant.variant] = steps.env.NODE_NAME
+
+      if (is_submittable_change) {
+        lock_if_necessary = { closure ->
+          def repo_url  = steps.scm.userRemoteConfigs[0].url
+          def repo_name = repo_url.tokenize('/')[-2..-1].join('/') - ~/\.git$/ // "${project}/${repo}"
+          def branch    = steps.env.CHANGE_TARGET ?: steps.env.BRANCH_NAME
+          def lock_name = "${repo_name}/${branch}"
+          return steps.lock(lock_name) {
+            // Ensure a new checkout is performed because the target repository may change while waiting for the lock
+            if (change_only_step) {
+              this.checkouts.remove(this.nodes[change_only_step.variant])
+              this.nodes.remove(change_only_step.variant)
             }
 
-            // NOTE: side-effect of calling this.has_submittable_change() allows usage of this.may_submit_result below
-            this.has_submittable_change()
-          }
-        if (is_submittable_change) {
-          lock_if_necessary = { closure ->
-            def repo_url  = steps.scm.userRemoteConfigs[0].url
-            def repo_name = repo_url.tokenize('/')[-2..-1].join('/') - ~/\.git$/ // "${project}/${repo}"
-            def branch    = steps.env.CHANGE_TARGET ?: steps.env.BRANCH_NAME
-            def lock_name = "${repo_name}/${branch}"
-            return steps.lock(lock_name) {
-              // Ensure a new checkout is performed because the target repository may change while waiting for the lock
-              this.checkouts.remove(this.nodes[variant.variant])
-              this.nodes.remove(variant.variant)
-
-              return closure()
-            }
+            return closure()
           }
         }
       }
