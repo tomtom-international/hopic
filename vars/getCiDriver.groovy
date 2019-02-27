@@ -669,7 +669,7 @@ exec ssh -i '''
           }
         }
 
-        if (this.nodes && this.may_submit_result != false) {
+        if (this.may_submit_result != false) {
           this.on_build_node {
             if (this.has_submittable_change()) {
               steps.stage('submit') {
