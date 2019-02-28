@@ -452,14 +452,15 @@ exec ssh -i '''
          * In order to do this we only check out the CI config file to the orchestrator node.
          */
         def scm = steps.checkout(steps.scm)
-        steps.env.GIT_COMMIT          = scm.GIT_COMMIT
+        // Don't trust Jenkin's scm.GIT_COMMIT because it sometimes lies
+        steps.env.GIT_COMMIT          = steps.sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
         steps.env.GIT_COMMITTER_NAME  = scm.GIT_COMMITTER_NAME
         steps.env.GIT_COMMITTER_EMAIL = scm.GIT_COMMITTER_EMAIL
         steps.env.GIT_AUTHOR_NAME     = scm.GIT_AUTHOR_NAME
         steps.env.GIT_AUTHOR_EMAIL    = scm.GIT_AUTHOR_EMAIL
 
         if (steps.env.CHANGE_TARGET) {
-          this.source_commit = scm.GIT_COMMIT
+          this.source_commit = steps.env.GIT_COMMIT
         }
 
         cmd += ' --workspace=' + shell_quote("${workspace}")
