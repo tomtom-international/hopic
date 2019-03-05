@@ -348,7 +348,7 @@ exec ssh -i '''
     }
 
     params += ' --target-remote=' + shell_quote(steps.scm.userRemoteConfigs[0].url)
-    params += ' --target-ref='    + shell_quote(steps.env.CHANGE_TARGET ?: steps.env.BRANCH_NAME)
+    params += ' --target-ref='    + shell_quote(get_branch_name())
 
     steps.env.GIT_COMMIT = this.with_credentials() {
       this.target_commit = steps.sh(script: cmd
@@ -408,6 +408,13 @@ exec ssh -i '''
       this.checkouts[steps.env.NODE_NAME] = this.checkout(clean)
     }
     return this.checkouts[steps.env.NODE_NAME]
+  }
+
+  /**
+   * @return name of target branch that we're building.
+   */
+  private String get_branch_name() {
+    steps.env.CHANGE_TARGET ?: steps.env.BRANCH_NAME
   }
 
   /**
@@ -510,7 +517,7 @@ exec ssh -i '''
         lock_if_necessary = { closure ->
           def repo_url  = steps.scm.userRemoteConfigs[0].url
           def repo_name = repo_url.tokenize('/')[-2..-1].join('/') - ~/\.git$/ // "${project}/${repo}"
-          def branch    = steps.env.CHANGE_TARGET ?: steps.env.BRANCH_NAME
+          def branch    = get_branch_name()
           def lock_name = "${repo_name}/${branch}"
           return steps.lock(lock_name) {
             // Ensure a new checkout is performed because the target repository may change while waiting for the lock
