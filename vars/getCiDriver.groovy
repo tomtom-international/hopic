@@ -418,6 +418,16 @@ exec ssh -i '''
   }
 
   /**
+   * @return a lock name unique to the target repository
+   */
+  private String get_lock_name() {
+    def repo_url  = steps.scm.userRemoteConfigs[0].url
+    def repo_name = repo_url.tokenize('/')[-2..-1].join('/') - ~/\.git$/ // "${project}/${repo}"
+    def branch    = get_branch_name()
+    "${repo_name}/${branch}"
+  }
+
+  /**
    * Unstash everything previously stashed on other nodes that we didn't yet unstash here.
    */
   private def ensure_unstashed() {
@@ -515,11 +525,7 @@ exec ssh -i '''
 
       if (is_submittable_change) {
         lock_if_necessary = { closure ->
-          def repo_url  = steps.scm.userRemoteConfigs[0].url
-          def repo_name = repo_url.tokenize('/')[-2..-1].join('/') - ~/\.git$/ // "${project}/${repo}"
-          def branch    = get_branch_name()
-          def lock_name = "${repo_name}/${branch}"
-          return steps.lock(lock_name) {
+          return steps.lock(get_lock_name()) {
             // Ensure a new checkout is performed because the target repository may change while waiting for the lock
             if (change_only_step) {
               this.checkouts.remove(this.nodes[change_only_step.variant])
