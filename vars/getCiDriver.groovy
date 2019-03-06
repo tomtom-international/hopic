@@ -428,6 +428,26 @@ exec ssh -i '''
   }
 
   /**
+   * @return a tuple of build name and build identifier
+   *
+   * The build identifier is just the stringified build number for builds on branches. For builds on pull requests it's
+   * the PR number plus build number on this PR.
+   */
+  private Tuple get_build_id() {
+    def last_item_in_project_name = steps.currentBuild.projectName
+    def project_name = steps.currentBuild.fullProjectName
+    def job_name = project_name.take(project_name.lastIndexOf(last_item_in_project_name)
+                                                 .with { it < 2 ? project_name.size() : it - 1 })
+
+    def branch = get_branch_name()
+    String build_name = "${job_name}/${branch}".replaceAll(/\/|%2F/, ' :: ')
+
+    String build_identifier = (steps.env.CHANGE_TARGET ? "PR-${steps.env.CHANGE_ID} " : '') + "${steps.currentBuild.number}"
+
+    [build_name, build_identifier]
+  }
+
+  /**
    * Unstash everything previously stashed on other nodes that we didn't yet unstash here.
    */
   private def ensure_unstashed() {
@@ -660,15 +680,17 @@ exec ssh -i '''
                                 return fileSpec
                               }
                             ])
+                          if (!artifactoryBuildInfo.containsKey(server_id)) {
+                            def newBuildInfo = steps.Artifactory.newBuildInfo()
+                            def (build_name, build_identifier) = get_build_id()
+                            newBuildInfo.name = build_name
+                            newBuildInfo.number = build_identifier
+                            artifactoryBuildInfo[server_id] = newBuildInfo
+                          }
                           def server = steps.Artifactory.server server_id
-                          def newBuildInfo = server.upload(uploadSpec)
+                          server.upload(spec: uploadSpec, buildInfo: artifactoryBuildInfo[server_id])
                           // Work around Artifactory Groovy bug
                           server = null
-                          if (!artifactoryBuildInfo.containsKey(server_id)) {
-                            artifactoryBuildInfo[server_id] = newBuildInfo
-                          } else {
-                            artifactoryBuildInfo[server_id].append(newBuildInfo)
-                          }
                         }
                       }
                     }
