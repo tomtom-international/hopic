@@ -537,8 +537,7 @@ exec ssh -i '''
         }
       }
 
-      def artifactoryServerId = null
-      def buildInfo = null
+      def artifactoryBuildInfo = [:]
 
       lock_if_necessary {
         phases.each {
@@ -665,11 +664,10 @@ exec ssh -i '''
                           def newBuildInfo = server.upload(uploadSpec)
                           // Work around Artifactory Groovy bug
                           server = null
-                          if (buildInfo == null) {
-                            artifactoryServerId = server_id
-                            buildInfo = newBuildInfo
+                          if (!artifactoryBuildInfo.containsKey(server_id)) {
+                            artifactoryBuildInfo[server_id] = newBuildInfo
                           } else {
-                            buildInfo.append(newBuildInfo)
+                            artifactoryBuildInfo[server_id].append(newBuildInfo)
                           }
                         }
                       }
@@ -697,10 +695,10 @@ exec ssh -i '''
         }
       }
 
-      if (buildInfo != null) {
-        assert this.nodes : "When we have buildInfo we expect to have execution nodes that it got produced on"
+      artifactoryBuildInfo.each { server_id, buildInfo ->
+        assert this.nodes : "When we have artifactory build info we expect to have execution nodes that it got produced on"
         this.on_build_node {
-          def server = steps.Artifactory.server artifactoryServerId
+          def server = steps.Artifactory.server server_id
           server.publishBuildInfo(buildInfo)
           // Work around Artifactory Groovy bug
           server = null
