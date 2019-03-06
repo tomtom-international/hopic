@@ -382,7 +382,7 @@ exec ssh -i '''
     }
 
     params += ' --target-remote=' + shell_quote(steps.scm.userRemoteConfigs[0].url)
-    params += ' --target-ref='    + shell_quote(steps.env.CHANGE_TARGET ?: steps.env.BRANCH_NAME)
+    params += ' --target-ref='    + shell_quote(get_branch_name())
 
     steps.env.GIT_COMMIT = this.with_credentials() {
       this.target_commit = steps.sh(script: cmd
@@ -456,6 +456,43 @@ exec ssh -i '''
   }
 
   /**
+   * @return name of target branch that we're building.
+   */
+  private String get_branch_name() {
+    steps.env.CHANGE_TARGET ?: steps.env.BRANCH_NAME
+  }
+
+  /**
+   * @return a lock name unique to the target repository
+   */
+  private String get_lock_name() {
+    def repo_url  = steps.scm.userRemoteConfigs[0].url
+    def repo_name = repo_url.tokenize('/')[-2..-1].join('/') - ~/\.git$/ // "${project}/${repo}"
+    def branch    = get_branch_name()
+    "${repo_name}/${branch}"
+  }
+
+  /**
+   * @return a tuple of build name and build identifier
+   *
+   * The build identifier is just the stringified build number for builds on branches. For builds on pull requests it's
+   * the PR number plus build number on this PR.
+   */
+  private Tuple get_build_id() {
+    def last_item_in_project_name = steps.currentBuild.projectName
+    def project_name = steps.currentBuild.fullProjectName
+    def job_name = project_name.take(project_name.lastIndexOf(last_item_in_project_name)
+                                                 .with { it < 2 ? project_name.size() : it - 1 })
+
+    def branch = get_branch_name()
+    String build_name = "${job_name}/${branch}".replaceAll(/\/|%2F/, ' :: ')
+
+    String build_identifier = (steps.env.CHANGE_TARGET ? "PR-${steps.env.CHANGE_ID} " : '') + "${steps.currentBuild.number}"
+
+    [build_name, build_identifier]
+  }
+
+  /**
    * Unstash everything previously stashed on other nodes that we didn't yet unstash here.
    */
   private def ensure_unstashed() {
@@ -497,14 +534,15 @@ exec ssh -i '''
          * In order to do this we only check out the CI config file to the orchestrator node.
          */
         def scm = steps.checkout(steps.scm)
-        steps.env.GIT_COMMIT          = scm.GIT_COMMIT
+        // Don't trust Jenkin's scm.GIT_COMMIT because it sometimes lies
+        steps.env.GIT_COMMIT          = steps.sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
         steps.env.GIT_COMMITTER_NAME  = scm.GIT_COMMITTER_NAME
         steps.env.GIT_COMMITTER_EMAIL = scm.GIT_COMMITTER_EMAIL
         steps.env.GIT_AUTHOR_NAME     = scm.GIT_AUTHOR_NAME
         steps.env.GIT_AUTHOR_EMAIL    = scm.GIT_AUTHOR_EMAIL
 
         if (steps.env.CHANGE_TARGET) {
-          this.source_commit = scm.GIT_COMMIT
+          this.source_commit = steps.env.GIT_COMMIT
         }
 
         cmd += ' --workspace=' + shell_quote("${workspace}")
@@ -535,42 +573,36 @@ exec ssh -i '''
       // NOP as default
       def lock_if_necessary = { closure -> closure() }
 
-      def has_change_only_step = phases.findAll { phase ->
-          phase.variants.findAll { variant ->
-            variant.run_on_change == 'only'
+      def is_change_only = { variant -> variant.run_on_change == 'only' }
+      def change_only_phase = phases.find { phase -> phase.variants.any is_change_only }
+      def change_only_step = change_only_phase ? change_only_phase.variants.find(is_change_only) : null
+
+      def is_submittable_change = steps.node(change_only_step ? change_only_step.label : default_node_expr) {
+          this.ensure_checkout(clean)
+          // FIXME: factor out this duplication of node pinning (same occurs below)
+          if (change_only_step && !this.nodes.containsKey(change_only_step.variant)) {
+            this.nodes[change_only_step.variant] = steps.env.NODE_NAME
           }
+
+          // NOTE: side-effect of calling this.has_submittable_change() allows usage of this.may_submit_result below
+          this.has_submittable_change()
         }
-      if (has_change_only_step) {
-        def variant = has_change_only_step[0].variants[0]
-        def is_submittable_change = steps.node(variant.label) {
-            this.ensure_checkout(clean)
-            // FIXME: factor out this duplication of node pinning (same occurs below)
-            if (!this.nodes.containsKey(variant.variant)) {
-              this.nodes[variant.variant] = steps.env.NODE_NAME
+
+      if (is_submittable_change) {
+        lock_if_necessary = { closure ->
+          return steps.lock(get_lock_name()) {
+            // Ensure a new checkout is performed because the target repository may change while waiting for the lock
+            if (change_only_step) {
+              this.checkouts.remove(this.nodes[change_only_step.variant])
+              this.nodes.remove(change_only_step.variant)
             }
 
-            // NOTE: side-effect of calling this.has_submittable_change() allows usage of this.may_submit_result below
-            this.has_submittable_change()
-          }
-        if (is_submittable_change) {
-          lock_if_necessary = { closure ->
-            def repo_url  = steps.scm.userRemoteConfigs[0].url
-            def repo_name = repo_url.tokenize('/')[-2..-1].join('/') - ~/\.git$/ // "${project}/${repo}"
-            def branch    = steps.env.CHANGE_TARGET ?: steps.env.BRANCH_NAME
-            def lock_name = "${repo_name}/${branch}"
-            return steps.lock(lock_name) {
-              // Ensure a new checkout is performed because the target repository may change while waiting for the lock
-              this.checkouts.remove(this.nodes[variant.variant])
-              this.nodes.remove(variant.variant)
-
-              return closure()
-            }
+            return closure()
           }
         }
       }
 
-      def artifactoryServerId = null
-      def buildInfo = null
+      def artifactoryBuildInfo = [:]
 
       lock_if_necessary {
         phases.each {
@@ -720,16 +752,17 @@ exec ssh -i '''
                                 return fileSpec
                               }
                             ])
+                          if (!artifactoryBuildInfo.containsKey(server_id)) {
+                            def newBuildInfo = steps.Artifactory.newBuildInfo()
+                            def (build_name, build_identifier) = get_build_id()
+                            newBuildInfo.name = build_name
+                            newBuildInfo.number = build_identifier
+                            artifactoryBuildInfo[server_id] = newBuildInfo
+                          }
                           def server = steps.Artifactory.server server_id
-                          def newBuildInfo = server.upload(uploadSpec)
+                          server.upload(spec: uploadSpec, buildInfo: artifactoryBuildInfo[server_id])
                           // Work around Artifactory Groovy bug
                           server = null
-                          if (buildInfo == null) {
-                            artifactoryServerId = server_id
-                            buildInfo = newBuildInfo
-                          } else {
-                            buildInfo.append(newBuildInfo)
-                          }
                         }
                       }
                     }
@@ -741,7 +774,7 @@ exec ssh -i '''
           }
         }
 
-        if (this.nodes && this.may_submit_result != false) {
+        if (this.may_submit_result != false) {
           this.on_build_node {
             if (this.has_submittable_change()) {
               steps.stage('submit') {
@@ -756,10 +789,10 @@ exec ssh -i '''
         }
       }
 
-      if (buildInfo != null) {
-        assert this.nodes : "When we have buildInfo we expect to have execution nodes that it got produced on"
+      artifactoryBuildInfo.each { server_id, buildInfo ->
+        assert this.nodes : "When we have artifactory build info we expect to have execution nodes that it got produced on"
         this.on_build_node {
-          def server = steps.Artifactory.server artifactoryServerId
+          def server = steps.Artifactory.server server_id
           server.publishBuildInfo(buildInfo)
           // Work around Artifactory Groovy bug
           server = null
