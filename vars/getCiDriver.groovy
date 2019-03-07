@@ -430,8 +430,8 @@ exec ssh -i '''
   /**
    * @return a tuple of build name and build identifier
    *
-   * The build identifier is just the stringified build number for builds on branches. For builds on pull requests it's
-   * the PR number plus build number on this PR.
+   * The build identifier is just the stringified build number for builds on branches.
+   * For builds on pull requests it's the PR number plus build number on this PR.
    */
   private Tuple get_build_id() {
     def last_item_in_project_name = steps.currentBuild.projectName
