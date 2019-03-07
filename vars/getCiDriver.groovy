@@ -466,6 +466,21 @@ exec ssh -i '''
     }
   }
 
+  private def pin_variant_to_current_node(String variant) {
+    if (!this.nodes.containsKey(variant)) {
+      this.nodes[variant] = steps.env.NODE_NAME
+    }
+  }
+
+  private def unpin_variant_from_node(String variant) {
+    if (this.nodes.containsKey(variant)) {
+      if (this.checkouts.containsKey(variant)) {
+        this.checkouts.remove(this.nodes[variant])
+      }
+      this.nodes.remove(variant)
+    }
+  }
+
   public def on_build_node(Map params = [:], closure) {
     def node_expr = this.nodes.collect { variant, node -> node }.join(" || ") ?: params.getOrDefault('default_node_expr', this.default_node_expr)
     return steps.node(node_expr) {
@@ -534,9 +549,8 @@ exec ssh -i '''
 
       def is_submittable_change = steps.node(change_only_step ? change_only_step.label : default_node_expr) {
           this.ensure_checkout(clean)
-          // FIXME: factor out this duplication of node pinning (same occurs below)
-          if (change_only_step && !this.nodes.containsKey(change_only_step.variant)) {
-            this.nodes[change_only_step.variant] = steps.env.NODE_NAME
+          if (change_only_step) {
+            this.pin_variant_to_current_node(change_only_step.variant)
           }
 
           // NOTE: side-effect of calling this.has_submittable_change() allows usage of this.may_submit_result below
@@ -548,8 +562,7 @@ exec ssh -i '''
           return steps.lock(get_lock_name()) {
             // Ensure a new checkout is performed because the target repository may change while waiting for the lock
             if (change_only_step) {
-              this.checkouts.remove(this.nodes[change_only_step.variant])
-              this.nodes.remove(change_only_step.variant)
+              this.unpin_variant_from_node(change_only_step.variant)
             }
 
             return closure()
@@ -598,9 +611,7 @@ exec ssh -i '''
                 steps.node(label) {
                   steps.stage("${phase}-${variant}") {
                     def cmd = this.ensure_checkout(clean).cmd
-                    if (!this.nodes.containsKey(variant)) {
-                      this.nodes[variant] = steps.env.NODE_NAME
-                    }
+                    this.pin_variant_to_current_node(variant)
 
                     this.ensure_unstashed()
 
