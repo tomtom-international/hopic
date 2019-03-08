@@ -27,9 +27,13 @@ class ChangeRequest {
     return "'" + word.replace("'", "'\\''") + "'"
   }
 
+  protected ArrayList line_split(String text) {
+    return text.split('\\r?\\n') as ArrayList
+  }
+
   protected def maySubmitImpl(target_commit, source_commit, allow_cache = true) {
-    return !steps.sh(script: 'git log ' + shell_quote(target_commit) + '..' + shell_quote(source_commit) + " --pretty='%s' --reverse", returnStdout: true)
-      .trim().split('\\r?\\n').find { subject ->
+    return !line_split(steps.sh(script: 'git log ' + shell_quote(target_commit) + '..' + shell_quote(source_commit) + " --pretty='%s' --reverse", returnStdout: true)
+      .trim()).find { subject ->
         if (subject.startsWith('fixup!') || subject.startsWith('squash!')) {
           return true
         }
@@ -153,7 +157,7 @@ class BitbucketPullRequest extends ChangeRequest {
     def (remote_ref, local_ref) = source_refspec.tokenize(':')
     if (remote_ref.startsWith('+'))
       remote_ref = remote_ref.substring(1)
-    def output = steps.sh(script: cmd
+    def output = line_split(steps.sh(script: cmd
                                 + ' prepare-source-tree'
                                 + ' --author-name=' + shell_quote(steps.env.CHANGE_AUTHOR)
                                 + ' --author-email=' + shell_quote(steps.env.CHANGE_AUTHOR_EMAIL)
@@ -165,7 +169,7 @@ class BitbucketPullRequest extends ChangeRequest {
                                 + ' --change-request=' + shell_quote(steps.env.CHANGE_ID)
                                 + ' --title=' + shell_quote(steps.env.CHANGE_TITLE)
                                 + extra_params,
-                          returnStdout: true).split("\\r?\\n").findAll{it.size() > 0}
+                          returnStdout: true)).findAll{it.size() > 0}
     if (output.size() <= 0) {
       return null
     }
@@ -191,12 +195,12 @@ class ModalityRequest extends ChangeRequest {
   public def apply(cmd, source_remote) {
     def author_time = steps.currentBuild.timeInMillis / 1000.0
     def commit_time = steps.currentBuild.startTimeInMillis / 1000.0
-    def output = steps.sh(script: cmd
+    def output = line_split(steps.sh(script: cmd
                                 + ' prepare-source-tree'
                                 + ' --author-date=' + shell_quote('@' + author_time)
                                 + ' --commit-date=' + shell_quote('@' + commit_time)
                                 + ' apply-modality-change ' + shell_quote(modality),
-                          returnStdout: true).split("\\r?\\n").findAll{it.size() > 0}
+                          returnStdout: true)).findAll{it.size() > 0}
     if (output.size() <= 0) {
       return null
     }
@@ -274,6 +278,10 @@ class CiDriver {
 
   private def shell_quote(word) {
     return "'" + word.replace("'", "'\\''") + "'"
+  }
+
+  protected ArrayList line_split(String text) {
+    return text.split('\\r?\\n') as ArrayList
   }
 
   public def install_prerequisites() {
@@ -475,8 +483,8 @@ exec ssh -i '''
   /**
    * @return a tuple of build name and build identifier
    *
-   * The build identifier is just the stringified build number for builds on branches. For builds on pull requests it's
-   * the PR number plus build number on this PR.
+   * The build identifier is just the stringified build number for builds on branches.
+   * For builds on pull requests it's the PR number plus build number on this PR.
    */
   private Tuple get_build_id() {
     def last_item_in_project_name = steps.currentBuild.projectName
@@ -508,6 +516,21 @@ exec ssh -i '''
         steps.unstash(name)
       }
       this.stashes[name].nodes[steps.env.NODE_NAME] = true
+    }
+  }
+
+  private def pin_variant_to_current_node(String variant) {
+    if (!this.nodes.containsKey(variant)) {
+      this.nodes[variant] = steps.env.NODE_NAME
+    }
+  }
+
+  private def unpin_variant_from_node(String variant) {
+    if (this.nodes.containsKey(variant)) {
+      if (this.checkouts.containsKey(variant)) {
+        this.checkouts.remove(this.nodes[variant])
+      }
+      this.nodes.remove(variant)
     }
   }
 
@@ -548,14 +571,13 @@ exec ssh -i '''
         cmd += ' --workspace=' + shell_quote("${workspace}")
         cmd += ' --config=' + shell_quote("${workspace}/${config_file}")
 
-        return steps.sh(script: "${cmd} phases",
-            returnStdout: true)
-            .split("\\r?\\n")
+        return line_split(steps.sh(script: "${cmd} phases",
+            returnStdout: true))
             .findAll{it.size() > 0}
             .collect { phase ->
           [
             phase: phase,
-            variants: steps.sh(script: "${cmd} variants --phase=" + shell_quote(phase), returnStdout: true).split("\\r?\\n").collect { variant ->
+            variants: line_split(steps.sh(script: "${cmd} variants --phase=" + shell_quote(phase), returnStdout: true)).collect { variant ->
               def meta = steps.readJSON(text: steps.sh(
                   script: "${cmd} getinfo --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant),
                   returnStdout: true,
@@ -579,9 +601,8 @@ exec ssh -i '''
 
       def is_submittable_change = steps.node(change_only_step ? change_only_step.label : default_node_expr) {
           this.ensure_checkout(clean)
-          // FIXME: factor out this duplication of node pinning (same occurs below)
-          if (change_only_step && !this.nodes.containsKey(change_only_step.variant)) {
-            this.nodes[change_only_step.variant] = steps.env.NODE_NAME
+          if (change_only_step) {
+            this.pin_variant_to_current_node(change_only_step.variant)
           }
 
           // NOTE: side-effect of calling this.has_submittable_change() allows usage of this.may_submit_result below
@@ -593,8 +614,7 @@ exec ssh -i '''
           return steps.lock(get_lock_name()) {
             // Ensure a new checkout is performed because the target repository may change while waiting for the lock
             if (change_only_step) {
-              this.checkouts.remove(this.nodes[change_only_step.variant])
-              this.nodes.remove(change_only_step.variant)
+              this.unpin_variant_from_node(change_only_step.variant)
             }
 
             return closure()
@@ -643,9 +663,7 @@ exec ssh -i '''
                 steps.node(label) {
                   steps.stage("${phase}-${variant}") {
                     def cmd = this.ensure_checkout(clean).cmd
-                    if (!this.nodes.containsKey(variant)) {
-                      this.nodes[variant] = steps.env.NODE_NAME
-                    }
+                    this.pin_variant_to_current_node(variant)
 
                     this.ensure_unstashed()
 
