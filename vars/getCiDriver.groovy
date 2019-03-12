@@ -480,13 +480,6 @@ exec ssh -i '''
     }
   }
 
-  private def unpin_variant_from_node(String variant) {
-    if (this.nodes.containsKey(variant)) {
-      this.checkouts.remove(this.nodes[variant])
-    }
-    this.nodes.remove(variant)
-  }
-
   public def on_build_node(Map params = [:], closure) {
     def node_expr = this.nodes.collect { variant, node -> node }.join(" || ") ?: params.getOrDefault('default_node_expr', this.default_node_expr)
     return steps.node(node_expr) {
@@ -554,22 +547,24 @@ exec ssh -i '''
 
       def is_submittable_change = steps.node(change_only_step ? change_only_step.label : default_node_expr) {
           this.ensure_checkout(clean)
-          if (change_only_step) {
+
+          // NOTE: side-effect of calling this.has_submittable_change() allows usage of this.may_submit_result below
+          def is_submittable = this.has_submittable_change()
+
+          if (is_submittable) {
+            // Ensure a new checkout is performed because the target repository may change while waiting for the lock
+            this.checkouts.remove(steps.env.NODE_NAME)
+          } else if (change_only_step) {
+            // Optimization: prevent duplicate checkout effort when no locking is required
             this.pin_variant_to_current_node(change_only_step.variant)
           }
 
-          // NOTE: side-effect of calling this.has_submittable_change() allows usage of this.may_submit_result below
-          this.has_submittable_change()
+          return is_submittable
         }
 
       if (is_submittable_change) {
         lock_if_necessary = { closure ->
           return steps.lock(get_lock_name()) {
-            // Ensure a new checkout is performed because the target repository may change while waiting for the lock
-            if (change_only_step) {
-              this.unpin_variant_from_node(change_only_step.variant)
-            }
-
             return closure()
           }
         }
