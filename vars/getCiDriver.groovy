@@ -482,11 +482,9 @@ exec ssh -i '''
 
   private def unpin_variant_from_node(String variant) {
     if (this.nodes.containsKey(variant)) {
-      if (this.checkouts.containsKey(variant)) {
-        this.checkouts.remove(this.nodes[variant])
-      }
-      this.nodes.remove(variant)
+      this.checkouts.remove(this.nodes[variant])
     }
+    this.nodes.remove(variant)
   }
 
   public def on_build_node(Map params = [:], closure) {
