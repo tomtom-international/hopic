@@ -466,14 +466,14 @@ exec ssh -i '''
   /**
    * @return name of target branch that we're building.
    */
-  private String get_branch_name() {
+  public String get_branch_name() {
     steps.env.CHANGE_TARGET ?: steps.env.BRANCH_NAME
   }
 
   /**
    * @return a lock name unique to the target repository
    */
-  private String get_lock_name() {
+  public String get_lock_name() {
     def repo_url  = steps.scm.userRemoteConfigs[0].url
     def repo_name = repo_url.tokenize('/')[-2..-1].join('/') - ~/\.git$/ // "${project}/${repo}"
     def branch    = get_branch_name()
@@ -486,7 +486,7 @@ exec ssh -i '''
    * The build identifier is just the stringified build number for builds on branches.
    * For builds on pull requests it's the PR number plus build number on this PR.
    */
-  private Tuple get_build_id() {
+  public Tuple get_build_id() {
     def last_item_in_project_name = steps.currentBuild.projectName
     def project_name = steps.currentBuild.fullProjectName
     def job_name = project_name.take(project_name.lastIndexOf(last_item_in_project_name)
