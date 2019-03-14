@@ -565,21 +565,21 @@ exec ssh -i '''
       def change_only_step = change_only_phase ? change_only_phase.variants.find(is_change_only) : null
 
       def is_submittable_change = steps.node(change_only_step ? change_only_step.label : default_node_expr) {
-          this.ensure_checkout(clean)
+        this.ensure_checkout(clean)
 
-          // NOTE: this is the first time calling this.has_submittable_change(), see its precondition when changing this
-          def is_submittable = this.has_submittable_change()
+        // NOTE: this is the first time calling this.has_submittable_change(), see its precondition when changing this
+        def is_submittable = this.has_submittable_change()
 
-          if (is_submittable) {
-            // Ensure a new checkout is performed because the target repository may change while waiting for the lock
-            this.checkouts.remove(steps.env.NODE_NAME)
-          } else if (change_only_step) {
-            // Optimization: prevent duplicate checkout effort when no locking is required
-            this.pin_variant_to_current_node(change_only_step.variant)
-          }
-
-          return is_submittable
+        if (is_submittable) {
+          // Ensure a new checkout is performed because the target repository may change while waiting for the lock
+          this.checkouts.remove(steps.env.NODE_NAME)
+        } else if (change_only_step) {
+          // Optimization: prevent duplicate checkout effort when no locking is required
+          this.pin_variant_to_current_node(change_only_step.variant)
         }
+
+        return is_submittable
+      }
 
       if (is_submittable_change) {
         lock_if_necessary = { closure ->
