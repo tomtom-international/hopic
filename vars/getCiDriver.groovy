@@ -567,7 +567,6 @@ exec ssh -i '''
       def is_submittable_change = steps.node(change_only_step ? change_only_step.label : default_node_expr) {
         this.ensure_checkout(clean)
 
-        // NOTE: this is the first time calling this.has_submittable_change(), see its precondition when changing this
         def is_submittable = this.has_submittable_change()
 
         if (is_submittable) {
@@ -610,7 +609,7 @@ exec ssh -i '''
                 return true
               }
 
-              return this.has_submittable_change()
+              return is_submittable_change
             }
             assert false : "Unknown 'run-on-change' option: ${run_on_change}"
           }
