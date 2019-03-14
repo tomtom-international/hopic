@@ -437,15 +437,25 @@ exec ssh -i '''
     return this.get_change() != null
   }
 
+  /**
+   * @pre this has to be executed on a node the first time
+   */
   public def has_submittable_change() {
     if (this.may_submit_result == null) {
+      assert steps.env.NODE_NAME != null, "has_submittable_change must be executed on a node the first time"
+
       assert !this.has_change() || (this.target_commit != null && this.source_commit != null)
       this.may_submit_result = this.has_change() && this.get_change().maySubmit(target_commit, source_commit, /* allow_cache =*/ false)
     }
     return this.may_submit_result
   }
 
+  /**
+   * @pre this has to be executed on a node
+   */
   private def ensure_checkout(clean = false) {
+    assert steps.env.NODE_NAME != null, "ensure_checkout must be executed on a node"
+
     if (!this.checkouts.containsKey(steps.env.NODE_NAME)) {
       this.checkouts[steps.env.NODE_NAME] = this.checkout(clean)
     }
@@ -502,8 +512,12 @@ exec ssh -i '''
 
   /**
    * Unstash everything previously stashed on other nodes that we didn't yet unstash here.
+   *
+   * @pre this has to be executed on a node
    */
   private def ensure_unstashed() {
+    assert steps.env.NODE_NAME != null, "ensure_unstashed must be executed on a node"
+
     this.stashes.each { name, stash ->
       if (stash.nodes[steps.env.NODE_NAME]) {
         return
@@ -519,18 +533,14 @@ exec ssh -i '''
     }
   }
 
+  /**
+   * @pre this has to be executed on a node
+   */
   private def pin_variant_to_current_node(String variant) {
+    assert steps.env.NODE_NAME != null, "pin_variant_to_current_node must be executed on a node"
+
     if (!this.nodes.containsKey(variant)) {
       this.nodes[variant] = steps.env.NODE_NAME
-    }
-  }
-
-  private def unpin_variant_from_node(String variant) {
-    if (this.nodes.containsKey(variant)) {
-      if (this.checkouts.containsKey(variant)) {
-        this.checkouts.remove(this.nodes[variant])
-      }
-      this.nodes.remove(variant)
     }
   }
 
@@ -600,23 +610,24 @@ exec ssh -i '''
       def change_only_step = change_only_phase ? change_only_phase.variants.find(is_change_only) : null
 
       def is_submittable_change = steps.node(change_only_step ? change_only_step.label : default_node_expr) {
-          this.ensure_checkout(clean)
-          if (change_only_step) {
-            this.pin_variant_to_current_node(change_only_step.variant)
-          }
+        this.ensure_checkout(clean)
 
-          // NOTE: side-effect of calling this.has_submittable_change() allows usage of this.may_submit_result below
-          this.has_submittable_change()
+        def is_submittable = this.has_submittable_change()
+
+        if (is_submittable) {
+          // Ensure a new checkout is performed because the target repository may change while waiting for the lock
+          this.checkouts.remove(steps.env.NODE_NAME)
+        } else if (change_only_step) {
+          // Optimization: prevent duplicate checkout effort when no locking is required
+          this.pin_variant_to_current_node(change_only_step.variant)
         }
+
+        return is_submittable
+      }
 
       if (is_submittable_change) {
         lock_if_necessary = { closure ->
           return steps.lock(get_lock_name()) {
-            // Ensure a new checkout is performed because the target repository may change while waiting for the lock
-            if (change_only_step) {
-              this.unpin_variant_from_node(change_only_step.variant)
-            }
-
             return closure()
           }
         }
@@ -643,8 +654,7 @@ exec ssh -i '''
                 return true
               }
 
-              assert this.may_submit_result != null : "submittability should already have been determined by a previous call to has_submittable_change()"
-              return this.may_submit_result
+              return is_submittable_change
             }
             assert false : "Unknown 'run-on-change' option: ${run_on_change}"
           }
