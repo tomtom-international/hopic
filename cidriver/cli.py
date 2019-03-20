@@ -290,7 +290,7 @@ def determine_version(version_info, code_dir=None):
 
 @click.group(context_settings=dict(help_option_names=('-h', '--help')))
 @click.option('--color', type=click.Choice(('always', 'auto', 'never')), default='auto', show_default=True)
-@click.option('--config', type=click.Path(exists=False, file_okay=True, dir_okay=False, readable=True, resolve_path=True))
+@click.option('--config', type=click.Path(exists=False, file_okay=True, dir_okay=False, readable=True, resolve_path=True), default=lambda: None, show_default='${WORKSPACE}/hopic-ci-config.yaml or ${WORKSPACE}/cfg.yml')
 @click.option('--workspace', type=click.Path(exists=False, file_okay=False, dir_okay=True), default=lambda: None, show_default='current working directory')
 @click_log.simple_verbosity_option(__package__, autocompletion=cli_autocomplete_click_log_verbosity)
 @click_log.simple_verbosity_option('git', '--git-verbosity', autocompletion=cli_autocomplete_click_log_verbosity)
@@ -360,8 +360,20 @@ def cli(ctx, color, config, workspace):
         except KeyError:
             pass
 
+    if config is None:
+        for fname in (
+                'hopic-ci-config.yaml',
+                'cfg.yml',
+            ):
+            fname = os.path.join(workspace, fname)
+            if os.path.isfile(fname):
+                config = fname
+                break
+
     cfg = {}
     if config is not None:
+        if not os.path.isabs(config):
+            config = os.path.join(os.getcwd(), config)
         ctx.obj.config_file = config
         ctx.obj.volume_vars['CFGDIR'] = ctx.obj.config_dir = os.path.dirname(config)
         # Prevent reading the config file _before_ performing a checkout. This prevents a pre-existing file at the same
