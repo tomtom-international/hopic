@@ -30,6 +30,7 @@ except ImportError:
             Mapping,
             MutableSequence,
         )
+from copy import copy
 from datetime import (datetime, timedelta)
 from dateutil.parser import parse as date_parse
 from dateutil.tz import (tzoffset, tzlocal, tzutc)
@@ -619,6 +620,7 @@ def process_prepare_source_tree(
         commit_params = change_applicator(repo)
         if not commit_params:
             return
+        source_commit = commit_params.pop('source_commit', None)
 
         # Re-read config to ensure any changes introduced by 'change_applicator' are taken into account
         try:
@@ -739,6 +741,9 @@ def process_prepare_source_tree(
             if tagname is not None:
                 refspecs.append('refs/tags/{tagname}:refs/tags/{tagname}'.format(**locals()))
             cfg.set_value(section, 'refspecs', ' '.join(shquote(refspec) for refspec in refspecs))
+            if source_commit:
+                cfg.set_value(section, 'target-commit', text_type(target_commit))
+                cfg.set_value(section, 'source-commit', text_type(source_commit))
         if ctx.obj.version is not None:
             click.echo(ctx.obj.version)
 
@@ -787,6 +792,7 @@ def merge_change_request(
                     repo.head.commit,
                     source_commit,
                 ),
+                'source_commit': source_commit,
             }
     return change_applicator
 
@@ -960,14 +966,22 @@ def build(ctx, phase, variant):
 
     cfg = ctx.obj.config
 
+    refspecs = []
+    source_commits = []
     try:
         with git.Repo(ctx.obj.workspace) as repo:
             submit_commit = repo.head.commit
             section = 'ci-driver.{submit_commit}'.format(**locals())
             with repo.config_reader() as git_cfg:
-                refspecs = list(shlex.split(git_cfg.get_value(section, 'refspecs')))
-    except (NoOptionError, NoSectionError):
-        refspecs = []
+                if git_cfg.has_option(section, 'refspecs'):
+                    refspecs = list(shlex.split(git_cfg.get_value(section, 'refspecs')))
+                if git_cfg.has_option(section, 'target-commit') and git_cfg.has_option(section, 'source-commit'):
+                    target_commit = repo.commit(git_cfg.get_value(section, 'target-commit'))
+                    source_commit = repo.commit(git_cfg.get_value(section, 'source-commit'))
+                    source_commits = git.Commit.list_items(repo, '{target_commit}..{source_commit}'.format(**locals()), first_parent=True, no_merges=True)
+                    log.debug('Building for source commits: %s', source_commits)
+    except NoSectionError:
+        pass
     has_change = bool(refspecs)
 
     worktree_commits = {}
@@ -995,6 +1009,7 @@ def build(ctx, phase, variant):
 
             for cmd in cmds:
                 worktrees = {}
+                foreach = None
                 if not isinstance(cmd, string_types):
                     try:
                         run_on_change = cmd['run-on-change']
@@ -1037,6 +1052,11 @@ def build(ctx, phase, variant):
                         pass
 
                     try:
+                        foreach = cmd['foreach']
+                    except KeyError:
+                        pass
+
+                    try:
                         cmd = cmd['sh']
                     except (KeyError, TypeError):
                         continue
@@ -1051,43 +1071,53 @@ def build(ctx, phase, variant):
                 except click.BadParameter:
                     pass
 
-                # Strip off prefixed environment variables from this command-line and apply them
-                while cmd:
-                    m = _env_var_re.match(cmd[0])
-                    if not m:
-                        break
-                    env[m.group('var')] = expand_vars(volume_vars, m.group('val'))
-                    cmd.pop(0)
-                cmd = [expand_vars(volume_vars, arg) for arg in cmd]
+                foreach_items = (None,)
+                if foreach == 'SOURCE_COMMIT':
+                    foreach_items = source_commits
 
-                # Handle execution inside docker
-                if image is not None:
-                    uid, gid = os.getuid(), os.getgid()
-                    docker_run = ['docker', 'run',
-                                  '--rm',
-                                  '--net=host',
-                                  '--tty',
-                                  '--tmpfs', '{}:uid={},gid={}'.format(env['HOME'], uid, gid),
-                                  '-u', '{}:{}'.format(uid, gid),
-                                  '-v', '/etc/passwd:/etc/passwd:ro',
-                                  '-v', '/etc/group:/etc/group:ro',
-                                  '-w', '/code',
-                                  '-v', '{WORKSPACE}:/code:rw'.format(**ctx.obj.volume_vars)
-                                  ] + list(chain(*[
-                                      ['-e', '{}={}'.format(k, v)] for k, v in env.items()
-                                  ]))
-                    for volume in cfg['volumes']:
-                        docker_run += ['-v', volume_spec_to_docker_param(volume)]
-                    docker_run.append(image)
-                    cmd = docker_run + cmd
-                new_env = os.environ.copy()
-                if image is None:
-                    new_env.update(env)
-                try:
-                    echo_cmd(subprocess.check_call, cmd, env=new_env, cwd=ctx.obj.code_dir)
-                except subprocess.CalledProcessError as e:
-                    log.exception("Command fatally terminated with exit code %d", e.returncode)
-                    sys.exit(e.returncode)
+                for foreach_item in foreach_items:
+                    cfg_vars = volume_vars.copy()
+                    if foreach == 'SOURCE_COMMIT':
+                        cfg_vars['SOURCE_COMMIT'] = text_type(foreach_item)
+
+                    # Strip off prefixed environment variables from this command-line and apply them
+                    final_cmd = copy(cmd)
+                    while final_cmd:
+                        m = _env_var_re.match(final_cmd[0])
+                        if not m:
+                            break
+                        env[m.group('var')] = expand_vars(cfg_vars, m.group('val'))
+                        final_cmd.pop(0)
+                    final_cmd = [expand_vars(cfg_vars, arg) for arg in final_cmd]
+
+                    # Handle execution inside docker
+                    if image is not None:
+                        uid, gid = os.getuid(), os.getgid()
+                        docker_run = ['docker', 'run',
+                                      '--rm',
+                                      '--net=host',
+                                      '--tty',
+                                      '--tmpfs', '{}:uid={},gid={}'.format(env['HOME'], uid, gid),
+                                      '-u', '{}:{}'.format(uid, gid),
+                                      '-v', '/etc/passwd:/etc/passwd:ro',
+                                      '-v', '/etc/group:/etc/group:ro',
+                                      '-w', '/code',
+                                      '-v', '{WORKSPACE}:/code:rw'.format(**ctx.obj.volume_vars)
+                                      ] + list(chain(*[
+                                          ['-e', '{}={}'.format(k, v)] for k, v in env.items()
+                                      ]))
+                        for volume in cfg['volumes']:
+                            docker_run += ['-v', volume_spec_to_docker_param(volume)]
+                        docker_run.append(image)
+                        final_cmd = docker_run + final_cmd
+                    new_env = os.environ.copy()
+                    if image is None:
+                        new_env.update(env)
+                    try:
+                        echo_cmd(subprocess.check_call, final_cmd, env=new_env, cwd=ctx.obj.code_dir)
+                    except subprocess.CalledProcessError as e:
+                        log.exception("Command fatally terminated with exit code %d", e.returncode)
+                        sys.exit(e.returncode)
 
                 for subdir, worktree in worktrees.items():
                     with git.Repo(os.path.join(ctx.obj.workspace, subdir)) as repo:
