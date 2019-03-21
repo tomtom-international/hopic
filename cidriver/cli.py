@@ -293,8 +293,8 @@ def determine_version(version_info, code_dir=None):
 
 @click.group(context_settings=dict(help_option_names=('-h', '--help')))
 @click.option('--color', type=click.Choice(('always', 'auto', 'never')), default='auto', show_default=True)
-@click.option('--config', type=click.Path(exists=False, file_okay=True, dir_okay=False, readable=True, resolve_path=True))
-@click.option('--workspace', type=click.Path(exists=False, file_okay=False, dir_okay=True))
+@click.option('--config', type=click.Path(exists=False, file_okay=True, dir_okay=False, readable=True, resolve_path=True), default=lambda: None, show_default='${WORKSPACE}/hopic-ci-config.yaml or ${WORKSPACE}/cfg.yml')
+@click.option('--workspace', type=click.Path(exists=False, file_okay=False, dir_okay=True), default=lambda: None, show_default='current working directory')
 @click.option('--whitelisted-var', multiple=True, default=['CT_DEVENV_HOME'], show_default=True)
 @click_log.simple_verbosity_option(__package__, autocompletion=cli_autocomplete_click_log_verbosity)
 @click_log.simple_verbosity_option('git', '--git-verbosity', autocompletion=cli_autocomplete_click_log_verbosity)
@@ -321,7 +321,6 @@ def cli(ctx, color, config, workspace, whitelisted_var):
                         'Directory "{workspace}" does not exist.'.format(**locals()),
                         ctx=ctx, param=param
                     )
-            ctx.obj.workspace = workspace
         elif param.human_readable_name == 'config' and config is not None:
             # Require the config file to exist everywhere that it's used
             if not os.path.isfile(config):
@@ -332,23 +331,27 @@ def cli(ctx, color, config, workspace, whitelisted_var):
                     )
                 ctx.obj.register_parameter(ctx=ctx, param=param, exception_raiser=exception_raiser)
 
-    ctx.obj.volume_vars = {}
-    if workspace is not None:
-        code_dir = workspace
-        try:
-            with git.Repo(workspace) as repo, repo.config_reader() as cfg:
-                code_dir = os.path.join(workspace, cfg.get_value('ci-driver.code', 'dir'))
-        except (git.InvalidGitRepositoryError, git.NoSuchPathError, NoSectionError):
-            pass
+    if workspace is None:
+        # workspace default
+        workspace = (os.path.dirname(config) if config is not None else os.getcwd())
+    workspace = os.path.join(os.getcwd(), workspace)
+    ctx.obj.workspace = workspace
 
-        ctx.obj.code_dir = ctx.obj.volume_vars['WORKSPACE'] = code_dir
-        source_date = determine_source_date(code_dir)
-        if source_date is not None:
-            ctx.obj.source_date = source_date
-            ctx.obj.source_date_epoch = int((
-                source_date - datetime.utcfromtimestamp(0).replace(tzinfo=tzutc())
-            ).total_seconds())
-            ctx.obj.volume_vars['SOURCE_DATE_EPOCH'] = str(ctx.obj.source_date_epoch)
+    ctx.obj.volume_vars = {}
+    try:
+        with git.Repo(workspace) as repo, repo.config_reader() as cfg:
+            code_dir = os.path.join(workspace, cfg.get_value('ci-driver.code', 'dir'))
+    except (git.InvalidGitRepositoryError, git.NoSuchPathError, NoSectionError):
+        code_dir = workspace
+
+    ctx.obj.code_dir = ctx.obj.volume_vars['WORKSPACE'] = code_dir
+    source_date = determine_source_date(code_dir)
+    if source_date is not None:
+        ctx.obj.source_date = source_date
+        ctx.obj.source_date_epoch = int((
+            source_date - datetime.utcfromtimestamp(0).replace(tzinfo=tzutc())
+        ).total_seconds())
+        ctx.obj.volume_vars['SOURCE_DATE_EPOCH'] = str(ctx.obj.source_date_epoch)
     ctx.obj.register_dependent_attribute('code_dir', 'workspace')
     ctx.obj.register_dependent_attribute('source_date', 'workspace')
     ctx.obj.register_dependent_attribute('source_date_epoch', 'workspace')
@@ -359,8 +362,20 @@ def cli(ctx, color, config, workspace, whitelisted_var):
         except KeyError:
             pass
 
+    if config is None:
+        for fname in (
+                'hopic-ci-config.yaml',
+                'cfg.yml',
+            ):
+            fname = os.path.join(workspace, fname)
+            if os.path.isfile(fname):
+                config = fname
+                break
+
     cfg = {}
     if config is not None:
+        if not os.path.isabs(config):
+            config = os.path.join(os.getcwd(), config)
         ctx.obj.config_file = config
         ctx.obj.volume_vars['CFGDIR'] = ctx.obj.config_dir = os.path.dirname(config)
         # Prevent reading the config file _before_ performing a checkout. This prevents a pre-existing file at the same
@@ -373,7 +388,7 @@ def cli(ctx, color, config, workspace, whitelisted_var):
 
     ctx.obj.version = determine_version(
             cfg.get('version', {}),
-            code_dir=(ctx.obj.code_dir if workspace is not None else None),
+            code_dir=ctx.obj.code_dir,
         )
     if ctx.obj.version is not None:
         log.debug("read version: \x1B[34m%s\x1B[39m", ctx.obj.version)
@@ -675,7 +690,7 @@ def process_prepare_source_tree(
         if ctx.obj.version is not None and not ctx.obj.version.prerelease and version_tag:
             tagname = version_tag.format(
                     version        = ctx.obj.version,
-                    build_sep      = ('+' if ctx.obj.version.build else ''),
+                    build_sep      = ('+' if getattr(ctx.obj.version, 'build', None) else ''),
                 )
             repo.create_tag(tagname, submit_commit, force=True)
 
