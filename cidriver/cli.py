@@ -664,7 +664,7 @@ def process_prepare_source_tree(
         if ctx.obj.version is not None and not ctx.obj.version.prerelease and version_tag:
             tagname = version_tag.format(
                     version        = ctx.obj.version,
-                    build_sep      = ('+' if ctx.obj.version.build else ''),
+                    build_sep      = ('+' if getattr(ctx.obj.version, 'build', None) else ''),
                 )
             repo.create_tag(tagname, submit_commit, force=True)
 
