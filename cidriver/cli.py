@@ -589,7 +589,6 @@ def process_prepare_source_tree(
             section = 'ci-driver.{target_commit}'.format(**locals())
             target_ref    = cfg.get_value(section, 'ref')
             target_remote = cfg.get_value(section, 'remote')
-            cfg.remove_section(section)
 
         commit_params = change_applicator(repo)
         if not commit_params:
@@ -706,6 +705,7 @@ def process_prepare_source_tree(
             log.info('%s', repo.git.show(push_commit, format='fuller', stat=True))
 
         with repo.config_writer() as cfg:
+            cfg.remove_section('ci-driver.{target_commit}'.format(**locals()))
             section = 'ci-driver.{submit_commit}'.format(**locals())
             cfg.set_value(section, 'remote', target_remote)
             cfg.set_value(section, 'ref', target_ref)
