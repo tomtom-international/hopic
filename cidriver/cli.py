@@ -262,7 +262,7 @@ def cli_autocomplete_click_log_verbosity(ctx, args, incomplete):
             yield level
 
 
-def determine_version(version_info, code_dir=None):
+def determine_version(version_info, config_dir, code_dir=None):
     """
     Determines the current version for the given version configuration snippet.
     """
@@ -271,7 +271,7 @@ def determine_version(version_info, code_dir=None):
         params = {}
         if 'format' in version_info:
             params['format'] = version_info['format']
-        fname = version_info['file']
+        fname = os.path.join(config_dir, version_info['file'])
         if os.path.isfile(fname):
             return read_version(fname, **params)
 
@@ -386,6 +386,7 @@ def cli(ctx, color, config, workspace):
 
     ctx.obj.version = determine_version(
             cfg.get('version', {}),
+            config_dir=(config and ctx.obj.config_dir),
             code_dir=ctx.obj.code_dir,
         )
     if ctx.obj.version is not None:
@@ -621,7 +622,7 @@ def process_prepare_source_tree(
             version_info = {}
 
         # Re-read version to ensure that the version policy in the reloaded configuration is used for it
-        ctx.obj.version = determine_version(version_info, ctx.obj.code_dir)
+        ctx.obj.version = determine_version(version_info, ctx.obj.config_dir, ctx.obj.code_dir)
 
         if version_info.get('bump', True):
             if ctx.obj.version is None:
