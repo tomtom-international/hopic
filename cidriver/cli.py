@@ -623,10 +623,6 @@ def process_prepare_source_tree(
         # Re-read version to ensure that the version policy in the reloaded configuration is used for it
         ctx.obj.version = determine_version(version_info, ctx.obj.code_dir)
 
-        version_tag  = version_info.get('tag', False)
-        if version_tag and not isinstance(version_tag, string_types):
-            version_tag = '{version.major}.{version.minor}.{version.patch}'
-
         if version_info.get('bump', True):
             if ctx.obj.version is None:
                 if 'file' in version_info:
@@ -661,7 +657,10 @@ def process_prepare_source_tree(
         restore_mtime_from_git(repo)
 
         tagname = None
+        version_tag = version_info.get('tag', False)
         if ctx.obj.version is not None and not ctx.obj.version.prerelease and version_tag:
+            if version_tag and not isinstance(version_tag, string_types):
+                version_tag = ctx.obj.version.default_tag_name
             tagname = version_tag.format(
                     version        = ctx.obj.version,
                     build_sep      = ('+' if getattr(ctx.obj.version, 'build', None) else ''),
