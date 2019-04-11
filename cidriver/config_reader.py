@@ -166,6 +166,11 @@ def expand_docker_volume_spec(config_dir, volume_vars, volume_specs):
             volume['target'] = target
 
         volumes.append(volume)
+    if '/code' not in (volume['target'] for volume in volumes):
+        volumes.insert(0, {
+            'source': volume_vars['WORKSPACE'],
+            'target': guest_volume_vars['WORKSPACE'],
+        })
     return volumes
 
 

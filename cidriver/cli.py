@@ -1030,7 +1030,6 @@ def build(ctx, phase, variant):
                                   '-v', '/etc/passwd:/etc/passwd:ro',
                                   '-v', '/etc/group:/etc/group:ro',
                                   '-w', '/code',
-                                  '-v', '{WORKSPACE}:/code:rw'.format(**ctx.obj.volume_vars)
                                   ] + list(chain(*[
                                       ['-e', '{}={}'.format(k, v)] for k, v in env.items()
                                   ]))
