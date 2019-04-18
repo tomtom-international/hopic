@@ -1004,10 +1004,13 @@ def build(ctx, phase, variant):
                     HOME            = '/home/sandbox',
                     _JAVA_OPTIONS   = '-Duser.home=/home/sandbox',
                 ) if image is not None else {})
-                try:
-                    env['SOURCE_DATE_EPOCH'] = str(ctx.obj.source_date_epoch)
-                except click.BadParameter:
-                    pass
+                for varname in (
+                        'SOURCE_DATE_EPOCH',
+                        'VERSION',
+                        'DEBVERSION',
+                    ):
+                    if varname in ctx.obj.volume_vars:
+                        env[varname] = ctx.obj.volume_vars[varname]
 
                 # Strip off prefixed environment variables from this command-line and apply them
                 while cmd:
