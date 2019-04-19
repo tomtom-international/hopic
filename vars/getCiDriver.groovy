@@ -743,13 +743,15 @@ exec ssh -i '''
         }
       }
 
-      artifactoryBuildInfo.each { server_id, buildInfo ->
+      if (artifactoryBuildInfo) {
         assert this.nodes : "When we have artifactory build info we expect to have execution nodes that it got produced on"
         this.on_build_node {
-          def server = steps.Artifactory.server server_id
-          server.publishBuildInfo(buildInfo)
-          // Work around Artifactory Groovy bug
-          server = null
+          artifactoryBuildInfo.each { server_id, buildInfo ->
+            def server = steps.Artifactory.server server_id
+            server.publishBuildInfo(buildInfo)
+            // Work around Artifactory Groovy bug
+            server = null
+          }
         }
       }
     }
