@@ -763,17 +763,15 @@ exec ssh -i '''
                           if (server_id == null) {
                             steps.error("Artifactory upload configuration entry for ${phase}.${variant} does not contain 'id' property to identify Artifactory server")
                           }
-                          def target = meta[archiving_cfg]['upload-artifactory'].target
-                          if (target == null) {
-                            steps.error("Artifactory upload configuration entry for ${phase}.${variant} does not contain 'target' property to identify target repository")
-                          }
-
                           def uploadSpec = JsonOutput.toJson([
                               files: artifacts.collect { artifact ->
                                 def fileSpec = [
                                   pattern: artifact.pattern,
-                                  target: target,
+                                  target: artifact.target,
                                 ]
+                                if (fileSpec.target == null) {
+                                  steps.error("Artifactory upload configuration entry for ${phase}.${variant} does not contain 'target' property to identify target repository")
+                                }
                                 if (artifact.props != null) {
                                   fileSpec.props = artifact.props
                                 }
@@ -817,13 +815,15 @@ exec ssh -i '''
         }
       }
 
-      artifactoryBuildInfo.each { server_id, buildInfo ->
+      if (artifactoryBuildInfo) {
         assert this.nodes : "When we have artifactory build info we expect to have execution nodes that it got produced on"
         this.on_build_node {
-          def server = steps.Artifactory.server server_id
-          server.publishBuildInfo(buildInfo)
-          // Work around Artifactory Groovy bug
-          server = null
+          artifactoryBuildInfo.each { server_id, buildInfo ->
+            def server = steps.Artifactory.server server_id
+            server.publishBuildInfo(buildInfo)
+            // Work around Artifactory Groovy bug
+            server = null
+          }
         }
       }
     }
