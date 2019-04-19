@@ -818,9 +818,25 @@ exec ssh -i '''
       if (artifactoryBuildInfo) {
         assert this.nodes : "When we have artifactory build info we expect to have execution nodes that it got produced on"
         this.on_build_node {
+          def cmd = this.ensure_checkout(clean).cmd
+          def config = steps.readJSON(text: steps.sh(
+              script: "${cmd} show-config",
+              returnStdout: true,
+            ))
+
           artifactoryBuildInfo.each { server_id, buildInfo ->
+            def promotion_config = config.getOrDefault('artifactory', [:]).getOrDefault('promotion', [:]).getOrDefault(server_id, [:])
+
             def server = steps.Artifactory.server server_id
             server.publishBuildInfo(buildInfo)
+            if (promotion_config.containsKey('target-repo')
+             && this.has_submittable_change()) {
+              server.promote(
+                  targetRepo:  promotion_config['target-repo'],
+                  buildName:   buildInfo.name,
+                  buildNumber: buildInfo.number,
+                )
+            }
             // Work around Artifactory Groovy bug
             server = null
           }
