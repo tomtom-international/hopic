@@ -677,13 +677,14 @@ exec ssh -i '''
                       }
                       steps.dir(this.checkouts[steps.env.NODE_NAME].workspace) {
                         artifacts.each { artifact ->
+                          def pattern = artifact.pattern.replace('(*)', '*')
                           if (archiving_cfg == 'archive') {
                             steps.archiveArtifacts(
-                                artifacts: artifact.pattern,
+                                artifacts: pattern,
                                 fingerprint: meta.archive.getOrDefault('fingerprint', true),
                               )
                           } else if (archiving_cfg == 'fingerprint') {
-                            steps.fingerprint(artifact.pattern)
+                            steps.fingerprint(pattern)
                           }
                         }
                         if (meta[archiving_cfg].containsKey('upload-artifactory')) {
