@@ -830,7 +830,8 @@ def apply_modality_change(
             # Force clean builds when we don't know how to discover changed files
             repo.git.clean('-xd', force=True)
 
-        volume_vars = ctx.obj.volume_vars
+        volume_vars = ctx.obj.volume_vars.copy()
+        volume_vars.setdefault('HOME', os.path.expanduser('~'))
 
         for cmd in modality_cmds:
             if isinstance(cmd, string_types):
