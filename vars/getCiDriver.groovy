@@ -94,6 +94,10 @@ class BitbucketPullRequest extends ChangeRequest {
       def last_idx = 0
       def new_description = ''
       m.each { _, username ->
+        if (!username) {
+          return
+        }
+
         if (!users.containsKey(username)) {
           def baseRestUrl = url
             .replaceFirst(/\/projects\/.*/, '/rest/api/1.0')
