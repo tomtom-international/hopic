@@ -559,8 +559,9 @@ exec ssh -i '''
 
   public def build(Map buildParams = [:]) {
     def clean = buildParams.getOrDefault('clean', false)
+    def default_node = buildParams.getOrDefault('default_node_expr', this.default_node_expr)
     steps.ansiColor('xterm') {
-      def phases = steps.node(default_node_expr) {
+      def phases = steps.node(default_node) {
         def cmd = this.install_prerequisites()
         def workspace = steps.pwd()
 
@@ -598,7 +599,7 @@ exec ssh -i '''
                 ))
               [
                 variant: variant,
-                label: meta.getOrDefault('node-label', default_node_expr),
+                label: meta.getOrDefault('node-label', default_node),
                 run_on_change: meta.getOrDefault('run-on-change', 'always'),
               ]
             }
@@ -613,7 +614,7 @@ exec ssh -i '''
       def change_only_phase = phases.find { phase -> phase.variants.any is_change_only }
       def change_only_step = change_only_phase ? change_only_phase.variants.find(is_change_only) : null
 
-      def is_submittable_change = steps.node(change_only_step ? change_only_step.label : default_node_expr) {
+      def is_submittable_change = steps.node(change_only_step ? change_only_step.label : default_node) {
         this.ensure_checkout(clean)
 
         def is_submittable = this.has_submittable_change()
