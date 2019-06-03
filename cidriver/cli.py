@@ -107,6 +107,17 @@ class DateTime(click.ParamType):
         except ValueError as e:
             self.fail('Could not parse datetime string "{value}": {e}'.format(value=value, e=' '.join(e.args)), param, ctx)
 
+def is_publish_branch(target_ref, publish_from_branch):
+    """
+    Check if the branch name is allowed to publish, if publish-from-branch is not defined in the config file, all the branches should be allowed to publish
+    """
+    if publish_from_branch is not None:
+        publish_branch_pattern = re.compile('(?:{})$'.format(publish_from_branch))
+        is_publish_allowed = True if publish_branch_pattern.match(target_ref) else False
+    else:
+        is_publish_allowed = True
+    
+    return is_publish_allowed
 
 def determine_source_date(workspace):
     """Determine the date of most recent change to the sources in the given workspace"""
@@ -650,8 +661,12 @@ def process_prepare_source_tree(
 
         # Re-read version to ensure that the version policy in the reloaded configuration is used for it
         ctx.obj.version = determine_version(version_info, ctx.obj.config_dir, ctx.obj.code_dir)
-
-        if version_info.get('bump', True):
+        
+        # If the branch is not allowed to publish, skip version bump step
+        publish_from_branch = ctx.obj.config.get('publish-from-branch')
+        is_publish_allowed = is_publish_branch(target_ref, publish_from_branch)
+        
+        if is_publish_allowed and version_info.get('bump', True):
             if ctx.obj.version is None:
                 if 'file' in version_info:
                     log.error("Failed to read the current version (from %r) while attempting to bump the version", version_info['file'])
@@ -668,6 +683,8 @@ def process_prepare_source_tree(
             if 'file' in version_info:
                 replace_version(os.path.join(ctx.obj.config_dir, version_info['file']), ctx.obj.version)
                 repo.index.add([version_info['file']])
+        else:
+            log.info("Skip version bumping due to the configuration or the target branch is not allowed to publish")
 
         author = git.Actor.author(repo.config_reader())
         if author_name is not None:
@@ -683,10 +700,11 @@ def process_prepare_source_tree(
         submit_commit = repo.index.commit(**commit_params)
         click.echo(submit_commit)
         restore_mtime_from_git(repo)
-
+        
+        # Tagging after bumping the version
         tagname = None
         version_tag = version_info.get('tag', False)
-        if ctx.obj.version is not None and not ctx.obj.version.prerelease and version_tag:
+        if ctx.obj.version is not None and not ctx.obj.version.prerelease and version_tag and is_publish_allowed:
             if version_tag and not isinstance(version_tag, string_types):
                 version_tag = ctx.obj.version.default_tag_name
             tagname = version_tag.format(
@@ -974,6 +992,7 @@ def build(ctx, phase, variant):
             submit_commit = repo.head.commit
             section = 'ci-driver.{submit_commit}'.format(**locals())
             with repo.config_reader() as git_cfg:
+                target_ref = git_cfg.get_value(section, 'ref')
                 if git_cfg.has_option(section, 'refspecs'):
                     refspecs = list(shlex.split(git_cfg.get_value(section, 'refspecs')))
                 if git_cfg.has_option(section, 'target-commit') and git_cfg.has_option(section, 'source-commit'):
@@ -1007,7 +1026,11 @@ def build(ctx, phase, variant):
                 volume_vars['WORKSPACE'] = '/code'
 
             artifacts = []
-
+            
+            # If the branch is not allowed to publish, skip the publish phase. If run_on_change is set to 'always', phase will be run anyway regardless of this condition
+            # For build phase, run_on_change is set to 'always' by default, so build will always happen
+            publish_from_branch = ctx.obj.config.get('publish-from-branch')
+            is_publish_allowed = is_publish_branch(target_ref, publish_from_branch)
             for cmd in cmds:
                 worktrees = {}
                 foreach = None
@@ -1019,9 +1042,7 @@ def build(ctx, phase, variant):
                     else:
                         if run_on_change == 'always':
                             pass
-                        elif run_on_change == 'never' and has_change:
-                            break
-                        elif run_on_change == 'only' and not has_change:
+                        elif run_on_change == 'only' and not (has_change and is_publish_allowed):
                             break
                     try:
                         desc = cmd['description']
