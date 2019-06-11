@@ -449,7 +449,12 @@ exec ssh -i '''
       assert steps.env.NODE_NAME != null, "has_submittable_change must be executed on a node the first time"
 
       assert !this.has_change() || (this.target_commit != null && this.source_commit != null)
-      this.may_submit_result = this.has_change() && this.get_change().maySubmit(target_commit, source_commit, /* allow_cache =*/ false)
+      def cmd = this.checkouts[steps.env.NODE_NAME].cmd
+      def may_publish = steps.sh(
+          script: "${cmd} may-publish",
+          returnStatus: true,
+        ) == 0
+      this.may_submit_result = may_publish && this.has_change() && this.get_change().maySubmit(target_commit, source_commit, /* allow_cache =*/ false)
     }
     return this.may_submit_result
   }

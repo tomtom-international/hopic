@@ -107,17 +107,25 @@ class DateTime(click.ParamType):
         except ValueError as e:
             self.fail('Could not parse datetime string "{value}": {e}'.format(value=value, e=' '.join(e.args)), param, ctx)
 
-def is_publish_branch(target_ref, publish_from_branch):
+def is_publish_branch(ctx):
     """
     Check if the branch name is allowed to publish, if publish-from-branch is not defined in the config file, all the branches should be allowed to publish
     """
-    if publish_from_branch is not None:
-        publish_branch_pattern = re.compile('(?:{})$'.format(publish_from_branch))
-        is_publish_allowed = True if publish_branch_pattern.match(target_ref) else False
-    else:
-        is_publish_allowed = True
-    
-    return is_publish_allowed
+
+    with git.Repo(ctx.obj.workspace) as repo:
+        target_commit = repo.head.commit
+        with repo.config_reader() as cfg:
+            section = 'ci-driver.{target_commit}'.format(**locals())
+            target_ref = cfg.get_value(section, 'ref')
+
+    try:
+        publish_from_branch = ctx.obj.config['publish-from-branch']
+    except KeyError:
+        return True
+
+    publish_branch_pattern = re.compile('(?:{})$'.format(publish_from_branch))
+    return publish_branch_pattern.match(target_ref)
+
 
 def determine_source_date(workspace):
     """Determine the date of most recent change to the sources in the given workspace"""
@@ -411,6 +419,16 @@ def cli(ctx, color, config, workspace, whitelisted_var):
         ctx.obj.volume_vars['DEBVERSION'] = ctx.obj.volume_vars['VERSION'].replace('-', '~', 1).replace('.dirty.', '+dirty', 1)
 
 
+@cli.command()
+@click.pass_context
+def may_publish(ctx):
+    """
+    Check if the target branch name is allowed to be published, according to publish-from-branch in the config file.
+    """
+
+    ctx.exit(0 if is_publish_branch(ctx) else 1)
+
+
 def restore_mtime_from_git(repo, files=None):
     if files is None:
         files = set(filter(None, repo.git.ls_files('-z', stdout_as_string=False).split(b'\0')))
@@ -663,8 +681,7 @@ def process_prepare_source_tree(
         ctx.obj.version = determine_version(version_info, ctx.obj.config_dir, ctx.obj.code_dir)
         
         # If the branch is not allowed to publish, skip version bump step
-        publish_from_branch = ctx.obj.config.get('publish-from-branch')
-        is_publish_allowed = is_publish_branch(target_ref, publish_from_branch)
+        is_publish_allowed = is_publish_branch(ctx)
         
         if is_publish_allowed and version_info.get('bump', True):
             if ctx.obj.version is None:
@@ -992,7 +1009,6 @@ def build(ctx, phase, variant):
             submit_commit = repo.head.commit
             section = 'ci-driver.{submit_commit}'.format(**locals())
             with repo.config_reader() as git_cfg:
-                target_ref = git_cfg.get_value(section, 'ref')
                 if git_cfg.has_option(section, 'refspecs'):
                     refspecs = list(shlex.split(git_cfg.get_value(section, 'refspecs')))
                 if git_cfg.has_option(section, 'target-commit') and git_cfg.has_option(section, 'source-commit'):
@@ -1029,8 +1045,7 @@ def build(ctx, phase, variant):
             
             # If the branch is not allowed to publish, skip the publish phase. If run_on_change is set to 'always', phase will be run anyway regardless of this condition
             # For build phase, run_on_change is set to 'always' by default, so build will always happen
-            publish_from_branch = ctx.obj.config.get('publish-from-branch')
-            is_publish_allowed = is_publish_branch(target_ref, publish_from_branch)
+            is_publish_allowed = is_publish_branch(ctx)
             for cmd in cmds:
                 worktrees = {}
                 foreach = None
