@@ -32,9 +32,11 @@ class ChangeRequest {
   }
 
   protected def maySubmitImpl(target_commit, source_commit, allow_cache = true) {
-    return !line_split(steps.sh(script: 'git log ' + shell_quote(target_commit) + '..' + shell_quote(source_commit) + " --pretty='%s' --reverse", returnStdout: true)
-      .trim()).find { subject ->
+    return !line_split(steps.sh(script: 'git log ' + shell_quote(target_commit) + '..' + shell_quote(source_commit) + " --pretty='%H:%s' --reverse", returnStdout: true)
+      .trim()).find { line ->
+        def (commit, subject) = line.split(':', 2)
         if (subject.startsWith('fixup!') || subject.startsWith('squash!')) {
+          steps.println("\033[36m[info] not submitting because commit ${commit} is marked with 'fixup!' or 'squash!': ${subject}\033[39m")
           return true
         }
     }
@@ -91,12 +93,20 @@ class BitbucketPullRequest extends ChangeRequest {
   }
 
   public def maySubmit(target_commit, source_commit, allow_cache = true) {
+    if (!super.maySubmitImpl(target_commit, source_commit, allow_cache)) {
+      return false
+    }
     def cur_cr_info = this.get_info(allow_cache)
-    return !(!super.maySubmitImpl(target_commit, source_commit, allow_cache)
-          || cur_cr_info == null
-          || cur_cr_info.fromRef == null
-          || cur_cr_info.fromRef.latestCommit != source_commit
-          || !cur_cr_info.canMerge)
+    if (cur_cr_info == null
+     || cur_cr_info.fromRef == null
+     || cur_cr_info.fromRef.latestCommit != source_commit) {
+      steps.println("\033[31m[error] failed to get pull request info from BitBucket for ${source_commit}\033[39m")
+      return false
+    }
+    if (!cur_cr_info.canMerge) {
+      steps.println("\033[36m[info] not submitting because the BitBucket merge criteria are not met\033[39m")
+    }
+    return cur_cr_info.canMerge
   }
 
   public def apply(cmd, source_remote) {
