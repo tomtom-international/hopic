@@ -221,17 +221,18 @@ class ModalityRequest extends ChangeRequest {
 class CiDriver {
   private repo
   private steps
-  private base_cmds         = [:]
-  private cmds              = [:]
-  private nodes             = [:]
-  private checkouts         = [:]
-  private stashes           = [:]
-  private worktree_bundles  = [:]
-  private submit_version    = null
-  private change            = null
-  private source_commit     = "HEAD"
-  private target_commit     = null
-  private may_submit_result = null
+  private base_cmds          = [:]
+  private cmds               = [:]
+  private nodes              = [:]
+  private checkouts          = [:]
+  private stashes            = [:]
+  private worktree_bundles   = [:]
+  private submit_version     = null
+  private change             = null
+  private source_commit      = "HEAD"
+  private target_commit      = null
+  private may_submit_result  = null
+  private may_publish_result = null
   private config_file
 
   private final default_node_expr = "Linux && Docker"
@@ -449,14 +450,26 @@ exec ssh -i '''
       assert steps.env.NODE_NAME != null, "has_submittable_change must be executed on a node the first time"
 
       assert !this.has_change() || (this.target_commit != null && this.source_commit != null)
+      this.may_submit_result = this.has_change() && this.get_change().maySubmit(target_commit, source_commit, /* allow_cache =*/ false)
+    }
+    return this.may_submit_result
+  }
+
+  /**
+   * @pre this has to be executed on a node the first time
+   */
+  public def has_publishable_change() {
+    if (this.may_publish_result == null) {
+      assert steps.env.NODE_NAME != null, "has_publishable_change must be executed on a node the first time"
+
       def cmd = this.checkouts[steps.env.NODE_NAME].cmd
       def may_publish = steps.sh(
           script: "${cmd} may-publish",
           returnStatus: true,
         ) == 0
-      this.may_submit_result = may_publish && this.has_change() && this.get_change().maySubmit(target_commit, source_commit, /* allow_cache =*/ false)
+      this.may_publish_result = may_publish && this.has_submittable_change()
     }
-    return this.may_submit_result
+    return this.may_publish_result
   }
 
   /**
@@ -619,12 +632,12 @@ exec ssh -i '''
       def change_only_phase = phases.find { phase -> phase.variants.any is_change_only }
       def change_only_step = change_only_phase ? change_only_phase.variants.find(is_change_only) : null
 
-      def is_submittable_change = steps.node(change_only_step ? change_only_step.label : default_node) {
+      def is_publishable_change = steps.node(change_only_step ? change_only_step.label : default_node) {
         this.ensure_checkout(clean)
 
-        def is_submittable = this.has_submittable_change()
+        def is_publishable = this.has_publishable_change()
 
-        if (is_submittable) {
+        if (is_publishable) {
           // Ensure a new checkout is performed because the target repository may change while waiting for the lock
           this.checkouts.remove(steps.env.NODE_NAME)
         } else if (change_only_step) {
@@ -632,10 +645,10 @@ exec ssh -i '''
           this.pin_variant_to_current_node(change_only_step.variant)
         }
 
-        return is_submittable
+        return is_publishable
       }
 
-      if (is_submittable_change) {
+      if (is_publishable_change) {
         lock_if_necessary = { closure ->
           return steps.lock(get_lock_name()) {
             return closure()
@@ -664,7 +677,7 @@ exec ssh -i '''
                 return true
               }
 
-              return is_submittable_change
+              return is_publishable_change
             }
             assert false : "Unknown 'run-on-change' option: ${run_on_change}"
           }
@@ -841,7 +854,7 @@ exec ssh -i '''
             def server = steps.Artifactory.server server_id
             server.publishBuildInfo(buildInfo)
             if (promotion_config.containsKey('target-repo')
-             && this.has_submittable_change()) {
+             && this.has_publishable_change()) {
               server.promote(
                   targetRepo:  promotion_config['target-repo'],
                   buildName:   buildInfo.name,
