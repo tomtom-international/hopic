@@ -733,7 +733,7 @@ def process_prepare_source_tree(
         log.info('%s', repo.git.show(submit_commit, format='fuller', stat=True))
 
         push_commit = submit_commit
-        if ctx.obj.version is not None and 'file' in version_info and 'bump' in version_info.get('after-submit', {}):
+        if ctx.obj.version is not None and 'file' in version_info and 'bump' in version_info.get('after-submit', {}) and is_publish_allowed:
             params = {'bump': version_info['after-submit']['bump']}
             try:
                 params['prerelease_seed'] = version_info['after-submit']['prerelease-seed']
