@@ -112,11 +112,14 @@ def is_publish_branch(ctx):
     Check if the branch name is allowed to publish, if publish-from-branch is not defined in the config file, all the branches should be allowed to publish
     """
 
-    with git.Repo(ctx.obj.workspace) as repo:
-        target_commit = repo.head.commit
-        with repo.config_reader() as cfg:
-            section = 'ci-driver.{target_commit}'.format(**locals())
-            target_ref = cfg.get_value(section, 'ref')
+    try:
+        with git.Repo(ctx.obj.workspace) as repo:
+            target_commit = repo.head.commit
+            with repo.config_reader() as cfg:
+                section = 'ci-driver.{target_commit}'.format(**locals())
+                target_ref = cfg.get_value(section, 'ref')
+    except (NoOptionError, NoSectionError):
+        return False
 
     try:
         publish_from_branch = ctx.obj.config['publish-from-branch']
