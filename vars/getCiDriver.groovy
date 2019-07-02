@@ -32,9 +32,11 @@ class ChangeRequest {
   }
 
   protected def maySubmitImpl(target_commit, source_commit, allow_cache = true) {
-    return !line_split(steps.sh(script: 'git log ' + shell_quote(target_commit) + '..' + shell_quote(source_commit) + " --pretty='%s' --reverse", returnStdout: true)
-      .trim()).find { subject ->
+    return !line_split(steps.sh(script: 'git log ' + shell_quote(target_commit) + '..' + shell_quote(source_commit) + " --pretty='%H:%s' --reverse", returnStdout: true)
+      .trim()).find { line ->
+        def (commit, subject) = line.split(':', 2)
         if (subject.startsWith('fixup!') || subject.startsWith('squash!')) {
+          steps.println("\033[36m[info] not submitting because commit ${commit} is marked with 'fixup!' or 'squash!': ${subject}\033[39m")
           return true
         }
     }
@@ -128,12 +130,20 @@ class BitbucketPullRequest extends ChangeRequest {
   }
 
   public def maySubmit(target_commit, source_commit, allow_cache = true) {
+    if (!super.maySubmitImpl(target_commit, source_commit, allow_cache)) {
+      return false
+    }
     def cur_cr_info = this.get_info(allow_cache)
-    return !(!super.maySubmitImpl(target_commit, source_commit, allow_cache)
-          || cur_cr_info == null
-          || cur_cr_info.fromRef == null
-          || cur_cr_info.fromRef.latestCommit != source_commit
-          || !cur_cr_info.canMerge)
+    if (cur_cr_info == null
+     || cur_cr_info.fromRef == null
+     || cur_cr_info.fromRef.latestCommit != source_commit) {
+      steps.println("\033[31m[error] failed to get pull request info from BitBucket for ${source_commit}\033[39m")
+      return false
+    }
+    if (!cur_cr_info.canMerge) {
+      steps.println("\033[36m[info] not submitting because the BitBucket merge criteria are not met\033[39m")
+    }
+    return cur_cr_info.canMerge
   }
 
   public def apply(cmd, source_remote) {
@@ -165,8 +175,8 @@ class BitbucketPullRequest extends ChangeRequest {
                                 + ' prepare-source-tree'
                                 + ' --author-name=' + shell_quote(steps.env.CHANGE_AUTHOR)
                                 + ' --author-email=' + shell_quote(steps.env.CHANGE_AUTHOR_EMAIL)
-                                + ' --author-date=' + shell_quote('@' + change_request.author_time)
-                                + ' --commit-date=' + shell_quote('@' + change_request.commit_time)
+                                + ' --author-date=' + shell_quote(sprintf('@%.3f', change_request.author_time))
+                                + ' --commit-date=' + shell_quote(sprintf('@%.3f', change_request.commit_time))
                                 + ' merge-change-request'
                                 + ' --source-remote=' + shell_quote(source_remote)
                                 + ' --source-ref=' + shell_quote(remote_ref)
@@ -201,8 +211,8 @@ class ModalityRequest extends ChangeRequest {
     def commit_time = steps.currentBuild.startTimeInMillis / 1000.0
     def output = line_split(steps.sh(script: cmd
                                 + ' prepare-source-tree'
-                                + ' --author-date=' + shell_quote('@' + author_time)
-                                + ' --commit-date=' + shell_quote('@' + commit_time)
+                                + ' --author-date=' + shell_quote(sprintf('@%.3f', author_time))
+                                + ' --commit-date=' + shell_quote(sprintf('@%.3f', commit_time))
                                 + ' apply-modality-change ' + shell_quote(modality),
                           returnStdout: true)).findAll{it.size() > 0}
     if (output.size() <= 0) {
