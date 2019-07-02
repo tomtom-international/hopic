@@ -723,6 +723,30 @@ def process_prepare_source_tree(
 
         submit_commit = repo.index.commit(**commit_params)
         click.echo(submit_commit)
+
+        # Autosquash the merged commits (if any) to discover how that would look like.
+        autosquash_base = None
+        if source_commit:
+            for commit in git.Commit.list_items(repo, '{target_commit}..{source_commit}'.format(**locals()), first_parent=True, no_merges=True):
+                subject = commit.message.splitlines()[0]
+                if subject.startswith('fixup!') or subject.startswith('squash!'):
+                    autosquash_base = repo.merge_base(target_commit, submit_commit)
+                    break
+        autosquashed_commit = None
+        if autosquash_base:
+            repo.head.reference = source_commit
+            repo.head.reset(index=True, working_tree=True)
+            try:
+                try:
+                    repo.git.rebase(autosquash_base, interactive=True, autosquash=True, env=dict(GIT_EDITOR='true'), kill_after_timeout=5)
+                except git.GitCommandError:
+                    pass
+                else:
+                    autosquashed_commit = repo.head.commit
+            finally:
+                repo.head.reference = submit_commit
+                repo.head.reset(index=True, working_tree=True)
+
         if code_clean:
             restore_mtime_from_git(repo)
 
@@ -787,6 +811,8 @@ def process_prepare_source_tree(
             if source_commit:
                 cfg.set_value(section, 'target-commit', text_type(target_commit))
                 cfg.set_value(section, 'source-commit', text_type(source_commit))
+            if autosquashed_commit:
+                cfg.set_value(section, 'autosquashed-commit', text_type(autosquashed_commit))
         if ctx.obj.version is not None:
             click.echo(ctx.obj.version)
 
@@ -1012,6 +1038,7 @@ def build(ctx, phase, variant):
 
     refspecs = []
     source_commits = []
+    autosquashed_commits = []
     try:
         with git.Repo(ctx.obj.workspace) as repo:
             submit_commit = repo.head.commit
@@ -1023,7 +1050,11 @@ def build(ctx, phase, variant):
                     target_commit = repo.commit(git_cfg.get_value(section, 'target-commit'))
                     source_commit = repo.commit(git_cfg.get_value(section, 'source-commit'))
                     source_commits = git.Commit.list_items(repo, '{target_commit}..{source_commit}'.format(**locals()), first_parent=True, no_merges=True)
+                    autosquashed_commits = source_commits
                     log.debug('Building for source commits: %s', source_commits)
+                if git_cfg.has_option(section, 'autosquashed-commit'):
+                    autosquashed_commit = repo.commit(git_cfg.get_value(section, 'autosquashed-commit'))
+                    autosquashed_commits = git.Commit.list_items(repo, '{target_commit}..{autosquashed_commit}'.format(**locals()), first_parent=True, no_merges=True)
     except NoSectionError:
         pass
     has_change = bool(refspecs)
@@ -1122,11 +1153,16 @@ def build(ctx, phase, variant):
                 foreach_items = (None,)
                 if foreach == 'SOURCE_COMMIT':
                     foreach_items = source_commits
+                elif foreach == 'AUTOSQUASHED_COMMIT':
+                    foreach_items = autosquashed_commits
 
                 for foreach_item in foreach_items:
                     cfg_vars = volume_vars.copy()
-                    if foreach == 'SOURCE_COMMIT':
-                        cfg_vars['SOURCE_COMMIT'] = text_type(foreach_item)
+                    if foreach in (
+                            'SOURCE_COMMIT',
+                            'AUTOSQUASHED_COMMIT',
+                        ):
+                        cfg_vars[foreach] = text_type(foreach_item)
 
                     # Strip off prefixed environment variables from this command-line and apply them
                     final_cmd = copy(cmd)
