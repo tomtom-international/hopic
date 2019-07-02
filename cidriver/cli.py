@@ -337,7 +337,7 @@ def cli(ctx, color, config, workspace):
     try:
         with git.Repo(workspace) as repo, repo.config_reader() as cfg:
             code_dir = os.path.join(workspace, cfg.get_value('ci-driver.code', 'dir'))
-    except (git.InvalidGitRepositoryError, git.NoSuchPathError, NoSectionError):
+    except (git.InvalidGitRepositoryError, git.NoSuchPathError, NoOptionError, NoSectionError):
         code_dir = workspace
 
     ctx.obj.code_dir = ctx.obj.volume_vars['WORKSPACE'] = code_dir
@@ -456,6 +456,7 @@ def checkout_tree(tree, remote, ref, clean):
         with repo.config_writer() as cfg:
             cfg.remove_section('ci-driver.code')
             cfg.set_value('color', 'ui', 'always')
+            cfg.set_value('ci-driver.code', 'cfg-clean', str(clean))
 
         tags = repo.tags
         if tags:
@@ -476,12 +477,15 @@ def checkout_tree(tree, remote, ref, clean):
             if clean_output:
                 log.info('%s', clean_output)
 
+            # Only restore mtimes when doing a clean build. This prevents problems with timestamp-based build sytems.
+            # I.e. make and ninja and probably half the world.
+            restore_mtime_from_git(repo)
+
         with repo.config_writer() as cfg:
             section = 'ci-driver.{commit}'.format(**locals())
             cfg.set_value(section, 'ref', ref)
             cfg.set_value(section, 'remote', remote)
 
-        restore_mtime_from_git(repo)
     return commit
 
 
@@ -589,6 +593,7 @@ def process_prepare_source_tree(
             section = 'ci-driver.{target_commit}'.format(**locals())
             target_ref    = cfg.get_value(section, 'ref')
             target_remote = cfg.get_value(section, 'remote')
+            code_clean    = cfg.getboolean('ci-driver.code', 'cfg-clean')
 
         commit_params = change_applicator(repo)
         if not commit_params:
@@ -611,7 +616,6 @@ def process_prepare_source_tree(
                     code_commit = ctx.obj.config['scm']['git']['ref']
                 except (KeyError, TypeError):
                     code_commit = cfg.get_value('ci-driver.code', 'cfg-ref')
-                code_clean = cfg.getboolean('ci-driver.code', 'cfg-clean')
 
             checkout_tree(ctx.obj.code_dir, code_remote, code_commit, code_clean)
 
@@ -654,7 +658,8 @@ def process_prepare_source_tree(
 
         submit_commit = repo.index.commit(**commit_params)
         click.echo(submit_commit)
-        restore_mtime_from_git(repo)
+        if code_clean:
+            restore_mtime_from_git(repo)
 
         tagname = None
         version_tag = version_info.get('tag', False)
