@@ -730,6 +730,7 @@ def process_prepare_source_tree(
             for commit in git.Commit.list_items(repo, '{target_commit}..{source_commit}'.format(**locals()), first_parent=True, no_merges=True):
                 subject = commit.message.splitlines()[0]
                 if subject.startswith('fixup!') or subject.startswith('squash!'):
+                    log.debug("Found an autosquash-commit in the source commits: '%s': %s", subject, click.style(text_type(commit), fg='yellow'))
                     autosquash_base = repo.merge_base(target_commit, submit_commit)
                     break
         autosquashed_commit = None
@@ -746,6 +747,11 @@ def process_prepare_source_tree(
                     log.warning('Failed to perform auto squashing rebase: %s', e)
                 else:
                     autosquashed_commit = repo.head.commit
+                    if log.isEnabledFor(logging.DEBUG):
+                        log.debug('Autosquashed to:')
+                        for commit in git.Commit.list_items(repo, '{target_commit}..{autosquashed_commit}'.format(**locals()), first_parent=True, no_merges=True):
+                            subject = commit.message.splitlines()[0]
+                            log.debug('%s %s', click.style(text_type(commit), fg='yellow'), subject)
             finally:
                 repo.head.reference = submit_commit
                 repo.head.reset(index=True, working_tree=True)
