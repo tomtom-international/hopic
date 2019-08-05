@@ -312,12 +312,6 @@ ${shell_quote(venv)}/bin/python -m pip install ${shell_quote(this.repo)}
 """)
       }
       this.base_cmds[steps.env.NODE_NAME] = shell_quote("${venv}/bin/python") + ' ' + shell_quote("${venv}/bin/ci-driver") + ' --color=always'
-      if (steps.params.HOPIC_VERBOSITY != null) {
-        this.base_cmds[steps.env.NODE_NAME] += ' --verbosity=' + shell_quote(steps.params.HOPIC_VERBOSITY)
-      }
-      if (steps.params.GIT_VERBOSITY != null) {
-        this.base_cmds[steps.env.NODE_NAME] += ' --git-verbosity=' + shell_quote(steps.params.GIT_VERBOSITY)
-      }
     }
     return this.base_cmds[steps.env.NODE_NAME]
   }

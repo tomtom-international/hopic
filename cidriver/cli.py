@@ -319,8 +319,8 @@ def determine_version(version_info, config_dir, code_dir=None):
 @click.option('--config', type=click.Path(exists=False, file_okay=True, dir_okay=False, readable=True, resolve_path=True), default=lambda: None, show_default='${WORKSPACE}/hopic-ci-config.yaml or ${WORKSPACE}/cfg.yml')
 @click.option('--workspace', type=click.Path(exists=False, file_okay=False, dir_okay=True), default=lambda: None, show_default='current working directory')
 @click.option('--whitelisted-var', multiple=True, default=['CT_DEVENV_HOME'], show_default=True)
-@click_log.simple_verbosity_option(__package__, autocompletion=cli_autocomplete_click_log_verbosity)
-@click_log.simple_verbosity_option('git', '--git-verbosity', autocompletion=cli_autocomplete_click_log_verbosity)
+@click_log.simple_verbosity_option(__package__,              envvar='HOPIC_VERBOSITY', autocompletion=cli_autocomplete_click_log_verbosity)
+@click_log.simple_verbosity_option('git', '--git-verbosity', envvar='GIT_VERBOSITY'  , autocompletion=cli_autocomplete_click_log_verbosity)
 @click.pass_context
 def cli(ctx, color, config, workspace, whitelisted_var):
     if color == 'always':
