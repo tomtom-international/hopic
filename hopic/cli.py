@@ -116,7 +116,7 @@ def is_publish_branch(ctx):
         with git.Repo(ctx.obj.workspace) as repo:
             target_commit = repo.head.commit
             with repo.config_reader() as cfg:
-                section = 'ci-driver.{target_commit}'.format(**locals())
+                section = 'hopic.{target_commit}'.format(**locals())
                 target_ref = cfg.get_value(section, 'ref')
     except (NoOptionError, NoSectionError):
         return False
@@ -363,7 +363,7 @@ def cli(ctx, color, config, workspace, whitelisted_var):
     ctx.obj.volume_vars = {}
     try:
         with git.Repo(workspace) as repo, repo.config_reader() as cfg:
-            code_dir = os.path.join(workspace, cfg.get_value('ci-driver.code', 'dir'))
+            code_dir = os.path.join(workspace, cfg.get_value('hopic.code', 'dir'))
     except (git.InvalidGitRepositoryError, git.NoSuchPathError, NoOptionError, NoSectionError):
         code_dir = workspace
 
@@ -490,9 +490,9 @@ def checkout_tree(tree, remote, ref, clean=False, remote_name='origin'):
 
     with repo:
         with repo.config_writer() as cfg:
-            cfg.remove_section('ci-driver.code')
+            cfg.remove_section('hopic.code')
             cfg.set_value('color', 'ui', 'always')
-            cfg.set_value('ci-driver.code', 'cfg-clean', str(clean))
+            cfg.set_value('hopic.code', 'cfg-clean', str(clean))
 
         tags = repo.tags
         if tags:
@@ -519,7 +519,7 @@ def checkout_tree(tree, remote, ref, clean=False, remote_name='origin'):
             restore_mtime_from_git(repo)
 
         with repo.config_writer() as cfg:
-            section = 'ci-driver.{commit}'.format(**locals())
+            section = 'hopic.{commit}'.format(**locals())
             cfg.set_value(section, 'ref', ref)
             cfg.set_value(section, 'remote', remote)
 
@@ -613,11 +613,11 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
     # Check out configured repository and mark it as the code directory of this one
     ctx.obj.code_dir = os.path.join(workspace, code_dir)
     with git.Repo(workspace) as repo, repo.config_writer() as cfg:
-        cfg.remove_section('ci-driver.code')
-        cfg.set_value('ci-driver.code', 'dir', code_dir)
-        cfg.set_value('ci-driver.code', 'cfg-remote', target_remote)
-        cfg.set_value('ci-driver.code', 'cfg-ref', target_ref)
-        cfg.set_value('ci-driver.code', 'cfg-clean', str(clean))
+        cfg.remove_section('hopic.code')
+        cfg.set_value('hopic.code', 'dir', code_dir)
+        cfg.set_value('hopic.code', 'cfg-remote', target_remote)
+        cfg.set_value('hopic.code', 'cfg-ref', target_ref)
+        cfg.set_value('hopic.code', 'cfg-clean', str(clean))
 
     checkout_tree(ctx.obj.code_dir, git_cfg.get('remote', target_remote), git_cfg.get('ref', target_ref), clean)
 
@@ -650,10 +650,10 @@ def process_prepare_source_tree(
         target_commit = repo.head.commit
 
         with repo.config_writer() as cfg:
-            section = 'ci-driver.{target_commit}'.format(**locals())
+            section = 'hopic.{target_commit}'.format(**locals())
             target_ref    = cfg.get_value(section, 'ref')
             target_remote = cfg.get_value(section, 'remote')
-            code_clean    = cfg.getboolean('ci-driver.code', 'cfg-clean')
+            code_clean    = cfg.getboolean('hopic.code', 'cfg-clean')
 
         commit_params = change_applicator(repo)
         if not commit_params:
@@ -672,11 +672,11 @@ def process_prepare_source_tree(
                 try:
                     code_remote = ctx.obj.config['scm']['git']['remote']
                 except (KeyError, TypeError):
-                    code_remote = cfg.get_value('ci-driver.code', 'cfg-remote')
+                    code_remote = cfg.get_value('hopic.code', 'cfg-remote')
                 try:
                     code_commit = ctx.obj.config['scm']['git']['ref']
                 except (KeyError, TypeError):
-                    code_commit = cfg.get_value('ci-driver.code', 'cfg-ref')
+                    code_commit = cfg.get_value('hopic.code', 'cfg-ref')
 
             checkout_tree(ctx.obj.code_dir, code_remote, code_commit, code_clean)
 
@@ -810,8 +810,8 @@ def process_prepare_source_tree(
             log.info('%s', repo.git.show(push_commit, format='fuller', stat=True))
 
         with repo.config_writer() as cfg:
-            cfg.remove_section('ci-driver.{target_commit}'.format(**locals()))
-            section = 'ci-driver.{submit_commit}'.format(**locals())
+            cfg.remove_section('hopic.{target_commit}'.format(**locals()))
+            section = 'hopic.{submit_commit}'.format(**locals())
             cfg.set_value(section, 'remote', target_remote)
             cfg.set_value(section, 'ref', target_ref)
             refspecs = ['{push_commit}:{target_ref}'.format(**locals())]
@@ -946,7 +946,7 @@ def apply_modality_change(
             remove_files = set()
             with repo.config_reader() as cfg:
                 try:
-                    code_dir = cfg.get_value('ci-driver.code', 'dir')
+                    code_dir = cfg.get_value('hopic.code', 'dir')
                 except (NoOptionError, NoSectionError):
                     pass
                 else:
@@ -1052,7 +1052,7 @@ def build(ctx, phase, variant):
     try:
         with git.Repo(ctx.obj.workspace) as repo:
             submit_commit = repo.head.commit
-            section = 'ci-driver.{submit_commit}'.format(**locals())
+            section = 'hopic.{submit_commit}'.format(**locals())
             with repo.config_reader() as git_cfg:
                 if git_cfg.has_option(section, 'refspecs'):
                     refspecs = list(shlex.split(git_cfg.get_value(section, 'refspecs')))
@@ -1263,7 +1263,7 @@ def build(ctx, phase, variant):
                     repo.git.bundle('create', os.path.join(ctx.obj.workspace, 'worktree-transfer.bundle'), *bundle_commits)
 
                     submit_commit = repo.head.commit
-                    section = 'ci-driver.{submit_commit}'.format(**locals())
+                    section = 'hopic.{submit_commit}'.format(**locals())
                     cfg.set_value(section, 'refspecs', ' '.join(shquote(refspec) for refspec in refspecs))
 
             # Post-processing to make these artifacts as reproducible as possible
@@ -1281,7 +1281,7 @@ def unbundle_worktrees(ctx, bundle):
 
     with git.Repo(ctx.obj.workspace) as repo:
         submit_commit = repo.head.commit
-        section = 'ci-driver.{submit_commit}'.format(**locals())
+        section = 'hopic.{submit_commit}'.format(**locals())
         with repo.config_reader() as git_cfg:
             try:
                 refspecs = list(shlex.split(git_cfg.get_value(section, 'refspecs')))
@@ -1326,7 +1326,7 @@ def submit(ctx, target_remote):
     """
 
     with git.Repo(ctx.obj.workspace) as repo:
-        section = 'ci-driver.{repo.head.commit}'.format(**locals())
+        section = 'hopic.{repo.head.commit}'.format(**locals())
         with repo.config_reader() as cfg:
             if target_remote is None:
                 target_remote = cfg.get_value(section, 'remote')

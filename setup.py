@@ -30,13 +30,13 @@ description = re.sub(r'\*\*(.*?)\*\*', r'\1', description)
 description = description.replace('\n', ' ')
 
 setup(
-    name='cidriver',
+    name='hopic',
     author='TomTom N.V.',
     description=description,
     long_description=long_description,
     long_description_content_type='text/x-rst',
-    packages=('cidriver',),
-    py_modules=('cidriver',),
+    packages=('hopic',),
+    py_modules=('hopic',),
     install_requires=(
       'Click>=7.0,<8.0',
       'click-log',
@@ -52,7 +52,7 @@ setup(
     use_scm_version={"relative_to": __file__},
     entry_points='''
       [console_scripts]
-      ci-driver=cidriver.cli:cli
+      hopic=hopic.cli:cli
     ''',
     url='https://github.com/tomtom-international/hopic',
     project_urls={

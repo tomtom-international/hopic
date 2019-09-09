@@ -55,7 +55,7 @@ project = u'Hopic CI driver'
 copyright = u'2018 - 2019, TomTom N.V.'
 author = u'Giel van Schijndel'
 
-pkg_name = 'cidriver'
+pkg_name = 'hopic'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the

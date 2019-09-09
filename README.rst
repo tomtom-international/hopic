@@ -6,13 +6,13 @@ With Hopic CI Driver local debugging is made significantly easier.
 
 As of now commit stage can be adapted to use CI-Driver functionality.
 With this most of the required configuration will live in the hopic-ci-config.yaml file replacing the groovy snippets from the commit stage in jenkins file.
-This can be locally tested with the command - **"ci-driver"**
+This can be locally tested with the command - **"hopic"**
 
 
 Test CI Driver locally
 ----------------------
 
-**Install the ci-driver** command with below package
+**Install the hopic** command with below package
 
 .. code-block:: console
 
@@ -24,10 +24,10 @@ Test CI Driver locally
 
 .. code-block:: console
 
-   eval "$(_CI_DRIVER_COMPLETE=source ci-driver)"
+   eval "$(_CI_DRIVER_COMPLETE=source hopic)"
 
-For the command line help on ci-driver usage
+For the command line help on hopic usage
 
 .. code-block:: console
 
-   ci-driver --help
+   hopic --help
