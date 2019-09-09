@@ -435,6 +435,7 @@ def may_publish(ctx):
 def restore_mtime_from_git(repo, files=None):
     if files is None:
         files = set(filter(None, repo.git.ls_files('-z', stdout_as_string=False).split(b'\0')))
+    log.debug('restoring mtime from git')
 
     encoding = sys.getfilesystemencoding() or sys.getdefaultencoding()
     workspace = repo.working_tree_dir.encode(encoding)
