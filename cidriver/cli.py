@@ -1208,7 +1208,7 @@ def build(ctx, phase, variant):
                     try:
                         echo_cmd(subprocess.check_call, final_cmd, env=new_env, cwd=ctx.obj.code_dir)
                     except subprocess.CalledProcessError as e:
-                        log.exception("Command fatally terminated with exit code %d", e.returncode)
+                        log.error("Command fatally terminated with exit code %d", e.returncode)
                         sys.exit(e.returncode)
 
                 for subdir, worktree in worktrees.items():
