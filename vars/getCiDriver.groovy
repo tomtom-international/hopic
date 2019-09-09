@@ -32,9 +32,11 @@ class ChangeRequest {
   }
 
   protected def maySubmitImpl(target_commit, source_commit, allow_cache = true) {
-    return !line_split(steps.sh(script: 'git log ' + shell_quote(target_commit) + '..' + shell_quote(source_commit) + " --pretty='%s' --reverse", returnStdout: true)
-      .trim()).find { subject ->
+    return !line_split(steps.sh(script: 'git log ' + shell_quote(target_commit) + '..' + shell_quote(source_commit) + " --pretty='%H:%s' --reverse", returnStdout: true)
+      .trim()).find { line ->
+        def (commit, subject) = line.split(':', 2)
         if (subject.startsWith('fixup!') || subject.startsWith('squash!')) {
+          steps.println("\033[36m[info] not submitting because commit ${commit} is marked with 'fixup!' or 'squash!': ${subject}\033[39m")
           return true
         }
     }
@@ -94,6 +96,10 @@ class BitbucketPullRequest extends ChangeRequest {
       def last_idx = 0
       def new_description = ''
       m.each { _, username ->
+        if (!username) {
+          return
+        }
+
         if (!users.containsKey(username)) {
           def baseRestUrl = url
             .replaceFirst(/\/projects\/.*/, '/rest/api/1.0')
@@ -124,12 +130,20 @@ class BitbucketPullRequest extends ChangeRequest {
   }
 
   public def maySubmit(target_commit, source_commit, allow_cache = true) {
+    if (!super.maySubmitImpl(target_commit, source_commit, allow_cache)) {
+      return false
+    }
     def cur_cr_info = this.get_info(allow_cache)
-    return !(!super.maySubmitImpl(target_commit, source_commit, allow_cache)
-          || cur_cr_info == null
-          || cur_cr_info.fromRef == null
-          || cur_cr_info.fromRef.latestCommit != source_commit
-          || !cur_cr_info.canMerge)
+    if (cur_cr_info == null
+     || cur_cr_info.fromRef == null
+     || cur_cr_info.fromRef.latestCommit != source_commit) {
+      steps.println("\033[31m[error] failed to get pull request info from BitBucket for ${source_commit}\033[39m")
+      return false
+    }
+    if (!cur_cr_info.canMerge) {
+      steps.println("\033[36m[info] not submitting because the BitBucket merge criteria are not met\033[39m")
+    }
+    return cur_cr_info.canMerge
   }
 
   public def apply(cmd, source_remote) {
@@ -161,8 +175,8 @@ class BitbucketPullRequest extends ChangeRequest {
                                 + ' prepare-source-tree'
                                 + ' --author-name=' + shell_quote(steps.env.CHANGE_AUTHOR)
                                 + ' --author-email=' + shell_quote(steps.env.CHANGE_AUTHOR_EMAIL)
-                                + ' --author-date=' + shell_quote('@' + change_request.author_time)
-                                + ' --commit-date=' + shell_quote('@' + change_request.commit_time)
+                                + ' --author-date=' + shell_quote(sprintf('@%.3f', change_request.author_time))
+                                + ' --commit-date=' + shell_quote(sprintf('@%.3f', change_request.commit_time))
                                 + ' merge-change-request'
                                 + ' --source-remote=' + shell_quote(source_remote)
                                 + ' --source-ref=' + shell_quote(remote_ref)
@@ -197,8 +211,8 @@ class ModalityRequest extends ChangeRequest {
     def commit_time = steps.currentBuild.startTimeInMillis / 1000.0
     def output = line_split(steps.sh(script: cmd
                                 + ' prepare-source-tree'
-                                + ' --author-date=' + shell_quote('@' + author_time)
-                                + ' --commit-date=' + shell_quote('@' + commit_time)
+                                + ' --author-date=' + shell_quote(sprintf('@%.3f', author_time))
+                                + ' --commit-date=' + shell_quote(sprintf('@%.3f', commit_time))
                                 + ' apply-modality-change ' + shell_quote(modality),
                           returnStdout: true)).findAll{it.size() > 0}
     if (output.size() <= 0) {
@@ -217,17 +231,18 @@ class ModalityRequest extends ChangeRequest {
 class CiDriver {
   private repo
   private steps
-  private base_cmds         = [:]
-  private cmds              = [:]
-  private nodes             = [:]
-  private checkouts         = [:]
-  private stashes           = [:]
-  private worktree_bundles  = [:]
-  private submit_version    = null
-  private change            = null
-  private source_commit     = "HEAD"
-  private target_commit     = null
-  private may_submit_result = null
+  private base_cmds          = [:]
+  private cmds               = [:]
+  private nodes              = [:]
+  private checkouts          = [:]
+  private stashes            = [:]
+  private worktree_bundles   = [:]
+  private submit_version     = null
+  private change             = null
+  private source_commit      = "HEAD"
+  private target_commit      = null
+  private may_submit_result  = null
+  private may_publish_result = null
   private config_file
 
   private final default_node_expr = "Linux && Docker"
@@ -451,6 +466,23 @@ exec ssh -i '''
   }
 
   /**
+   * @pre this has to be executed on a node the first time
+   */
+  public def has_publishable_change() {
+    if (this.may_publish_result == null) {
+      assert steps.env.NODE_NAME != null, "has_publishable_change must be executed on a node the first time"
+
+      def cmd = this.checkouts[steps.env.NODE_NAME].cmd
+      def may_publish = steps.sh(
+          script: "${cmd} may-publish",
+          returnStatus: true,
+        ) == 0
+      this.may_publish_result = may_publish && this.has_submittable_change()
+    }
+    return this.may_publish_result
+  }
+
+  /**
    * @pre this has to be executed on a node
    */
   private def ensure_checkout(clean = false) {
@@ -555,8 +587,9 @@ exec ssh -i '''
 
   public def build(Map buildParams = [:]) {
     def clean = buildParams.getOrDefault('clean', false)
+    def default_node = buildParams.getOrDefault('default_node_expr', this.default_node_expr)
     steps.ansiColor('xterm') {
-      def phases = steps.node(default_node_expr) {
+      def phases = steps.node(default_node) {
         def cmd = this.install_prerequisites()
         def workspace = steps.pwd()
 
@@ -594,7 +627,7 @@ exec ssh -i '''
                 ))
               [
                 variant: variant,
-                label: meta.getOrDefault('node-label', default_node_expr),
+                label: meta.getOrDefault('node-label', default_node),
                 run_on_change: meta.getOrDefault('run-on-change', 'always'),
               ]
             }
@@ -609,12 +642,12 @@ exec ssh -i '''
       def change_only_phase = phases.find { phase -> phase.variants.any is_change_only }
       def change_only_step = change_only_phase ? change_only_phase.variants.find(is_change_only) : null
 
-      def is_submittable_change = steps.node(change_only_step ? change_only_step.label : default_node_expr) {
+      def is_publishable_change = steps.node(change_only_step ? change_only_step.label : default_node) {
         this.ensure_checkout(clean)
 
-        def is_submittable = this.has_submittable_change()
+        def is_publishable = this.has_publishable_change()
 
-        if (is_submittable) {
+        if (is_publishable) {
           // Ensure a new checkout is performed because the target repository may change while waiting for the lock
           this.checkouts.remove(steps.env.NODE_NAME)
         } else if (change_only_step) {
@@ -622,10 +655,10 @@ exec ssh -i '''
           this.pin_variant_to_current_node(change_only_step.variant)
         }
 
-        return is_submittable
+        return is_publishable
       }
 
-      if (is_submittable_change) {
+      if (is_publishable_change) {
         lock_if_necessary = { closure ->
           return steps.lock(get_lock_name()) {
             return closure()
@@ -654,7 +687,7 @@ exec ssh -i '''
                 return true
               }
 
-              return is_submittable_change
+              return is_publishable_change
             }
             assert false : "Unknown 'run-on-change' option: ${run_on_change}"
           }
@@ -749,13 +782,14 @@ exec ssh -i '''
                       }
                       steps.dir(this.checkouts[steps.env.NODE_NAME].workspace) {
                         artifacts.each { artifact ->
+                          def pattern = artifact.pattern.replace('(*)', '*')
                           if (archiving_cfg == 'archive') {
                             steps.archiveArtifacts(
-                                artifacts: artifact.pattern,
+                                artifacts: pattern,
                                 fingerprint: meta.archive.getOrDefault('fingerprint', true),
                               )
                           } else if (archiving_cfg == 'fingerprint') {
-                            steps.fingerprint(artifact.pattern)
+                            steps.fingerprint(pattern)
                           }
                         }
                         if (meta[archiving_cfg].containsKey('upload-artifactory')) {
@@ -763,17 +797,15 @@ exec ssh -i '''
                           if (server_id == null) {
                             steps.error("Artifactory upload configuration entry for ${phase}.${variant} does not contain 'id' property to identify Artifactory server")
                           }
-                          def target = meta[archiving_cfg]['upload-artifactory'].target
-                          if (target == null) {
-                            steps.error("Artifactory upload configuration entry for ${phase}.${variant} does not contain 'target' property to identify target repository")
-                          }
-
                           def uploadSpec = JsonOutput.toJson([
                               files: artifacts.collect { artifact ->
                                 def fileSpec = [
                                   pattern: artifact.pattern,
-                                  target: target,
+                                  target: artifact.target,
                                 ]
+                                if (fileSpec.target == null) {
+                                  steps.error("Artifactory upload configuration entry for ${phase}.${variant} does not contain 'target' property to identify target repository")
+                                }
                                 if (artifact.props != null) {
                                   fileSpec.props = artifact.props
                                 }
@@ -817,13 +849,31 @@ exec ssh -i '''
         }
       }
 
-      artifactoryBuildInfo.each { server_id, buildInfo ->
+      if (artifactoryBuildInfo) {
         assert this.nodes : "When we have artifactory build info we expect to have execution nodes that it got produced on"
         this.on_build_node {
-          def server = steps.Artifactory.server server_id
-          server.publishBuildInfo(buildInfo)
-          // Work around Artifactory Groovy bug
-          server = null
+          def cmd = this.ensure_checkout(clean).cmd
+          def config = steps.readJSON(text: steps.sh(
+              script: "${cmd} show-config",
+              returnStdout: true,
+            ))
+
+          artifactoryBuildInfo.each { server_id, buildInfo ->
+            def promotion_config = config.getOrDefault('artifactory', [:]).getOrDefault('promotion', [:]).getOrDefault(server_id, [:])
+
+            def server = steps.Artifactory.server server_id
+            server.publishBuildInfo(buildInfo)
+            if (promotion_config.containsKey('target-repo')
+             && this.has_publishable_change()) {
+              server.promote(
+                  targetRepo:  promotion_config['target-repo'],
+                  buildName:   buildInfo.name,
+                  buildNumber: buildInfo.number,
+                )
+            }
+            // Work around Artifactory Groovy bug
+            server = null
+          }
         }
       }
     }

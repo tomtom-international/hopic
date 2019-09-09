@@ -204,6 +204,14 @@ def read(config, volume_vars):
                             # Expand short hand notation of just the artifact pattern to a full dictionary
                             artifacts = [({'pattern': artifact} if isinstance(artifact, string_types) else artifact) for artifact in artifacts]
 
+                            try:
+                                target = var[var_key]['upload-artifactory'].pop('target')
+                            except (KeyError, TypeError):
+                                pass
+                            else:
+                                for artifact in artifacts:
+                                    artifact.setdefault('target', target)
+
                             var[var_key]['artifacts'] = artifacts
                         if var_key == 'junit':
                             if isinstance(var[var_key], string_types):

@@ -107,6 +107,28 @@ class DateTime(click.ParamType):
         except ValueError as e:
             self.fail('Could not parse datetime string "{value}": {e}'.format(value=value, e=' '.join(e.args)), param, ctx)
 
+def is_publish_branch(ctx):
+    """
+    Check if the branch name is allowed to publish, if publish-from-branch is not defined in the config file, all the branches should be allowed to publish
+    """
+
+    try:
+        with git.Repo(ctx.obj.workspace) as repo:
+            target_commit = repo.head.commit
+            with repo.config_reader() as cfg:
+                section = 'ci-driver.{target_commit}'.format(**locals())
+                target_ref = cfg.get_value(section, 'ref')
+    except (NoOptionError, NoSectionError):
+        return False
+
+    try:
+        publish_from_branch = ctx.obj.config['publish-from-branch']
+    except KeyError:
+        return True
+
+    publish_branch_pattern = re.compile('(?:{})$'.format(publish_from_branch))
+    return publish_branch_pattern.match(target_ref)
+
 
 def determine_source_date(workspace):
     """Determine the date of most recent change to the sources in the given workspace"""
@@ -297,8 +319,8 @@ def determine_version(version_info, config_dir, code_dir=None):
 @click.option('--config', type=click.Path(exists=False, file_okay=True, dir_okay=False, readable=True, resolve_path=True), default=lambda: None, show_default='${WORKSPACE}/hopic-ci-config.yaml or ${WORKSPACE}/cfg.yml')
 @click.option('--workspace', type=click.Path(exists=False, file_okay=False, dir_okay=True), default=lambda: None, show_default='current working directory')
 @click.option('--whitelisted-var', multiple=True, default=['CT_DEVENV_HOME'], show_default=True)
-@click_log.simple_verbosity_option(__package__, autocompletion=cli_autocomplete_click_log_verbosity)
-@click_log.simple_verbosity_option('git', '--git-verbosity', autocompletion=cli_autocomplete_click_log_verbosity)
+@click_log.simple_verbosity_option(__package__,              envvar='HOPIC_VERBOSITY', autocompletion=cli_autocomplete_click_log_verbosity)
+@click_log.simple_verbosity_option('git', '--git-verbosity', envvar='GIT_VERBOSITY'  , autocompletion=cli_autocomplete_click_log_verbosity)
 @click.pass_context
 def cli(ctx, color, config, workspace, whitelisted_var):
     if color == 'always':
@@ -342,7 +364,7 @@ def cli(ctx, color, config, workspace, whitelisted_var):
     try:
         with git.Repo(workspace) as repo, repo.config_reader() as cfg:
             code_dir = os.path.join(workspace, cfg.get_value('ci-driver.code', 'dir'))
-    except (git.InvalidGitRepositoryError, git.NoSuchPathError, NoSectionError):
+    except (git.InvalidGitRepositoryError, git.NoSuchPathError, NoOptionError, NoSectionError):
         code_dir = workspace
 
     ctx.obj.code_dir = ctx.obj.volume_vars['WORKSPACE'] = code_dir
@@ -400,9 +422,20 @@ def cli(ctx, color, config, workspace, whitelisted_var):
         ctx.obj.volume_vars['DEBVERSION'] = ctx.obj.volume_vars['VERSION'].replace('-', '~', 1).replace('.dirty.', '+dirty', 1)
 
 
+@cli.command()
+@click.pass_context
+def may_publish(ctx):
+    """
+    Check if the target branch name is allowed to be published, according to publish-from-branch in the config file.
+    """
+
+    ctx.exit(0 if is_publish_branch(ctx) else 1)
+
+
 def restore_mtime_from_git(repo, files=None):
     if files is None:
         files = set(filter(None, repo.git.ls_files('-z', stdout_as_string=False).split(b'\0')))
+    log.debug('restoring mtime from git')
 
     encoding = sys.getfilesystemencoding() or sys.getdefaultencoding()
     workspace = repo.working_tree_dir.encode(encoding)
@@ -459,6 +492,7 @@ def checkout_tree(tree, remote, ref, clean=False, remote_name='origin'):
         with repo.config_writer() as cfg:
             cfg.remove_section('ci-driver.code')
             cfg.set_value('color', 'ui', 'always')
+            cfg.set_value('ci-driver.code', 'cfg-clean', str(clean))
 
         tags = repo.tags
         if tags:
@@ -480,12 +514,15 @@ def checkout_tree(tree, remote, ref, clean=False, remote_name='origin'):
             if clean_output:
                 log.info('%s', clean_output)
 
+            # Only restore mtimes when doing a clean build. This prevents problems with timestamp-based build sytems.
+            # I.e. make and ninja and probably half the world.
+            restore_mtime_from_git(repo)
+
         with repo.config_writer() as cfg:
             section = 'ci-driver.{commit}'.format(**locals())
             cfg.set_value(section, 'ref', ref)
             cfg.set_value(section, 'remote', remote)
 
-        restore_mtime_from_git(repo)
     return commit
 
 
@@ -616,6 +653,7 @@ def process_prepare_source_tree(
             section = 'ci-driver.{target_commit}'.format(**locals())
             target_ref    = cfg.get_value(section, 'ref')
             target_remote = cfg.get_value(section, 'remote')
+            code_clean    = cfg.getboolean('ci-driver.code', 'cfg-clean')
 
         commit_params = change_applicator(repo)
         if not commit_params:
@@ -639,7 +677,6 @@ def process_prepare_source_tree(
                     code_commit = ctx.obj.config['scm']['git']['ref']
                 except (KeyError, TypeError):
                     code_commit = cfg.get_value('ci-driver.code', 'cfg-ref')
-                code_clean = cfg.getboolean('ci-driver.code', 'cfg-clean')
 
             checkout_tree(ctx.obj.code_dir, code_remote, code_commit, code_clean)
 
@@ -650,8 +687,11 @@ def process_prepare_source_tree(
 
         # Re-read version to ensure that the version policy in the reloaded configuration is used for it
         ctx.obj.version = determine_version(version_info, ctx.obj.config_dir, ctx.obj.code_dir)
-
-        if version_info.get('bump', True):
+        
+        # If the branch is not allowed to publish, skip version bump step
+        is_publish_allowed = is_publish_branch(ctx)
+        
+        if is_publish_allowed and version_info.get('bump', True):
             if ctx.obj.version is None:
                 if 'file' in version_info:
                     log.error("Failed to read the current version (from %r) while attempting to bump the version", version_info['file'])
@@ -668,6 +708,8 @@ def process_prepare_source_tree(
             if 'file' in version_info:
                 replace_version(os.path.join(ctx.obj.config_dir, version_info['file']), ctx.obj.version)
                 repo.index.add([version_info['file']])
+        else:
+            log.info("Skip version bumping due to the configuration or the target branch is not allowed to publish")
 
         author = git.Actor.author(repo.config_reader())
         if author_name is not None:
@@ -682,11 +724,46 @@ def process_prepare_source_tree(
 
         submit_commit = repo.index.commit(**commit_params)
         click.echo(submit_commit)
-        restore_mtime_from_git(repo)
 
+        # Autosquash the merged commits (if any) to discover how that would look like.
+        autosquash_base = None
+        if source_commit:
+            for commit in git.Commit.list_items(repo, '{target_commit}..{source_commit}'.format(**locals()), first_parent=True, no_merges=True):
+                subject = commit.message.splitlines()[0]
+                if subject.startswith('fixup!') or subject.startswith('squash!'):
+                    log.debug("Found an autosquash-commit in the source commits: '%s': %s", subject, click.style(text_type(commit), fg='yellow'))
+                    autosquash_base = repo.merge_base(target_commit, submit_commit)
+                    break
+        autosquashed_commit = None
+        if autosquash_base:
+            repo.head.reference = source_commit
+            repo.head.reset(index=True, working_tree=True)
+            try:
+                try:
+                    env = {'GIT_EDITOR': 'true'}
+                    if 'commit_date' in commit_params:
+                        env['GIT_COMMITTER_DATE'] = commit_params['commit_date']
+                    repo.git.rebase(autosquash_base, interactive=True, autosquash=True, env=env, kill_after_timeout=5)
+                except git.GitCommandError as e:
+                    log.warning('Failed to perform auto squashing rebase: %s', e)
+                else:
+                    autosquashed_commit = repo.head.commit
+                    if log.isEnabledFor(logging.DEBUG):
+                        log.debug('Autosquashed to:')
+                        for commit in git.Commit.list_items(repo, '{target_commit}..{autosquashed_commit}'.format(**locals()), first_parent=True, no_merges=True):
+                            subject = commit.message.splitlines()[0]
+                            log.debug('%s %s', click.style(text_type(commit), fg='yellow'), subject)
+            finally:
+                repo.head.reference = submit_commit
+                repo.head.reset(index=True, working_tree=True)
+
+        if code_clean:
+            restore_mtime_from_git(repo)
+
+        # Tagging after bumping the version
         tagname = None
         version_tag = version_info.get('tag', False)
-        if ctx.obj.version is not None and not ctx.obj.version.prerelease and version_tag:
+        if ctx.obj.version is not None and not ctx.obj.version.prerelease and version_tag and is_publish_allowed:
             if version_tag and not isinstance(version_tag, string_types):
                 version_tag = ctx.obj.version.default_tag_name
             tagname = version_tag.format(
@@ -698,7 +775,7 @@ def process_prepare_source_tree(
         log.info('%s', repo.git.show(submit_commit, format='fuller', stat=True))
 
         push_commit = submit_commit
-        if ctx.obj.version is not None and 'file' in version_info and 'bump' in version_info.get('after-submit', {}):
+        if ctx.obj.version is not None and 'file' in version_info and 'bump' in version_info.get('after-submit', {}) and is_publish_allowed:
             params = {'bump': version_info['after-submit']['bump']}
             try:
                 params['prerelease_seed'] = version_info['after-submit']['prerelease-seed']
@@ -744,6 +821,8 @@ def process_prepare_source_tree(
             if source_commit:
                 cfg.set_value(section, 'target-commit', text_type(target_commit))
                 cfg.set_value(section, 'source-commit', text_type(source_commit))
+            if autosquashed_commit:
+                cfg.set_value(section, 'autosquashed-commit', text_type(autosquashed_commit))
         if ctx.obj.version is not None:
             click.echo(ctx.obj.version)
 
@@ -830,7 +909,8 @@ def apply_modality_change(
             # Force clean builds when we don't know how to discover changed files
             repo.git.clean('-xd', force=True)
 
-        volume_vars = ctx.obj.volume_vars
+        volume_vars = ctx.obj.volume_vars.copy()
+        volume_vars.setdefault('HOME', os.path.expanduser('~'))
 
         for cmd in modality_cmds:
             if isinstance(cmd, string_types):
@@ -968,6 +1048,7 @@ def build(ctx, phase, variant):
 
     refspecs = []
     source_commits = []
+    autosquashed_commits = []
     try:
         with git.Repo(ctx.obj.workspace) as repo:
             submit_commit = repo.head.commit
@@ -979,7 +1060,11 @@ def build(ctx, phase, variant):
                     target_commit = repo.commit(git_cfg.get_value(section, 'target-commit'))
                     source_commit = repo.commit(git_cfg.get_value(section, 'source-commit'))
                     source_commits = git.Commit.list_items(repo, '{target_commit}..{source_commit}'.format(**locals()), first_parent=True, no_merges=True)
+                    autosquashed_commits = source_commits
                     log.debug('Building for source commits: %s', source_commits)
+                if git_cfg.has_option(section, 'autosquashed-commit'):
+                    autosquashed_commit = repo.commit(git_cfg.get_value(section, 'autosquashed-commit'))
+                    autosquashed_commits = git.Commit.list_items(repo, '{target_commit}..{autosquashed_commit}'.format(**locals()), first_parent=True, no_merges=True)
     except NoSectionError:
         pass
     has_change = bool(refspecs)
@@ -1006,7 +1091,10 @@ def build(ctx, phase, variant):
                 volume_vars['WORKSPACE'] = '/code'
 
             artifacts = []
-
+            
+            # If the branch is not allowed to publish, skip the publish phase. If run_on_change is set to 'always', phase will be run anyway regardless of this condition
+            # For build phase, run_on_change is set to 'always' by default, so build will always happen
+            is_publish_allowed = is_publish_branch(ctx)
             for cmd in cmds:
                 worktrees = {}
                 foreach = None
@@ -1018,9 +1106,7 @@ def build(ctx, phase, variant):
                     else:
                         if run_on_change == 'always':
                             pass
-                        elif run_on_change == 'never' and has_change:
-                            break
-                        elif run_on_change == 'only' and not has_change:
+                        elif run_on_change == 'only' and not (has_change and is_publish_allowed):
                             break
                     try:
                         desc = cmd['description']
@@ -1066,19 +1152,27 @@ def build(ctx, phase, variant):
                     HOME            = '/home/sandbox',
                     _JAVA_OPTIONS   = '-Duser.home=/home/sandbox',
                 ) if image is not None else {})
-                try:
-                    env['SOURCE_DATE_EPOCH'] = str(ctx.obj.source_date_epoch)
-                except click.BadParameter:
-                    pass
+                for varname in (
+                        'SOURCE_DATE_EPOCH',
+                        'VERSION',
+                        'DEBVERSION',
+                    ):
+                    if varname in ctx.obj.volume_vars:
+                        env[varname] = ctx.obj.volume_vars[varname]
 
                 foreach_items = (None,)
                 if foreach == 'SOURCE_COMMIT':
                     foreach_items = source_commits
+                elif foreach == 'AUTOSQUASHED_COMMIT':
+                    foreach_items = autosquashed_commits
 
                 for foreach_item in foreach_items:
                     cfg_vars = volume_vars.copy()
-                    if foreach == 'SOURCE_COMMIT':
-                        cfg_vars['SOURCE_COMMIT'] = text_type(foreach_item)
+                    if foreach in (
+                            'SOURCE_COMMIT',
+                            'AUTOSQUASHED_COMMIT',
+                        ):
+                        cfg_vars[foreach] = text_type(foreach_item)
 
                     # Strip off prefixed environment variables from this command-line and apply them
                     final_cmd = copy(cmd)
@@ -1115,7 +1209,7 @@ def build(ctx, phase, variant):
                     try:
                         echo_cmd(subprocess.check_call, final_cmd, env=new_env, cwd=ctx.obj.code_dir)
                     except subprocess.CalledProcessError as e:
-                        log.exception("Command fatally terminated with exit code %d", e.returncode)
+                        log.error("Command fatally terminated with exit code %d", e.returncode)
                         sys.exit(e.returncode)
 
                 for subdir, worktree in worktrees.items():
