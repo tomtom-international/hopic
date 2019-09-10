@@ -719,9 +719,10 @@ exec ssh -i '''
                     try {
                       if (meta.containsKey('with-credentials')) {
                         def creds = meta['with-credentials']
-                        def user_var = creds.getOrDefault('username-variable', 'USERNAME')
-                        def pass_var = creds.getOrDefault('password-variable', 'PASSWORD')
-                        def file_var = creds.getOrDefault('filename-variable', 'SECRET_FILE')
+                        def user_var   = creds.getOrDefault('username-variable', 'USERNAME')
+                        def pass_var   = creds.getOrDefault('password-variable', 'PASSWORD')
+                        def file_var   = creds.getOrDefault('filename-variable', 'SECRET_FILE')
+                        def string_var = creds.getOrDefault('string-variable',   'SECRET')
                         try
                         {
                           steps.withCredentials([steps.usernamePassword(
@@ -752,8 +753,25 @@ exec ssh -i '''
                                 )
                             }
                           }
-                          finally
+                          catch (CredentialNotFoundException e2)
                           {
+                            try
+                            {
+                              steps.withCredentials([steps.string(
+                                    credentialsId: creds['id'],
+                                    variable:      string_var,
+                                    )]) {
+                                steps.sh(script: cmd
+                                    + ' --whitelisted-var=' + shell_quote(string_var)
+                                    + ' build'
+                                    + ' --phase=' + shell_quote(phase)
+                                    + ' --variant=' + shell_quote(variant)
+                                  )
+                              }
+                            }
+                            finally
+                            {
+                            }
                           }
                         }
                       } else {
