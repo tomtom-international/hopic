@@ -721,18 +721,40 @@ exec ssh -i '''
                         def creds = meta['with-credentials']
                         def user_var = creds.getOrDefault('username-variable', 'USERNAME')
                         def pass_var = creds.getOrDefault('password-variable', 'PASSWORD')
-                        steps.withCredentials([steps.usernamePassword(
-                              credentialsId: creds['id'],
-                              usernameVariable: user_var,
-                              passwordVariable: pass_var,
-                              )]) {
-                          steps.sh(script: cmd
-                              + ' --whitelisted-var=' + shell_quote(user_var)
-                              + ' --whitelisted-var=' + shell_quote(pass_var)
-                              + ' build'
-                              + ' --phase=' + shell_quote(phase)
-                              + ' --variant=' + shell_quote(variant)
-                            )
+                        def file_var = creds.getOrDefault('filename-variable', 'SECRET_FILE')
+                        try
+                        {
+                          steps.withCredentials([steps.usernamePassword(
+                                credentialsId: creds['id'],
+                                usernameVariable: user_var,
+                                passwordVariable: pass_var,
+                                )]) {
+                            steps.sh(script: cmd
+                                + ' --whitelisted-var=' + shell_quote(user_var)
+                                + ' --whitelisted-var=' + shell_quote(pass_var)
+                                + ' build'
+                                + ' --phase=' + shell_quote(phase)
+                                + ' --variant=' + shell_quote(variant)
+                              )
+                          }
+                        } catch (CredentialNotFoundException e1) {
+                          try
+                          {
+                            steps.withCredentials([steps.file(
+                                  credentialsId: creds['id'],
+                                  variable:      file_var,
+                                  )]) {
+                              steps.sh(script: cmd
+                                  + ' --whitelisted-var=' + shell_quote(file_var)
+                                  + ' build'
+                                  + ' --phase=' + shell_quote(phase)
+                                  + ' --variant=' + shell_quote(variant)
+                                )
+                            }
+                          }
+                          finally
+                          {
+                          }
                         }
                       } else {
                         steps.sh(script: "${cmd} build --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant))
