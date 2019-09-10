@@ -389,6 +389,65 @@ exec ssh -i '''
     }
   }
 
+  private def subcommand_with_credentials(String cmd, String subcmd, credentials = null) {
+    if (credentials == null) {
+      return steps.sh(script: "${cmd} ${subcmd}")
+    }
+
+    def credential_id = credentials['id']
+    def user_var      = credentials.getOrDefault('username-variable', 'USERNAME')
+    def pass_var      = credentials.getOrDefault('password-variable', 'PASSWORD')
+    def file_var      = credentials.getOrDefault('filename-variable', 'SECRET_FILE')
+    def string_var    = credentials.getOrDefault('string-variable',   'SECRET')
+
+    def type = credentials.getOrDefault('type', 'username-password')
+
+    try {
+      if (type == 'username-password') {
+        return steps.withCredentials([steps.usernamePassword(
+            credentialsId: credential_id,
+            usernameVariable: user_var,
+            passwordVariable: pass_var,
+          )]) {
+          steps.sh(script: cmd
+              + ' --whitelisted-var=' + shell_quote(user_var)
+              + ' --whitelisted-var=' + shell_quote(pass_var)
+              + ' '
+              + subcmd
+            )
+        }
+      } else if (type == 'file') {
+        return steps.withCredentials([steps.file(
+            credentialsId: credential_id,
+            variable: file_var,
+          )]) {
+          steps.sh(script: cmd
+              + ' --whitelisted-var=' + shell_quote(file_var)
+              + ' '
+              + subcmd
+            )
+        }
+      } else if (type == 'string') {
+        return steps.withCredentials([steps.string(
+            credentialsId: credential_id,
+            variable: string_var,
+          )]) {
+          steps.sh(script: cmd
+              + ' --whitelisted-var=' + shell_quote(string_var)
+              + ' '
+              + subcmd
+            )
+        }
+      } else {
+        steps.error("Unknown credential type: '${type}' for credential '${credential_id}'")
+      }
+    }
+    catch (CredentialNotFoundException e) {
+      steps.println("\033[31m[error] credential '${credential_id}' does not exist or is not of type '${type}'\033[39m")
+      throw e
+    }
+  }
+
   private def checkout(clean = false) {
     def cmd = this.install_prerequisites()
 
@@ -717,66 +776,12 @@ exec ssh -i '''
                       ))
 
                     try {
-                      if (meta.containsKey('with-credentials')) {
-                        def creds = meta['with-credentials']
-                        def user_var   = creds.getOrDefault('username-variable', 'USERNAME')
-                        def pass_var   = creds.getOrDefault('password-variable', 'PASSWORD')
-                        def file_var   = creds.getOrDefault('filename-variable', 'SECRET_FILE')
-                        def string_var = creds.getOrDefault('string-variable',   'SECRET')
-                        try
-                        {
-                          steps.withCredentials([steps.usernamePassword(
-                                credentialsId: creds['id'],
-                                usernameVariable: user_var,
-                                passwordVariable: pass_var,
-                                )]) {
-                            steps.sh(script: cmd
-                                + ' --whitelisted-var=' + shell_quote(user_var)
-                                + ' --whitelisted-var=' + shell_quote(pass_var)
-                                + ' build'
-                                + ' --phase=' + shell_quote(phase)
-                                + ' --variant=' + shell_quote(variant)
-                              )
-                          }
-                        } catch (CredentialNotFoundException e1) {
-                          try
-                          {
-                            steps.withCredentials([steps.file(
-                                  credentialsId: creds['id'],
-                                  variable:      file_var,
-                                  )]) {
-                              steps.sh(script: cmd
-                                  + ' --whitelisted-var=' + shell_quote(file_var)
-                                  + ' build'
-                                  + ' --phase=' + shell_quote(phase)
-                                  + ' --variant=' + shell_quote(variant)
-                                )
-                            }
-                          }
-                          catch (CredentialNotFoundException e2)
-                          {
-                            try
-                            {
-                              steps.withCredentials([steps.string(
-                                    credentialsId: creds['id'],
-                                    variable:      string_var,
-                                    )]) {
-                                steps.sh(script: cmd
-                                    + ' --whitelisted-var=' + shell_quote(string_var)
-                                    + ' build'
-                                    + ' --phase=' + shell_quote(phase)
-                                    + ' --variant=' + shell_quote(variant)
-                                  )
-                              }
-                            }
-                            finally
-                            {
-                            }
-                          }
-                        }
-                      } else {
-                        steps.sh(script: "${cmd} build --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant))
-                      }
+                      this.subcommand_with_credentials(
+                          cmd,
+                          'build'
+                        + ' --phase=' + shell_quote(phase)
+                        + ' --variant=' + shell_quote(variant)
+                        , meta['with-credentials'])
                     } finally {
                       if (meta.containsKey('junit')) {
                         def results = meta.junit
