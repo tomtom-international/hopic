@@ -11,11 +11,11 @@ phases:
   build:
     sphinx-doc:
       - rm -rf doc/build/venv
-      - python -m virtualenv --clear doc/build/venv
-      - doc/build/venv/bin/python -m pip install setuptools_scm . -r doc-requirements.txt
+      - python3 -m virtualenv --clear doc/build/venv
+      - doc/build/venv/bin/python -m pip install setuptools_scm setuptools_scm_git_archive . -r doc-requirements.txt
       - archive:
           artifacts: doc/build/html/**
         worktrees:
           doc/build/html:
             commit-message: "Update documentation for ${VERSION}"
-        sh: doc/build/venv/bin/python -m sphinx.cmd.build -b html -d doc/build/doctrees doc/source doc/build/html
+        sh: sh -c 'doc/build/venv/bin/python -m sphinxcontrib.versioning build doc/source doc/build/html && find doc/build/html -name .doctrees -exec rm -r "{}" +'
