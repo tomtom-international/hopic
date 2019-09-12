@@ -1147,8 +1147,10 @@ def build(ctx, phase, variant):
                             for diff in repo.index.diff(None):
                                 add_files.add(diff.b_path)
                                 remove_files.add(diff.a_path)
-                            repo.index.remove(remove_files)
-                            repo.index.add(add_files)
+                            if remove_files:
+                                repo.index.remove(remove_files)
+                            if add_files:
+                                repo.index.add(add_files)
 
                         commit_message = expand_vars(volume_vars, worktree['commit-message'])
                         if not commit_message.endswith(u'\n'):
