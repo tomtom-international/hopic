@@ -15,6 +15,7 @@ Contents
    :maxdepth: 2
 
    usage
+   config
 
 Indices and tables
 ==================

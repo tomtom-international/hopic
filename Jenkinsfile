@@ -14,7 +14,7 @@
  *
  */
 
-def version = 'release/0.2'
+def version = 'release/0'
 @NonCPS
 String transform_ssh_to_https(String url)
 {
