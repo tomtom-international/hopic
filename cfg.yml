@@ -18,4 +18,4 @@ phases:
         worktrees:
           doc/build/html:
             commit-message: "Update documentation for ${VERSION}"
-        sh: sh -c 'doc/build/venv/bin/python -m sphinxcontrib.versioning build doc/source doc/build/html && find doc/build/html -name .doctrees -exec rm -r "{}" +'
+        sh: sh -c 'doc/build/venv/bin/python -m sphinxcontrib.versioning build --override-branch=${GIT_BRANCH}=${GIT_COMMIT} doc/source doc/build/html && find doc/build/html -name .doctrees -exec rm -r "{}" +'
