@@ -14,7 +14,7 @@ For that purpose the :option:`with-credentials` configuration option can be used
 You need to specify an identifier (``id``), used for looking up the credential and its type (``type``).
 In addition to that you can specify the name of the config and environment variable that should be set to contain them.
 
-The support types of credential are:
+The supported types of credential are:
 
 Username/password credential
    * ``type``: ``username-password``

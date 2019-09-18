@@ -171,6 +171,43 @@ def volume_spec_to_docker_param(volume):
     return param
 
 
+class DockerContainers(object):
+    """
+    This context manager class manages a set of Docker containers, handling their creation and deletion.
+    """
+    def __init__(self):
+        self.containers = set()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, ex_type, ex_value, tb):
+        if self.containers:
+            log.info('Cleaning up Docker containers: %s', ' '.join(self.containers))
+            try:
+                echo_cmd(subprocess.check_call, ['docker', 'rm', '-v'] + list(self.containers))
+            except subprocess.CalledProcessError as e:
+                log.error('Could not remove all Docker volumes, command failed with exit code %d', e.returncode)
+            self.containers.clear()
+
+    def __iter__(self):
+        return iter(self.containers)
+
+    def add(self, volume_image):
+        log.info('Creating new Docker container for image %s', volume_image)
+        try:
+            container_id = echo_cmd(subprocess.check_output, ['docker', 'create', volume_image]).strip()
+        except subprocess.CalledProcessError as e:
+            log.exception('Command fatally terminated with exit code %d', e.returncode)
+            sys.exit(e.returncode)
+
+        # Container ID's consist of 64 hex characters
+        if not re.match('^[0-9a-fA-F]{64}$', container_id):
+            log.error('Unable to create Docker container for %s', volume_image)
+            sys.exit(1)
+
+        self.containers.add(container_id)
+
 class OptionContext(object):
     def __init__(self):
         super(OptionContext, self).__init__()
@@ -1046,6 +1083,7 @@ def build(ctx, phase, variant):
 
     cfg = ctx.obj.config
 
+    submit_ref = None
     refspecs = []
     source_commits = []
     autosquashed_commits = []
@@ -1056,6 +1094,15 @@ def build(ctx, phase, variant):
             with repo.config_reader() as git_cfg:
                 if git_cfg.has_option(section, 'refspecs'):
                     refspecs = list(shlex.split(git_cfg.get_value(section, 'refspecs')))
+
+                    # Determine remote ref for current commit
+                    for refspec in refspecs:
+                        local_ref, remote_ref = refspec.split(':', 1)
+                        local_ref = repo.commit(local_ref)
+                        if local_ref == submit_commit or local_ref in submit_commit.parents:
+                            submit_ref = remote_ref
+                            break
+
                 if git_cfg.has_option(section, 'target-commit') and git_cfg.has_option(section, 'source-commit'):
                     target_commit = repo.commit(git_cfg.get_value(section, 'target-commit'))
                     source_commit = repo.commit(git_cfg.get_value(section, 'source-commit'))
@@ -1084,193 +1131,211 @@ def build(ctx, phase, variant):
                 except KeyError:
                     image = image.get('default', None)
 
-            volume_vars = ctx.obj.volume_vars
+            volume_vars = ctx.obj.volume_vars.copy()
             # Give commands executing inside a container image a different view than outside
             if image is not None:
-                volume_vars = volume_vars.copy()
                 volume_vars['WORKSPACE'] = '/code'
+            volume_vars['GIT_COMMIT'] = str(submit_commit)
+            if submit_ref is not None:
+                volume_vars['GIT_BRANCH'] = submit_ref
 
             artifacts = []
-            
-            # If the branch is not allowed to publish, skip the publish phase. If run_on_change is set to 'always', phase will be run anyway regardless of this condition
-            # For build phase, run_on_change is set to 'always' by default, so build will always happen
-            is_publish_allowed = is_publish_branch(ctx)
-            for cmd in cmds:
-                worktrees = {}
-                foreach = None
-                if not isinstance(cmd, string_types):
-                    try:
-                        run_on_change = cmd['run-on-change']
-                    except (KeyError, TypeError):
-                        pass
-                    else:
-                        if run_on_change == 'always':
-                            pass
-                        elif run_on_change == 'only' and not (has_change and is_publish_allowed):
-                            break
-                    try:
-                        desc = cmd['description']
-                    except (KeyError, TypeError):
-                        pass
-                    else:
-                        log.info('Performing: %s', click.style(desc, fg='cyan'))
-                    for artifact_key in (
-                            'archive',
-                            'fingerprint',
-                        ):
+            with DockerContainers() as volumes_from:
+                # If the branch is not allowed to publish, skip the publish phase. If run_on_change is set to 'always', phase will be run anyway regardless of this condition
+                # For build phase, run_on_change is set to 'always' by default, so build will always happen
+                is_publish_allowed = is_publish_branch(ctx)
+                for cmd in cmds:
+                    worktrees = {}
+                    foreach = None
+                    if not isinstance(cmd, string_types):
                         try:
-                            artifacts.extend(expand_vars(volume_vars, (
-                                artifact['pattern'] for artifact in cmd[artifact_key]['artifacts'] if 'pattern' in artifact)))
+                            run_on_change = cmd['run-on-change']
                         except (KeyError, TypeError):
                             pass
+                        else:
+                            if run_on_change == 'always':
+                                pass
+                            elif run_on_change == 'only' and not (has_change and is_publish_allowed):
+                                break
+                        try:
+                            desc = cmd['description']
+                        except (KeyError, TypeError):
+                            pass
+                        else:
+                            log.info('Performing: %s', click.style(desc, fg='cyan'))
 
-                    try:
-                        worktrees = cmd['worktrees']
+                        try:
+                            cmd_volumes_from = cmd['volumes-from']
+                        except (KeyError, TypeError):
+                            pass
+                        else:
+                            if image:
+                                for volume in cmd_volumes_from:
+                                    volumes_from.add(volume['image'])
+                            else:
+                                log.warning('`volumes-from` has no effect if no Docker image is configured')
 
-                        # Force clean builds when we don't know how to discover changed files
-                        for subdir, worktree in worktrees.items():
-                            if 'changed-files' not in worktree:
-                                with git.Repo(os.path.join(ctx.obj.workspace, subdir)) as repo:
-                                    clean_output = repo.git.clean('-xd', subdir, force=True)
-                                    if clean_output:
-                                        log.info('%s', clean_output)
-                    except KeyError:
-                        pass
+                        for artifact_key in (
+                                'archive',
+                                'fingerprint',
+                            ):
+                            try:
+                                artifacts.extend(expand_vars(volume_vars, (
+                                    artifact['pattern'] for artifact in cmd[artifact_key]['artifacts'] if 'pattern' in artifact)))
+                            except (KeyError, TypeError):
+                                pass
 
-                    try:
-                        foreach = cmd['foreach']
-                    except KeyError:
-                        pass
+                        try:
+                            worktrees = cmd['worktrees']
 
-                    try:
-                        cmd = cmd['sh']
-                    except (KeyError, TypeError):
-                        continue
+                            # Force clean builds when we don't know how to discover changed files
+                            for subdir, worktree in worktrees.items():
+                                if 'changed-files' not in worktree:
+                                    with git.Repo(os.path.join(ctx.obj.workspace, subdir)) as repo:
+                                        clean_output = repo.git.clean('-xd', subdir, force=True)
+                                        if clean_output:
+                                            log.info('%s', clean_output)
+                        except KeyError:
+                            pass
 
-                cmd = shlex.split(cmd)
-                env = (dict(
-                    HOME            = '/home/sandbox',
-                    _JAVA_OPTIONS   = '-Duser.home=/home/sandbox',
-                ) if image is not None else {})
-                for varname in (
-                        'SOURCE_DATE_EPOCH',
-                        'VERSION',
-                        'DEBVERSION',
-                    ):
-                    if varname in ctx.obj.volume_vars:
-                        env[varname] = ctx.obj.volume_vars[varname]
+                        try:
+                            foreach = cmd['foreach']
+                        except KeyError:
+                            pass
 
-                foreach_items = (None,)
-                if foreach == 'SOURCE_COMMIT':
-                    foreach_items = source_commits
-                elif foreach == 'AUTOSQUASHED_COMMIT':
-                    foreach_items = autosquashed_commits
+                        try:
+                            cmd = cmd['sh']
+                        except (KeyError, TypeError):
+                            continue
 
-                for foreach_item in foreach_items:
-                    cfg_vars = volume_vars.copy()
-                    if foreach in (
-                            'SOURCE_COMMIT',
-                            'AUTOSQUASHED_COMMIT',
+                    cmd = shlex.split(cmd)
+                    env = (dict(
+                        HOME            = '/home/sandbox',
+                        _JAVA_OPTIONS   = '-Duser.home=/home/sandbox',
+                    ) if image is not None else {})
+                    for varname in (
+                            'SOURCE_DATE_EPOCH',
+                            'VERSION',
+                            'DEBVERSION',
                         ):
-                        cfg_vars[foreach] = text_type(foreach_item)
+                        if varname in ctx.obj.volume_vars:
+                            env[varname] = ctx.obj.volume_vars[varname]
 
-                    # Strip off prefixed environment variables from this command-line and apply them
-                    final_cmd = copy(cmd)
-                    while final_cmd:
-                        m = _env_var_re.match(final_cmd[0])
-                        if not m:
-                            break
-                        env[m.group('var')] = expand_vars(cfg_vars, m.group('val'))
-                        final_cmd.pop(0)
-                    final_cmd = [expand_vars(cfg_vars, arg) for arg in final_cmd]
+                    foreach_items = (None,)
+                    if foreach == 'SOURCE_COMMIT':
+                        foreach_items = source_commits
+                    elif foreach == 'AUTOSQUASHED_COMMIT':
+                        foreach_items = autosquashed_commits
 
-                    # Handle execution inside docker
-                    if image is not None:
-                        uid, gid = os.getuid(), os.getgid()
-                        docker_run = ['docker', 'run',
-                                      '--rm',
-                                      '--net=host',
-                                      '--tty',
-                                      '--tmpfs', '{}:uid={},gid={}'.format(env['HOME'], uid, gid),
-                                      '-u', '{}:{}'.format(uid, gid),
-                                      '-v', '/etc/passwd:/etc/passwd:ro',
-                                      '-v', '/etc/group:/etc/group:ro',
-                                      '-w', '/code',
-                                      ] + list(chain(*[
-                                          ['-e', '{}={}'.format(k, v)] for k, v in env.items()
-                                      ]))
-                        for volume in cfg['volumes']:
-                            docker_run += ['-v', volume_spec_to_docker_param(volume)]
-                        docker_run.append(image)
-                        final_cmd = docker_run + final_cmd
-                    new_env = os.environ.copy()
-                    if image is None:
-                        new_env.update(env)
-                    try:
-                        echo_cmd(subprocess.check_call, final_cmd, env=new_env, cwd=ctx.obj.code_dir)
-                    except subprocess.CalledProcessError as e:
-                        log.error("Command fatally terminated with exit code %d", e.returncode)
-                        sys.exit(e.returncode)
+                    for foreach_item in foreach_items:
+                        cfg_vars = volume_vars.copy()
+                        if foreach in (
+                                'SOURCE_COMMIT',
+                                'AUTOSQUASHED_COMMIT',
+                            ):
+                            cfg_vars[foreach] = text_type(foreach_item)
 
-                for subdir, worktree in worktrees.items():
-                    with git.Repo(os.path.join(ctx.obj.workspace, subdir)) as repo:
-                        worktree_commits.setdefault(subdir, [
-                            text_type(repo.head.commit),
-                            text_type(repo.head.commit),
-                        ])
+                        # Strip off prefixed environment variables from this command-line and apply them
+                        final_cmd = copy(cmd)
+                        while final_cmd:
+                            m = _env_var_re.match(final_cmd[0])
+                            if not m:
+                                break
+                            env[m.group('var')] = expand_vars(cfg_vars, m.group('val'))
+                            final_cmd.pop(0)
+                        final_cmd = [expand_vars(cfg_vars, arg) for arg in final_cmd]
 
-                        if 'changed-files' in worktree:
-                            changed_files = worktree["changed-files"]
-                            if isinstance(changed_files, string_types):
-                                changed_files = [changed_files]
-                            changed_files = [expand_vars(volume_vars, f) for f in changed_files]
-                            repo.index.add(changed_files)
-                        else:
-                            # 'git add --all' equivalent (excluding the code_dir)
-                            add_files = set(repo.untracked_files)
-                            remove_files = set()
-                            for diff in repo.index.diff(None):
-                                add_files.add(diff.b_path)
-                                remove_files.add(diff.a_path)
-                            if remove_files:
-                                repo.index.remove(remove_files)
-                            if add_files:
-                                repo.index.add(add_files)
+                        # Handle execution inside docker
+                        if image is not None:
+                            uid, gid = os.getuid(), os.getgid()
+                            docker_run = ['docker', 'run',
+                                          '--rm',
+                                          '--net=host',
+                                          '--tty',
+                                          '--tmpfs', '{}:uid={},gid={}'.format(env['HOME'], uid, gid),
+                                          '-u', '{}:{}'.format(uid, gid),
+                                          '-v', '/etc/passwd:/etc/passwd:ro',
+                                          '-v', '/etc/group:/etc/group:ro',
+                                          '-w', '/code',
+                                          ] + list(chain(*[
+                                              ['-e', '{}={}'.format(k, v)] for k, v in env.items()
+                                          ]))
+                            for volume in cfg['volumes']:
+                                docker_run += ['-v', volume_spec_to_docker_param(volume)]
 
-                        commit_message = expand_vars(volume_vars, worktree['commit-message'])
-                        if not commit_message.endswith(u'\n'):
-                            commit_message += u'\n'
-                        with git.Repo(ctx.obj.workspace) as parent_repo:
-                            parent = parent_repo.head.commit
-                            submit_commit = repo.index.commit(
-                                    message     = commit_message,
-                                    author      = parent.author,
-                                    author_date = to_git_time(parent.authored_datetime),
-                                )
-                        restore_mtime_from_git(repo)
-                        worktree_commits[subdir][1] = text_type(submit_commit)
-                        log.info('%s', repo.git.show(submit_commit, format='fuller', stat=True))
+                            for volume_from in volumes_from:
+                                docker_run += ['--volumes-from=' + volume_from]
 
-            if worktrees:
-                with git.Repo(ctx.obj.workspace) as repo, repo.config_writer() as cfg:
-                    bundle_commits = []
-                    for subdir, (base_commit, submit_commit) in worktree_commits.items():
-                        worktree_ref = ctx.obj.config['scm']['git']['worktrees'][subdir]
-                        if worktree_ref in repo.heads:
-                            repo.heads[worktree_ref].set_commit(submit_commit, logmsg='Prepare for git-bundle')
-                        else:
-                            repo.create_head(worktree_ref, submit_commit)
-                        bundle_commits.append('{base_commit}..{worktree_ref}'.format(**locals()))
-                        refspecs.append('{submit_commit}:{worktree_ref}'.format(**locals()))
-                    repo.git.bundle('create', os.path.join(ctx.obj.workspace, 'worktree-transfer.bundle'), *bundle_commits)
+                            docker_run.append(image)
+                            final_cmd = docker_run + final_cmd
+                        new_env = os.environ.copy()
+                        if image is None:
+                            new_env.update(env)
+                        try:
+                            echo_cmd(subprocess.check_call, final_cmd, env=new_env, cwd=ctx.obj.code_dir)
+                        except subprocess.CalledProcessError as e:
+                            log.error("Command fatally terminated with exit code %d", e.returncode)
+                            sys.exit(e.returncode)
 
-                    submit_commit = repo.head.commit
-                    section = 'hopic.{submit_commit}'.format(**locals())
-                    cfg.set_value(section, 'refspecs', ' '.join(shquote(refspec) for refspec in refspecs))
+                    for subdir, worktree in worktrees.items():
+                        with git.Repo(os.path.join(ctx.obj.workspace, subdir)) as repo:
+                            worktree_commits.setdefault(subdir, [
+                                text_type(repo.head.commit),
+                                text_type(repo.head.commit),
+                            ])
 
-            # Post-processing to make these artifacts as reproducible as possible
-            for artifact in artifacts:
-                binary_normalize.normalize(os.path.join(ctx.obj.code_dir, artifact), source_date_epoch=ctx.obj.source_date_epoch)
+                            if 'changed-files' in worktree:
+                                changed_files = worktree["changed-files"]
+                                if isinstance(changed_files, string_types):
+                                    changed_files = [changed_files]
+                                changed_files = [expand_vars(volume_vars, f) for f in changed_files]
+                                repo.index.add(changed_files)
+                            else:
+                                # 'git add --all' equivalent (excluding the code_dir)
+                                add_files = set(repo.untracked_files)
+                                remove_files = set()
+                                for diff in repo.index.diff(None):
+                                    add_files.add(diff.b_path)
+                                    remove_files.add(diff.a_path)
+                                if remove_files:
+                                    repo.index.remove(remove_files)
+                                if add_files:
+                                    repo.index.add(add_files)
+
+                            commit_message = expand_vars(volume_vars, worktree['commit-message'])
+                            if not commit_message.endswith(u'\n'):
+                                commit_message += u'\n'
+                            with git.Repo(ctx.obj.workspace) as parent_repo:
+                                parent = parent_repo.head.commit
+                                submit_commit = repo.index.commit(
+                                        message     = commit_message,
+                                        author      = parent.author,
+                                        author_date = to_git_time(parent.authored_datetime),
+                                    )
+                            restore_mtime_from_git(repo)
+                            worktree_commits[subdir][1] = text_type(submit_commit)
+                            log.info('%s', repo.git.show(submit_commit, format='fuller', stat=True))
+
+                if worktrees:
+                    with git.Repo(ctx.obj.workspace) as repo, repo.config_writer() as cfg:
+                        bundle_commits = []
+                        for subdir, (base_commit, submit_commit) in worktree_commits.items():
+                            worktree_ref = ctx.obj.config['scm']['git']['worktrees'][subdir]
+                            if worktree_ref in repo.heads:
+                                repo.heads[worktree_ref].set_commit(submit_commit, logmsg='Prepare for git-bundle')
+                            else:
+                                repo.create_head(worktree_ref, submit_commit)
+                            bundle_commits.append('{base_commit}..{worktree_ref}'.format(**locals()))
+                            refspecs.append('{submit_commit}:{worktree_ref}'.format(**locals()))
+                        repo.git.bundle('create', os.path.join(ctx.obj.workspace, 'worktree-transfer.bundle'), *bundle_commits)
+
+                        submit_commit = repo.head.commit
+                        section = 'hopic.{submit_commit}'.format(**locals())
+                        cfg.set_value(section, 'refspecs', ' '.join(shquote(refspec) for refspec in refspecs))
+
+                # Post-processing to make these artifacts as reproducible as possible
+                for artifact in artifacts:
+                    binary_normalize.normalize(os.path.join(ctx.obj.code_dir, artifact), source_date_epoch=ctx.obj.source_date_epoch)
 
 
 @cli.command()

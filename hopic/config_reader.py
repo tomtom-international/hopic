@@ -49,6 +49,9 @@ def expand_vars(vars, expr):
     except TypeError:
         return expr
 
+class ConfigurationError(Exception):
+    pass
+
 
 class OrderedLoader(yaml.SafeLoader):
     pass
@@ -118,6 +121,20 @@ def ordered_image_ivy_loader(volume_vars):
         lambda *args: image_from_ivy_manifest(volume_vars, *args)
     )
     return OrderedImageLoader
+
+
+def expand_docker_volumes_from(volume_vars, volumes_from_vars):
+    # Glue the Docker image name together with the (mandatory) version and expand
+    volumes = []
+    for volume in volumes_from_vars:
+        if 'image-name' not in volume or 'image-version' not in volume:
+            raise ConfigurationError('`volumes-from` requires `image-name` and `image-version` to be provided')
+        image_name = volume['image-name']
+        image_version = volume['image-version']
+        volume['image'] = expand_vars(volume_vars, os.path.expanduser(":".join((image_name, image_version))))
+        volumes.append(volume)
+
+    return volumes
 
 
 def expand_docker_volume_spec(config_dir, volume_vars, volume_specs):
@@ -219,5 +236,7 @@ def read(config, volume_vars):
                         if var_key == 'with-credentials':
                             if isinstance(var[var_key], string_types):
                                 var[var_key] = OrderedDict([('id', var[var_key])])
+                        if var_key == 'volumes-from':
+                            var[var_key] = expand_docker_volumes_from(volume_vars, var[var_key])
 
     return cfg
