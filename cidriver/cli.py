@@ -1083,6 +1083,7 @@ def build(ctx, phase, variant):
 
     cfg = ctx.obj.config
 
+    submit_ref = None
     refspecs = []
     source_commits = []
     autosquashed_commits = []
@@ -1093,6 +1094,15 @@ def build(ctx, phase, variant):
             with repo.config_reader() as git_cfg:
                 if git_cfg.has_option(section, 'refspecs'):
                     refspecs = list(shlex.split(git_cfg.get_value(section, 'refspecs')))
+
+                    # Determine remote ref for current commit
+                    for refspec in refspecs:
+                        local_ref, remote_ref = refspec.split(':', 1)
+                        local_ref = repo.commit(local_ref)
+                        if local_ref == submit_commit or local_ref in submit_commit.parents:
+                            submit_ref = remote_ref
+                            break
+
                 if git_cfg.has_option(section, 'target-commit') and git_cfg.has_option(section, 'source-commit'):
                     target_commit = repo.commit(git_cfg.get_value(section, 'target-commit'))
                     source_commit = repo.commit(git_cfg.get_value(section, 'source-commit'))
@@ -1121,11 +1131,13 @@ def build(ctx, phase, variant):
                 except KeyError:
                     image = image.get('default', None)
 
-            volume_vars = ctx.obj.volume_vars
+            volume_vars = ctx.obj.volume_vars.copy()
             # Give commands executing inside a container image a different view than outside
             if image is not None:
-                volume_vars = volume_vars.copy()
                 volume_vars['WORKSPACE'] = '/code'
+            volume_vars['GIT_COMMIT'] = str(submit_commit)
+            if submit_ref is not None:
+                volume_vars['GIT_BRANCH'] = submit_ref
 
             artifacts = []
             with DockerContainers() as volumes_from:
