@@ -1093,7 +1093,7 @@ def build(ctx, phase, variant):
             section = 'ci-driver.{submit_commit}'.format(**locals())
             with repo.config_reader() as git_cfg:
                 # Determine remote ref for current commit
-                submit_ref = cfg.get_value(section, 'ref')
+                submit_ref = git_cfg.get_value(section, 'ref')
 
                 if git_cfg.has_option(section, 'refspecs'):
                     refspecs = list(shlex.split(git_cfg.get_value(section, 'refspecs')))
