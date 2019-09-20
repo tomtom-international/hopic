@@ -353,8 +353,8 @@ def determine_version(version_info, config_dir, code_dir=None):
 
 @click.group(context_settings=dict(help_option_names=('-h', '--help')))
 @click.option('--color', type=click.Choice(('always', 'auto', 'never')), default='auto', show_default=True)
-@click.option('--config', type=click.Path(exists=False, file_okay=True, dir_okay=False, readable=True, resolve_path=True), default=lambda: None, show_default='${WORKSPACE}/hopic-ci-config.yaml or ${WORKSPACE}/cfg.yml')
-@click.option('--workspace', type=click.Path(exists=False, file_okay=False, dir_okay=True), default=lambda: None, show_default='current working directory')
+@click.option('--config', type=click.Path(exists=False, file_okay=True, dir_okay=False, readable=True, resolve_path=True), default=lambda: None, show_default='${WORKSPACE}/hopic-ci-config.yaml')
+@click.option('--workspace', type=click.Path(exists=False, file_okay=False, dir_okay=True), default=lambda: None, show_default='parent directory of config file or current working directory')
 @click.option('--whitelisted-var', multiple=True, default=['CT_DEVENV_HOME'], show_default=True)
 @click_log.simple_verbosity_option(__package__,              envvar='HOPIC_VERBOSITY', autocompletion=cli_autocomplete_click_log_verbosity)
 @click_log.simple_verbosity_option('git', '--git-verbosity', envvar='GIT_VERBOSITY'  , autocompletion=cli_autocomplete_click_log_verbosity)
@@ -425,7 +425,6 @@ def cli(ctx, color, config, workspace, whitelisted_var):
     if config is None:
         for fname in (
                 'hopic-ci-config.yaml',
-                'cfg.yml',
             ):
             fname = os.path.join(workspace, fname)
             if os.path.isfile(fname):
