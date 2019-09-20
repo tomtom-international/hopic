@@ -521,7 +521,7 @@ exec ssh -i '''
   public def build(Map buildParams = [:]) {
     def clean = buildParams.getOrDefault('clean', false)
     steps.ansiColor('xterm') {
-      def phases = steps.node(default_node_expr) {
+      def (phases, is_submittable_change) = steps.node(default_node_expr) {
         def cmd = this.install_prerequisites()
         def workspace = steps.pwd()
 
@@ -546,7 +546,11 @@ exec ssh -i '''
         cmd += ' --workspace=' + shell_quote("${workspace}")
         cmd += ' --config=' + shell_quote("${workspace}/${config_file}")
 
-        return line_split(steps.sh(script: "${cmd} phases",
+        // Force a full based checkout & change application, instead of relying on the checkout done above, to ensure that we're building the list of phases and
+        // variants to execute (below) using the final config file.
+        this.ensure_checkout(clean)
+
+        def phases = line_split(steps.sh(script: "${cmd} phases",
             returnStdout: true))
             .findAll{it.size() > 0}
             .collect { phase ->
@@ -565,30 +569,19 @@ exec ssh -i '''
             }
           ]
         }
-      }
-
-      // NOP as default
-      def lock_if_necessary = { closure -> closure() }
-
-      def is_change_only = { variant -> variant.run_on_change == 'only' }
-      def change_only_phase = phases.find { phase -> phase.variants.any is_change_only }
-      def change_only_step = change_only_phase ? change_only_phase.variants.find(is_change_only) : null
-
-      def is_submittable_change = steps.node(change_only_step ? change_only_step.label : default_node_expr) {
-        this.ensure_checkout(clean)
 
         def is_submittable = this.has_submittable_change()
 
         if (is_submittable) {
           // Ensure a new checkout is performed because the target repository may change while waiting for the lock
           this.checkouts.remove(steps.env.NODE_NAME)
-        } else if (change_only_step) {
-          // Optimization: prevent duplicate checkout effort when no locking is required
-          this.pin_variant_to_current_node(change_only_step.variant)
         }
 
-        return is_submittable
+        return [phases, is_submittable]
       }
+
+      // NOP as default
+      def lock_if_necessary = { closure -> closure() }
 
       if (is_submittable_change) {
         lock_if_necessary = { closure ->
