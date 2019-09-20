@@ -1092,16 +1092,11 @@ def build(ctx, phase, variant):
             submit_commit = repo.head.commit
             section = 'hopic.{submit_commit}'.format(**locals())
             with repo.config_reader() as git_cfg:
+                # Determine remote ref for current commit
+                submit_ref = git_cfg.get_value(section, 'ref')
+
                 if git_cfg.has_option(section, 'refspecs'):
                     refspecs = list(shlex.split(git_cfg.get_value(section, 'refspecs')))
-
-                    # Determine remote ref for current commit
-                    for refspec in refspecs:
-                        local_ref, remote_ref = refspec.split(':', 1)
-                        local_ref = repo.commit(local_ref)
-                        if local_ref == submit_commit or local_ref in submit_commit.parents:
-                            submit_ref = remote_ref
-                            break
 
                 if git_cfg.has_option(section, 'target-commit') and git_cfg.has_option(section, 'source-commit'):
                     target_commit = repo.commit(git_cfg.get_value(section, 'target-commit'))
