@@ -546,6 +546,8 @@ exec ssh -i '''
         cmd += ' --workspace=' + shell_quote("${workspace}")
         cmd += ' --config=' + shell_quote("${workspace}/${config_file}")
 
+        // Force a full based checkout & change application, instead of relying on the checkout done above, to ensure that we're building the list of phases and
+        // variants to execute (below) using the final config file.
         this.ensure_checkout(clean)
 
         def phases = line_split(steps.sh(script: "${cmd} phases",
