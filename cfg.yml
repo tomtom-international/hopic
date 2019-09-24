@@ -8,6 +8,12 @@ scm:
       doc/build/html: pages
 
 phases:
+  style:
+    commit-messages:
+      # Require each commit message to adhere to our requirements
+      - foreach: AUTOSQUASHED_COMMIT
+        sh: .ci/verify-commit.py ${AUTOSQUASHED_COMMIT}
+
   build:
     sphinx-doc:
       - rm -rf doc/build/venv
