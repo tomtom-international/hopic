@@ -12,7 +12,7 @@ phases:
     commit-messages:
       # Require each commit message to adhere to our requirements
       - foreach: AUTOSQUASHED_COMMIT
-        sh: .ci/verify-commit.py ${AUTOSQUASHED_COMMIT}
+        sh: .ci/verify-commit-message.py ${AUTOSQUASHED_COMMIT}
 
   build:
     sphinx-doc:
