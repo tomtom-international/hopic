@@ -16,9 +16,32 @@
 
 # This is a simplistic implementation of checking adherance to Conventional Commits https://www.conventionalcommits.org/
 
+from functools import wraps
+from inspect import getfullargspec
 import re
 import sys
 import subprocess
+from typing import (
+        get_type_hints,
+        Iterable,
+    )
+
+def type_check(f):
+    @wraps(f)
+    def validate_parameters(*args, **kwargs):
+        func_args = getfullargspec(f)[0]
+        kw = kwargs.copy()
+        kw.update(dict(zip(func_args, args)))
+
+        for attr_name, attr_type in get_type_hints(f).items():
+            if attr_name == 'return':
+                continue
+
+            if attr_name in kw and not isinstance(kw[attr_name], attr_type):
+                raise TypeError('Argument {!r} is not of type {}'.format(attr_name, attr_type))
+        return f(*args, **kwargs)
+    return validate_parameters
+
 
 commit = 'HEAD'
 if len(sys.argv) >= 2:
@@ -72,7 +95,8 @@ type_tag, scope, description = subject.group('type_tag'), subject.group('scope')
 
 errors = []
 
-def complain_about_excess_space(name, line=0):
+@type_check
+def complain_about_excess_space(name: str, line: int = 0) -> None:
     text = subject.group(name)
     start = subject.start(name)
 
