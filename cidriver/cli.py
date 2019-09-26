@@ -1080,7 +1080,6 @@ def build(ctx, phase, variant):
     It's possible to limit building to either all variants for a single phase, all phases for a single variant or a
     single variant for a single phase.
     """
-
     cfg = ctx.obj.config
 
     submit_ref = None
@@ -1200,12 +1199,9 @@ def build(ctx, phase, variant):
                             pass
 
                         try:
-                            volumes_override = cmd['volumes']
-                            volumes_override = expand_docker_volume_spec(ctx.obj.volume_vars['CFGDIR'],
-                                                                         ctx.obj.volume_vars, volumes_override)
-                            for key in volumes_override:
-                                volumes[key] = volumes_override[key];
-
+                            scoped_volumes = expand_docker_volume_spec(ctx.obj.volume_vars['CFGDIR'],
+                                                                       ctx.obj.volume_vars, cmd['volumes'])
+                            volumes.update(scoped_volumes)
                         except KeyError:
                             pass
 
@@ -1266,8 +1262,8 @@ def build(ctx, phase, variant):
                                           ] + list(chain(*[
                                               ['-e', '{}={}'.format(k, v)] for k, v in env.items()
                                           ]))
-                            for volumeKey in volumes:
-                                docker_run += ['-v', volume_spec_to_docker_param(volumes[volumeKey])]
+                            for volume in volumes.values():
+                                docker_run += ['-v', volume_spec_to_docker_param(volume)]
 
                             for volume_from in volumes_from:
                                 docker_run += ['--volumes-from=' + volume_from]

@@ -1,0 +1,29 @@
+image: buildpack-deps:testing-curl
+
+volumes:
+  - source: ~/
+    target: /tools/devenv
+    read-only: yes
+  - /tmp
+  - /tmp/Music:/home/sandbox/temp
+
+phases:
+  list:
+    jira:
+      - with-credentials:
+          id: netrc
+          type: file
+        volumes:
+          - ${SECRET_FILE}:~/.netrc:ro
+      - curl -v --netrc --silent "https://jira.atlassian.com/rest/api/2/search?maxResults=100&fields=key,summary,assignee&jql=resolution+%3D+unresolved+AND+%28project+%3D+BSERV+OR+assignee+%3D+currentUser()%29+ORDER+BY+priority+DESC%2C+created+ASC"
+    print:
+      - echo "only global volumes will be mounted"
+  mounts:
+    print:
+      - sh: echo "/tmp/Music will be overridden with /tmp/Downloads"
+        volumes:
+          - /tmp/Downloads:/home/sandbox/temp
+      - volumes: 
+        - /tmp/Pictures:/home/sandbox/temp
+        - /tmp/Desktop
+      - echo "override /tmp/Downloads with /tmp/Pictures and /tmp/Desktop is added"
