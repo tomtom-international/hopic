@@ -18,6 +18,7 @@
 
 from functools import wraps
 from inspect import getfullargspec
+import difflib
 import itertools
 import re
 import sys
@@ -134,7 +135,10 @@ if type_tag not in accepted_tags and type_tag not in ('feat', 'fix'):
     tag_end = subject.end('type_tag')
     error = "\x1B[1m{commit}:1:1: \x1B[31merror\x1B[39m: use of type tag that's neither 'feat', 'fix' nor whitelisted ({})\x1B[m\n".format(', '.join(accepted_tags), **locals())
     error += lines[0] + '\n'
-    error += '\x1B[32m' + '^' * tag_end + '\x1B[39m'
+    error += '\x1B[31m' + '~' * tag_end + '\x1B[39m'
+    possibilities = difflib.get_close_matches(type_tag, ('feat', 'fix') + accepted_tags, n=1)
+    if possibilities:
+        error += '\n' + possibilities[0]
     errors.append(error)
 
 # 4. An optional scope MAY be provided after a type. A scope is a phrase describing a section of the codebase enclosed
