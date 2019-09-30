@@ -18,6 +18,7 @@
 
 from functools import wraps
 from inspect import getfullargspec
+import itertools
 import re
 import sys
 import subprocess
@@ -100,11 +101,8 @@ def complain_about_excess_space(name: str, line: int = 0) -> None:
     text = subject.group(name)
     start = subject.start(name)
 
-    excess_whitespace = []
-    for space in re.finditer(r'\s', text):
-        pos = space.start()
-        if pos == 0 or pos == len(text) - 1 or re.search(r'\s', text[max(0, pos-1):pos] + text[pos+1:pos+2]):
-            excess_whitespace.extend(range(*space.span()))
+    excess_whitespace = list(itertools.chain.from_iterable(
+            range(*space.span()) for space in re.finditer(r'\s{2,}|^\s+|\s+$', text)))
     if excess_whitespace:
         error = "\x1B[1m{commit}:{line}:{col}: \x1B[31merror\x1B[39m: excess whitespace in {name}\x1B[m\n".format(line=line + 1, col=start + 1 + excess_whitespace[0], name=name, commit=commit)
         error += lines[0] + '\n'
