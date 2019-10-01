@@ -20,6 +20,7 @@ from functools import wraps
 from inspect import getfullargspec
 import difflib
 import itertools
+import os
 import re
 import sys
 import subprocess
@@ -49,7 +50,15 @@ commit = 'HEAD'
 if len(sys.argv) >= 2:
     commit = sys.argv[1]
 
-message = subprocess.check_output(('git', 'show', '-q', '--format=%B', commit))[:-1].decode('UTF-8')
+if os.path.isfile(commit) and not re.match(r'^[0-9a-fA-F]{40}$', commit):
+    with open(commit, encoding='UTF-8') as f:
+        message = f.read()
+        comment_start = message.find('\n#')
+        if comment_start > 0:
+            message = message[:comment_start]
+        message = message.strip()
+else:
+    message = subprocess.check_output(('git', 'show', '-q', '--format=%B', commit, '--'))[:-1].decode('UTF-8')
 lines = message.splitlines()
 
 if len(lines) >= 2:
