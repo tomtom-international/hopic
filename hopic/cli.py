@@ -17,7 +17,7 @@ import click_log
 
 from . import binary_normalize
 from .config_reader import read as read_config
-from .config_reader import expand_vars
+from .config_reader import expand_vars, expand_docker_volume_spec
 from .execution import echo_cmd
 from .versioning import *
 try:
@@ -1080,7 +1080,6 @@ def build(ctx, phase, variant):
     It's possible to limit building to either all variants for a single phase, all phases for a single variant or a
     single variant for a single phase.
     """
-
     cfg = ctx.obj.config
 
     submit_ref = None
@@ -1139,6 +1138,7 @@ def build(ctx, phase, variant):
                 # If the branch is not allowed to publish, skip the publish phase. If run_on_change is set to 'always', phase will be run anyway regardless of this condition
                 # For build phase, run_on_change is set to 'always' by default, so build will always happen
                 is_publish_allowed = is_publish_branch(ctx)
+                volumes = cfg['volumes'].copy()
                 for cmd in cmds:
                     worktrees = {}
                     foreach = None
@@ -1199,6 +1199,13 @@ def build(ctx, phase, variant):
                             pass
 
                         try:
+                            scoped_volumes = expand_docker_volume_spec(ctx.obj.volume_vars['CFGDIR'],
+                                                                       ctx.obj.volume_vars, cmd['volumes'])
+                            volumes.update(scoped_volumes)
+                        except KeyError:
+                            pass
+
+                        try:
                             cmd = cmd['sh']
                         except (KeyError, TypeError):
                             continue
@@ -1255,7 +1262,7 @@ def build(ctx, phase, variant):
                                           ] + list(chain(*[
                                               ['-e', '{}={}'.format(k, v)] for k, v in env.items()
                                           ]))
-                            for volume in cfg['volumes']:
+                            for volume in volumes.values():
                                 docker_run += ['-v', volume_spec_to_docker_param(volume)]
 
                             for volume_from in volumes_from:
