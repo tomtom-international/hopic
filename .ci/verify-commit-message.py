@@ -100,7 +100,7 @@ subject_re = re.compile(r'''
     ''', re.VERBOSE)
 subject = subject_re.match(lines[0])
 if not subject:
-    print("\x1B[1m{commit}:1:1: \x1B[31merror\x1B[39m: commit message's subject not formatted according to Conventional Commits\x1B[m\n{subject.re.pattern}".format(**locals()), file=sys.stderr)
+    print("\x1B[1m{commit}:1:1: \x1B[31merror\x1B[39m: commit message's subject not formatted according to Conventional Commits\x1B[m\n{subject_re.pattern}".format(**locals()), file=sys.stderr)
     sys.exit(1)
 type_tag, scope, description = subject.group('type_tag'), subject.group('scope'), subject.group('description')
 
