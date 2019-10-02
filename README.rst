@@ -16,7 +16,7 @@ Test CI Driver locally
 
 .. code-block:: console
 
-   pip install --user git+https://github.com/tomtom-international/hopic.git@release/0.1
+   pip install --user git+https://github.com/tomtom-international/hopic.git@release/0
 
 .. _BashComplete: https://click.palletsprojects.com/en/7.x/bashcomplete/#activation
 
