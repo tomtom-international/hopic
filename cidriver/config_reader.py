@@ -22,6 +22,7 @@ import yaml
 __all__ = (
     'expand_vars',
     'read',
+    'expand_docker_volume_spec',
 )
 
 
@@ -141,7 +142,7 @@ def expand_docker_volume_spec(config_dir, volume_vars, volume_specs):
     guest_volume_vars = {
         'WORKSPACE': '/code',
     }
-    volumes = []
+    volumes = OrderedDict({});
     for volume in volume_specs:
         # Expand string format to dictionary format
         if isinstance(volume, string_types):
@@ -181,13 +182,13 @@ def expand_docker_volume_spec(config_dir, volume_vars, volume_specs):
             target = expand_vars(guest_volume_vars, target)
 
             volume['target'] = target
-
-        volumes.append(volume)
-    if '/code' not in (volume['target'] for volume in volumes):
-        volumes.insert(0, {
+        volumes[target] = volume
+    if '/code' not in volumes:
+        volumes[guest_volume_vars['WORKSPACE']] = {
             'source': volume_vars['WORKSPACE'],
             'target': guest_volume_vars['WORKSPACE'],
-        })
+        }
+
     return volumes
 
 
