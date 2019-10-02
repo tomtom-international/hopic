@@ -53,10 +53,24 @@ if len(sys.argv) >= 2:
 if os.path.isfile(commit) and not re.match(r'^[0-9a-fA-F]{40}$', commit):
     with open(commit, encoding='UTF-8') as f:
         message = f.read()
-        comment_start = message.find('\n#')
-        if comment_start > 0:
-            message = message[:comment_start]
-        message = message.strip()
+        try:
+            comment_char = subprocess.check_output(('git', 'config', '-z', 'core.commentChar'))[:-1].decode('UTF-8')
+        except:
+            comment_char = '#'
+        cut_line = message.find(comment_char + ' ------------------------ >8 ------------------------\n')
+        if cut_line >= 0 and (cut_line == 0 or message[cut_line - 1] == '\n'):
+            message = message[:cut_line]
+        # Strip comments
+        message = re.sub(r'^#[^\n]*\n?', '', message, flags=re.MULTILINE)
+        # Strip trailing whitespace from lines
+        message = re.sub(r'[ \t]+$', '', message, flags=re.MULTILINE)
+        # Merge consecutive empty lines into a single empty line
+        message = re.sub(r'(?<=\n\n)\n+', '', message)
+        # Remove empty lines from the beginning and end
+        while message[:1] == '\n':
+            message = message[1:]
+        while message[-2:] == '\n\n':
+            message = message[:-1]
 else:
     message = subprocess.check_output(('git', 'show', '-q', '--format=%B', commit, '--'))[:-1].decode('UTF-8')
 lines = message.splitlines()
