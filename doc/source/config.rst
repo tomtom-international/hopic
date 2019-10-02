@@ -4,6 +4,25 @@ Configuration
 The Hopic build configuration is stored in a file in your repository.
 The default location where it will look for this is ``${repo}/hopic-ci-config.yaml``.
 
+Build Phases
+------------
+
+.. option:: phases
+
+Hopic's build flow is divided in ``phases``, during which a set of commands can be executed for different ``variants``.
+The :option:`phases` option is a dictionary of dictionaries.
+It's top-level key specifies the name of each phase.
+The keys within each phase specify the names of variants to be executed within that phase.
+
+Phases are executed in the order in which they appear in the configuration.
+Within a phase each variant may be executed in parallel, possibly on different executors.
+Every next phase only starts executing when each variant within the previous phase finished successfully.
+I.e. the execution flow "forks" to each variant at the start of a phase and "joins" at the end.
+
+A variant, identified by its name, may appear in multiple phases.
+Variants appearing in multiple phases are guaranteed to run on the same executor within each phase.
+This provides a stable environment (workspace) to work in and allows incremental steps, such as building in phase A and running built tests in phase B.
+
 Credentials
 -----------
 
