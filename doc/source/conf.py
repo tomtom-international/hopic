@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Hopic CI driver documentation build configuration file, created by
+# Hopic driver documentation build configuration file, created by
 # sphinx-quickstart on Mon Jan 28 13:57:37 2019.
 #
 # This file is execfile()d with the current directory set to its
@@ -52,7 +52,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'Hopic CI driver'
+project = u'Hopic'
 copyright = u'2018 - 2019, TomTom N.V.'
 author = u'Giel van Schijndel'
 
@@ -258,7 +258,7 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, 'HopicCIdriver.tex', u'Hopic CI driver Documentation',
+    (master_doc, 'HopicCIdriver.tex', u'Hopic Documentation',
      u'Giel van Schijndel', 'manual'),
 ]
 
@@ -302,7 +302,7 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    (master_doc, 'HopicCIdriver', u'Hopic CI driver Documentation',
+    (master_doc, 'HopicCIdriver', u'Hopic Documentation',
      author, 'HopicCIdriver', 'One line description of project.',
      'Miscellaneous'),
 ]
