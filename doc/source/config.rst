@@ -23,6 +23,15 @@ A variant, identified by its name, may appear in multiple phases.
 Variants appearing in multiple phases are guaranteed to run on the same executor within each phase.
 This provides a stable environment (workspace) to work in and allows incremental steps, such as building in phase A and running built tests in phase B.
 
+For example, the configuration example listed results in an execution flow as shown after that.
+
+.. literalinclude:: ../../examples/parallel-phases.yaml
+   :language: yaml
+
+.. figure:: parallel-phases.svg
+
+    Example execution flow of a Hopic build configuration.
+
 Credentials
 -----------
 
