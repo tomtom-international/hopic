@@ -62,6 +62,28 @@ class BitbucketPullRequest extends ChangeRequest {
     this.credentialsId = credentialsId
   }
 
+  @NonCPS
+  private List find_username_replacements(String message) {
+    def m = message =~ /(?<!\\)@(\w+)/
+
+    def user_replacements = []
+
+    m.each { match ->
+      def username = match[1]
+      if (!username) {
+        return
+      }
+
+      user_replacements.add([
+          username,
+          m.start(),
+          m.end(),
+      ])
+    }
+
+    return user_replacements
+  }
+
   private def get_info(allow_cache = true) {
     if (allow_cache && this.info) {
       return this.info
@@ -92,14 +114,12 @@ class BitbucketPullRequest extends ChangeRequest {
     if (info.containsKey('description')) {
       def users = [:]
 
-      def m = info.description =~ /(?<!\\)@(\w+)/
-      def last_idx = 0
-      def new_description = ''
-      m.each { _, username ->
-        if (!username) {
-          return
-        }
+      def user_replacements = find_username_replacements(info.description)
 
+      int last_idx = 0
+      String new_description = ''
+      user_replacements.each { repl ->
+        def (username, start, end) = repl
         if (!users.containsKey(username)) {
           def baseRestUrl = url
             .replaceFirst(/\/projects\/.*/, '/rest/api/1.0')
@@ -116,9 +136,10 @@ class BitbucketPullRequest extends ChangeRequest {
           str = "${str} <${user.emailAddress}>"
         }
 
-        new_description = new_description + info.description[last_idx..m.start() - 1] + str
-        last_idx = m.end()
+        new_description = new_description + info.description[last_idx..start - 1] + str
+        last_idx = end
       }
+
       new_description = new_description + info.description[last_idx..-1]
       info.description = new_description
     }
