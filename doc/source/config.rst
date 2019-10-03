@@ -51,6 +51,9 @@ String credential
 .. literalinclude:: ../../examples/with-credentials.yaml
    :language: yaml
 
+Volumes
+-------
+
 .. option:: volumes
 
 In order to execute commands within Docker it is often required to mount directories or a file to the docker container.
