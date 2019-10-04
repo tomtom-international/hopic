@@ -1,0 +1,68 @@
+phases:
+  style:
+    commit-message-checker:
+      # Require each commit message to adhere to our requirements
+      - foreach: AUTOSQUASHED_COMMIT
+        sh: .ci/verify-commit-message.py ${AUTOSQUASHED_COMMIT}
+    clang-format:
+      # Show all changes necessary to have each commit formatted properly
+      - foreach: AUTOSQUASHED_COMMIT
+        sh: GIT_PAGER="tee ${AUTOSQUASHED_COMMIT}.format.diff" git clang-format --style=file --diff ${AUTOSQUASHED_COMMIT}~1 ${AUTOSQUASHED_COMMIT}
+      # Assert that no changes were necessary
+      - foreach: AUTOSQUASHED_COMMIT
+        sh: 'test ! -s ${AUTOSQUASHED_COMMIT}.format.diff'
+
+  build:
+    x64-release:
+      - cmake -B build-x64-release -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo
+      - cmake --build build-x64-release
+    x64-debug:
+      - cmake -B build-x64-debug -S . -DCMAKE_BUILD_TYPE=Debug
+      - cmake --build build-x64-debug
+    arm64-release:
+      - cmake -B build-arm64-release -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_TOOLCHAIN_FILE:PATH=${CMAKE_AGL_AARCH64_TOOLCHAIN_FILE}
+      - cmake --build build-arm64-release
+    arm64-debug:
+      - cmake -B build-arm64-debug -S . -DCMAKE_BUILD_TYPE=Debug -DCMAKE_TOOLCHAIN_FILE:PATH=${CMAKE_AGL_AARCH64_TOOLCHAIN_FILE}
+      - cmake --build build-arm64-debug
+
+  test:
+    x64-debug:
+      - junit: build-x64-debug/test-unit.xml
+      - cmake --build build-x64-debug --target test
+
+  package:
+    x64-release:
+      - fingerprint:
+          artifacts:
+            - build-x64-release/TomTom-Stacktrace-${VERSION}-Linux-x86_64.tar.gz
+      - cmake --build build-x64-release --target package
+    x64-debug:
+      - fingerprint:
+          artifacts:
+            - build-x64-debug/TomTom-Stacktrace-${VERSION}-Linux-x86_64.tar.gz
+      - cmake --build build-x64-debug --target package
+    arm64-release:
+      - fingerprint:
+          artifacts:
+            - build-arm64-release/TomTom-Stacktrace-${VERSION}-Linux-aarch64.tar.gz
+      - cmake --build build-arm64-release --target package
+    arm64-debug:
+      - fingerprint:
+          artifacts:
+            - build-arm64-debug/TomTom-Stacktrace-${VERSION}-Linux-aarch64.tar.gz
+      - cmake --build build-arm64-debug --target package
+
+  upload:
+    x64-release:
+      - run-on-change: only
+      - build-x64-release/do-upload.sh
+    x64-debug:
+      - run-on-change: only
+      - build-x64-debug/do-upload.sh
+    arm64-release:
+      - run-on-change: only
+      - build-arm64-release/do-upload.sh
+    arm64-debug:
+      - run-on-change: only
+      - build-arm64-debug/do-upload.sh
