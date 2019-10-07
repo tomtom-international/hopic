@@ -187,6 +187,26 @@ if not description:
     errors.append(error)
 complain_about_excess_space('description')
 
+# Disallow referring to review comments because it's a poor excuse for a proper commit message
+review_comment_ref = re.search(r'''
+    (?:accord|address|apply|implement|incorporat|process|resolv|rework)(?:e|e?[sd]|ing)?\s+
+    (?:all\s+)?
+    (?:minor\s+)?
+    (?:code\s+)?
+    review(?:\s+(?:comment|finding)s?)?\b
+    |review\s+comments\s+    (?:accord|address|apply|implement|incorporat|process|resolv|rework)(?:e|e?[sd]|ing)?\s+
+    |\breview\s+rework(?:ing|ed)?\b
+    |[(] \s* review \s+ (?:comment|finding)s? \s* [)]
+    ''',
+    description, re.VERBOSE|re.IGNORECASE)
+if review_comment_ref:
+    start = subject.start('description') + review_comment_ref.start()
+    error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: add context directly to commit messages instead of referring to review comments\x1B[m\n".format(start + 1, **locals())
+    error += lines[0] + '\n'
+    error += ' ' * start + '\x1B[32m' + '^' * (review_comment_ref.end() - review_comment_ref.start()) + '\x1B[39m\n'
+    error += "\x1B[1m{commit}:1:{}: \x1B[30mnote\x1B[39m: prefer using --fixup when fixing previous commits in the same pull request\x1B[m".format(start + 1, **locals())
+    errors.append(error)
+
 # Our own requirements on the description
 # No JIRA tickets in the subject line, because it wastes precious screen estate (80 chars)
 non_jira_projects = (
@@ -221,12 +241,21 @@ blacklist_start_words = (
         'added',
         'adds',
         'adding'
+        'applied',
+        'applies',
+        'applying',
+        'expanded',
+        'expands',
+        'expanding',
         'fixed',
         'fixes',
         'fixing',
         'removed',
         'removes',
         'removing',
+        'renamed',
+        'renames',
+        'renaming',
         'deleted',
         'deletes',
         'deleting',
@@ -236,6 +265,9 @@ blacklist_start_words = (
         'ensured',
         'ensures',
         'ensuring',
+        'resolved',
+        'resolves',
+        'resolving',
         'verified',
         'verifies',
         'verifying',
@@ -243,12 +275,12 @@ blacklist_start_words = (
         # repeating the tag is frowned upon as well
         type_tag,
     )
-blacklisted = re.match(r'^(?:' + '|'.join(re.escape(w) for w in blacklist_start_words) + r')\b', description)
+blacklisted = re.match(r'^(?:' + '|'.join(re.escape(w) for w in blacklist_start_words) + r')\b', description, flags=re.IGNORECASE)
 if blacklisted:
-    start = subject.start('description')
-    error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's description starts with blacklisted word or type tag\x1B[m\n".format(start + 1, **locals())
+    start = subject.start('description') + blacklisted.start()
+    error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's description contains blacklisted word or repeats type tag\x1B[m\n".format(start + 1, **locals())
     error += lines[0] + '\n'
-    error += start * ' ' + '\x1B[32m^' * blacklisted.end() + '\x1B[39m\n'
+    error += start * ' ' + '\x1B[32m^' * (blacklisted.end() - blacklisted.start()) + '\x1B[39m\n'
     error += "\x1B[1m{commit}:1:{}: \x1B[30mnote\x1B[39m: prefer using the imperative for verbs\x1B[m".format(start + 1, **locals())
     errors.append(error)
 
