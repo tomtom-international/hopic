@@ -221,12 +221,21 @@ blacklist_start_words = (
         'added',
         'adds',
         'adding'
+        'applied',
+        'applies',
+        'applying',
+        'expanded',
+        'expands',
+        'expanding',
         'fixed',
         'fixes',
         'fixing',
         'removed',
         'removes',
         'removing',
+        'renamed',
+        'renames',
+        'renaming',
         'deleted',
         'deletes',
         'deleting',
@@ -236,6 +245,9 @@ blacklist_start_words = (
         'ensured',
         'ensures',
         'ensuring',
+        'resolved',
+        'resolves',
+        'resolving',
         'verified',
         'verifies',
         'verifying',
@@ -243,12 +255,12 @@ blacklist_start_words = (
         # repeating the tag is frowned upon as well
         type_tag,
     )
-blacklisted = re.match(r'^(?:' + '|'.join(re.escape(w) for w in blacklist_start_words) + r')\b', description)
+blacklisted = re.match(r'^(?:' + '|'.join(re.escape(w) for w in blacklist_start_words) + r')\b', description, flags=re.IGNORECASE)
 if blacklisted:
-    start = subject.start('description')
-    error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's description starts with blacklisted word or type tag\x1B[m\n".format(start + 1, **locals())
+    start = subject.start('description') + blacklisted.start()
+    error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's description contains blacklisted word or repeats type tag\x1B[m\n".format(start + 1, **locals())
     error += lines[0] + '\n'
-    error += start * ' ' + '\x1B[32m^' * blacklisted.end() + '\x1B[39m\n'
+    error += start * ' ' + '\x1B[32m^' * (blacklisted.end() - blacklisted.start()) + '\x1B[39m\n'
     error += "\x1B[1m{commit}:1:{}: \x1B[30mnote\x1B[39m: prefer using the imperative for verbs\x1B[m".format(start + 1, **locals())
     errors.append(error)
 
