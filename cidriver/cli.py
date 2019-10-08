@@ -46,6 +46,7 @@ import logging
 import os
 import re
 import shlex
+import shutil
 from six import (
         string_types,
         text_type,
@@ -522,6 +523,12 @@ def restore_mtime_from_git(repo, files=None):
 def checkout_tree(tree, remote, ref, clean=False, remote_name='origin'):
     try:
         repo = git.Repo(tree)
+        # Cleanup potential existing submodules to avoid conflicts in PR's where submodules are added
+        # Cannot use config file here to determine if feature is enabled since config is not parsed during checkout-source-tree
+        repo.git.submodule(["deinit", "--all", "--force"])
+        modules_dir = "%s/modules" % repo.git_dir
+        if os.path.isdir(modules_dir):
+            shutil.rmtree(modules_dir) # Hacky way to restore git repo to clean state
     except (git.InvalidGitRepositoryError, git.NoSuchPathError):
         repo = git.Repo.clone_from(remote, tree)
 
@@ -546,14 +553,9 @@ def checkout_tree(tree, remote, ref, clean=False, remote_name='origin'):
         commit = origin.fetch(ref, tags=True)[0].commit
         repo.head.reference = commit
         repo.head.reset(index=True, working_tree=True)
+        update_submodules(repo, clean)
         if clean:
-            clean_output = repo.git.clean('-xd', force=True)
-            if clean_output:
-                log.info('%s', clean_output)
-
-            # Only restore mtimes when doing a clean build. This prevents problems with timestamp-based build sytems.
-            # I.e. make and ninja and probably half the world.
-            restore_mtime_from_git(repo)
+            clean_repo(repo)
 
         with repo.config_writer() as cfg:
             section = 'ci-driver.{commit}'.format(**locals())
@@ -561,6 +563,30 @@ def checkout_tree(tree, remote, ref, clean=False, remote_name='origin'):
             cfg.set_value(section, 'remote', remote)
 
     return commit
+
+
+def update_submodules(repo, clean):
+    for submodule in repo.submodules:
+        log.info("Updating submodule: %s and clean = %s" % (submodule, clean))
+        # Cannot use submodule.update call here since this call doesn't use git submodules call
+        # It tries to emulate the behaviour with a git clone call, but this doesn't work with relative submodule URL's
+        # See https://github.com/gitpython-developers/GitPython/issues/944
+        repo.git.submodule(["update", "--init", "--recursive"])
+
+        with git.Repo(submodule) as sub_repo:
+            update_submodules(sub_repo, clean)
+            if clean:
+                clean_repo(sub_repo)
+
+
+def clean_repo(repo):
+    clean_output = repo.git.clean('-xd', force=True)
+    if clean_output:
+        log.info('%s', clean_output)
+
+    # Only restore mtimes when doing a clean build. This prevents problems with timestamp-based build sytems.
+    # I.e. make and ninja and probably half the world.
+    restore_mtime_from_git(repo)
 
 
 def to_git_time(date):
@@ -793,6 +819,8 @@ def process_prepare_source_tree(
             finally:
                 repo.head.reference = submit_commit
                 repo.head.reset(index=True, working_tree=True)
+
+        update_submodules(repo, code_clean)
 
         if code_clean:
             restore_mtime_from_git(repo)
