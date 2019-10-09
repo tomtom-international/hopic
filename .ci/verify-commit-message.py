@@ -28,6 +28,10 @@ from typing import (
         get_type_hints,
         Iterable,
     )
+try:
+    from stemming.porter2 import stem
+except ImportError:
+    stem = None
 
 def type_check(f):
     @wraps(f)
@@ -188,22 +192,76 @@ if not description:
 complain_about_excess_space('description')
 
 # Disallow referring to review comments because it's a poor excuse for a proper commit message
-review_comment_ref = re.search(r'''
-    (?:accord|address|apply|implement|incorporat|process|resolv|rework)(?:e|e?[sd]|ing)?\s+
-    (?:all\s+)?
-    (?:minor\s+)?
-    (?:code\s+)?
-    review(?:\s+(?:comment|finding)s?)?\b
-    |review\s+comments\s+    (?:accord|address|apply|implement|incorporat|process|resolv|rework)(?:e|e?[sd]|ing)?\s+
-    |\breview\s+rework(?:ing|ed)?\b
-    |[(] \s* review \s+ (?:comment|finding)s? \s* [)]
-    ''',
-    description, re.VERBOSE|re.IGNORECASE)
+review_comment_ref = None
+if stem is not None:
+    description_words = tuple((word.group(), word.start(), word.end()) for word in re.finditer(r'\b(?:\w|[-])+\b', description))
+    opt_prefix = (
+            'all',
+            'code',
+            'minor',
+        )
+    opt_suffix = (
+            'comment',
+            'find',
+        )
+    reference_words = (
+            'accord',
+            'address',
+            'appli',
+            'implement',
+            'incorpor',
+            'process',
+            'resolv',
+            'rework',
+        )
+    ref_start, ref_end = None, None
+    for idx, (word, start, end) in enumerate(description_words):
+        if stem(word).lower() == 'review':
+            cur_idx = idx
+            while cur_idx > 0 and stem(description_words[cur_idx-1][0]).lower() in opt_prefix:
+                cur_idx -= 1
+            if cur_idx > 0 and stem(description_words[cur_idx-1][0]).lower() in reference_words:
+                cur_idx -= 1
+                ref_start = description_words[cur_idx][1]
+                ref_end = end
+            cur_idx = idx
+            while cur_idx + 1 < len(description_words) and stem(description_words[cur_idx+1][0]).lower() in opt_suffix:
+                cur_idx += 1
+            if cur_idx + 1 < len(description_words) and stem(description_words[cur_idx+1][0]).lower() in reference_words:
+                cur_idx += 1
+                if ref_start is None:
+                    ref_start = len(description)
+                if ref_end is None:
+                    ref_end = 0
+                ref_start = min(ref_start, description_words[idx][1])
+                ref_end = max(ref_end, description_words[cur_idx][2])
+            if ref_start is None and ref_end is None:
+                brace_prefix = re.match(r'^.*([(])\s*', description[:start])
+                brace_suffix = re.match(r'\s*([)])', description[description_words[cur_idx][2]:])
+                if brace_prefix and brace_suffix:
+                    ref_start = brace_prefix.start(1)
+                    ref_end = brace_prefix.end(1)
+            if ref_start is not None and ref_end is not None:
+                review_comment_ref = (ref_start, ref_end)
+                break
+else:
+    review_comment_ref = re.search(r'''
+        (?:accord|address|apply|implement|incorporat|process|resolv|rework)(?:e|e?[sd]|ing)?\s+
+        (?:all\s+)?
+        (?:minor\s+)?
+        (?:code\s+)?
+        review(?:\s+(?:comment|finding)s?)?\b
+        |review\s+comments\s+    (?:accord|address|apply|implement|incorporat|process|resolv|rework)(?:e|e?[sd]|ing)?\s+
+        |\breview\s+rework(?:ing|ed)?\b
+        |[(] \s* review \s+ (?:comment|finding)s? \s* [)]
+        ''',
+        description, re.VERBOSE|re.IGNORECASE)
+    review_comment_ref = (review_comment_ref.start(), review_comment_ref.end())
 if review_comment_ref:
-    start = subject.start('description') + review_comment_ref.start()
+    start = subject.start('description') + review_comment_ref[0]
     error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: add context directly to commit messages instead of referring to review comments\x1B[m\n".format(start + 1, **locals())
     error += lines[0] + '\n'
-    error += ' ' * start + '\x1B[32m' + '^' * (review_comment_ref.end() - review_comment_ref.start()) + '\x1B[39m\n'
+    error += ' ' * start + '\x1B[32m' + '^' * (review_comment_ref[1] - review_comment_ref[0]) + '\x1B[39m\n'
     error += "\x1B[1m{commit}:1:{}: \x1B[30mnote\x1B[39m: prefer using --fixup when fixing previous commits in the same pull request\x1B[m".format(start + 1, **locals())
     errors.append(error)
 
