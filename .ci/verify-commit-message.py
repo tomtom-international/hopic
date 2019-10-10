@@ -256,7 +256,8 @@ else:
         |[(] \s* review \s+ (?:comment|finding)s? \s* [)]
         ''',
         description, re.VERBOSE|re.IGNORECASE)
-    review_comment_ref = (review_comment_ref.start(), review_comment_ref.end())
+    if review_comment_ref:
+        review_comment_ref = review_comment_ref.span()
 if review_comment_ref:
     start = subject.start('description') + review_comment_ref[0]
     error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: add context directly to commit messages instead of referring to review comments\x1B[m\n".format(start + 1, **locals())
