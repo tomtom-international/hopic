@@ -10,6 +10,7 @@ scm:
 phases:
   style:
     commit-messages:
+      - python3 -m pip install --user --upgrade 'stemming>=1,<2'
       # Require each commit message to adhere to our requirements
       - foreach: AUTOSQUASHED_COMMIT
         sh: .ci/verify-commit-message.py ${AUTOSQUASHED_COMMIT}

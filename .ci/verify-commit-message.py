@@ -27,6 +27,7 @@ import subprocess
 from typing import (
         get_type_hints,
         Iterable,
+        Sequence,
     )
 try:
     from stemming.porter2 import stem
@@ -194,56 +195,67 @@ complain_about_excess_space('description')
 # Disallow referring to review comments because it's a poor excuse for a proper commit message
 review_comment_ref = None
 if stem is not None:
-    description_words = tuple((word.group(), word.start(), word.end()) for word in re.finditer(r'\b(?:\w|[-])+\b', description))
-    opt_prefix = (
+    description_words = tuple((word.group(), stem(word.group()).lower(), word.start(), word.end()) for word in re.finditer(r'\b(?:\w|[-])+\b', description))
+    opt_prefix = frozenset({
             'all',
+            'as',
             'code',
+            'for',
             'minor',
-        )
-    opt_suffix = (
+            'per',
+            'request',
+        })
+    opt_suffix = frozenset({
             'comment',
             'find',
-        )
-    reference_words = (
+        })
+    reference_words = frozenset({
             'accord',
             'address',
             'appli',
+            'chang',
+            'fix',
             'implement',
             'incorpor',
             'process',
             'resolv',
             'rework',
-        )
+        })
     ref_start, ref_end = None, None
-    for idx, (word, start, end) in enumerate(description_words):
-        if stem(word).lower() == 'review':
-            cur_idx = idx
-            while cur_idx > 0 and stem(description_words[cur_idx-1][0]).lower() in opt_prefix:
-                cur_idx -= 1
-            if cur_idx > 0 and stem(description_words[cur_idx-1][0]).lower() in reference_words:
-                cur_idx -= 1
-                ref_start = description_words[cur_idx][1]
-                ref_end = end
-            cur_idx = idx
-            while cur_idx + 1 < len(description_words) and stem(description_words[cur_idx+1][0]).lower() in opt_suffix:
-                cur_idx += 1
-            if cur_idx + 1 < len(description_words) and stem(description_words[cur_idx+1][0]).lower() in reference_words:
-                cur_idx += 1
-                if ref_start is None:
-                    ref_start = len(description)
-                if ref_end is None:
-                    ref_end = 0
-                ref_start = min(ref_start, description_words[idx][1])
-                ref_end = max(ref_end, description_words[cur_idx][2])
-            if ref_start is None and ref_end is None:
-                brace_prefix = re.match(r'^.*([(])\s*', description[:start])
-                brace_suffix = re.match(r'\s*([)])', description[description_words[cur_idx][2]:])
-                if brace_prefix and brace_suffix:
-                    ref_start = brace_prefix.start(1)
-                    ref_end = brace_prefix.end(1)
-            if ref_start is not None and ref_end is not None:
-                review_comment_ref = (ref_start, ref_end)
-                break
+    def encounter(word: str, opts: Sequence[str]) -> bool:
+        return bool(word in opts or difflib.get_close_matches(word, opts, cutoff=0.9))
+    for idx, (word, stemmed, start, end) in enumerate(description_words):
+        if stemmed != 'review':
+            continue
+        min_idx = idx
+        while min_idx > 0 and encounter(description_words[min_idx-1][1], opt_prefix):
+            min_idx -= 1
+        if min_idx > 0 and encounter(description_words[min_idx-1][1], reference_words):
+            min_idx -= 1
+            ref_start = description_words[min_idx][2]
+            ref_end = end
+        max_idx = idx
+        while max_idx + 1 < len(description_words) and encounter(description_words[max_idx+1][1], opt_suffix):
+            max_idx += 1
+            if ref_end is not None:
+                ref_end = max(ref_end, description_words[max_idx][3])
+        if max_idx + 1 < len(description_words) and encounter(description_words[max_idx+1][1], reference_words):
+            max_idx += 1
+            if ref_start is None:
+                ref_start = len(description)
+            if ref_end is None:
+                ref_end = 0
+            ref_start = min(ref_start, description_words[min_idx][2])
+            ref_end = max(ref_end, description_words[max_idx][3])
+        if ref_start is None and ref_end is None:
+            brace_prefix = re.match(r'^.*([(])\s*', description[:start])
+            brace_suffix = re.match(r'\s*([)])', description[description_words[max_idx][3]:])
+            if brace_prefix and brace_suffix:
+                ref_start = brace_prefix.start(1)
+                ref_end = brace_prefix.end(1)
+        if ref_start is not None and ref_end is not None:
+            review_comment_ref = (ref_start, ref_end)
+            break
 else:
     review_comment_ref = re.search(r'''
         (?:accord|address|apply|implement|incorporat|process|resolv|rework)(?:e|e?[sd]|ing)?\s+
@@ -256,7 +268,8 @@ else:
         |[(] \s* review \s+ (?:comment|finding)s? \s* [)]
         ''',
         description, re.VERBOSE|re.IGNORECASE)
-    review_comment_ref = (review_comment_ref.start(), review_comment_ref.end())
+    if review_comment_ref:
+        review_comment_ref = review_comment_ref.span()
 if review_comment_ref:
     start = subject.start('description') + review_comment_ref[0]
     error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: add context directly to commit messages instead of referring to review comments\x1B[m\n".format(start + 1, **locals())
