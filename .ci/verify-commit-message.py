@@ -198,8 +198,12 @@ if stem is not None:
     description_words = tuple((word.group(), stem(word.group()).lower(), word.start(), word.end()) for word in re.finditer(r'\b(?:\w|[-])+\b', description))
     opt_prefix = frozenset({
             'all',
+            'as',
             'code',
+            'for',
             'minor',
+            'per',
+            'request',
         })
     opt_suffix = frozenset({
             'comment',
@@ -209,6 +213,8 @@ if stem is not None:
             'accord',
             'address',
             'appli',
+            'chang',
+            'fix',
             'implement',
             'incorpor',
             'process',
