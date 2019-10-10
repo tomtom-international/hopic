@@ -27,6 +27,7 @@ import subprocess
 from typing import (
         get_type_hints,
         Iterable,
+        Sequence,
     )
 try:
     from stemming.porter2 import stem
@@ -215,22 +216,24 @@ if stem is not None:
             'rework',
         })
     ref_start, ref_end = None, None
+    def encounter(word: str, opts: Sequence[str]) -> bool:
+        return bool(word in opts or difflib.get_close_matches(word, opts, cutoff=0.9))
     for idx, (word, stemmed, start, end) in enumerate(description_words):
         if stemmed != 'review':
             continue
         min_idx = idx
-        while min_idx > 0 and description_words[min_idx-1][1] in opt_prefix:
+        while min_idx > 0 and encounter(description_words[min_idx-1][1], opt_prefix):
             min_idx -= 1
-        if min_idx > 0 and description_words[min_idx-1][1] in reference_words:
+        if min_idx > 0 and encounter(description_words[min_idx-1][1], reference_words):
             min_idx -= 1
             ref_start = description_words[min_idx][2]
             ref_end = end
         max_idx = idx
-        while max_idx + 1 < len(description_words) and description_words[max_idx+1][1] in opt_suffix:
+        while max_idx + 1 < len(description_words) and encounter(description_words[max_idx+1][1], opt_suffix):
             max_idx += 1
             if ref_end is not None:
                 ref_end = max(ref_end, description_words[max_idx][3])
-        if max_idx + 1 < len(description_words) and description_words[max_idx+1][1] in reference_words:
+        if max_idx + 1 < len(description_words) and encounter(description_words[max_idx+1][1], reference_words):
             max_idx += 1
             if ref_start is None:
                 ref_start = len(description)
