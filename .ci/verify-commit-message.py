@@ -218,27 +218,29 @@ if stem is not None:
     for idx, (word, stemmed, start, end) in enumerate(description_words):
         if stemmed != 'review':
             continue
-        cur_idx = idx
-        while cur_idx > 0 and description_words[cur_idx-1][1] in opt_prefix:
-            cur_idx -= 1
-        if cur_idx > 0 and description_words[cur_idx-1][1] in reference_words:
-            cur_idx -= 1
-            ref_start = description_words[cur_idx][2]
+        min_idx = idx
+        while min_idx > 0 and description_words[min_idx-1][1] in opt_prefix:
+            min_idx -= 1
+        if min_idx > 0 and description_words[min_idx-1][1] in reference_words:
+            min_idx -= 1
+            ref_start = description_words[min_idx][2]
             ref_end = end
-        cur_idx = idx
-        while cur_idx + 1 < len(description_words) and description_words[cur_idx+1][1] in opt_suffix:
-            cur_idx += 1
-        if cur_idx + 1 < len(description_words) and description_words[cur_idx+1][1] in reference_words:
-            cur_idx += 1
+        max_idx = idx
+        while max_idx + 1 < len(description_words) and description_words[max_idx+1][1] in opt_suffix:
+            max_idx += 1
+            if ref_end is not None:
+                ref_end = max(ref_end, description_words[max_idx][3])
+        if max_idx + 1 < len(description_words) and description_words[max_idx+1][1] in reference_words:
+            max_idx += 1
             if ref_start is None:
                 ref_start = len(description)
             if ref_end is None:
                 ref_end = 0
-            ref_start = min(ref_start, description_words[idx][2])
-            ref_end = max(ref_end, description_words[cur_idx][3])
+            ref_start = min(ref_start, description_words[min_idx][2])
+            ref_end = max(ref_end, description_words[max_idx][3])
         if ref_start is None and ref_end is None:
             brace_prefix = re.match(r'^.*([(])\s*', description[:start])
-            brace_suffix = re.match(r'\s*([)])', description[description_words[cur_idx][3]:])
+            brace_suffix = re.match(r'\s*([)])', description[description_words[max_idx][3]:])
             if brace_prefix and brace_suffix:
                 ref_start = brace_prefix.start(1)
                 ref_end = brace_prefix.end(1)
