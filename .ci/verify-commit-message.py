@@ -94,9 +94,10 @@ for n, line in enumerate(lines[2:], 2):
     elif body[-1][1]:
         body.append([n, ''])
 
+errors = []
+
 if body and not body[-1][1]:
-    print("\x1B[1m{commit}:{}:1: \x1B[31merror\x1B[39m: commit message body is followed by empty lines\x1B[m".format(len(lines), commit=commit), file=sys.stderr)
-    sys.exit(1)
+    errors.append("\x1B[1m{commit}:{}:1: \x1B[31merror\x1B[39m: commit message body is followed by empty lines\x1B[m".format(len(lines), commit=commit))
 
 subject_re = re.compile(r'''
     ^
@@ -118,8 +119,7 @@ subject_re = re.compile(r'''
     ''', re.VERBOSE)
 subject = subject_re.match(lines[0])
 if not subject:
-    print("\x1B[1m{commit}:1:1: \x1B[31merror\x1B[39m: commit message's subject not formatted according to Conventional Commits\x1B[m\n{subject_re.pattern}".format(**locals()), file=sys.stderr)
-    sys.exit(1)
+    errors.append("\x1B[1m{commit}:1:1: \x1B[31merror\x1B[39m: commit message's subject not formatted according to Conventional Commits\x1B[m\n{subject_re.pattern}".format(**locals()))
 
 def extract_match_group(match, group):
     if match is None or match[group] is None:
@@ -127,9 +127,8 @@ def extract_match_group(match, group):
     return MatchGroup(name=group, text=match[group], start=match.start(group), end=match.end(group))
 type_tag    = extract_match_group(subject, 'type_tag'   )
 scope       = extract_match_group(subject, 'scope'      )
+separator   = extract_match_group(subject, 'separator'  )
 description = extract_match_group(subject, 'description')
-
-errors = []
 
 @type_check
 def complain_about_excess_space(match: MatchGroup, line: int = 0) -> None:
@@ -177,11 +176,10 @@ if scope is not None:
     complain_about_excess_space(scope)
 
 # 1. Commits MUST be prefixed with a type, ..., followed by a colon and a space.
-if subject.group('separator') != ': ':
-    sep_start = subject.start('separator')
-    error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's subject lacks a ': ' separator after the type tag\x1B[m\n".format(sep_start + 1, **locals())
+if separator and separator.text != ': ':
+    error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's subject lacks a ': ' separator after the type tag\x1B[m\n".format(separator.start + 1, **locals())
     error += lines[0] + '\n'
-    error += sep_start * ' ' + '\x1B[32m^' * max(1, subject.end('separator') - sep_start) + '\x1B[39m'
+    error += separator.start * ' ' + '\x1B[32m^' * max(1, separator.end - separator.start) + '\x1B[39m'
     errors.append(error)
 
 # 5. A description MUST immediately follow the type/scope prefix. The description is a short description of the
