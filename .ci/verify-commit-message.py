@@ -194,17 +194,17 @@ complain_about_excess_space('description')
 # Disallow referring to review comments because it's a poor excuse for a proper commit message
 review_comment_ref = None
 if stem is not None:
-    description_words = tuple((word.group(), word.start(), word.end()) for word in re.finditer(r'\b(?:\w|[-])+\b', description))
-    opt_prefix = (
+    description_words = tuple((word.group(), stem(word.group()).lower(), word.start(), word.end()) for word in re.finditer(r'\b(?:\w|[-])+\b', description))
+    opt_prefix = frozenset({
             'all',
             'code',
             'minor',
-        )
-    opt_suffix = (
+        })
+    opt_suffix = frozenset({
             'comment',
             'find',
-        )
-    reference_words = (
+        })
+    reference_words = frozenset({
             'accord',
             'address',
             'appli',
@@ -213,37 +213,38 @@ if stem is not None:
             'process',
             'resolv',
             'rework',
-        )
+        })
     ref_start, ref_end = None, None
-    for idx, (word, start, end) in enumerate(description_words):
-        if stem(word).lower() == 'review':
-            cur_idx = idx
-            while cur_idx > 0 and stem(description_words[cur_idx-1][0]).lower() in opt_prefix:
-                cur_idx -= 1
-            if cur_idx > 0 and stem(description_words[cur_idx-1][0]).lower() in reference_words:
-                cur_idx -= 1
-                ref_start = description_words[cur_idx][1]
-                ref_end = end
-            cur_idx = idx
-            while cur_idx + 1 < len(description_words) and stem(description_words[cur_idx+1][0]).lower() in opt_suffix:
-                cur_idx += 1
-            if cur_idx + 1 < len(description_words) and stem(description_words[cur_idx+1][0]).lower() in reference_words:
-                cur_idx += 1
-                if ref_start is None:
-                    ref_start = len(description)
-                if ref_end is None:
-                    ref_end = 0
-                ref_start = min(ref_start, description_words[idx][1])
-                ref_end = max(ref_end, description_words[cur_idx][2])
-            if ref_start is None and ref_end is None:
-                brace_prefix = re.match(r'^.*([(])\s*', description[:start])
-                brace_suffix = re.match(r'\s*([)])', description[description_words[cur_idx][2]:])
-                if brace_prefix and brace_suffix:
-                    ref_start = brace_prefix.start(1)
-                    ref_end = brace_prefix.end(1)
-            if ref_start is not None and ref_end is not None:
-                review_comment_ref = (ref_start, ref_end)
-                break
+    for idx, (word, stemmed, start, end) in enumerate(description_words):
+        if stemmed != 'review':
+            continue
+        cur_idx = idx
+        while cur_idx > 0 and description_words[cur_idx-1][1] in opt_prefix:
+            cur_idx -= 1
+        if cur_idx > 0 and description_words[cur_idx-1][1] in reference_words:
+            cur_idx -= 1
+            ref_start = description_words[cur_idx][2]
+            ref_end = end
+        cur_idx = idx
+        while cur_idx + 1 < len(description_words) and description_words[cur_idx+1][1] in opt_suffix:
+            cur_idx += 1
+        if cur_idx + 1 < len(description_words) and description_words[cur_idx+1][1] in reference_words:
+            cur_idx += 1
+            if ref_start is None:
+                ref_start = len(description)
+            if ref_end is None:
+                ref_end = 0
+            ref_start = min(ref_start, description_words[idx][2])
+            ref_end = max(ref_end, description_words[cur_idx][3])
+        if ref_start is None and ref_end is None:
+            brace_prefix = re.match(r'^.*([(])\s*', description[:start])
+            brace_suffix = re.match(r'\s*([)])', description[description_words[cur_idx][3]:])
+            if brace_prefix and brace_suffix:
+                ref_start = brace_prefix.start(1)
+                ref_end = brace_prefix.end(1)
+        if ref_start is not None and ref_end is not None:
+            review_comment_ref = (ref_start, ref_end)
+            break
 else:
     review_comment_ref = re.search(r'''
         (?:accord|address|apply|implement|incorporat|process|resolv|rework)(?:e|e?[sd]|ing)?\s+
