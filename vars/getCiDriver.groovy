@@ -534,6 +534,10 @@ exec ssh -i '''
     return this.get_change() != null
   }
 
+  private def is_build_a_replay() {
+    return steps.currentBuild.buildCauses.any{ cause -> cause._class.contains('ReplayCause') }
+  }
+
   /**
    * @pre this has to be executed on a node the first time
    */
@@ -542,7 +546,7 @@ exec ssh -i '''
       assert steps.env.NODE_NAME != null, "has_submittable_change must be executed on a node the first time"
 
       assert !this.has_change() || (this.target_commit != null && this.source_commit != null)
-      this.may_submit_result = this.has_change() && this.get_change().maySubmit(target_commit, source_commit, /* allow_cache =*/ false)
+      this.may_submit_result = this.has_change() && this.get_change().maySubmit(target_commit, source_commit, /* allow_cache =*/ false) && !this.is_build_a_replay()
     }
     return this.may_submit_result
   }
