@@ -16,6 +16,7 @@
 
 # This is a simplistic implementation of checking adherance to Conventional Commits https://www.conventionalcommits.org/
 
+from collections import namedtuple
 from functools import wraps
 from inspect import getfullargspec
 import difflib
@@ -51,6 +52,9 @@ def type_check(f):
     return validate_parameters
 
 
+MatchGroup = namedtuple('MatchGroup', ('text', 'name', 'start', 'end'))
+
+
 commit = 'HEAD'
 if len(sys.argv) >= 2:
     commit = sys.argv[1]
@@ -80,11 +84,6 @@ else:
     message = subprocess.check_output(('git', 'show', '-q', '--format=%B', commit, '--'))[:-1].decode('UTF-8')
 lines = message.splitlines()
 
-if len(lines) >= 2:
-    if lines[1]:
-        print("\x1B[1m{commit}:2:1: \x1B[31merror\x1B[39m: commit message subject and body are not separated by an empty line\x1B[m".format(**locals()), file=sys.stderr)
-        sys.exit(1)
-
 # Split the message body in paragraphs
 body = []
 for n, line in enumerate(lines[2:], 2):
@@ -95,9 +94,10 @@ for n, line in enumerate(lines[2:], 2):
     elif body[-1][1]:
         body.append([n, ''])
 
+errors = []
+
 if body and not body[-1][1]:
-    print("\x1B[1m{commit}:{}:1: \x1B[31merror\x1B[39m: commit message body is followed by empty lines\x1B[m".format(len(lines), commit=commit), file=sys.stderr)
-    sys.exit(1)
+    errors.append("\x1B[1m{commit}:{}:1: \x1B[31merror\x1B[39m: commit message body is followed by empty lines\x1B[m".format(len(lines), commit=commit))
 
 subject_re = re.compile(r'''
     ^
@@ -119,24 +119,26 @@ subject_re = re.compile(r'''
     ''', re.VERBOSE)
 subject = subject_re.match(lines[0])
 if not subject:
-    print("\x1B[1m{commit}:1:1: \x1B[31merror\x1B[39m: commit message's subject not formatted according to Conventional Commits\x1B[m\n{subject_re.pattern}".format(**locals()), file=sys.stderr)
-    sys.exit(1)
-type_tag, scope, description = subject.group('type_tag'), subject.group('scope'), subject.group('description')
+    errors.append("\x1B[1m{commit}:1:1: \x1B[31merror\x1B[39m: commit message's subject not formatted according to Conventional Commits\x1B[m\n{subject_re.pattern}".format(**locals()))
 
-errors = []
+def extract_match_group(match, group):
+    if match is None or match.group(group) is None:
+        return None
+    return MatchGroup(name=group, text=match.group(group), start=match.start(group), end=match.end(group))
+type_tag    = extract_match_group(subject, 'type_tag'   )
+scope       = extract_match_group(subject, 'scope'      )
+separator   = extract_match_group(subject, 'separator'  )
+description = extract_match_group(subject, 'description')
 
 @type_check
-def complain_about_excess_space(name: str, line: int = 0) -> None:
-    text = subject.group(name)
-    start = subject.start(name)
-
+def complain_about_excess_space(match: MatchGroup, line: int = 0) -> None:
     excess_whitespace = list(itertools.chain.from_iterable(
-            range(*space.span()) for space in re.finditer(r'\s{2,}|^\s+|\s+$', text)))
+            range(*space.span()) for space in re.finditer(r'\s{2,}|^\s+|\s+$', match.text)))
     if excess_whitespace:
-        error = "\x1B[1m{commit}:{line}:{col}: \x1B[31merror\x1B[39m: excess whitespace in {name}\x1B[m\n".format(line=line + 1, col=start + 1 + excess_whitespace[0], name=name, commit=commit)
+        error = "\x1B[1m{commit}:{line}:{col}: \x1B[31merror\x1B[39m: excess whitespace in {match.name}\x1B[m\n".format(line=line + 1, col=match.start + 1 + excess_whitespace[0], match=match, commit=commit)
         error += lines[0] + '\n'
         error += '\x1B[32m'
-        cur = -start
+        cur = -match.start
         for pos in excess_whitespace:
             error += ' ' * (pos - cur) + '^'
             cur = pos + 1
@@ -159,12 +161,11 @@ accepted_tags = (
 # 1. Commits MUST be prefixed with a type, which consists of a noun, feat, fix, etc., followed by a colon and a space.
 # 2. The type feat MUST be used when a commit adds a new feature to your application or library.
 # 3. The type fix MUST be used when a commit represents a bug fix for your application.
-if type_tag not in accepted_tags and type_tag not in ('feat', 'fix'):
-    tag_end = subject.end('type_tag')
+if type_tag and type_tag.text not in accepted_tags and type_tag.text not in ('feat', 'fix'):
     error = "\x1B[1m{commit}:1:1: \x1B[31merror\x1B[39m: use of type tag that's neither 'feat', 'fix' nor whitelisted ({})\x1B[m\n".format(', '.join(accepted_tags), **locals())
     error += lines[0] + '\n'
-    error += '\x1B[31m' + '~' * tag_end + '\x1B[39m'
-    possibilities = difflib.get_close_matches(type_tag, ('feat', 'fix') + accepted_tags, n=1)
+    error += '\x1B[31m' + '~' * type_tag.end + '\x1B[39m'
+    possibilities = difflib.get_close_matches(type_tag.text, ('feat', 'fix') + accepted_tags, n=1)
     if possibilities:
         error += '\n' + possibilities[0]
     errors.append(error)
@@ -172,193 +173,199 @@ if type_tag not in accepted_tags and type_tag not in ('feat', 'fix'):
 # 4. An optional scope MAY be provided after a type. A scope is a phrase describing a section of the codebase enclosed
 #    in parenthesis, e.g., fix(parser):
 if scope is not None:
-    complain_about_excess_space('scope')
+    complain_about_excess_space(scope)
 
 # 1. Commits MUST be prefixed with a type, ..., followed by a colon and a space.
-if subject.group('separator') != ': ':
-    sep_start = subject.start('separator')
-    error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's subject lacks a ': ' separator after the type tag\x1B[m\n".format(sep_start + 1, **locals())
+if separator and separator.text != ': ':
+    error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's subject lacks a ': ' separator after the type tag\x1B[m\n".format(separator.start + 1, **locals())
     error += lines[0] + '\n'
-    error += sep_start * ' ' + '\x1B[32m^' * max(1, subject.end('separator') - sep_start) + '\x1B[39m'
+    error += separator.start * ' ' + '\x1B[32m^' * max(1, separator.end - separator.start) + '\x1B[39m'
     errors.append(error)
 
 # 5. A description MUST immediately follow the type/scope prefix. The description is a short description of the
 #    code changes, e.g., fix: array parsing issue when multiple spaces were contained in string.
-if not description:
-    desc_start = subject.start('description')
-    error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's subject lacks a description after the type tag\x1B[m\n".format(desc_start + 1, **locals())
+if description and not description.text:
+    error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's subject lacks a description after the type tag\x1B[m\n".format(description.start + 1, **locals())
     error += lines[0] + '\n'
-    error += ' ' * desc_start + '\x1B[32m^\x1B[39m'
+    error += ' ' * description.start + '\x1B[32m^\x1B[39m'
     errors.append(error)
-complain_about_excess_space('description')
 
-# Disallow referring to review comments because it's a poor excuse for a proper commit message
-review_comment_ref = None
-if stem is not None:
-    description_words = tuple((word.group(), stem(word.group()).lower(), word.start(), word.end()) for word in re.finditer(r'\b(?:\w|[-])+\b', description))
-    opt_prefix = frozenset({
-            'all',
-            'as',
-            'code',
-            'for',
-            'minor',
-            'per',
-            'request',
-        })
-    opt_suffix = frozenset({
-            'comment',
-            'find',
-        })
-    reference_words = frozenset({
-            'accord',
-            'address',
-            'appli',
-            'chang',
-            'fix',
-            'implement',
-            'incorpor',
-            'process',
-            'resolv',
-            'rework',
-        })
-    ref_start, ref_end = None, None
-    def encounter(word: str, opts: Sequence[str]) -> bool:
-        return bool(word in opts or difflib.get_close_matches(word, opts, cutoff=0.9))
-    for idx, (word, stemmed, start, end) in enumerate(description_words):
-        if stemmed != 'review':
-            continue
-        min_idx = idx
-        while min_idx > 0 and encounter(description_words[min_idx-1][1], opt_prefix):
-            min_idx -= 1
-        if min_idx > 0 and encounter(description_words[min_idx-1][1], reference_words):
-            min_idx -= 1
-            ref_start = description_words[min_idx][2]
-            ref_end = end
-        max_idx = idx
-        while max_idx + 1 < len(description_words) and encounter(description_words[max_idx+1][1], opt_suffix):
-            max_idx += 1
-            if ref_end is not None:
+if description is not None:
+    complain_about_excess_space(description)
+
+    # Disallow referring to review comments because it's a poor excuse for a proper commit message
+    review_comment_ref = None
+    if stem is not None:
+        description_words = tuple((word.group(), stem(word.group()).lower(), word.start(), word.end()) for word in re.finditer(r'\b(?:\w|[-])+\b', description.text))
+        opt_prefix = frozenset({
+                'all',
+                'as',
+                'code',
+                'for',
+                'minor',
+                'per',
+                'request',
+            })
+        opt_suffix = frozenset({
+                'comment',
+                'find',
+            })
+        reference_words = frozenset({
+                'accord',
+                'address',
+                'appli',
+                'chang',
+                'fix',
+                'implement',
+                'incorpor',
+                'process',
+                'resolv',
+                'rework',
+            })
+        ref_start, ref_end = None, None
+        def encounter(word: str, opts: Sequence[str]) -> bool:
+            return bool(word in opts or difflib.get_close_matches(word, opts, cutoff=0.9))
+        for idx, (word, stemmed, start, end) in enumerate(description_words):
+            if stemmed != 'review':
+                continue
+            min_idx = idx
+            while min_idx > 0 and encounter(description_words[min_idx-1][1], opt_prefix):
+                min_idx -= 1
+            if min_idx > 0 and encounter(description_words[min_idx-1][1], reference_words):
+                min_idx -= 1
+                ref_start = description_words[min_idx][2]
+                ref_end = end
+            max_idx = idx
+            while max_idx + 1 < len(description_words) and encounter(description_words[max_idx+1][1], opt_suffix):
+                max_idx += 1
+                if ref_end is not None:
+                    ref_end = max(ref_end, description_words[max_idx][3])
+            if max_idx + 1 < len(description_words) and encounter(description_words[max_idx+1][1], reference_words):
+                max_idx += 1
+                if ref_start is None:
+                    ref_start = len(description.text)
+                if ref_end is None:
+                    ref_end = 0
+                ref_start = min(ref_start, description_words[min_idx][2])
                 ref_end = max(ref_end, description_words[max_idx][3])
-        if max_idx + 1 < len(description_words) and encounter(description_words[max_idx+1][1], reference_words):
-            max_idx += 1
-            if ref_start is None:
-                ref_start = len(description)
-            if ref_end is None:
-                ref_end = 0
-            ref_start = min(ref_start, description_words[min_idx][2])
-            ref_end = max(ref_end, description_words[max_idx][3])
-        if ref_start is None and ref_end is None:
-            brace_prefix = re.match(r'^.*([(])\s*', description[:start])
-            brace_suffix = re.match(r'\s*([)])', description[description_words[max_idx][3]:])
-            if brace_prefix and brace_suffix:
-                ref_start = brace_prefix.start(1)
-                ref_end = brace_prefix.end(1)
-        if ref_start is not None and ref_end is not None:
-            review_comment_ref = (ref_start, ref_end)
-            break
-else:
-    review_comment_ref = re.search(r'''
-        (?:accord|address|apply|implement|incorporat|process|resolv|rework)(?:e|e?[sd]|ing)?\s+
-        (?:all\s+)?
-        (?:minor\s+)?
-        (?:code\s+)?
-        review(?:\s+(?:comment|finding)s?)?\b
-        |review\s+comments\s+    (?:accord|address|apply|implement|incorporat|process|resolv|rework)(?:e|e?[sd]|ing)?\s+
-        |\breview\s+rework(?:ing|ed)?\b
-        |[(] \s* review \s+ (?:comment|finding)s? \s* [)]
-        ''',
-        description, re.VERBOSE|re.IGNORECASE)
+            if ref_start is None and ref_end is None:
+                brace_prefix = re.match(r'^.*([(])\s*', description.text[:start])
+                brace_suffix = re.match(r'\s*([)])', description.text[description_words[max_idx][3]:])
+                if brace_prefix and brace_suffix:
+                    ref_start = brace_prefix.start(1)
+                    ref_end = brace_prefix.end(1)
+            if ref_start is not None and ref_end is not None:
+                review_comment_ref = MatchGroup(name=0, text=description.text[ref_start:ref_end], start=ref_start+description.start, end=ref_end+description.start)
+                break
+    else:
+        review_comment_ref = re.search(r'''
+            (?:accord|address|apply|implement|incorporat|process|resolv|rework)(?:e|e?[sd]|ing)?\s+
+            (?:all\s+)?
+            (?:minor\s+)?
+            (?:code\s+)?
+            review(?:\s+(?:comment|finding)s?)?\b
+            |review\s+comments\s+    (?:accord|address|apply|implement|incorporat|process|resolv|rework)(?:e|e?[sd]|ing)?\s+
+            |\breview\s+rework(?:ing|ed)?\b
+            |[(] \s* review \s+ (?:comment|finding)s? \s* [)]
+            ''',
+            description.text, re.VERBOSE|re.IGNORECASE)
+        review_comment_ref = extract_match_group(review_comment_ref, 0)
+
     if review_comment_ref:
-        review_comment_ref = review_comment_ref.span()
-if review_comment_ref:
-    start = subject.start('description') + review_comment_ref[0]
-    error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: add context directly to commit messages instead of referring to review comments\x1B[m\n".format(start + 1, **locals())
-    error += lines[0] + '\n'
-    error += ' ' * start + '\x1B[32m' + '^' * (review_comment_ref[1] - review_comment_ref[0]) + '\x1B[39m\n'
-    error += "\x1B[1m{commit}:1:{}: \x1B[30mnote\x1B[39m: prefer using --fixup when fixing previous commits in the same pull request\x1B[m".format(start + 1, **locals())
-    errors.append(error)
+        start = description.start + review_comment_ref.start
+        error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: add context directly to commit messages instead of referring to review comments\x1B[m\n".format(start + 1, **locals())
+        error += lines[0] + '\n'
+        error += ' ' * start + '\x1B[32m' + '^' * (review_comment_ref.end - review_comment_ref.start) + '\x1B[39m\n'
+        error += "\x1B[1m{commit}:1:{}: \x1B[30mnote\x1B[39m: prefer using --fixup when fixing previous commits in the same pull request\x1B[m".format(start + 1, **locals())
+        errors.append(error)
 
-# Our own requirements on the description
-# No JIRA tickets in the subject line, because it wastes precious screen estate (80 chars)
-non_jira_projects = (
-        'AES', # AES-128
-        'SHA', # SHA-256
-        'VT',  # VT-220
-    )
-jira_re = re.compile(r'\b(?!' + '|'.join(re.escape(i + '-') for i in non_jira_projects) + r')[A-Z]+-[0-9]+\b')
-jira_tickets = []
-for m in jira_re.finditer(description):
-    jira_tickets.extend(range(*m.span()))
-if jira_tickets:
-    start = subject.start('description')
-    error = "\x1B[1m{commit}:{line}:{col}: \x1B[31merror\x1B[39m: commit message's subject contains Jira tickets\x1B[m\n".format(line=1, col=start + 1 + jira_tickets[0], commit=commit)
-    error += lines[0] + '\n'
-    error += '\x1B[32m'
-    cur = -start
-    for pos in jira_tickets:
-        error += ' ' * (pos - cur) + '^'
-        cur = pos + 1
-    error += '\x1B[39m'
-    errors.append(error)
+    # Our own requirements on the description
+    # No JIRA tickets in the subject line, because it wastes precious screen estate (80 chars)
+    non_jira_projects = (
+            'AES', # AES-128
+            'PEP', # PEP-440
+            'SHA', # SHA-256
+            'VT',  # VT-220
+        )
+    jira_re = re.compile(r'\b(?!' + '|'.join(re.escape(i + '-') for i in non_jira_projects) + r')[A-Z]+-[0-9]+\b')
+    jira_tickets = []
+    for m in jira_re.finditer(description.text):
+        jira_tickets.extend(range(*m.span()))
+    if jira_tickets:
+        error = "\x1B[1m{commit}:{line}:{col}: \x1B[31merror\x1B[39m: commit message's subject contains Jira tickets\x1B[m\n".format(line=1, col=description.start + 1 + jira_tickets[0], commit=commit)
+        error += lines[0] + '\n'
+        error += '\x1B[32m'
+        cur = -description.start
+        for pos in jira_tickets:
+            error += ' ' * (pos - cur) + '^'
+            cur = pos + 1
+        error += '\x1B[39m'
+        errors.append(error)
 
-# Disallow ending the description with punctuation
-if re.match(r'.*[.!?,]$', description):
-    error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's subject ends with punctuation\x1B[m\n".format(len(lines[0]), **locals())
-    error += lines[0] + '\n'
-    error += ' ' * (len(lines[0]) - 1) + '\x1B[32m^\x1B[39m'
-    errors.append(error)
+    # Disallow ending the description with punctuation
+    if re.match(r'.*[.!?,]$', description.text):
+        error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's subject ends with punctuation\x1B[m\n".format(len(lines[0]), **locals())
+        error += lines[0] + '\n'
+        error += ' ' * (len(lines[0]) - 1) + '\x1B[32m^\x1B[39m'
+        errors.append(error)
 
-blacklist_start_words = (
-        'added',
-        'adds',
-        'adding'
-        'applied',
-        'applies',
-        'applying',
-        'expanded',
-        'expands',
-        'expanding',
-        'fixed',
-        'fixes',
-        'fixing',
-        'removed',
-        'removes',
-        'removing',
-        'renamed',
-        'renames',
-        'renaming',
-        'deleted',
-        'deletes',
-        'deleting',
-        'updated',
-        'updates',
-        'updating',
-        'ensured',
-        'ensures',
-        'ensuring',
-        'resolved',
-        'resolves',
-        'resolving',
-        'verified',
-        'verifies',
-        'verifying',
+    blacklist_start_words = (
+            'added',
+            'adds',
+            'adding'
+            'applied',
+            'applies',
+            'applying',
+            'expanded',
+            'expands',
+            'expanding',
+            'fixed',
+            'fixes',
+            'fixing',
+            'removed',
+            'removes',
+            'removing',
+            'renamed',
+            'renames',
+            'renaming',
+            'deleted',
+            'deletes',
+            'deleting',
+            'updated',
+            'updates',
+            'updating',
+            'ensured',
+            'ensures',
+            'ensuring',
+            'resolved',
+            'resolves',
+            'resolving',
+            'verified',
+            'verifies',
+            'verifying',
 
-        # repeating the tag is frowned upon as well
-        type_tag,
-    )
-blacklisted = re.match(r'^(?:' + '|'.join(re.escape(w) for w in blacklist_start_words) + r')\b', description, flags=re.IGNORECASE)
-if blacklisted:
-    start = subject.start('description') + blacklisted.start()
-    error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's description contains blacklisted word or repeats type tag\x1B[m\n".format(start + 1, **locals())
-    error += lines[0] + '\n'
-    error += start * ' ' + '\x1B[32m^' * (blacklisted.end() - blacklisted.start()) + '\x1B[39m\n'
-    error += "\x1B[1m{commit}:1:{}: \x1B[30mnote\x1B[39m: prefer using the imperative for verbs\x1B[m".format(start + 1, **locals())
-    errors.append(error)
+            # repeating the tag is frowned upon as well
+            type_tag.text,
+        )
+    blacklisted = re.match(r'^(?:' + '|'.join(re.escape(w) for w in blacklist_start_words) + r')\b', description.text, flags=re.IGNORECASE)
+    if blacklisted:
+        start = description.start + blacklisted.start()
+        error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's description contains blacklisted word or repeats type tag\x1B[m\n".format(start + 1, **locals())
+        error += lines[0] + '\n'
+        error += start * ' ' + '\x1B[32m^' * (blacklisted.end() - blacklisted.start()) + '\x1B[39m\n'
+        error += "\x1B[1m{commit}:1:{}: \x1B[30mnote\x1B[39m: prefer using the imperative for verbs\x1B[m".format(start + 1, **locals())
+        errors.append(error)
 
 if len(lines[0]) > 80:
     error = "\x1B[1m{commit}:1:81: \x1B[31merror\x1B[39m: commit message's subject exceeds line length of 80 by {} characters\x1B[m\n".format(len(lines[0]) - 80, **locals())
     error += lines[0] + '\n'
     error += ' ' * 79 + '\x1B[32m^' + '~' * (len(lines[0]) - 80) + '\x1B[39m'
+    errors.append(error)
+
+if len(lines) > 1 and lines[1]:
+    error = "\x1B[1m{commit}:2:1: \x1B[31merror\x1B[39m: commit message subject and body are not separated by an empty line\x1B[m\n".format(**locals())
+    error += lines[1] + '\n'
+    error += '\x1B[31m' + '~' * len(lines[1]) + '\x1B[39m'
     errors.append(error)
 
 # 8. Breaking changes MUST be indicated at the very beginning of the footer or body section of a commit. A breaking
