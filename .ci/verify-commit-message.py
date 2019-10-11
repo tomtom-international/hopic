@@ -122,9 +122,9 @@ if not subject:
     errors.append("\x1B[1m{commit}:1:1: \x1B[31merror\x1B[39m: commit message's subject not formatted according to Conventional Commits\x1B[m\n{subject_re.pattern}".format(**locals()))
 
 def extract_match_group(match, group):
-    if match is None or match[group] is None:
+    if match is None or match.group(group) is None:
         return None
-    return MatchGroup(name=group, text=match[group], start=match.start(group), end=match.end(group))
+    return MatchGroup(name=group, text=match.group(group), start=match.start(group), end=match.end(group))
 type_tag    = extract_match_group(subject, 'type_tag'   )
 scope       = extract_match_group(subject, 'scope'      )
 separator   = extract_match_group(subject, 'separator'  )
