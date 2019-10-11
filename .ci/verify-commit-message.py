@@ -283,6 +283,7 @@ if description is not None:
     # No JIRA tickets in the subject line, because it wastes precious screen estate (80 chars)
     non_jira_projects = (
             'AES', # AES-128
+            'PEP', # PEP-440
             'SHA', # SHA-256
             'VT',  # VT-220
         )
