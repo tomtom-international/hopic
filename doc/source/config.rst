@@ -60,6 +60,15 @@ String credential
 .. literalinclude:: ../../examples/with-credentials.yaml
    :language: yaml
 
+Container Image
+---------------
+
+.. option:: image
+
+.. todo::
+
+    Document :option:`image` option.
+
 Volumes
 -------
 
@@ -115,3 +124,156 @@ Consider the following example where `/tmp/downloads` is overridden:
 .. literalinclude:: ../../examples/volumes-override.yaml
    :language: yaml
 
+Mounting Volumes From Other Containers
+--------------------------------------
+
+.. option:: volumes-from
+
+.. todo::
+
+    Document :option:`volumes-from` option.
+
+Publish From Branch
+-------------------
+
+.. option:: publish-from-branch
+
+.. todo::
+
+    Document :option:`publish-from-branch` option.
+
+Versioning
+----------
+
+.. option:: version
+
+.. todo::
+
+    Document :option:`version` option.
+
+Modality Changes
+----------------
+
+.. option:: modality-source-preparation
+
+.. todo::
+
+    Document :option:`modality-source-preparation` option.
+
+Restricting Variants to Specific Build Nodes
+--------------------------------------------
+
+.. option:: node-label
+
+.. todo::
+
+    Document :option:`node-label` option.
+
+Restricting Steps to Changes or Not
+-----------------------------------
+
+.. option:: run-on-change
+
+.. todo::
+
+    Document :option:`run-on-change` option.
+
+Sharing Output Data Between Variants
+------------------------------------
+
+.. option:: stash
+
+.. todo::
+
+    Document :option:`stash` option.
+
+Customizing Step Description
+----------------------------
+
+.. option:: description
+
+.. todo::
+
+    Document :option:`description` option.
+
+Branches in Subdirectory Worktrees
+----------------------------------
+
+.. option:: worktrees
+
+.. todo::
+
+    Document :option:`worktrees` option.
+
+Repeating Steps for Commits
+---------------------------
+
+.. option:: foreach
+
+.. todo::
+
+    Document :option:`foreach` option.
+
+Change Request Commits
+^^^^^^^^^^^^^^^^^^^^^^
+
+``SOURCE_COMMIT``
+
+Change Request Autosquashed Commits
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``AUTOSQUASHED_COMMIT``
+
+Sub SCM
+-------
+
+.. option:: scm
+
+.. todo::
+
+    Document :option:`scm` option.
+
+JUnit Test Results
+------------------
+
+.. option:: junit
+
+.. todo::
+
+    Document :option:`junit` option.
+
+Artifact Archiving
+------------------
+
+.. option:: archive
+
+.. todo::
+
+    Document :option:`archive` option.
+
+Archiving To Artifactory
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. option:: upload-artifactory
+
+.. todo::
+
+    Document :option:`upload-artifactory` option.
+
+Promoting Builds in Artifactory
+"""""""""""""""""""""""""""""""
+
+.. option:: artifactory
+
+.. todo::
+
+    Document :option:`artifactory` option.
+
+Artifact Fingerprint
+--------------------
+
+.. option:: fingerprint
+
+.. todo::
+
+    Document :option:`fingerprint` option.
