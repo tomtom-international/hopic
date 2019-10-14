@@ -99,6 +99,9 @@ errors = []
 if body and not body[-1][1]:
     errors.append("\x1B[1m{commit}:{}:1: \x1B[31merror\x1B[39m: commit message body is followed by empty lines\x1B[m".format(len(lines), commit=commit))
 
+merge = re.match(r'^Merge.*?(?:$|:\s+)', lines[0])
+subject_start = merge.end() if merge is not None else 0
+
 subject_re = re.compile(r'''
     ^
     # 1. Commits MUST be prefixed with a type, which consists of a noun, feat, fix, etc., ...
@@ -117,18 +120,21 @@ subject_re = re.compile(r'''
 
     $
     ''', re.VERBOSE)
-subject = subject_re.match(lines[0])
+subject = subject_re.match(lines[0][subject_start:])
 if not subject:
-    errors.append("\x1B[1m{commit}:1:1: \x1B[31merror\x1B[39m: commit message's subject not formatted according to Conventional Commits\x1B[m\n{subject_re.pattern}".format(**locals()))
+    error = "\x1B[1m{commit}:1:1: \x1B[31merror\x1B[39m: commit message's subject not formatted according to Conventional Commits\x1B[m\n{subject_re.pattern}\n".format(**locals())
+    error += lines[0] + '\n'
+    error += ' ' * subject_start + '\x1B[32m' + '^' * max(len(lines[0]) - subject_start, 1) + '\x1B[39m'
+    errors.append(error)
 
 def extract_match_group(match, group, start=0):
     if match is None or match.group(group) is None:
         return None
     return MatchGroup(name=group, text=match.group(group), start=match.start(group)+start, end=match.end(group)+start)
-type_tag    = extract_match_group(subject, 'type_tag'   )
-scope       = extract_match_group(subject, 'scope'      )
-separator   = extract_match_group(subject, 'separator'  )
-description = extract_match_group(subject, 'description')
+type_tag    = extract_match_group(subject, 'type_tag'   , subject_start)
+scope       = extract_match_group(subject, 'scope'      , subject_start)
+separator   = extract_match_group(subject, 'separator'  , subject_start)
+description = extract_match_group(subject, 'description', subject_start)
 
 @type_check
 def complain_about_excess_space(match: MatchGroup, line: int = 0) -> None:
