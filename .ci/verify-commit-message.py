@@ -164,7 +164,7 @@ accepted_tags = (
 if type_tag and type_tag.text not in accepted_tags and type_tag.text not in ('feat', 'fix'):
     error = "\x1B[1m{commit}:1:1: \x1B[31merror\x1B[39m: use of type tag that's neither 'feat', 'fix' nor whitelisted ({})\x1B[m\n".format(', '.join(accepted_tags), **locals())
     error += lines[0] + '\n'
-    error += '\x1B[31m' + '~' * type_tag.end + '\x1B[39m'
+    error += ' ' * type_tag.start + '\x1B[31m' + '~' * (type_tag.end - type_tag.start) + '\x1B[39m'
     possibilities = difflib.get_close_matches(type_tag.text, ('feat', 'fix') + accepted_tags, n=1)
     if possibilities:
         error += '\n' + possibilities[0]
