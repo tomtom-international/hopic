@@ -101,6 +101,9 @@ if body and not body[-1][1]:
 
 merge = re.match(r'^Merge.*?(?:$|:\s+)', lines[0])
 subject_start = merge.end() if merge is not None else 0
+if subject_start == len(lines[0]) and re.match(r"^Merge branch '.*?'(?:into '.*')?$", lines[0]):
+    # Ignore branch merges
+    sys.exit(0)
 
 subject_re = re.compile(r'''
     ^
