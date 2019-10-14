@@ -121,10 +121,10 @@ subject = subject_re.match(lines[0])
 if not subject:
     errors.append("\x1B[1m{commit}:1:1: \x1B[31merror\x1B[39m: commit message's subject not formatted according to Conventional Commits\x1B[m\n{subject_re.pattern}".format(**locals()))
 
-def extract_match_group(match, group):
+def extract_match_group(match, group, start=0):
     if match is None or match.group(group) is None:
         return None
-    return MatchGroup(name=group, text=match.group(group), start=match.start(group), end=match.end(group))
+    return MatchGroup(name=group, text=match.group(group), start=match.start(group)+start, end=match.end(group)+start)
 type_tag    = extract_match_group(subject, 'type_tag'   )
 scope       = extract_match_group(subject, 'scope'      )
 separator   = extract_match_group(subject, 'separator'  )
@@ -269,10 +269,10 @@ if description is not None:
             |[(] \s* review \s+ (?:comment|finding)s? \s* [)]
             ''',
             description.text, re.VERBOSE|re.IGNORECASE)
-        review_comment_ref = extract_match_group(review_comment_ref, 0)
+        review_comment_ref = extract_match_group(review_comment_ref, 0, description.start)
 
     if review_comment_ref:
-        start = description.start + review_comment_ref.start
+        start = review_comment_ref.start
         error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: add context directly to commit messages instead of referring to review comments\x1B[m\n".format(start + 1, **locals())
         error += lines[0] + '\n'
         error += ' ' * start + '\x1B[32m' + '^' * (review_comment_ref.end - review_comment_ref.start) + '\x1B[39m\n'
@@ -347,12 +347,11 @@ if description is not None:
             # repeating the tag is frowned upon as well
             type_tag.text,
         )
-    blacklisted = re.match(r'^(?:' + '|'.join(re.escape(w) for w in blacklist_start_words) + r')\b', description.text, flags=re.IGNORECASE)
+    blacklisted = extract_match_group(re.match(r'^(?:' + '|'.join(re.escape(w) for w in blacklist_start_words) + r')\b', description.text, flags=re.IGNORECASE), 0, description.start)
     if blacklisted:
-        start = description.start + blacklisted.start()
-        error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's description contains blacklisted word or repeats type tag\x1B[m\n".format(start + 1, **locals())
+        error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's description contains blacklisted word or repeats type tag\x1B[m\n".format(blacklisted.start + 1, **locals())
         error += lines[0] + '\n'
-        error += start * ' ' + '\x1B[32m^' * (blacklisted.end() - blacklisted.start()) + '\x1B[39m\n'
+        error += blacklisted.start * ' ' + '\x1B[32m^' * (blacklisted.end - blacklisted.start) + '\x1B[39m\n'
         error += "\x1B[1m{commit}:1:{}: \x1B[30mnote\x1B[39m: prefer using the imperative for verbs\x1B[m".format(start + 1, **locals())
         errors.append(error)
 
