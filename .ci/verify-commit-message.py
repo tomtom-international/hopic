@@ -207,7 +207,7 @@ if description is not None:
     if title_case_word:
         error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: don't use title case in the description\x1B[m\n".format(title_case_word.start + 1, **locals())
         error += lines[0] + '\n'
-        error += ' ' * title_case_word.start + '\x1B[32m' + '^' + '~' * (title_case_word.end - title_case_word.start - 1) + '\x1B[39m\n'
+        error += ' ' * title_case_word.start + '\x1B[32m' + '^' + '~' * (title_case_word.end - title_case_word.start - 1) + '\x1B[39m'
         errors.append(error)
 
     # Disallow referring to review comments because it's a poor excuse for a proper commit message
