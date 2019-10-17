@@ -202,6 +202,14 @@ if description and not description.text:
 if description is not None:
     complain_about_excess_space(description)
 
+    # Prevent upper casing the first letter of the first word, this is not a book-style sentence.
+    title_case_word = extract_match_group(re.match(r'\b[A-Z][a-z]*\b', description.text), 0, description.start)
+    if title_case_word:
+        error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: don't use title case in the description\x1B[m\n".format(title_case_word.start + 1, **locals())
+        error += lines[0] + '\n'
+        error += ' ' * title_case_word.start + '\x1B[32m' + '^' + '~' * (title_case_word.end - title_case_word.start - 1) + '\x1B[39m\n'
+        errors.append(error)
+
     # Disallow referring to review comments because it's a poor excuse for a proper commit message
     review_comment_ref = None
     if stem is not None:
