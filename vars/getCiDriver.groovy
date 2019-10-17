@@ -64,7 +64,7 @@ class BitbucketPullRequest extends ChangeRequest {
 
   @NonCPS
   private List find_username_replacements(String message) {
-    def m = message =~ /(?<!\\)@(\w+)/
+    def m = message =~ /(?<!\\)(?<!\S)@(\w+)/
 
     def user_replacements = []
 
