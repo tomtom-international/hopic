@@ -65,9 +65,15 @@ Container Image
 
 .. option:: image
 
-.. todo::
+In order to execute commands within a Docker container Hopic needs to be told what image to use for creating a container.
+This option can either contain a string in which case every variant will execute in a container constructed from that image.
+Alternatively it can contain a mapping where the keys and values are the names of the variant and the image to execute those in respectively.
+If using the mapping form, the ``default`` key will be used for variants that don't have an image specified explicitly.
 
-    Document :option:`image` option.
+An example of the mapping style where two different variants are executed in containers based on different images:
+
+.. literalinclude:: ../../examples/image-mapping.yaml
+    :language: yaml
 
 Volumes
 -------
