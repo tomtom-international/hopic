@@ -34,6 +34,10 @@ try:
     from stemming.porter2 import stem
 except ImportError:
     stem = None
+try:
+    import regex
+except ImportError:
+    regex = None
 
 def type_check(f):
     @wraps(f)
@@ -203,7 +207,11 @@ if description is not None:
     complain_about_excess_space(description)
 
     # Prevent upper casing the first letter of the first word, this is not a book-style sentence.
-    title_case_word = extract_match_group(re.match(r'\b[A-Z][a-z]*\b', description.text), 0, description.start)
+    if regex is None:
+        title_case_re = re.compile(r'\b[A-Z][a-z]*(?:\s+[A-Z][a-z]*)*\b')
+    else:
+        title_case_re = regex.compile(r'\b[\p{Lu}\p{Lt}]\p{Ll}*(?:\s+[\p{Lu}\p{Lt}]\p{Ll}*)*\b')
+    title_case_word = extract_match_group(title_case_re.match(description.text), 0, description.start)
     if title_case_word:
         error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: don't use title case in the description\x1B[m\n".format(title_case_word.start + 1, **locals())
         error += lines[0] + '\n'
