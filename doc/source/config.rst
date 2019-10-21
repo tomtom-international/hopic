@@ -75,6 +75,33 @@ An example of the mapping style where two different variants are executed in con
 .. literalinclude:: ../../examples/image-mapping.yaml
     :language: yaml
 
+For the purpose of using an image (name and version) specified in an Ivy dependency manifest file the `!image-from-ivy-manifest` type constructor exists.
+When used its contents are a mapping with these keys:
+
+``manifest``
+    Path to the Ivy manifest file.
+    This defaults to the first of these to exist:
+
+    * ``${WORKSPACE}/dependency_manifest.xml``
+    * ``${CFGDIR}/dependency_manifest.xml``
+
+``repository``
+    Docker repository to fetch the image from.
+
+``path``
+    Directory within the repository to fetch from.
+
+``name``
+    Name of the image to fetch.
+    This defaults to the content of the ``name`` attribute in the Ivy manifest.
+
+``rev``
+    Version of the image to fetch.
+    This defaults to the content of the ``rev`` attribute in the ivy manifest.
+
+When used this will get treated as if the expansion of ``{repository}/{path}/{name}:{rev}`` was specified as a string value of this field.
+This allows using Ivy as a mechanism for automatically keeping the Docker image up to date.
+
 Volumes
 -------
 
