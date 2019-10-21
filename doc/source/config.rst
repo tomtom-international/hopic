@@ -65,9 +65,65 @@ Container Image
 
 .. option:: image
 
-.. todo::
+In order to execute commands within a Docker container Hopic needs to be told what image to use for creating a container.
+This option can either contain a string in which case every variant will execute in a container constructed from that image.
+Alternatively it can contain a mapping where the keys and values are the names of the variant and the image to execute those in respectively.
+If using the mapping form, the ``default`` key will be used for variants that don't have an image specified explicitly.
 
-    Document :option:`image` option.
+An example of the mapping style where two different variants are executed in containers based on different images:
+
+.. literalinclude:: ../../examples/image-mapping.yaml
+    :language: yaml
+
+For the purpose of using an image (name and version) specified in an Ivy dependency manifest file the `!image-from-ivy-manifest` type constructor exists.
+When used its contents are a mapping with these keys:
+
+``manifest``
+    Path to the Ivy manifest file.
+    This defaults to the first of these to exist:
+
+    * ``${WORKSPACE}/dependency_manifest.xml``
+    * ``${CFGDIR}/dependency_manifest.xml``
+
+``repository``
+    Docker repository to fetch the image from.
+
+``path``
+    Directory within the repository to fetch from.
+
+``name``
+    Name of the image to fetch.
+    This defaults to the content of the ``name`` attribute in the Ivy manifest.
+
+``rev``
+    Version of the image to fetch.
+    This defaults to the content of the ``rev`` attribute in the ivy manifest.
+
+When used this will get treated as if the expansion of ``{repository}/{path}/{name}:{rev}`` was specified as a string value of this field.
+This allows using Ivy as a mechanism for automatically keeping the Docker image up to date.
+
+For example, when using this dependency manifest in ``${WORKSPACE}/dependency_manifest.xml``:
+
+.. code-block:: xml
+
+   <ivy-module version="2.0">
+     <info module="p1cms" organisation="com.tomtom" revision="dont-care" />
+     <dependencies>
+       <dependency name="python" org="com.tomtom.toolchains" rev="3.6.5" revConstraint="[3.5,4.0[">
+         <!-- identify this as the dependency specifying the Docker image for Hopic -->
+         <conf mapped="toolchain" name="default" />
+       </dependency>
+     </dependencies>
+   </ivy-module>
+
+And this Hopic config file:
+
+.. literalinclude:: ../../examples/image-ivy-manifest.yaml
+    :language: yaml
+
+The result will be to use the ``hub.docker.com/tomtom/python:3.6.5`` image by default.
+The ``PyPy`` build will instead use the ``hub.docker.com/tomtom/pypy:3.6.5`` image.
+I.e. for that build the image name is overridden from that used in the Ivy manifest, while still using the version from it.
 
 Volumes
 -------
@@ -147,9 +203,55 @@ Versioning
 
 .. option:: version
 
-.. todo::
+Hopic provides some support for determining and bumping of the currently checked out version.
 
-    Document :option:`version` option.
+It currently supports the syntax, sorting and bumping strategies of these versioning policies.
+The policy to use can be specified in the ``format`` option of the ``version`` option section.
+
+``semver``
+   `Semantic Versioning`_. This is the default when no policy is explicitly specified.
+
+   The default tag format is ``{version.major}.{version.minor}.{version.patch}``.
+
+   The default component to bump is the pre-release label.
+
+``carver``
+   Caruso variation on Semantic Version for branching
+
+   The default tag format is ``{version.major}{version.minor}{version.patch}+PI{version.increment}.{version.fix}``.
+
+   The default component to bump is the pre-release label.
+
+The version can be read from and stored in two locations:
+
+``file``
+    When this option is specified Hopic will always use this as the primary source for reading and storing the version.
+    The first line to contain only a syntactically valid version, optionally prefixed with ``version=``, is assumed to be the version.
+    When reading the version it'll use this verbatim.
+    When storing a (likely bumped) version it'll only modify the version portion of that file.
+
+``tag``
+    When this option is set to ``true`` or a non-empty string Hopic will, when storing, create a tag every time it creates a new version.
+    When this option is set to a string it will be interpreted according to `Python Format Specification`_ with the named variable ``version`` containing the version.
+    When this option is set and ``file`` is not set it will use `git describe <https://git-scm.com/docs/git-describe>`_ to read the current version from tags.
+    When used for reading, it will mark commits that don't have a tag a virtual prerelease of the predicted next version.
+
+    Setting this option to a string can, for example, be used to add a prefix like ``v`` to tags, e.g. by using ``v{version}``.
+    Having it set to ``true`` instead uses the version policy's default formatting.
+
+Whether and what to bump can be controlled by the ``bump`` option.
+When set to ``false`` it disables automated bumping completely.
+When not specified it defaults to bumping the default-to-bump part of the used version policy.
+When set to a string it bumps the named component of the version.
+
+When bumping is enabled, Hopic bumps each time that it applies a change.
+Usually this means when it's merging a pull request.
+Another option is when it's performing a modality change (currently only ``UPDATE_DEPENDENCY_MANIFEST``).
+
+.. todo:: Describe ``after-submit``. Maybe?
+
+.. _Semantic Versioning: https://semver.org/
+.. _Python Format Specification: https://docs.python.org/3/library/string.html#formatspec
 
 Modality Changes
 ----------------

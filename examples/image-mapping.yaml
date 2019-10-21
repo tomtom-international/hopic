@@ -1,0 +1,10 @@
+image:
+  default: buildpack-deps:testing
+  whoami:  buildpack-deps:testing-curl
+
+phases:
+  prepare:
+    hello:
+      - cc -o hello hello.c
+    whoami:
+      - curl --output ip-address.txt https://api.ipify.org
