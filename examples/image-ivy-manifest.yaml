@@ -1,0 +1,8 @@
+image:
+  default: !image-from-ivy-manifest
+    repository: hub.docker.com
+    path: tomtom
+  Linux_AGL-aarch64: !image-from-ivy-manifest
+    repository: hub.docker.com
+    path: tomtom
+    name: agl-build-aarch64-toolchain
