@@ -102,6 +102,29 @@ When used its contents are a mapping with these keys:
 When used this will get treated as if the expansion of ``{repository}/{path}/{name}:{rev}`` was specified as a string value of this field.
 This allows using Ivy as a mechanism for automatically keeping the Docker image up to date.
 
+For example, when using this dependency manifest in ``${WORKSPACE}/dependency_manifest.xml``:
+
+.. code-block:: xml
+
+   <ivy-module version="2.0">
+     <info module="p1cms" organisation="com.tomtom" revision="dont-care" />
+     <dependencies>
+       <dependency name="python" org="com.tomtom.toolchains" rev="3.6.5" revConstraint="[3.5,4.0[">
+         <!-- identify this as the dependency specifying the Docker image for Hopic -->
+         <conf mapped="toolchain" name="default" />
+       </dependency>
+     </dependencies>
+   </ivy-module>
+
+And this Hopic config file:
+
+.. literalinclude:: ../../examples/image-ivy-manifest.yaml
+    :language: yaml
+
+The result will be to use the ``hub.docker.com/tomtom/python:3.6.5`` image by default.
+The ``PyPy`` build will instead use the ``hub.docker.com/tomtom/pypy:3.6.5`` image.
+I.e. for that build the image name is overridden from that used in the Ivy manifest, while still using the version from it.
+
 Volumes
 -------
 
