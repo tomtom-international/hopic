@@ -12,11 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import io
 import re
 from setuptools import setup
 
-with io.open('README.rst', encoding='UTF-8') as fh:
+with open('README.rst', encoding='UTF-8') as fh:
     long_description = fh.read()
 
 # Remove directives
@@ -37,6 +36,7 @@ setup(
     long_description_content_type='text/x-rst',
     packages=('hopic',),
     py_modules=('hopic',),
+    python_requires='>=3.5.3',
     install_requires=(
       'Click>=7.0,<8.0',
       'click-log',
