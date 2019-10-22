@@ -351,6 +351,23 @@ def determine_version(version_info, config_dir, code_dir=None):
             return parse_git_describe_version(describe_out, dirty_date=determine_source_date(code_dir), **params)
 
 
+def determine_config_file_name(ctx):
+    """
+    Determines the location of the config file, possibly falling back to a default.
+    """
+    try:
+        return ctx.obj.config_file
+    except (click.BadParameter, AttributeError):
+        for fname in (
+                'hopic-ci-config.yaml',
+                'cfg.yml',
+            ):
+            fname = os.path.join(ctx.obj.workspace, fname)
+            if os.path.isfile(fname):
+                return fname
+        raise
+
+
 @click.group(context_settings=dict(help_option_names=('-h', '--help')))
 @click.option('--color', type=click.Choice(('always', 'auto', 'never')), default='auto', show_default=True)
 @click.option('--config', type=click.Path(exists=False, file_okay=True, dir_okay=False, readable=True, resolve_path=True), default=lambda: None, show_default='${WORKSPACE}/hopic-ci-config.yaml or ${WORKSPACE}/cfg.yml')
@@ -422,28 +439,24 @@ def cli(ctx, color, config, workspace, whitelisted_var):
         except KeyError:
             pass
 
-    if config is None:
-        for fname in (
-                'hopic-ci-config.yaml',
-                'cfg.yml',
-            ):
-            fname = os.path.join(workspace, fname)
-            if os.path.isfile(fname):
-                config = fname
-                break
+    if config is not None:
+        ctx.obj.config_file = config
+    ctx.obj.register_dependent_attribute('config_file', 'config')
+    try:
+        config = determine_config_file_name(ctx)
+    except click.BadParameter:
+        config = None
 
     cfg = {}
     if config is not None:
         if not os.path.isabs(config):
             config = os.path.join(os.getcwd(), config)
-        ctx.obj.config_file = config
         ctx.obj.volume_vars['CFGDIR'] = ctx.obj.config_dir = os.path.dirname(config)
         # Prevent reading the config file _before_ performing a checkout. This prevents a pre-existing file at the same
         # location from being read as the config file. This may cause problems if that pre-checkout file has syntax
         # errors for example.
         if ctx.invoked_subcommand != 'checkout-source-tree' and os.path.isfile(config):
             cfg = ctx.obj.config = read_config(config, ctx.obj.volume_vars)
-    ctx.obj.register_dependent_attribute('config_file', 'config')
     ctx.obj.register_dependent_attribute('config_dir', 'config')
 
     ctx.obj.version = determine_version(
@@ -596,7 +609,7 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean):
     click.echo(checkout_tree(workspace, target_remote, target_ref, clean))
 
     try:
-        ctx.obj.config = read_config(ctx.obj.config_file, ctx.obj.volume_vars)
+        ctx.obj.config = read_config(determine_config_file_name(ctx), ctx.obj.volume_vars)
         git_cfg = ctx.obj.config['scm']['git']
     except (click.BadParameter, KeyError, TypeError, OSError, IOError):
         return
@@ -699,7 +712,7 @@ def process_prepare_source_tree(
 
         # Re-read config to ensure any changes introduced by 'change_applicator' are taken into account
         try:
-            ctx.obj.config = read_config(ctx.obj.config_file, ctx.obj.volume_vars)
+            ctx.obj.config = read_config(determine_config_file_name(ctx), ctx.obj.volume_vars)
         except (click.BadParameter, KeyError, TypeError, OSError, IOError):
             pass
 
