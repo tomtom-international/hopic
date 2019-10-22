@@ -36,7 +36,7 @@ setup(
     long_description_content_type='text/x-rst',
     packages=('hopic',),
     py_modules=('hopic',),
-    python_requires='>=3.5.3',
+    python_requires='>=3.6.5',
     install_requires=(
       'Click>=7.0,<8.0',
       'click-log',
