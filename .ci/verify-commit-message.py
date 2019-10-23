@@ -34,6 +34,10 @@ try:
     from stemming.porter2 import stem
 except ImportError:
     stem = None
+try:
+    import regex
+except ImportError:
+    regex = None
 
 def type_check(f):
     @wraps(f)
@@ -99,6 +103,12 @@ errors = []
 if body and not body[-1][1]:
     errors.append("\x1B[1m{commit}:{}:1: \x1B[31merror\x1B[39m: commit message body is followed by empty lines\x1B[m".format(len(lines), commit=commit))
 
+merge = re.match(r'^Merge.*?(?:$|:\s+)', lines[0])
+subject_start = merge.end() if merge is not None else 0
+if subject_start == len(lines[0]) and re.match(r"^Merge branch '.*?'(?:into '.*')?$", lines[0]):
+    # Ignore branch merges
+    sys.exit(0)
+
 subject_re = re.compile(r'''
     ^
     # 1. Commits MUST be prefixed with a type, which consists of a noun, feat, fix, etc., ...
@@ -117,18 +127,21 @@ subject_re = re.compile(r'''
 
     $
     ''', re.VERBOSE)
-subject = subject_re.match(lines[0])
+subject = subject_re.match(lines[0][subject_start:])
 if not subject:
-    errors.append("\x1B[1m{commit}:1:1: \x1B[31merror\x1B[39m: commit message's subject not formatted according to Conventional Commits\x1B[m\n{subject_re.pattern}".format(**locals()))
+    error = "\x1B[1m{commit}:1:1: \x1B[31merror\x1B[39m: commit message's subject not formatted according to Conventional Commits\x1B[m\n{subject_re.pattern}\n".format(**locals())
+    error += lines[0] + '\n'
+    error += ' ' * subject_start + '\x1B[32m' + '^' * max(len(lines[0]) - subject_start, 1) + '\x1B[39m'
+    errors.append(error)
 
-def extract_match_group(match, group):
+def extract_match_group(match, group, start=0):
     if match is None or match.group(group) is None:
         return None
-    return MatchGroup(name=group, text=match.group(group), start=match.start(group), end=match.end(group))
-type_tag    = extract_match_group(subject, 'type_tag'   )
-scope       = extract_match_group(subject, 'scope'      )
-separator   = extract_match_group(subject, 'separator'  )
-description = extract_match_group(subject, 'description')
+    return MatchGroup(name=group, text=match.group(group), start=match.start(group)+start, end=match.end(group)+start)
+type_tag    = extract_match_group(subject, 'type_tag'   , subject_start)
+scope       = extract_match_group(subject, 'scope'      , subject_start)
+separator   = extract_match_group(subject, 'separator'  , subject_start)
+description = extract_match_group(subject, 'description', subject_start)
 
 @type_check
 def complain_about_excess_space(match: MatchGroup, line: int = 0) -> None:
@@ -164,7 +177,7 @@ accepted_tags = (
 if type_tag and type_tag.text not in accepted_tags and type_tag.text not in ('feat', 'fix'):
     error = "\x1B[1m{commit}:1:1: \x1B[31merror\x1B[39m: use of type tag that's neither 'feat', 'fix' nor whitelisted ({})\x1B[m\n".format(', '.join(accepted_tags), **locals())
     error += lines[0] + '\n'
-    error += '\x1B[31m' + '~' * type_tag.end + '\x1B[39m'
+    error += ' ' * type_tag.start + '\x1B[31m' + '~' * (type_tag.end - type_tag.start) + '\x1B[39m'
     possibilities = difflib.get_close_matches(type_tag.text, ('feat', 'fix') + accepted_tags, n=1)
     if possibilities:
         error += '\n' + possibilities[0]
@@ -193,6 +206,18 @@ if description and not description.text:
 if description is not None:
     complain_about_excess_space(description)
 
+    # Prevent upper casing the first letter of the first word, this is not a book-style sentence.
+    if regex is None:
+        title_case_re = re.compile(r'\b[A-Z][a-z]*(?:\s+[A-Z][a-z]*)*\b')
+    else:
+        title_case_re = regex.compile(r'\b[\p{Lu}\p{Lt}]\p{Ll}*(?:\s+[\p{Lu}\p{Lt}]\p{Ll}*)*\b')
+    title_case_word = extract_match_group(title_case_re.match(description.text), 0, description.start)
+    if title_case_word:
+        error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: don't use title case in the description\x1B[m\n".format(title_case_word.start + 1, **locals())
+        error += lines[0] + '\n'
+        error += ' ' * title_case_word.start + '\x1B[32m' + '^' + '~' * (title_case_word.end - title_case_word.start - 1) + '\x1B[39m'
+        errors.append(error)
+
     # Disallow referring to review comments because it's a poor excuse for a proper commit message
     review_comment_ref = None
     if stem is not None:
@@ -201,6 +226,7 @@ if description is not None:
                 'all',
                 'as',
                 'code',
+                'edit',
                 'for',
                 'minor',
                 'per',
@@ -209,9 +235,11 @@ if description is not None:
         opt_suffix = frozenset({
                 'comment',
                 'find',
+                'with',
             })
         reference_words = frozenset({
                 'accord',
+                'bitbucket',
                 'address',
                 'appli',
                 'chang',
@@ -226,7 +254,7 @@ if description is not None:
         def encounter(word: str, opts: Sequence[str]) -> bool:
             return bool(word in opts or difflib.get_close_matches(word, opts, cutoff=0.9))
         for idx, (word, stemmed, start, end) in enumerate(description_words):
-            if stemmed != 'review':
+            if stemmed not in ('review', 'onlin'):
                 continue
             min_idx = idx
             while min_idx > 0 and encounter(description_words[min_idx-1][1], opt_prefix):
@@ -269,10 +297,10 @@ if description is not None:
             |[(] \s* review \s+ (?:comment|finding)s? \s* [)]
             ''',
             description.text, re.VERBOSE|re.IGNORECASE)
-        review_comment_ref = extract_match_group(review_comment_ref, 0)
+        review_comment_ref = extract_match_group(review_comment_ref, 0, description.start)
 
     if review_comment_ref:
-        start = description.start + review_comment_ref.start
+        start = review_comment_ref.start
         error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: add context directly to commit messages instead of referring to review comments\x1B[m\n".format(start + 1, **locals())
         error += lines[0] + '\n'
         error += ' ' * start + '\x1B[32m' + '^' * (review_comment_ref.end - review_comment_ref.start) + '\x1B[39m\n'
@@ -283,6 +311,7 @@ if description is not None:
     # No JIRA tickets in the subject line, because it wastes precious screen estate (80 chars)
     non_jira_projects = (
             'AES', # AES-128
+            'PEP', # PEP-440
             'SHA', # SHA-256
             'VT',  # VT-220
         )
@@ -315,6 +344,9 @@ if description is not None:
             'applied',
             'applies',
             'applying',
+            'edited',
+            'edits',
+            'editing',
             'expanded',
             'expands',
             'expanding',
@@ -346,12 +378,11 @@ if description is not None:
             # repeating the tag is frowned upon as well
             type_tag.text,
         )
-    blacklisted = re.match(r'^(?:' + '|'.join(re.escape(w) for w in blacklist_start_words) + r')\b', description.text, flags=re.IGNORECASE)
+    blacklisted = extract_match_group(re.match(r'^(?:' + '|'.join(re.escape(w) for w in blacklist_start_words) + r')\b', description.text, flags=re.IGNORECASE), 0, description.start)
     if blacklisted:
-        start = description.start + blacklisted.start()
-        error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's description contains blacklisted word or repeats type tag\x1B[m\n".format(start + 1, **locals())
+        error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's description contains blacklisted word or repeats type tag\x1B[m\n".format(blacklisted.start + 1, **locals())
         error += lines[0] + '\n'
-        error += start * ' ' + '\x1B[32m^' * (blacklisted.end() - blacklisted.start()) + '\x1B[39m\n'
+        error += blacklisted.start * ' ' + '\x1B[32m^' * (blacklisted.end - blacklisted.start) + '\x1B[39m\n'
         error += "\x1B[1m{commit}:1:{}: \x1B[30mnote\x1B[39m: prefer using the imperative for verbs\x1B[m".format(start + 1, **locals())
         errors.append(error)
 
