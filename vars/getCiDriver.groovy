@@ -272,7 +272,7 @@ class CiDriver {
     this.repo = repo
     this.steps = steps
     this.change = params.change
-    this.config_file = params.getOrDefault('config', 'cfg.yml')
+    this.config_file = params.config
   }
 
   private def get_change() {
@@ -477,7 +477,9 @@ exec ssh -i '''
     def workspace = steps.pwd()
 
     cmd += ' --workspace=' + shell_quote(workspace)
-    cmd += ' --config=' + shell_quote("${workspace}/${config_file}")
+    if (this.config_file != null) {
+      cmd += ' --config=' + shell_quote("${workspace}/${config_file}")
+    }
 
     def params = ''
     if (clean) {
@@ -700,7 +702,9 @@ exec ssh -i '''
         }
 
         cmd += ' --workspace=' + shell_quote("${workspace}")
-        cmd += ' --config=' + shell_quote("${workspace}/${config_file}")
+        if (this.config_file != null) {
+          cmd += ' --config=' + shell_quote("${workspace}/${config_file}")
+        }
 
         // Force a full based checkout & change application, instead of relying on the checkout done above, to ensure that we're building the list of phases and
         // variants to execute (below) using the final config file.
