@@ -43,6 +43,7 @@ setup(
       'GitPython>=2.1.3,<3',
       'python-dateutil',
       'PyYAML',
+      'setuptools',
       'six',
     ),
     setup_requires=(
