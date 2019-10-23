@@ -535,7 +535,11 @@ exec ssh -i '''
   }
 
   private def is_build_a_replay() {
-    return steps.currentBuild.buildCauses.any{ cause -> cause._class.contains('ReplayCause') }
+    def r = steps.currentBuild.buildCauses.any{ cause -> cause._class.contains('ReplayCause') }
+    if (r) {
+      steps.println("\033[36m[info] not submitting because this build is a replay of another build.\033[39m")
+    }
+    return r
   }
 
   /**
