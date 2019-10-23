@@ -226,6 +226,7 @@ if description is not None:
                 'all',
                 'as',
                 'code',
+                'edit',
                 'for',
                 'minor',
                 'per',
@@ -234,9 +235,11 @@ if description is not None:
         opt_suffix = frozenset({
                 'comment',
                 'find',
+                'with',
             })
         reference_words = frozenset({
                 'accord',
+                'bitbucket',
                 'address',
                 'appli',
                 'chang',
@@ -251,7 +254,7 @@ if description is not None:
         def encounter(word: str, opts: Sequence[str]) -> bool:
             return bool(word in opts or difflib.get_close_matches(word, opts, cutoff=0.9))
         for idx, (word, stemmed, start, end) in enumerate(description_words):
-            if stemmed != 'review':
+            if stemmed not in ('review', 'onlin'):
                 continue
             min_idx = idx
             while min_idx > 0 and encounter(description_words[min_idx-1][1], opt_prefix):
@@ -341,6 +344,9 @@ if description is not None:
             'applied',
             'applies',
             'applying',
+            'edited',
+            'edits',
+            'editing',
             'expanded',
             'expands',
             'expanding',
