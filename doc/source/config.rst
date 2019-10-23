@@ -185,9 +185,25 @@ Mounting Volumes From Other Containers
 
 .. option:: volumes-from
 
-.. todo::
+The option ``volumes-from`` allows you to mount volumes that are defined in an external *Docker image*.
+The behavior translates directly to a ``--volumes-from`` Docker-run option; the volumes are mapped to the path as originally specified in the external image.
 
-    Document :option:`volumes-from` option.
+Note that this option does nothing if you haven't specified a Docker image (see the :option:`image` option).
+
+The option requires two keys to be specified:
+
+``image-name``
+    The full name of the Docker image.
+
+``image-version``
+    The targeted version of the Docker image.
+
+The combination of ``<image-name>:<image-version>`` should result in a correct, downloadable Docker image.
+
+**example:**
+
+.. literalinclude:: ../../examples/with-volumes.yaml
+    :language: yaml
 
 Publish From Branch
 -------------------
