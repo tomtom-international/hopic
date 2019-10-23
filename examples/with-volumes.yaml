@@ -1,0 +1,11 @@
+phases:
+  coverity:
+    x64:
+      - description: Coverity run
+      - volumes-from:
+        - image-name: hub.docker.com/tomtom/coverity
+          image-version: 2.4.7
+      - sh -c 'cd build/x64-rel;
+          /opt/coverity/bin/cov-configure --template --compiler c++ --comptype gcc --version 7.3 --config my_config.conf;
+          /opt/coverity/bin/cov-build --config my_config.conf --dir cov-int ninja;
+          echo etc.'
