@@ -44,6 +44,7 @@ from itertools import chain
 import json
 import logging
 import os
+import pkg_resources
 import re
 import shlex
 import shutil
@@ -940,8 +941,10 @@ def merge_change_request(
             msg = u"{msg}: {title}\n".format(msg=msg, title=title)
         if description is not None:
             msg = u"{msg}\n{description}\n".format(msg=msg, description=description)
+        msg += u'\n'
         if approved_by:
-            msg += u'\n' + u'\n'.join(u'Acked-by: {approval}'.format(**locals()) for approval in approved_by) + u'\n'
+            msg += u'\n'.join(u'Acked-by: {approval}'.format(**locals()) for approval in approved_by) + u'\n'
+        msg += u'Merged-by: Hopic {pkg.version}\n'.format(pkg=pkg_resources.get_distribution(__package__))
         return {
                 'message': msg,
                 'parent_commits': (
@@ -1043,8 +1046,8 @@ def apply_modality_change(
         if not repo.index.diff(repo.head.commit):
             log.info("No changes introduced by '%s'", commit_message)
             return None
-        if not commit_message.endswith(u'\n'):
-            commit_message += u'\n'
+        commit_message = (commit_message.rstrip()
+                + u'\n\nMerged-by: Hopic {pkg.version}\n'.format(pkg=pkg_resources.get_distribution(__package__)))
         return {'message': commit_message}
     return change_applicator
 
