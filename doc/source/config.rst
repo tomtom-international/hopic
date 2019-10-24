@@ -223,9 +223,19 @@ Publish From Branch
 
 .. option:: publish-from-branch
 
-.. todo::
+The ``publish-from-branch`` option, when provided, specifies a regular expression matching the names of branches from which to allow publication.
+Publication includes version bumping (see :option:`version`) and the execution of any steps marked with :option:`run-on-change` as ``only``.
 
-    Document :option:`publish-from-branch` option.
+If this option is omitted, Hopic allows publication from any branch.
+
+The example below configures Hopic to only publish from the ``master`` branch or any branch starting with ``release/`` or ``rel-``.
+
+**example:**
+
+.. code-block:: yaml
+
+  publish-from-branch: '^master$|^release/.*|^rel-.*'
+
 
 Versioning
 ----------
@@ -287,9 +297,43 @@ Modality Changes
 
 .. option:: modality-source-preparation
 
-.. todo::
+The ``modality-source-preparation`` option allows for influencing the build according to the ``MODALITY`` parameter.
+If Hopic is called with a ``MODALITY`` that is present in the configuration file, then the commands as specified in that section are executed before the other phases.
 
-    Document :option:`modality-source-preparation` option.
+See the description of the ``apply-modality-change`` parameter on the `Usage` page for the calling syntax.
+
+Note that this is, above all, a remnant of the previous generation pipeline; it is currently only used to perform ``UPDATE_DEPENDENCY_MANIFEST`` builds.
+
+.. note:: Defining new functionality using this option is discouraged.
+
+``description``
+    An optional description for the command, which will be printed in the logs.
+
+``sh``
+    The actual command to be run. Variables will be expanded, similar to commands defined in the :option:`phases`.
+
+``changed-files``
+    Specifies the files that are changed by the command, which are to be added to the commit.
+
+    If omitted, Hopic forces a clean repository before running the command specified by ``sh``.
+    Upon completion of the command, all files that are changed, removed and/or previously untracked are added to the commit.
+
+``commit-message``
+    The message that will be used to commit the changes when this modality is run.
+
+    If omitted, the value of the ``MODALITY`` parameter is used as the commit message.
+
+**example:**
+
+.. code-block:: yaml
+
+  modality-source-preparation:
+    UPDATE_DEPENDENCY_MANIFEST:
+      - sh: update_dependency_manifest.py ${CFGDIR}/dependency_manifest.xml ${CFGDIR}/ivysettings.xml
+        changed-files:
+          - ${CFGDIR}/dependency_manifest.xml
+        commit-message: Update of dependency manifest
+
 
 Restricting Variants to Specific Build Nodes
 --------------------------------------------
