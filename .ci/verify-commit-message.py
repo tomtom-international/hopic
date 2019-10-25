@@ -383,7 +383,7 @@ if description is not None:
         error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's description contains blacklisted word or repeats type tag\x1B[m\n".format(blacklisted.start + 1, **locals())
         error += lines[0] + '\n'
         error += blacklisted.start * ' ' + '\x1B[32m^' * (blacklisted.end - blacklisted.start) + '\x1B[39m\n'
-        error += "\x1B[1m{commit}:1:{}: \x1B[30mnote\x1B[39m: prefer using the imperative for verbs\x1B[m".format(start + 1, **locals())
+        error += "\x1B[1m{commit}:1:{}: \x1B[30mnote\x1B[39m: prefer using the imperative for verbs\x1B[m".format(blacklisted.start + 1, **locals())
         errors.append(error)
 
 if len(lines[0]) > 80:
