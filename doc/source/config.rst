@@ -124,6 +124,19 @@ Consider the following example where `/tmp/downloads` is overridden:
 .. literalinclude:: ../../examples/volumes-override.yaml
    :language: yaml
 
+Environment Variables
+---------------------
+
+.. option:: pass-through-environment-vars
+
+This option allows passing environment variables of the host environment through into containers.
+This is a list of strings.
+Each string is the name of an environment variable.
+If the named environment variable exists in the host environment, it will be set to the same value inside the container.
+
+.. literalinclude:: ../../examples/pass-through-env-vars.yaml
+   :language: yaml
+
 Mounting Volumes From Other Containers
 --------------------------------------
 
