@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections import OrderedDict
+from collections import (
+        OrderedDict,
+        Sequence,
+    )
 import os
 import re
 from six import string_types
@@ -203,6 +206,13 @@ def read(config, volume_vars):
         cfg = yaml.load(f, OrderedImageLoader)
 
     cfg['volumes'] = expand_docker_volume_spec(config_dir, volume_vars, cfg.get('volumes', ()))
+
+    env_vars = cfg.setdefault('pass-through-environment-vars', ())
+    if not (isinstance(env_vars, Sequence) and not isinstance(env_vars, string_types)):
+        raise ConfigurationError('`pass-through-environment-vars` must be a sequence of strings')
+    for idx, var in enumerate(env_vars):
+        if not isinstance(var, string_types):
+            raise ConfigurationError("`pass-through-environment-vars` must be a sequence containing strings only: element {idx} has type {type!r}".format(idx=idx, type=type))
 
     # Convert multiple different syntaxes into a single one
     for phase in cfg.setdefault('phases', OrderedDict()).values():

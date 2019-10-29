@@ -1259,6 +1259,11 @@ def build(ctx, phase, variant):
                         HOME            = '/home/sandbox',
                         _JAVA_OPTIONS   = '-Duser.home=/home/sandbox',
                     ) if image is not None else {})
+
+                    for varname in cfg['pass-through-environment-vars']:
+                        if varname in os.environ:
+                            env.setdefault(varname, os.environ[varname])
+
                     for varname in (
                             'SOURCE_DATE_EPOCH',
                             'VERSION',
