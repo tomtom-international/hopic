@@ -378,9 +378,22 @@ Artifact Archiving
 
 .. option:: archive
 
-.. todo::
+The option ``archive`` allows you to archive build artifacts.
+The artifacts can be stored on Jenkins and/or archived to Artifactory.
 
-    Document :option:`archive` option.
+The base directory is the workspace.
+Artifacts specified are discovered relative to the workspace.
+
+Use Wildcards like `module/dist/**/*.zip`.
+A `*` expands only to a single directory entry, where `**` expands to multiple directory levels deep.
+
+Use the ``pattern`` option to identify and upload a specific artifact.
+The specific artifact can then be uploaded to artifactory with the option ``target``.
+
+**example:**
+
+.. literalinclude:: ../../examples/archive.yaml
+    :language: yaml
 
 Archiving To Artifactory
 ^^^^^^^^^^^^^^^^^^^^^^^^

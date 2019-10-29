@@ -1,0 +1,14 @@
+phases:
+  build:
+    x64-release:
+      - cmake -B build-x64-release -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo
+
+  upload:
+    x64-release:
+      - cmake --build build-x64-release --target package
+      - archive:
+          artifacts:
+            - Build/Output/x64/release/**
+            - pattern: Build/Output/x64/release/TomTom-Package-${VERSION}-x64.tar.gz
+              target: cs-snapshot/com.tomtom.package/Package/x64/release/${VERSION}/TomTom-Package-x64-release-${VERSION}.tar.gz
+        run-on-change: only
