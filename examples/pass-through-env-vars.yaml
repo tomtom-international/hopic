@@ -1,0 +1,13 @@
+image: build-image:4.2.1
+
+pass-through-environment-vars:
+  - JENKINS_TEST_INSTANCE
+
+phases:
+  x86:
+    build:
+      - ./build.sh
+
+  x86:
+    upload:
+      - ./upload-from-non-test-only.sh

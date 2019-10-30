@@ -108,6 +108,9 @@ class BitbucketPullRequest extends ChangeRequest {
     if (merge.containsKey('canMerge')) {
       info['canMerge'] = merge['canMerge']
     }
+    if(merge.containsKey('vetoes')) {
+      info['vetoes'] = merge['vetoes']
+    }
 
     // Expand '@user' tokens in pull request description to 'Full Name <Full.Name@example.com>'
     // because we don't have this mapping handy when reading git commit messages.
@@ -163,6 +166,19 @@ class BitbucketPullRequest extends ChangeRequest {
     }
     if (!cur_cr_info.canMerge) {
       steps.println("\033[36m[info] not submitting because the BitBucket merge criteria are not met\033[39m")
+      if (cur_cr_info.vetoes) {
+        steps.println("\033[36m[info] the following merge condition(s) are not met: \033[39m")
+        cur_cr_info.vetoes.each { veto ->
+          if (veto.summaryMessage) {
+            steps.println("\033[36m[info] summary: ${veto.summaryMessage}\033[39m")
+            if (veto.detailedMessage) {
+              steps.println("\033[36m[info]   details: ${veto.detailedMessage}\033[39m")
+            }
+          }
+        }
+      } else {
+        steps.println("\033[36m[info] no information about why merge failed available\033[39m")
+      }
     }
     return cur_cr_info.canMerge
   }
