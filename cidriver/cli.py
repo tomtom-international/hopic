@@ -739,7 +739,9 @@ def process_prepare_source_tree(
 
         # Re-read config to ensure any changes introduced by 'change_applicator' are taken into account
         try:
-            ctx.obj.config = read_config(determine_config_file_name(ctx), ctx.obj.volume_vars)
+            config_file = determine_config_file_name(ctx)
+            ctx.obj.config = read_config(config_file, ctx.obj.volume_vars)
+            ctx.obj.volume_vars['CFGDIR'] = ctx.obj.config_dir = os.path.dirname(config_file)
         except (click.BadParameter, KeyError, TypeError, OSError, IOError):
             pass
 
