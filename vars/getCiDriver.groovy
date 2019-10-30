@@ -726,17 +726,12 @@ exec ssh -i '''
         // variants to execute (below) using the final config file.
         this.ensure_checkout(clean)
 
-        def phases = line_split(steps.sh(script: "${cmd} phases",
+        def phases = steps.readJSON(text: steps.sh(script: "${cmd} getinfo",
             returnStdout: true))
-            .findAll{it.size() > 0}
-            .collect { phase ->
+            .collect { phase, variants ->
           [
             phase: phase,
-            variants: line_split(steps.sh(script: "${cmd} variants --phase=" + shell_quote(phase), returnStdout: true)).collect { variant ->
-              def meta = steps.readJSON(text: steps.sh(
-                  script: "${cmd} getinfo --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant),
-                  returnStdout: true,
-                ))
+            variants: variants.collect { variant, meta ->
               [
                 variant: variant,
                 label: meta.getOrDefault('node-label', default_node),
