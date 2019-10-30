@@ -587,7 +587,7 @@ def update_submodules(repo, clean):
         # See https://github.com/gitpython-developers/GitPython/issues/944
         repo.git.submodule(["update", "--init", "--recursive"])
 
-        with git.Repo(submodule) as sub_repo:
+        with git.Repo(os.path.join(repo.working_dir, submodule.path)) as sub_repo:
             update_submodules(sub_repo, clean)
             if clean:
                 clean_repo(sub_repo)
