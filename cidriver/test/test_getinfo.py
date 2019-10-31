@@ -62,3 +62,38 @@ phases:
     assert tuple(output['build' ].keys()) == ('a', 'b')
     assert tuple(output['test'  ].keys()) == ('a',)
     assert tuple(output['upload'].keys()) == ('a', 'b')
+
+def test_variants_without_metadata():
+    """
+    Phase/variant combinations without meta data should still appear in the output JSON.
+    """
+
+    result = run_with_config('''\
+phases:
+  build:
+    a:
+      - ./build.sh a
+    b:
+      - sh: ./build.sh b
+  test:
+    a:
+      - ./test.sh a
+  upload:
+    a:
+      - ./upload.sh a
+    b:
+      - sh: ./upload.sh a
+''', ('getinfo',))
+
+    assert result.exit_code == 0
+    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
+
+    assert 'build'  in output
+    assert 'test'   in output
+    assert 'upload' in output
+
+    assert 'a' in output['build']
+    assert 'b' in output['build']
+    assert 'a' in output['test']
+    assert 'a' in output['upload']
+    assert 'b' in output['upload']
