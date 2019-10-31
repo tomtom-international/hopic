@@ -47,8 +47,12 @@ setup(
       'six',
     ),
     setup_requires=(
+      'pytest-runner',
       'setuptools_scm',
       'setuptools_scm_git_archive',
+    ),
+    tests_require=(
+      'pytest',
     ),
     use_scm_version={"relative_to": __file__},
     entry_points='''

@@ -20,6 +20,7 @@ from .config_reader import read as read_config
 from .config_reader import expand_vars, expand_docker_volume_spec
 from .execution import echo_cmd
 from .versioning import *
+from collections import OrderedDict
 try:
     from collections.abc import (
             Mapping,
@@ -1087,30 +1088,49 @@ def variants(ctx, phase):
 
 
 @cli.command()
-@click.option('--phase'             , metavar='<phase>'  , required=True, help='''Build phase''', autocompletion=cli_autocomplete_phase_from_config)
-@click.option('--variant'           , metavar='<variant>', required=True, help='''Configuration variant''', autocompletion=cli_autocomplete_variant_from_config)
+@click.option('--phase'             , metavar='<phase>'  , help='''Build phase''', autocompletion=cli_autocomplete_phase_from_config)
+@click.option('--variant'           , metavar='<variant>', help='''Configuration variant''', autocompletion=cli_autocomplete_variant_from_config)
 @click.pass_context
 def getinfo(ctx, phase, variant):
     """
-    Display meta-data associated with the specified variant in the given phase as JSON.
+    Display meta-data associated with each (or the specified) variant in each (or the specified) phase.
+
+    The output is JSON encoded.
+
+    If a phase or variant filter is specified the name of that will not be present in the output.
+    Otherwise this is a nested dictionary of phases and variants.
     """
 
-    info = {}
-    for var in ctx.obj.config['phases'][phase][variant]:
-        if isinstance(var, string_types):
+    info = OrderedDict()
+    for phasename, curphase in ctx.obj.config['phases'].items():
+        if phase is not None and phasename != phase:
             continue
-        for key, val in var.items():
-            try:
-                val = expand_vars(ctx.obj.volume_vars, val)
-            except KeyError:
-                pass
-            else:
-                if key in info and isinstance(info[key], Mapping):
-                    info[key].update(val)
-                elif key in info and isinstance(info[key], MutableSequence):
-                    info[key].extend(val)
-                else:
-                    info[key] = val
+        for variantname, curvariant in curphase.items():
+            if variant is not None and variantname != variant:
+                continue
+
+            # Only store phase/variant keys if we're not filtering on them.
+            var_info = info
+            if phase is None:
+                var_info = var_info.setdefault(phasename, OrderedDict())
+            if variant is None:
+                var_info = var_info.setdefault(variantname, OrderedDict())
+
+            for var in curvariant:
+                if isinstance(var, string_types):
+                    continue
+                for key, val in var.items():
+                    try:
+                        val = expand_vars(ctx.obj.volume_vars, val)
+                    except KeyError:
+                        pass
+                    else:
+                        if key in var_info and isinstance(var_info[key], Mapping):
+                            var_info[key].update(val)
+                        elif key in var_info and isinstance(var_info[key], MutableSequence):
+                            var_info[key].extend(val)
+                        else:
+                            var_info[key] = val
     click.echo(json.dumps(info, indent=4, separators=(',', ': ')))
 
 
