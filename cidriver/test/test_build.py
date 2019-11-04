@@ -19,6 +19,7 @@ from click.testing import CliRunner
 import git
 import os
 import pytest
+import subprocess
 import sys
 
 
@@ -42,7 +43,7 @@ def run_with_config(config, args, files={}):
     if result.stderr_bytes:
         print(result.stderr, end='', file=sys.stderr)
 
-    if result.exception is not None:
+    if result.exception is not None and not isinstance(result.exception, SystemExit):
         raise result.exception
 
     return result
@@ -60,8 +61,14 @@ phases:
 ''', ('build',))
 
 
-def test_with_manifest(capsys):
-    result = run_with_config('''\
+def test_with_manifest(monkeypatch):
+    def mock_check_call(args, *popenargs, **kwargs):
+        assert args[0] == 'docker'
+        assert tuple(args[-3:]) == ('buildpack-deps:18.04', 'cat', '/etc/lsb-release')
+
+    with monkeypatch.context() as m:
+        m.setattr(subprocess, 'check_call', mock_check_call)
+        result = run_with_config('''\
 image: !image-from-ivy-manifest {}
 
 phases:
