@@ -14,6 +14,7 @@
 
 from __future__ import print_function
 from ..cli import cli
+from .markers import *
 
 from click.testing import CliRunner
 import git
@@ -23,8 +24,8 @@ import subprocess
 import sys
 
 
-def run_with_config(config, args, files={}):
-    runner = CliRunner(mix_stderr=False)
+def run_with_config(config, args, files={}, env=None):
+    runner = CliRunner(mix_stderr=False, env=env)
     with runner.isolated_filesystem():
         with git.Repo.init() as repo:
             with open('hopic-ci-config.yaml', 'w') as f:
@@ -89,3 +90,37 @@ phases:
 '''
     })
     assert result.exit_code == 0
+
+
+@docker
+def test_container_with_env_var():
+    result = run_with_config('''\
+image: buildpack-deps:18.04
+
+pass-through-environment-vars:
+  - THE_ENVIRONMENT
+
+phases:
+  build:
+    test:
+      - printenv THE_ENVIRONMENT
+''', ('build',),
+    env={'THE_ENVIRONMENT': 'The Real Environment!'})
+    assert result.exit_code == 0
+
+
+@docker
+def test_container_without_env_var():
+    result = run_with_config('''\
+image: buildpack-deps:18.04
+
+pass-through-environment-vars:
+  - THE_ENVIRONMENT
+
+phases:
+  build:
+    test:
+      - printenv THE_ENVIRONMENT
+''', ('build',),
+    env={'THE_ENVIRONMENT': None})
+    assert result.exit_code != 0
