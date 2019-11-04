@@ -24,6 +24,9 @@ import subprocess
 import sys
 
 
+_source_date_epoch = 7 * 24 * 3600
+
+
 def run_with_config(config, args, files={}, env=None):
     runner = CliRunner(mix_stderr=False, env=env)
     with runner.isolated_filesystem():
@@ -35,8 +38,9 @@ def run_with_config(config, args, files={}, env=None):
                     os.makedirs(os.path.dirname(fname))
                 with open(fname, 'w') as f:
                     f.write(content)
-            repo.index.add(('hopic-ci-config.yaml',))
-            repo.index.commit(message='Initial commit')
+            repo.index.add(('hopic-ci-config.yaml',) + tuple(files.keys()))
+            git_time = '{} +0000'.format(_source_date_epoch)
+            repo.index.commit(message='Initial commit', author_date=git_time, commit_date=git_time)
         result = runner.invoke(cli, args)
 
     if result.stdout_bytes:
@@ -170,3 +174,15 @@ phases:
 ''', ('build',),
     env={'THE_ENVIRONMENT': None})
     assert result.exit_code != 0
+
+
+def test_command_with_source_date_epoch(capfd):
+    result = run_with_config('''\
+phases:
+  build:
+    test:
+      - printenv SOURCE_DATE_EPOCH
+''', ('build',))
+    assert result.exit_code == 0
+    out, err = capfd.readouterr()
+    assert out.strip() == str(_source_date_epoch)
