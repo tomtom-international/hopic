@@ -1185,7 +1185,7 @@ def build(ctx, phase, variant):
                 continue
 
             image = cfg.get('image', None)
-            if image is not None and not isinstance(image, string_types):
+            if image is not None and isinstance(image, Mapping):
                 try:
                     image = image[curvariant]
                 except KeyError:
@@ -1339,7 +1339,7 @@ def build(ctx, phase, variant):
                             for volume_from in volumes_from:
                                 docker_run += ['--volumes-from=' + volume_from]
 
-                            docker_run.append(image)
+                            docker_run.append(str(image))
                             final_cmd = docker_run + final_cmd
                         new_env = os.environ.copy()
                         if image is None:
