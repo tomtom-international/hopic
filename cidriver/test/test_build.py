@@ -92,6 +92,52 @@ phases:
     assert result.exit_code == 0
 
 
+def test_global_image(monkeypatch):
+    def mock_check_call(args, *popenargs, **kwargs):
+        assert args[0] == 'docker'
+        assert tuple(args[-2:]) == ('buildpack-deps:18.04', './a.sh')
+
+    with monkeypatch.context() as m:
+        m.setattr(subprocess, 'check_call', mock_check_call)
+        result = run_with_config('''\
+image: buildpack-deps:18.04
+
+phases:
+  build:
+    a:
+      - ./a.sh
+''', ('build',))
+    assert result.exit_code == 0
+
+
+def test_default_image(monkeypatch):
+    expected = [
+        ('buildpack-deps:18.04', './a.sh'),
+        ('buildpack-deps:buster', './b.sh'),
+    ]
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        assert args[0] == 'docker'
+        assert tuple(args[-2:]) == expected.pop(0)
+
+    with monkeypatch.context() as m:
+        m.setattr(subprocess, 'check_call', mock_check_call)
+        result = run_with_config('''\
+image:
+  default: buildpack-deps:18.04
+  b: buildpack-deps:buster
+
+phases:
+  build:
+    a:
+      - ./a.sh
+    b:
+      - ./b.sh
+''', ('build',))
+    assert result.exit_code == 0
+    assert not expected
+
+
 @docker
 def test_container_with_env_var():
     result = run_with_config('''\
