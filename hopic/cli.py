@@ -1179,37 +1179,6 @@ def apply_modality_change(
 
 
 @cli.command()
-@click.pass_context
-def phases(ctx):
-    """
-    Enumerate all available phases.
-    """
-
-    for phase in ctx.obj.config['phases']:
-        click.echo(phase)
-
-
-@cli.command()
-@click.option('--phase'             , metavar='<phase>'  , help='''Build phase to show variants for''', autocompletion=cli_autocomplete_phase_from_config)
-@click.pass_context
-def variants(ctx, phase):
-    """
-    Enumerates all available variants. Optionally this can be limited to all variants within a single phase.
-    """
-
-    variants = []
-    for phasename, curphase in ctx.obj.config['phases'].items():
-        if phase is not None and phasename != phase:
-            continue
-        for variant in curphase:
-            # Only add when not a duplicate, but preserve order from config file
-            if variant not in variants:
-                variants.append(variant)
-    for variant in variants:
-        click.echo(variant)
-
-
-@cli.command()
 @click.option('--phase'             , metavar='<phase>'  , help='''Build phase''', autocompletion=cli_autocomplete_phase_from_config)
 @click.option('--variant'           , metavar='<variant>', help='''Configuration variant''', autocompletion=cli_autocomplete_variant_from_config)
 @click.pass_context
