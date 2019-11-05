@@ -313,6 +313,7 @@ if description is not None:
             'AES', # AES-128
             'PEP', # PEP-440
             'SHA', # SHA-256
+            'UTF', # UTF-8
             'VT',  # VT-220
         )
     jira_re = re.compile(r'\b(?!' + '|'.join(re.escape(i + '-') for i in non_jira_projects) + r')[A-Z]+-[0-9]+\b')
