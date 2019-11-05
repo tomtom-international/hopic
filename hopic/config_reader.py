@@ -16,6 +16,7 @@ from collections import (
         OrderedDict,
         Sequence,
     )
+import errno
 import os
 import re
 from six import string_types
@@ -91,38 +92,41 @@ def get_toolchain_image_information(dependency_manifest):
     return toolchain_dep
 
 
-def image_from_ivy_manifest(volume_vars, loader, node):
-    props = loader.construct_mapping(node) if node.value else {}
+class IvyManifestImage:
+    def __init__(self, volume_vars, loader, node):
+        self.props = loader.construct_mapping(node) if node.value else {}
+        self.volume_vars = volume_vars
 
-    if 'manifest' in props:
-        manifest = expand_vars(volume_vars, props['manifest'])
-    else:
-        # Fall back to searching for dependency_manifest.xml in these directories
-        for dir in ('WORKSPACE', 'CFGDIR'):
-            if dir not in volume_vars:
-                continue
-            manifest = os.path.join(volume_vars[dir], 'dependency_manifest.xml')
-            if os.path.exists(manifest):
-                break
-    if not os.path.exists(manifest):
-        return None
+    def __str__(self):
+        if 'manifest' in self.props:
+            manifest = expand_vars(self.volume_vars, self.props['manifest'])
+        else:
+            # Fall back to searching for dependency_manifest.xml in these directories
+            for dir in ('WORKSPACE', 'CFGDIR'):
+                if dir not in self.volume_vars:
+                    continue
+                manifest = os.path.join(self.volume_vars[dir], 'dependency_manifest.xml')
+                if os.path.exists(manifest):
+                    break
+        if not os.path.exists(manifest):
+            raise FileNotFoundError(errno.ENOENT, "required ivy manifest file is not found", os.path.abspath(manifest))
 
-    image = get_toolchain_image_information(manifest)
+        image = get_toolchain_image_information(manifest)
 
-    # Override dependency manifest with info from config
-    image.update(props)
+        # Override dependency manifest with info from config
+        image.update(self.props)
 
-    # Construct a full, pullable, image path
-    image['image'] = '/'.join(path for path in (image.get('repository'), image.get('path'), image['name']) if path)
+        # Construct a full, pullable, image path
+        image['image'] = '/'.join(path for path in (image.get('repository'), image.get('path'), image['name']) if path)
 
-    return '{image}:{rev}'.format(**image)
+        return '{image}:{rev}'.format(**image)
 
 
 def ordered_image_ivy_loader(volume_vars):
     OrderedImageLoader = type('OrderedImageLoader', (OrderedLoader,), {})
     OrderedImageLoader.add_constructor(
         '!image-from-ivy-manifest',
-        lambda *args: image_from_ivy_manifest(volume_vars, *args)
+        lambda *args: IvyManifestImage(volume_vars, *args)
     )
     return OrderedImageLoader
 

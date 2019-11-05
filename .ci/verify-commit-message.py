@@ -246,6 +246,7 @@ if description is not None:
                 'fix',
                 'implement',
                 'incorpor',
+                'per',
                 'process',
                 'resolv',
                 'rework',
@@ -282,6 +283,12 @@ if description is not None:
                 if brace_prefix and brace_suffix:
                     ref_start = brace_prefix.start(1)
                     ref_end = brace_prefix.end(1)
+            if ref_start is None and ref_end is None:
+                for try_idx, (try_word, try_stemmed, _, _) in enumerate(description_words[min_idx:max_idx+1], min_idx):
+                    if encounter(try_stemmed, reference_words):
+                        ref_start = description_words[min_idx][2]
+                        ref_end = description_words[max_idx][3]
+                        break
             if ref_start is not None and ref_end is not None:
                 review_comment_ref = MatchGroup(name=0, text=description.text[ref_start:ref_end], start=ref_start+description.start, end=ref_end+description.start)
                 break
@@ -313,6 +320,7 @@ if description is not None:
             'AES', # AES-128
             'PEP', # PEP-440
             'SHA', # SHA-256
+            'UTF', # UTF-8
             'VT',  # VT-220
         )
     jira_re = re.compile(r'\b(?!' + '|'.join(re.escape(i + '-') for i in non_jira_projects) + r')[A-Z]+-[0-9]+\b')

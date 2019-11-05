@@ -1100,13 +1100,21 @@ def getinfo(ctx, phase, variant):
     Otherwise this is a nested dictionary of phases and variants.
     """
 
-    info = {}
+    info = OrderedDict()
     for phasename, curphase in ctx.obj.config['phases'].items():
         if phase is not None and phasename != phase:
             continue
         for variantname, curvariant in curphase.items():
             if variant is not None and variantname != variant:
                 continue
+
+            # Only store phase/variant keys if we're not filtering on them.
+            var_info = info
+            if phase is None:
+                var_info = var_info.setdefault(phasename, OrderedDict())
+            if variant is None:
+                var_info = var_info.setdefault(variantname, OrderedDict())
+
             for var in curvariant:
                 if isinstance(var, string_types):
                     continue
@@ -1116,13 +1124,6 @@ def getinfo(ctx, phase, variant):
                     except KeyError:
                         pass
                     else:
-                        # Only store phase/variant keys if we're not filtering on them.
-                        var_info = info
-                        if phase is None:
-                            var_info = var_info.setdefault(phasename, OrderedDict())
-                        if variant is None:
-                            var_info = var_info.setdefault(variantname, OrderedDict())
-
                         if key in var_info and isinstance(var_info[key], Mapping):
                             var_info[key].update(val)
                         elif key in var_info and isinstance(var_info[key], MutableSequence):
@@ -1183,7 +1184,7 @@ def build(ctx, phase, variant):
                 continue
 
             image = cfg.get('image', None)
-            if image is not None and not isinstance(image, string_types):
+            if image is not None and isinstance(image, Mapping):
                 try:
                     image = image[curvariant]
                 except KeyError:
@@ -1337,7 +1338,7 @@ def build(ctx, phase, variant):
                             for volume_from in volumes_from:
                                 docker_run += ['--volumes-from=' + volume_from]
 
-                            docker_run.append(image)
+                            docker_run.append(str(image))
                             final_cmd = docker_run + final_cmd
                         new_env = os.environ.copy()
                         if image is None:

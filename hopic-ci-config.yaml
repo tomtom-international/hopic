@@ -15,6 +15,12 @@ phases:
       - foreach: AUTOSQUASHED_COMMIT
         sh: .ci/verify-commit-message.py ${AUTOSQUASHED_COMMIT}
 
+  test:
+    python:
+      - python3 -m virtualenv --clear venv
+      - venv/bin/python setup.py pytest
+      - junit: junit-test.xml
+
   build:
     sphinx-doc:
       - rm -rf doc/build/venv
