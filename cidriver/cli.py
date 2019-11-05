@@ -777,6 +777,8 @@ def process_prepare_source_tree(
                     log.error("Failed to read the current version (from %r) while attempting to bump the version", version_info['file'])
                 else:
                     log.error("Failed to determine the current version while attempting to bump the version")
+                    # TODO: PIPE-309: provide an initial starting point instead
+                    log.info("If this is a new repository you may wish to create a 0.0.0 tag for Hopic to start bumping from")
                 ctx.exit(1)
 
             params = {}
