@@ -591,6 +591,7 @@ def checkout_tree(tree, remote, ref, clean=False, remote_name='origin', allow_su
 def update_submodules(repo, clean):
     for submodule in repo.submodules:
         log.info("Updating submodule: %s and clean = %s" % (submodule, clean))
+        repo.git.submodule(["sync", "--recursive"])
         # Cannot use submodule.update call here since this call doesn't use git submodules call
         # It tries to emulate the behaviour with a git clone call, but this doesn't work with relative submodule URL's
         # See https://github.com/gitpython-developers/GitPython/issues/944
