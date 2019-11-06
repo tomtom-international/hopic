@@ -535,7 +535,7 @@ def restore_mtime_from_git(repo, files=None):
         pass
 
 
-def checkout_tree(tree, remote, ref, clean=False, remote_name='origin'):
+def checkout_tree(tree, remote, ref, clean=False, remote_name='origin', allow_submodule_checkout_failure=False):
     try:
         repo = git.Repo(tree)
         # Cleanup potential existing submodules to avoid conflicts in PR's where submodules are added
@@ -568,7 +568,15 @@ def checkout_tree(tree, remote, ref, clean=False, remote_name='origin'):
         commit = origin.fetch(ref, tags=True)[0].commit
         repo.head.reference = commit
         repo.head.reset(index=True, working_tree=True)
-        update_submodules(repo, clean)
+
+        try:
+            update_submodules(repo, clean)
+        except git.GitCommandError as e:
+            log.error('Failed to checkout submodule for ref \'%s\'\n'
+                        'error:\n%s' % (ref, e))
+            if not allow_submodule_checkout_failure:
+                raise
+
         if clean:
             clean_repo(repo)
 
@@ -625,16 +633,17 @@ def to_git_time(date):
 @click.option('--target-remote'     , metavar='<url>')
 @click.option('--target-ref'        , metavar='<ref>')
 @click.option('--clean/--no-clean'  , default=False, help='''Clean workspace of non-tracked files''')
+@click.option('--ignore-initial-submodule-checkout-failure/--no-ignore-initial-submodule-checkout-failure',
+              default=False, help='''Ignore git submodule errors during initial checkout''')
 @click.pass_context
-def checkout_source_tree(ctx, target_remote, target_ref, clean):
+def checkout_source_tree(ctx, target_remote, target_ref, clean, ignore_initial_submodule_checkout_failure):
     """
     Checks out a source tree of the specified remote's ref to the workspace.
     """
 
     workspace = ctx.obj.workspace
-
     # Check out specified repository
-    click.echo(checkout_tree(workspace, target_remote, target_ref, clean))
+    click.echo(checkout_tree(workspace, target_remote, target_ref, clean, allow_submodule_checkout_failure=ignore_initial_submodule_checkout_failure))
 
     try:
         ctx.obj.config = read_config(determine_config_file_name(ctx), ctx.obj.volume_vars)

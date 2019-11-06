@@ -502,6 +502,10 @@ exec ssh -i '''
       params += ' --clean'
     }
 
+    if (this.has_change()) {
+      params += ' --ignore-initial-submodule-checkout-failure'
+    }
+
     params += ' --target-remote=' + shell_quote(steps.scm.userRemoteConfigs[0].url)
     params += ' --target-ref='    + shell_quote(get_branch_name())
 
