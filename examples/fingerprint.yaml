@@ -1,0 +1,11 @@
+phases:
+  build:
+    x64-release:
+      - cmake --build build-x64-release
+
+  package:
+    x64-release:
+      - fingerprint:
+          artifacts:
+            - build-x64-release/TomTom-Stacktrace-${VERSION}-Linux-x86_64.tar.gz
+      - cmake --build build-x64-release --target package
