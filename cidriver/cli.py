@@ -821,7 +821,7 @@ def process_prepare_source_tree(
                 subject = commit.message.splitlines()[0]
                 if subject.startswith('fixup!') or subject.startswith('squash!'):
                     log.debug("Found an autosquash-commit in the source commits: '%s': %s", subject, click.style(text_type(commit), fg='yellow'))
-                    autosquash_base = repo.merge_base(target_commit, submit_commit)
+                    autosquash_base = repo.merge_base(target_commit, source_commit)
                     break
         autosquashed_commit = None
         if autosquash_base:
