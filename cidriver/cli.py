@@ -493,7 +493,9 @@ def restore_mtime_from_git(repo, files=None):
     encoding = sys.getfilesystemencoding() or sys.getdefaultencoding()
     workspace = repo.working_tree_dir.encode(encoding)
 
-    symlink_mode = 0o120000
+    regular_file_type = 0b1000
+    symlink_type      = 0b1010
+    gitlink_type      = 0b1110
 
     # Set all files' modification times to their last commit's time
     whatchanged = repo.git.whatchanged(pretty='format:%ct', as_process=True)
@@ -512,6 +514,8 @@ def restore_mtime_from_git(repo, files=None):
             old_mode, new_mode, old_hash, new_hash, operation = props.split(b' ')
             old_mode, new_mode = int(old_mode, 8), int(new_mode, 8)
 
+            object_type = (new_mode >> (9 + 3)) & 0b1111
+
             filenames = filenames.split(b'\t')
             if len(filenames) == 1:
                 filenames.insert(0, None)
@@ -520,12 +524,15 @@ def restore_mtime_from_git(repo, files=None):
             if new_filename in files:
                 files.remove(new_filename)
                 path = os.path.join(workspace, new_filename)
-                if new_mode == symlink_mode:
+                if object_type == symlink_type:
                     # Only attempt to modify symlinks' timestamps when the current system supports it.
                     # E.g. Python >= 3.3 and Linux kernel >= 2.6.22
                     if os.utime in getattr(os, 'supports_follow_symlinks', set()):
                         os.utime(path, (mtime, mtime), follow_symlinks=False)
-                else:
+                elif object_type == gitlink_type:
+                    # Skip gitlinks: used by submodules, they don't exist as regular files
+                    pass
+                elif object_type == regular_file_type:
                     os.utime(path, (mtime, mtime))
         else:
             mtime = int(line)
