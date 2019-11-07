@@ -1,0 +1,9 @@
+phases:
+  build:
+    x64-release:
+      - cmake --build build-x64-release
+
+  test:
+    x64-debug:
+      - junit: build-x64-debug/test-unit.xml
+      - cmake --build build-x64-debug --target test

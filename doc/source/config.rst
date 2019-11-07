@@ -340,18 +340,32 @@ Restricting Variants to Specific Build Nodes
 
 .. option:: node-label
 
-.. todo::
+The option ``node-label`` executes the specified steps on an agent available in the Jenkins environment with the provided label(s).
 
-    Document :option:`node-label` option.
+**example:**
+
+.. literalinclude:: ../../examples/node-label.yaml
+    :language: yaml
 
 Restricting Steps to Changes or Not
 -----------------------------------
 
 .. option:: run-on-change
 
-.. todo::
+The option ``run-on-change`` allows you to specify when a step needs to be executed.
+The value of the ``run-on-change`` option can be:
 
-    Document :option:`run-on-change` option.
+``always``
+    The steps will always be performed. (Default if not specified).
+``never``
+    The steps will never be performed.
+``only``
+    The steps will only be performed when the change is to be submitted in the current execution.
+
+**example:**
+
+.. literalinclude:: ../../examples/run-on-change.yaml
+    :language: yaml
 
 Sharing Output Data Between Variants
 ------------------------------------
@@ -413,9 +427,13 @@ JUnit Test Results
 
 .. option:: junit
 
-.. todo::
+The option ``junit`` triggers Jenkins Unit Testing.
+For more information about this feature see: https://www.tutorialspoint.com/jenkins/jenkins_unit_testing.htm
 
-    Document :option:`junit` option.
+**example:**
+
+.. literalinclude:: ../../examples/junit.yaml
+    :language: yaml
 
 Artifact Archiving
 ------------------
@@ -444,24 +462,43 @@ Archiving To Artifactory
 
 .. option:: upload-artifactory
 
-.. todo::
+The option ``upload-artifactory`` allows you to archive build artifacts to Artifactory.
+The option ``id`` is the named identifier referring to a preconfigured Artifactory server from Jenkins' global configuration.
+The artifacts to be uploaded are specified with the ``artifacts`` option.
 
-    Document :option:`upload-artifactory` option.
+**example:**
+
+.. literalinclude:: ../../examples/upload-artifactory.yaml
+    :language: yaml
 
 Promoting Builds in Artifactory
 """""""""""""""""""""""""""""""
 
 .. option:: artifactory
 
-.. todo::
+The option ``artifactory`` lets the user create promotion definitions for specific Artifactory repositories.
+The option ``promotion`` is used to promote build artifacts. After this option the Artifactory server ID is specified.
+The option ``target-repo`` specifies the Artifactory target repository.
 
-    Document :option:`artifactory` option.
+Only build artifacts that were uploaded with the option ``upload-artifactory`` will be promoted.
+
+**example:**
+
+.. literalinclude:: ../../examples/artifactory-promote.yaml
+    :language: yaml
 
 Artifact Fingerprint
 --------------------
 
 .. option:: fingerprint
 
-.. todo::
+The option ``fingerprint`` triggers fingerprinting of build artifacts on Jenkins.
+Use the option ``artifacts`` to identify the artifacts to be fingerprinted.
 
-    Document :option:`fingerprint` option.
+With the ``fingerprint`` option, the Jenkins "fingerprint" feature is invoked.
+For more information about this feature see: https://jenkins.io/doc/pipeline/steps/core/#fingerprint-record-fingerprints-of-files-to-track-usage
+
+**example:**
+
+.. literalinclude:: ../../examples/fingerprint.yaml
+    :language: yaml
