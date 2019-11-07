@@ -340,9 +340,12 @@ Restricting Variants to Specific Build Nodes
 
 .. option:: node-label
 
-.. todo::
+The option ``node-label`` executes the specified steps on an agent available in the Jenkins environment with the provided label(s).
 
-    Document :option:`node-label` option.
+**example:**
+
+.. literalinclude:: ../../examples/node-label.yaml
+    :language: yaml
 
 Restricting Steps to Changes or Not
 -----------------------------------
