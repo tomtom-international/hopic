@@ -2,5 +2,5 @@ Usage
 =====
 
 .. click:: cidriver.cli:cli
-   :prog: cidriver
+   :prog: hopic
    :show-nested:

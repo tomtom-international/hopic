@@ -1,10 +1,10 @@
-.. Hopic CI driver documentation master file, created by
+.. Hopic documentation master file, created by
    sphinx-quickstart on Mon Jan 28 13:57:37 2019.
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Hopic CI driver
-===============
+Hopic
+=====
 
 .. include:: ../../README.rst
 

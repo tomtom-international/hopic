@@ -58,6 +58,7 @@ setup(
     entry_points='''
       [console_scripts]
       ci-driver=cidriver.cli:cli
+      hopic=cidriver.cli:cli
     ''',
     url='https://github.com/tomtom-international/hopic',
     project_urls={

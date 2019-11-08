@@ -338,7 +338,7 @@ class CiDriver {
 
   public def install_prerequisites() {
     if (!this.base_cmds.containsKey(steps.env.NODE_NAME)) {
-      def venv = steps.pwd(tmp: true) + "/cidriver-venv"
+      def venv = steps.pwd(tmp: true) + "/hopic-venv"
       def workspace = steps.pwd()
       // Timeout prevents infinite downloads from blocking the build forever
       steps.timeout(time: 1, unit: 'MINUTES', activity: true) {
@@ -348,7 +348,7 @@ python -m virtualenv --clear ${shell_quote(venv)}
 ${shell_quote(venv)}/bin/python -m pip install ${shell_quote(this.repo)}
 """)
       }
-      this.base_cmds[steps.env.NODE_NAME] = shell_quote("${venv}/bin/python") + ' ' + shell_quote("${venv}/bin/ci-driver") + ' --color=always'
+      this.base_cmds[steps.env.NODE_NAME] = shell_quote("${venv}/bin/python") + ' ' + shell_quote("${venv}/bin/hopic") + ' --color=always'
     }
     return this.base_cmds[steps.env.NODE_NAME]
   }
@@ -489,7 +489,7 @@ exec ssh -i '''
     def cmd = this.install_prerequisites()
 
     def tmpdir = steps.pwd(tmp: true)
-    def venv = tmpdir + "/cidriver-venv"
+    def venv = tmpdir + "/hopic-venv"
     def workspace = steps.pwd()
 
     cmd += ' --workspace=' + shell_quote(workspace)
