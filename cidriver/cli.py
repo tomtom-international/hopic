@@ -1203,12 +1203,11 @@ def build(ctx, phase, variant):
             if variant is not None and curvariant != variant:
                 continue
 
-            image = cfg.get('image', None)
-            if image is not None and isinstance(image, Mapping):
-                try:
-                    image = image[curvariant]
-                except KeyError:
-                    image = image.get('default', None)
+            images = cfg['image']
+            try:
+                image = images[curvariant]
+            except KeyError:
+                image = images.get('default', None)
 
             volume_vars = ctx.obj.volume_vars.copy()
             # Give commands executing inside a container image a different view than outside

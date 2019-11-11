@@ -230,13 +230,14 @@ def read(config, volume_vars):
         if not isinstance(var, string_types):
             raise ConfigurationError("`pass-through-environment-vars` must be a sequence containing strings only: element {idx} has type {type!r}".format(idx=idx, type=type))
 
-    if 'image' in cfg:
-        if not isinstance(cfg['image'], (Mapping, str, IvyManifestImage)):
-            raise ConfigurationError("`image` must be a string, mapping, or `!image-from-ivy-manifest`")
-        if isinstance(cfg['image'], Mapping):
-            for variant, image in cfg['image'].items():
-                if not isinstance(image, (str, IvyManifestImage)):
-                    raise ConfigurationError("`image` member `{variant}` must be a string or `!image-from-ivy-manifest`".format(**locals()))
+    image = cfg.setdefault('image', OrderedDict())
+    if not isinstance(image, (Mapping, str, IvyManifestImage)):
+        raise ConfigurationError("`image` must be a string, mapping, or `!image-from-ivy-manifest`")
+    if not isinstance(image, Mapping):
+        image = cfg['image'] = OrderedDict((('default', cfg['image']),))
+    for variant, name in image.items():
+        if not isinstance(name, (str, IvyManifestImage)):
+            raise ConfigurationError("`image` member `{variant}` must be a string or `!image-from-ivy-manifest`".format(**locals()))
 
     # Convert multiple different syntaxes into a single one
     for phase in cfg.setdefault('phases', OrderedDict()).values():

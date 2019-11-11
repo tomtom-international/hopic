@@ -17,7 +17,9 @@ from ..cli import cli
 from ..config_reader import ConfigurationError
 
 from click.testing import CliRunner
+from collections import OrderedDict
 import git
+import json
 import pytest
 import sys
 
@@ -50,6 +52,15 @@ def run_with_config(config, args, files={}, env=None):
         raise result.exception
 
     return result
+
+
+def test_default_image(capfd):
+    result = run_with_config('''\
+image: example
+''', ('show-config',))
+    assert result.exit_code == 0
+    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
+    assert output['image']['default'] == 'example'
 
 
 def test_default_image_type_error(capfd):
