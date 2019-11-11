@@ -16,7 +16,16 @@ from collections import (
         OrderedDict,
         Sequence,
     )
+try:
+    from collections.abc import (
+            Mapping,
+        )
+except ImportError:
+    from collections import (
+            Mapping,
+        )
 import errno
+import json
 import os
 import re
 from six import string_types
@@ -126,6 +135,13 @@ class IvyManifestImage:
         return '{image}:{rev}'.format(**image)
 
 
+class JSONEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, IvyManifestImage):
+            return str(o)
+        return super().default(o)
+
+
 def ordered_image_ivy_loader(volume_vars):
     OrderedImageLoader = type('OrderedImageLoader', (OrderedLoader,), {})
     OrderedImageLoader.add_constructor(
@@ -221,6 +237,15 @@ def read(config, volume_vars):
     for idx, var in enumerate(env_vars):
         if not isinstance(var, string_types):
             raise ConfigurationError("`pass-through-environment-vars` must be a sequence containing strings only: element {idx} has type {type!r}".format(idx=idx, type=type))
+
+    image = cfg.setdefault('image', OrderedDict())
+    if not isinstance(image, (Mapping, str, IvyManifestImage)):
+        raise ConfigurationError("`image` must be a string, mapping, or `!image-from-ivy-manifest`")
+    if not isinstance(image, Mapping):
+        image = cfg['image'] = OrderedDict((('default', cfg['image']),))
+    for variant, name in image.items():
+        if not isinstance(name, (str, IvyManifestImage)):
+            raise ConfigurationError("`image` member `{variant}` must be a string or `!image-from-ivy-manifest`".format(**locals()))
 
     # Convert multiple different syntaxes into a single one
     for phase in cfg.setdefault('phases', OrderedDict()).values():
