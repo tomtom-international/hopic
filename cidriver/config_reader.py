@@ -25,6 +25,7 @@ except ImportError:
             Mapping,
         )
 import errno
+import json
 import os
 import re
 from six import string_types
@@ -132,6 +133,13 @@ class IvyManifestImage:
         image['image'] = '/'.join(path for path in (image.get('repository'), image.get('path'), image['name']) if path)
 
         return '{image}:{rev}'.format(**image)
+
+
+class JSONEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, IvyManifestImage):
+            return str(o)
+        return super().default(o)
 
 
 def ordered_image_ivy_loader(volume_vars):

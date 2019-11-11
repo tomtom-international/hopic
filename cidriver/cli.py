@@ -16,8 +16,12 @@ import click
 import click_log
 
 from . import binary_normalize
-from .config_reader import read as read_config
-from .config_reader import expand_vars, expand_docker_volume_spec
+from .config_reader import (
+        JSONEncoder,
+        expand_docker_volume_spec,
+        expand_vars,
+        read as read_config,
+    )
 from .execution import echo_cmd
 from .versioning import *
 from collections import OrderedDict
@@ -1150,7 +1154,7 @@ def getinfo(ctx, phase, variant):
                             var_info[key].extend(val)
                         else:
                             var_info[key] = val
-    click.echo(json.dumps(info, indent=4, separators=(',', ': ')))
+    click.echo(json.dumps(info, indent=4, separators=(',', ': '), cls=JSONEncoder))
 
 
 @cli.command()
@@ -1503,7 +1507,7 @@ def show_config(ctx):
     Diagnostic helper command to display the configuration after processing.
     """
 
-    click.echo(json.dumps(ctx.obj.config, indent=4, separators=(',', ': ')))
+    click.echo(json.dumps(ctx.obj.config, indent=4, separators=(',', ': '), cls=JSONEncoder))
 
 
 @cli.command()

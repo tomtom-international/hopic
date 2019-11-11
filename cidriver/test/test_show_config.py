@@ -54,6 +54,29 @@ def run_with_config(config, args, files={}, env=None):
     return result
 
 
+def test_image_from_manifest():
+    result = run_with_config('''\
+image: !image-from-ivy-manifest
+  repository: example.com
+  path: example
+''', ('show-config',),
+    files={
+        'dependency_manifest.xml': '''\
+<?xml version="1.0" encoding="UTF-8"?>
+<ivy-module version="2.0">
+  <dependencies>
+    <dependency name="exemplar" rev="3.1.4">
+      <conf mapped="toolchain" name="default" />
+    </dependency>
+  </dependencies>
+</ivy-module>
+'''
+    })
+    assert result.exit_code == 0
+    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
+    assert output['image']['default'] == 'example.com/example/exemplar:3.1.4'
+
+
 def test_default_image(capfd):
     result = run_with_config('''\
 image: example
