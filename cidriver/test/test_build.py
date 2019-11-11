@@ -27,7 +27,7 @@ import sys
 _source_date_epoch = 7 * 24 * 3600
 
 
-def run_with_config(config, args, files={}, env=None):
+def run_with_config(config, *args, files={}, env=None):
     runner = CliRunner(mix_stderr=False, env=env)
     with runner.isolated_filesystem():
         with git.Repo.init() as repo:
@@ -41,15 +41,19 @@ def run_with_config(config, args, files={}, env=None):
             repo.index.add(('hopic-ci-config.yaml',) + tuple(files.keys()))
             git_time = '{} +0000'.format(_source_date_epoch)
             repo.index.commit(message='Initial commit', author_date=git_time, commit_date=git_time)
-        result = runner.invoke(cli, args)
+        for arg in args:
+            result = runner.invoke(cli, arg)
 
-    if result.stdout_bytes:
-        print(result.stdout, end='')
-    if result.stderr_bytes:
-        print(result.stderr, end='', file=sys.stderr)
+            if result.stdout_bytes:
+                print(result.stdout, end='')
+            if result.stderr_bytes:
+                print(result.stderr, end='', file=sys.stderr)
 
-    if result.exception is not None and not isinstance(result.exception, SystemExit):
-        raise result.exception
+            if result.exception is not None and not isinstance(result.exception, SystemExit):
+                raise result.exception
+
+            if result.exit_code != 0:
+                return result
 
     return result
 
@@ -186,3 +190,25 @@ phases:
     assert result.exit_code == 0
     out, err = capfd.readouterr()
     assert out.strip() == str(_source_date_epoch)
+
+
+def test_command_with_branch_and_commit(capfd):
+    result = run_with_config('''\
+phases:
+  build:
+    test:
+      - echo ${GIT_BRANCH}=${GIT_COMMIT}
+''',
+        ('checkout-source-tree', '--clean', '--target-remote', '.', '--target-ref', 'master'),
+        ('build',),
+    )
+    assert result.exit_code == 0
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    checkout_commit = out.splitlines()[0]
+    claimed_branch, claimed_commit = out.splitlines()[1].split('=')
+    assert claimed_branch == 'master'
+    assert claimed_commit == checkout_commit
