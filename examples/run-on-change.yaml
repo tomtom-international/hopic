@@ -1,0 +1,14 @@
+phases:
+  build:
+    x64-release:
+      - cmake --build build-x64-release
+    x64-debug:
+      - cmake --build build-x64-debug
+
+  upload:
+    x64-release:
+      - run-on-change: only
+      - build-x64-release/do-upload.sh
+    x64-debug:
+      - run-on-change: only
+      - build-x64-debug/do-upload.sh

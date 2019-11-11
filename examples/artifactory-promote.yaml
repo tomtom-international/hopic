@@ -1,0 +1,28 @@
+artifactory:
+  promotion:
+    artifactory-navkit:
+      target-repo: cs-psa-p1cms-release
+
+phases:
+  build:
+    Linux-x86_64:
+      - cmake --build build-x86
+    Linux_AGL-aarch64:
+      - cmake --build build-agl-aarch64
+
+  package:
+    Linux-x86_64:
+      - fingerprint:
+          artifacts:
+            - build-x86/TomTom-Stacktrace-${VERSION}-Linux-x86_64.tar.gz
+      - cmake --build build-x86 --target package
+
+  upload:
+    Linux-x86_64:
+      - archive:
+          artifacts:
+            - pattern: build-x86/TomTom-Stacktrace-${VERSION}-Linux-x86_64.tar.gz
+              target: cs-psa-p1cms-snapshot/com.tomtom.stacktrace/Stacktrace/linux/x86_64/release/${VERSION}/Stacktrace-linux-x86_64-release-custom-${VERSION}.tar.gz
+          upload-artifactory:
+            id: artifactory-navkit
+        run-on-change: only

@@ -4,7 +4,7 @@ In order to simplify the CI configuration we are switching away from the **gener
 Instead we are switching to the Hopic project which only has a minimal **CI driver** component written in Groovy with the rest written in Python.
 With Hopic local debugging is made significantly easier.
 
-As of now the commit stage can be adapted to use Hopic's CI-Driver functionality.
+As of now the commit stage can be adapted to use Hopic's functionality.
 With this most of the required configuration will live in the hopic-ci-config.yaml file replacing the groovy snippets from the commit stage in jenkins file.
 This can be locally tested with the command - **"hopic"**
 

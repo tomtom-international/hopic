@@ -492,7 +492,9 @@ def restore_mtime_from_git(repo, files=None):
     encoding = sys.getfilesystemencoding() or sys.getdefaultencoding()
     workspace = repo.working_tree_dir.encode(encoding)
 
-    symlink_mode = 0o120000
+    regular_file_type = 0b1000
+    symlink_type      = 0b1010
+    gitlink_type      = 0b1110
 
     # Set all files' modification times to their last commit's time
     whatchanged = repo.git.whatchanged(pretty='format:%ct', as_process=True)
@@ -511,6 +513,8 @@ def restore_mtime_from_git(repo, files=None):
             old_mode, new_mode, old_hash, new_hash, operation = props.split(b' ')
             old_mode, new_mode = int(old_mode, 8), int(new_mode, 8)
 
+            object_type = (new_mode >> (9 + 3)) & 0b1111
+
             filenames = filenames.split(b'\t')
             if len(filenames) == 1:
                 filenames.insert(0, None)
@@ -519,12 +523,15 @@ def restore_mtime_from_git(repo, files=None):
             if new_filename in files:
                 files.remove(new_filename)
                 path = os.path.join(workspace, new_filename)
-                if new_mode == symlink_mode:
+                if object_type == symlink_type:
                     # Only attempt to modify symlinks' timestamps when the current system supports it.
                     # E.g. Python >= 3.3 and Linux kernel >= 2.6.22
                     if os.utime in getattr(os, 'supports_follow_symlinks', set()):
                         os.utime(path, (mtime, mtime), follow_symlinks=False)
-                else:
+                elif object_type == gitlink_type:
+                    # Skip gitlinks: used by submodules, they don't exist as regular files
+                    pass
+                elif object_type == regular_file_type:
                     os.utime(path, (mtime, mtime))
         else:
             mtime = int(line)
@@ -534,7 +541,7 @@ def restore_mtime_from_git(repo, files=None):
         pass
 
 
-def checkout_tree(tree, remote, ref, clean=False, remote_name='origin'):
+def checkout_tree(tree, remote, ref, clean=False, remote_name='origin', allow_submodule_checkout_failure=False):
     try:
         repo = git.Repo(tree)
         # Cleanup potential existing submodules to avoid conflicts in PR's where submodules are added
@@ -567,7 +574,15 @@ def checkout_tree(tree, remote, ref, clean=False, remote_name='origin'):
         commit = origin.fetch(ref, tags=True)[0].commit
         repo.head.reference = commit
         repo.head.reset(index=True, working_tree=True)
-        update_submodules(repo, clean)
+
+        try:
+            update_submodules(repo, clean)
+        except git.GitCommandError as e:
+            log.error('Failed to checkout submodule for ref \'%s\'\n'
+                        'error:\n%s' % (ref, e))
+            if not allow_submodule_checkout_failure:
+                raise
+
         if clean:
             clean_repo(repo)
 
@@ -582,6 +597,7 @@ def checkout_tree(tree, remote, ref, clean=False, remote_name='origin'):
 def update_submodules(repo, clean):
     for submodule in repo.submodules:
         log.info("Updating submodule: %s and clean = %s" % (submodule, clean))
+        repo.git.submodule(["sync", "--recursive"])
         # Cannot use submodule.update call here since this call doesn't use git submodules call
         # It tries to emulate the behaviour with a git clone call, but this doesn't work with relative submodule URL's
         # See https://github.com/gitpython-developers/GitPython/issues/944
@@ -624,16 +640,17 @@ def to_git_time(date):
 @click.option('--target-remote'     , metavar='<url>')
 @click.option('--target-ref'        , metavar='<ref>')
 @click.option('--clean/--no-clean'  , default=False, help='''Clean workspace of non-tracked files''')
+@click.option('--ignore-initial-submodule-checkout-failure/--no-ignore-initial-submodule-checkout-failure',
+              default=False, help='''Ignore git submodule errors during initial checkout''')
 @click.pass_context
-def checkout_source_tree(ctx, target_remote, target_ref, clean):
+def checkout_source_tree(ctx, target_remote, target_ref, clean, ignore_initial_submodule_checkout_failure):
     """
     Checks out a source tree of the specified remote's ref to the workspace.
     """
 
     workspace = ctx.obj.workspace
-
     # Check out specified repository
-    click.echo(checkout_tree(workspace, target_remote, target_ref, clean))
+    click.echo(checkout_tree(workspace, target_remote, target_ref, clean, allow_submodule_checkout_failure=ignore_initial_submodule_checkout_failure))
 
     try:
         ctx.obj.config = read_config(determine_config_file_name(ctx), ctx.obj.volume_vars)
@@ -776,6 +793,8 @@ def process_prepare_source_tree(
                     log.error("Failed to read the current version (from %r) while attempting to bump the version", version_info['file'])
                 else:
                     log.error("Failed to determine the current version while attempting to bump the version")
+                    # TODO: PIPE-309: provide an initial starting point instead
+                    log.info("If this is a new repository you may wish to create a 0.0.0 tag for Hopic to start bumping from")
                 ctx.exit(1)
 
             params = {}
@@ -811,7 +830,7 @@ def process_prepare_source_tree(
                 subject = commit.message.splitlines()[0]
                 if subject.startswith('fixup!') or subject.startswith('squash!'):
                     log.debug("Found an autosquash-commit in the source commits: '%s': %s", subject, click.style(text_type(commit), fg='yellow'))
-                    autosquash_base = repo.merge_base(target_commit, submit_commit)
+                    autosquash_base = repo.merge_base(target_commit, source_commit)
                     break
         autosquashed_commit = None
         if autosquash_base:

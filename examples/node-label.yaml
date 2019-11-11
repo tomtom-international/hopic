@@ -1,0 +1,5 @@
+phases:
+  build:
+    Linux-x86_64-Release:
+      - node-label: Linux && Docker && Release
+      - Build/build.py -f Build/Linux-x86_64.yaml -m Release

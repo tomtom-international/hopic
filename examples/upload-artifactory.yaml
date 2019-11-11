@@ -1,0 +1,12 @@
+phases:
+  upload:
+    Linux-x86_64:
+      - archive:
+          artifacts:
+            - pattern: build-x86/TomTom-Stacktrace-${VERSION}-Linux-x86_64.tar.gz
+              target: cs-psa-p1cms-snapshot/com.tomtom.stacktrace/Stacktrace/linux/x86_64/release/${VERSION}/Stacktrace-linux-x86_64-release-custom-${VERSION}.tar.gz
+            - pattern: build-x86/TomTom-Stacktrace-${VERSION}-Linux-x86_64.tar.gz
+              target: cs-psa-p1cms-snapshot/com.tomtom.stacktrace/Stacktrace/linux/x86_64/debug/${VERSION}/Stacktrace-linux-x86_64-release-custom-${VERSION}.tar.gz
+          upload-artifactory:
+            id: artifactory-navkit
+        run-on-change: only
