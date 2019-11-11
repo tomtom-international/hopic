@@ -66,36 +66,6 @@ phases:
 ''', ('build',))
 
 
-def test_with_manifest(monkeypatch):
-    def mock_check_call(args, *popenargs, **kwargs):
-        assert args[0] == 'docker'
-        assert tuple(args[-3:]) == ('buildpack-deps:18.04', 'cat', '/etc/lsb-release')
-
-    with monkeypatch.context() as m:
-        m.setattr(subprocess, 'check_call', mock_check_call)
-        result = run_with_config('''\
-image: !image-from-ivy-manifest {}
-
-phases:
-  build:
-    test:
-      - cat /etc/lsb-release
-''', ('build',),
-    files={
-        'dependency_manifest.xml': '''\
-<?xml version="1.0" encoding="UTF-8"?>
-<ivy-module version="2.0">
-  <dependencies>
-    <dependency name="buildpack-deps" rev="18.04">
-      <conf mapped="toolchain" name="default" />
-    </dependency>
-  </dependencies>
-</ivy-module>
-'''
-    })
-    assert result.exit_code == 0
-
-
 def test_global_image(monkeypatch):
     def mock_check_call(args, *popenargs, **kwargs):
         assert args[0] == 'docker'
