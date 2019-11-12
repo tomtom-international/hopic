@@ -24,6 +24,7 @@ except ImportError:
     from collections import (
             Mapping,
         )
+from click import ClickException
 import errno
 import json
 import os
@@ -63,8 +64,18 @@ def expand_vars(vars, expr):
     except TypeError:
         return expr
 
-class ConfigurationError(Exception):
-    pass
+class ConfigurationError(ClickException):
+    exit_code = 32
+
+    def __init__(self, message, file=None):
+        super().__init__(message)
+        self.file = file
+
+    def format_message(self):
+        if self.file is not None:
+            return "configuration error in '%s': %s" % (self.file, self.message)
+        else:
+            return "configuration error: %s" % (self.message,)
 
 
 class OrderedLoader(yaml.SafeLoader):
@@ -233,19 +244,19 @@ def read(config, volume_vars):
 
     env_vars = cfg.setdefault('pass-through-environment-vars', ())
     if not (isinstance(env_vars, Sequence) and not isinstance(env_vars, string_types)):
-        raise ConfigurationError('`pass-through-environment-vars` must be a sequence of strings')
+        raise ConfigurationError('`pass-through-environment-vars` must be a sequence of strings', file=config)
     for idx, var in enumerate(env_vars):
         if not isinstance(var, string_types):
-            raise ConfigurationError("`pass-through-environment-vars` must be a sequence containing strings only: element {idx} has type {type!r}".format(idx=idx, type=type))
+            raise ConfigurationError("`pass-through-environment-vars` must be a sequence containing strings only: element {idx} has type {type!r}".format(idx=idx, type=type), file=config)
 
     image = cfg.setdefault('image', OrderedDict())
     if not isinstance(image, (Mapping, str, IvyManifestImage)):
-        raise ConfigurationError("`image` must be a string, mapping, or `!image-from-ivy-manifest`")
+        raise ConfigurationError("`image` must be a string, mapping, or `!image-from-ivy-manifest`", file=config)
     if not isinstance(image, Mapping):
         image = cfg['image'] = OrderedDict((('default', cfg['image']),))
     for variant, name in image.items():
         if not isinstance(name, (str, IvyManifestImage)):
-            raise ConfigurationError("`image` member `{variant}` must be a string or `!image-from-ivy-manifest`".format(**locals()))
+            raise ConfigurationError("`image` member `{variant}` must be a string or `!image-from-ivy-manifest`".format(**locals()), file=config)
 
     # Convert multiple different syntaxes into a single one
     for phase in cfg.setdefault('phases', OrderedDict()).values():
