@@ -16,6 +16,12 @@
 
 # This is a simplistic implementation of checking adherance to Conventional Commits https://www.conventionalcommits.org/
 
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from cidriver.commit import CommitMessage
+
 from collections import namedtuple
 from functools import wraps
 from inspect import getfullargspec
@@ -65,51 +71,22 @@ if len(sys.argv) >= 2:
 
 if os.path.isfile(commit) and not re.match(r'^[0-9a-fA-F]{40}$', commit):
     with open(commit, encoding='UTF-8') as f:
-        message = f.read()
-        try:
-            comment_char = subprocess.check_output(('git', 'config', '-z', 'core.commentChar'))[:-1].decode('UTF-8')
-        except:
-            comment_char = '#'
-        cut_line = message.find(comment_char + ' ------------------------ >8 ------------------------\n')
-        if cut_line >= 0 and (cut_line == 0 or message[cut_line - 1] == '\n'):
-            message = message[:cut_line]
-        # Strip comments
-        message = re.sub(r'^#[^\n]*\n?', '', message, flags=re.MULTILINE)
-        # Strip trailing whitespace from lines
-        message = re.sub(r'[ \t]+$', '', message, flags=re.MULTILINE)
-        # Merge consecutive empty lines into a single empty line
-        message = re.sub(r'(?<=\n\n)\n+', '', message)
-        # Remove empty lines from the beginning and end
-        while message[:1] == '\n':
-            message = message[1:]
-        while message[-2:] == '\n\n':
-            message = message[:-1]
+        message = CommitMessage(f.read())
 else:
     commit = subprocess.check_output(('git', 'rev-parse', commit))[:-1].decode('UTF-8')
-    message = subprocess.check_output(('git', 'show', '-q', '--format=%B', commit, '--'))[:-1].decode('UTF-8')
-lines = message.splitlines()
-
-# Split the message body in paragraphs
-body = []
-for n, line in enumerate(lines[2:], 2):
-    if line:
-        if not body:
-            body.append([n, ''])
-        body[-1][1] += ('\n' if body[-1][1] else '') + line
-    elif body[-1][1]:
-        body.append([n, ''])
+    message = CommitMessage(subprocess.check_output(('git', 'show', '-q', '--format=%B', commit, '--'))[:-1].decode('UTF-8'))
 
 errors = []
 
-if body and not body[-1][1]:
-    errors.append("\x1B[1m{commit}:{}:1: \x1B[31merror\x1B[39m: commit message body is followed by empty lines\x1B[m".format(len(lines), commit=commit))
+if not message.lines[-1]:
+    errors.append("\x1B[1m{commit}:{}:1: \x1B[31merror\x1B[39m: commit message body is followed by empty lines\x1B[m".format(len(message.lines), commit=commit))
 
-autosquash = re.match(r'^(fixup|squash)!\s+', lines[0])
+autosquash = re.match(r'^(fixup|squash)!\s+', message.subject)
 subject_start = autosquash.end() if autosquash is not None else 0
 
-merge = re.match(r'^Merge.*?(?:$|:\s+)', lines[0][subject_start:])
+merge = re.match(r'^Merge.*?(?:$|:\s+)', message.subject[subject_start:])
 subject_start += merge.end() if merge is not None else 0
-if subject_start == len(lines[0]) and re.match(r"^Merge branch '.*?'(?:into '.*')?$", lines[0]):
+if subject_start == len(message.subject) and re.match(r"^Merge branch '.*?'(?:into '.*')?$", message.subject):
     # Ignore branch merges
     sys.exit(0)
 
@@ -118,24 +95,28 @@ subject_re = re.compile(r'''
     # 1. Commits MUST be prefixed with a type, which consists of a noun, feat, fix, etc., ...
     (?P<type_tag>\w+)
 
-    # 4. An optional scope MAY be provided after a type. A scope is a phrase describing a section of the codebase
-    #    enclosed in parenthesis, e.g., fix(parser):
+    # 4. A scope MAY be provided after a type. A scope MUST consist of a noun describing a section of the codebase
+    #    surrounded by parenthesis, e.g., `fix(parser):`
     (?: \( (?P<scope> [^()]* ) \) )?
 
-    # 1. Commits MUST be prefixed with a type, ..., followed by a colon and a space.
+    # 1. Commits MUST be prefixed with a type, ..., followed by ..., OPTIONAL `!`, ...
+    (?P<breaking>\s*!(?:\s+(?=:))?)?
+
+    # 1. Commits MUST be prefixed with a type, ..., and REQUIRED terminal colon and space.
     (?P<separator>:?[ ]?)
 
-    # 5. A description MUST immediately follow the type/scope prefix. The description is a short description of the
-    #    code changes, e.g., fix: array parsing issue when multiple spaces were contained in string.
+    # 5. A description MUST immediately follow the colon and space after the type/scope prefix. The description is a
+    #    short description of the code changes, e.g., fix: array parsing issue when multiple spaces were contained in
+    #    string.
     (?P<description>.*)
 
     $
     ''', re.VERBOSE)
-subject = subject_re.match(lines[0][subject_start:])
+subject = subject_re.match(message.subject[subject_start:])
 if not subject:
     error = "\x1B[1m{commit}:1:1: \x1B[31merror\x1B[39m: commit message's subject not formatted according to Conventional Commits\x1B[m\n{subject_re.pattern}\n".format(**locals())
-    error += lines[0] + '\n'
-    error += ' ' * subject_start + '\x1B[32m' + '^' * max(len(lines[0]) - subject_start, 1) + '\x1B[39m'
+    error += message.subject + '\n'
+    error += ' ' * subject_start + '\x1B[32m' + '^' * max(len(message.subject) - subject_start, 1) + '\x1B[39m'
     errors.append(error)
 
 def extract_match_group(match, group, start=0):
@@ -144,6 +125,7 @@ def extract_match_group(match, group, start=0):
     return MatchGroup(name=group, text=match.group(group), start=match.start(group)+start, end=match.end(group)+start)
 type_tag    = extract_match_group(subject, 'type_tag'   , subject_start)
 scope       = extract_match_group(subject, 'scope'      , subject_start)
+breaking    = extract_match_group(subject, 'breaking'   , subject_start)
 separator   = extract_match_group(subject, 'separator'  , subject_start)
 description = extract_match_group(subject, 'description', subject_start)
 
@@ -153,7 +135,7 @@ def complain_about_excess_space(match: MatchGroup, line: int = 0) -> None:
             range(*space.span()) for space in re.finditer(r'\s{2,}|^\s+|\s+$', match.text)))
     if excess_whitespace:
         error = "\x1B[1m{commit}:{line}:{col}: \x1B[31merror\x1B[39m: excess whitespace in {match.name}\x1B[m\n".format(line=line + 1, col=match.start + 1 + excess_whitespace[0], match=match, commit=commit)
-        error += lines[0] + '\n'
+        error += message.subject + '\n'
         error += '\x1B[32m'
         cur = -match.start
         for pos in excess_whitespace:
@@ -180,7 +162,7 @@ accepted_tags = (
 # 3. The type fix MUST be used when a commit represents a bug fix for your application.
 if type_tag and type_tag.text not in accepted_tags and type_tag.text not in ('feat', 'fix'):
     error = "\x1B[1m{commit}:1:1: \x1B[31merror\x1B[39m: use of type tag that's neither 'feat', 'fix' nor whitelisted ({})\x1B[m\n".format(', '.join(accepted_tags), **locals())
-    error += lines[0] + '\n'
+    error += message.subject + '\n'
     error += ' ' * type_tag.start + '\x1B[31m' + '~' * (type_tag.end - type_tag.start) + '\x1B[39m'
     possibilities = difflib.get_close_matches(type_tag.text, ('feat', 'fix') + accepted_tags, n=1)
     if possibilities:
@@ -192,10 +174,19 @@ if type_tag and type_tag.text not in accepted_tags and type_tag.text not in ('fe
 if scope is not None:
     complain_about_excess_space(scope)
 
+# 13. If included in the type/scope prefix, breaking changes MUST be indicated by a `!` immediately before the `:`.
+#     If `!` is used, `BREAKING CHANGE: ` MAY be ommitted from the footer section, and the commit description SHALL be
+#     used to describe the breaking change.
+if breaking is not None and breaking.text != '!':
+    error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: breaking change indicator in commit message's subject should be exactly '!'\x1B[m\n".format(breaking.start + 1, **locals())
+    error += message.subject + '\n'
+    error += breaking.start * ' ' + '\x1B[31m' + breaking.text.find('!') * '~' + ' ' + (len(breaking.text) - 1 - breaking.text.find('!')) * '~' + '\x1B[39m'
+    errors.append(error)
+
 # 1. Commits MUST be prefixed with a type, ..., followed by a colon and a space.
 if separator and separator.text != ': ':
     error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's subject lacks a ': ' separator after the type tag\x1B[m\n".format(separator.start + 1, **locals())
-    error += lines[0] + '\n'
+    error += message.subject + '\n'
     error += separator.start * ' ' + '\x1B[32m^' * max(1, separator.end - separator.start) + '\x1B[39m'
     errors.append(error)
 
@@ -203,7 +194,7 @@ if separator and separator.text != ': ':
 #    code changes, e.g., fix: array parsing issue when multiple spaces were contained in string.
 if description and not description.text:
     error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's subject lacks a description after the type tag\x1B[m\n".format(description.start + 1, **locals())
-    error += lines[0] + '\n'
+    error += message.subject + '\n'
     error += ' ' * description.start + '\x1B[32m^\x1B[39m'
     errors.append(error)
 
@@ -218,7 +209,7 @@ if description is not None:
     title_case_word = extract_match_group(title_case_re.match(description.text), 0, description.start)
     if title_case_word:
         error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: don't use title case in the description\x1B[m\n".format(title_case_word.start + 1, **locals())
-        error += lines[0] + '\n'
+        error += message.subject + '\n'
         error += ' ' * title_case_word.start + '\x1B[32m' + '^' + '~' * (title_case_word.end - title_case_word.start - 1) + '\x1B[39m'
         errors.append(error)
 
@@ -313,7 +304,7 @@ if description is not None:
     if review_comment_ref:
         start = review_comment_ref.start
         error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: add context directly to commit messages instead of referring to review comments\x1B[m\n".format(start + 1, **locals())
-        error += lines[0] + '\n'
+        error += message.subject + '\n'
         error += ' ' * start + '\x1B[32m' + '^' * (review_comment_ref.end - review_comment_ref.start) + '\x1B[39m\n'
         error += "\x1B[1m{commit}:1:{}: \x1B[30mnote\x1B[39m: prefer using --fixup when fixing previous commits in the same pull request\x1B[m".format(start + 1, **locals())
         errors.append(error)
@@ -333,7 +324,7 @@ if description is not None:
         jira_tickets.extend(range(*m.span()))
     if jira_tickets:
         error = "\x1B[1m{commit}:{line}:{col}: \x1B[31merror\x1B[39m: commit message's subject contains Jira tickets\x1B[m\n".format(line=1, col=description.start + 1 + jira_tickets[0], commit=commit)
-        error += lines[0] + '\n'
+        error += message.subject + '\n'
         error += '\x1B[32m'
         cur = -description.start
         for pos in jira_tickets:
@@ -344,9 +335,9 @@ if description is not None:
 
     # Disallow ending the description with punctuation
     if re.match(r'.*[.!?,]$', description.text):
-        error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's subject ends with punctuation\x1B[m\n".format(len(lines[0]), **locals())
-        error += lines[0] + '\n'
-        error += ' ' * (len(lines[0]) - 1) + '\x1B[32m^\x1B[39m'
+        error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's subject ends with punctuation\x1B[m\n".format(len(message.subject), **locals())
+        error += message.subject + '\n'
+        error += ' ' * (len(message.subject) - 1) + '\x1B[32m^\x1B[39m'
         errors.append(error)
 
     blacklist_start_words = (
@@ -393,26 +384,27 @@ if description is not None:
     blacklisted = extract_match_group(re.match(r'^(?:' + '|'.join(re.escape(w) for w in blacklist_start_words) + r')\b', description.text, flags=re.IGNORECASE), 0, description.start)
     if blacklisted:
         error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's description contains blacklisted word or repeats type tag\x1B[m\n".format(blacklisted.start + 1, **locals())
-        error += lines[0] + '\n'
+        error += message.subject + '\n'
         error += blacklisted.start * ' ' + '\x1B[32m^' * (blacklisted.end - blacklisted.start) + '\x1B[39m\n'
         error += "\x1B[1m{commit}:1:{}: \x1B[30mnote\x1B[39m: prefer using the imperative for verbs\x1B[m".format(blacklisted.start + 1, **locals())
         errors.append(error)
 
-if len(lines[0]) > 80:
-    error = "\x1B[1m{commit}:1:81: \x1B[31merror\x1B[39m: commit message's subject exceeds line length of 80 by {} characters\x1B[m\n".format(len(lines[0]) - 80, **locals())
-    error += lines[0] + '\n'
-    error += ' ' * 79 + '\x1B[32m^' + '~' * (len(lines[0]) - 80) + '\x1B[39m'
+if len(message.subject) > 80:
+    error = "\x1B[1m{commit}:1:81: \x1B[31merror\x1B[39m: commit message's subject exceeds line length of 80 by {} characters\x1B[m\n".format(len(message.subject) - 80, **locals())
+    error += message.subject + '\n'
+    error += ' ' * 79 + '\x1B[32m^' + '~' * (len(message.subject) - 80) + '\x1B[39m'
     errors.append(error)
 
-if len(lines) > 1 and lines[1]:
+if len(message.lines) > 1 and message.lines[1]:
     error = "\x1B[1m{commit}:2:1: \x1B[31merror\x1B[39m: commit message subject and body are not separated by an empty line\x1B[m\n".format(**locals())
-    error += lines[1] + '\n'
-    error += '\x1B[31m' + '~' * len(lines[1]) + '\x1B[39m'
+    error += message.lines[1] + '\n'
+    error += '\x1B[31m' + '~' * len(message.lines[1]) + '\x1B[39m'
     errors.append(error)
 
 # 8. Breaking changes MUST be indicated at the very beginning of the footer or body section of a commit. A breaking
 #    change MUST consist of the uppercase text BREAKING CHANGE, followed by a colon and a space.
-for lineno, paragraph in body:
+for paraidx, paragraph in enumerate(message.paragraphs):
+    lineno = message.paragraph_line(paraidx)
     for m in re.finditer(r'\bBREAKING(\s+)CHANGE\b(\s*)(:?)(\s*)(\S?)', paragraph):
         if m.start() == 0:
             if paragraph[:m.end(4)] != 'BREAKING CHANGE: ' or not m.group(m.lastindex):
