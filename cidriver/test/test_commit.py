@@ -88,7 +88,7 @@ def test_conventional_break():
     m = ConventionalCommit('''\
 chore: cleanup old cfg.yml default config file name
 
-BREAKING CHANGE: "${WORKSPACE}/cfg.yml" is no longer the default location
+BREAKING-CHANGE: "${WORKSPACE}/cfg.yml" is no longer the default location
 of the config file. Instead only "${WORKSPACE}/hopic-ci-config.yaml" is
 looked at.
 ''')
@@ -97,6 +97,10 @@ looked at.
     assert m.has_breaking_change()
     assert not m.has_new_feature()
     assert not m.has_fix()
+
+    footer, = m.footers
+    assert footer.token == 'BREAKING CHANGE'
+    assert 'default location' in footer.value
 
 def test_conventional_subject_break():
     m = ConventionalCommit('''chore!: delete deprecated 'ci-driver' command''')
@@ -130,3 +134,33 @@ def test_conventional_fixup_fix():
     assert not m.has_breaking_change()
     assert not m.has_new_feature()
     assert m.has_fix()
+
+def test_conventional_footers():
+    m = ConventionalCommit('''\
+Merge #63: improvement(groovy): retrieve execution graph in a single 'getinfo' call
+
+This should reduce the amount of Jenkins master/slave interactions and
+their associated Groovy script engine "context switches" (state
+serialization and restoration). As a result performance should increase.
+
+Addresses #PIPE-279 by adding a test framework.
+
+Acked-by: Anton Indrawan <Anton.Indrawan@tomtom.com>
+Acked-by: Joost Muller <Joost.Muller@tomtom.com>
+Acked-by: Martijn Leijssen <Martijn.Leijssen@tomtom.com>
+Acked-by: Rene Kempen <Rene.Kempen@tomtom.com>
+Merged-by: Hopic 0.10.2.dev7+g840ca0c
+''')
+    assert m.type_tag == 'improvement'
+    assert m.scope == 'groovy'
+
+    assert tuple(tuple(footer) for footer in m.footers) == (
+            ('Addresses', 'PIPE-279 by adding a test framework.'),
+
+            ('Acked-by' , 'Anton Indrawan <Anton.Indrawan@tomtom.com>'),
+            ('Acked-by' , 'Joost Muller <Joost.Muller@tomtom.com>'),
+            ('Acked-by' , 'Martijn Leijssen <Martijn.Leijssen@tomtom.com>'),
+            ('Acked-by' , 'Rene Kempen <Rene.Kempen@tomtom.com>'),
+
+            ('Merged-by', 'Hopic 0.10.2.dev7+g840ca0c'),
+        )

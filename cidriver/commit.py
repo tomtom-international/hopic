@@ -12,7 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections import namedtuple
 import re
+
+
+_Footer = namedtuple('Footer', ('token', 'value'))
 
 
 class CommitMessage(object):
@@ -95,6 +99,27 @@ class ConventionalCommit(CommitMessage):
     $
     ''', re.VERBOSE)
 
+    footer_re = re.compile(r'''
+    # 8.  One or more footers MAY be provided one blank line after the body. ...
+    \n
+
+    # 8.  ... Each footer MUST consist of a word token, ...
+    (?P<token>
+
+    # 9.  A footer's token MUST use `-` in place of whitespace characters, e.g. `Acked-by` (this helps differentiate
+    #     the footer section from a multi-paragraph body). ...
+        \w+(?:-\w+)*
+
+    # 9.  ... An exception is made for `BREAKING CHANGE`, which MAY
+    #     also be used as a token.
+    | BREAKING[ ]CHANGE
+    )
+
+    # 8.  ..., followed by either a `: ` or ` #` separator, followed by a string value (this is inspired by the git
+    #     trailer convention).
+    (?::[ ]|[ ][#])
+    ''', re.VERBOSE)
+
     def __init__(self, message):
         super().__init__(message)
         m = self.strict_subject_re.match(self.autosquashed_subject)
@@ -105,13 +130,20 @@ class ConventionalCommit(CommitMessage):
         self._is_breaking = m.group('breaking')
         self.description  = m.group('description')
 
+        # 10. A footer's value MAY contain spaces and newlines, and parsing MUST terminate when the next valid footer
+        #     token/separator pair is observed.
+        self._footer_index = [(m.group('token'), m.start(), m.end()) for m in self.footer_re.finditer(self.message)]
+
+    @property
+    def footers(self):
+        return _ConventionalFooterList(self.message, self._footer_index)
+
     def has_breaking_change(self):
         if self._is_breaking:
             return True
 
-        for paragraph in self.paragraphs:
-            # 16. `BREAKING-CHANGE` MUST be synonymous with `BREAKING CHANGE`, when used as a token in a footer.
-            if re.match(r'^BREAKING[- ]CHANGE: ', paragraph):
+        for token, value in self.footers:
+            if token == 'BREAKING CHANGE':
                 return True
 
         return False
@@ -136,6 +168,30 @@ class _IndexedList(object):
         if idx < 0:
             idx += len(self)
         return self._message[self._index[idx] : self._index[idx+1] - len(self.separator)]
+
+
+class _ConventionalFooterList(object):
+    def __init__(self, message, index):
+        self._message = message
+        self._index = index
+
+    def __len__(self):
+        return len(self._index)
+
+    def __getitem__(self, idx):
+        if idx < 0:
+            idx += len(self)
+        token, token_start, content_start = self._index[idx]
+        content_end = self._index[idx+1][1] if idx + 1 < len(self) else len(self._message)
+        while content_end > content_start and self._message[content_end-1] == '\n':
+            content_end -= 1
+
+        # 16. `BREAKING-CHANGE` MUST be synonymous with `BREAKING CHANGE`, when used as a token in a footer.
+        if token == 'BREAKING-CHANGE':
+            token = 'BREAKING CHANGE'
+
+        return _Footer(token=token, value=self._message[content_start:content_end])
+
 
 def _strip_message(message):
     cut_line = message.find('# ------------------------ >8 ------------------------\n')
