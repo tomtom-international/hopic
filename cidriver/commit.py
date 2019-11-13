@@ -29,6 +29,9 @@ class CommitMessage(object):
         if len(self._line_index) < 2 or self._line_index[-1] < len(self.message):
             self._line_index.append(len(self.message) + 1)
 
+        merge = re.match(r'^Merge.*?:[ \t]*', self.message)
+        self._subject_start = merge.end() if merge is not None else 0
+
         # Discover starts of paragraphs
         self._paragraph_index = [m.end() for m in re.finditer(self.paragraph_separator, self.message)]
         if not self.message[self._line_index[1] - len(self.line_separator):].startswith(self.paragraph_separator):
@@ -45,7 +48,7 @@ class CommitMessage(object):
 
     @property
     def subject(self):
-        return self.message[:self._line_index[1] - 1]
+        return self.message[self._subject_start:self._line_index[1] - 1]
 
     def needs_autosquash(self):
         return self.autosquash_re.match(self.subject) is not None
