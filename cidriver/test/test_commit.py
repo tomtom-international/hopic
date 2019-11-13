@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..commit import CommitMessage
+from ..commit import *
 
 
 def test_basic_message_strip_and_splitup():
@@ -58,3 +58,75 @@ in the output.
     assert m.paragraphs[-1].splitlines(keepends=True)[-1] == '''is more to the point.'''
     assert m.paragraphs[-1].splitlines()[-1] == m.body.splitlines()[-1]
     assert m.body.splitlines()[-1] == m.message.splitlines()[-1]
+
+def test_conventional_scoped_improvement():
+    m = ConventionalCommit('improvement(config): display config error messages without backtrace')
+    assert m.type_tag == 'improvement'
+    assert m.scope == 'config'
+    assert m.description == 'display config error messages without backtrace'
+    assert not m.has_breaking_change()
+    assert not m.has_new_feature()
+    assert not m.has_fix()
+
+def test_conventional_fix():
+    m = ConventionalCommit('fix: use the common ancestor of the source and target commit for autosquash')
+    assert m.type_tag == 'fix'
+    assert m.scope is None
+    assert not m.has_breaking_change()
+    assert not m.has_new_feature()
+    assert m.has_fix()
+
+def test_conventional_new_feature():
+    m = ConventionalCommit('''feat: make execution possible with 'hopic' as command''')
+    assert m.type_tag == 'feat'
+    assert m.scope is None
+    assert not m.has_breaking_change()
+    assert m.has_new_feature()
+    assert not m.has_fix()
+
+def test_conventional_break():
+    m = ConventionalCommit('''\
+chore: cleanup old cfg.yml default config file name
+
+BREAKING CHANGE: "${WORKSPACE}/cfg.yml" is no longer the default location
+of the config file. Instead only "${WORKSPACE}/hopic-ci-config.yaml" is
+looked at.
+''')
+    assert m.type_tag == 'chore'
+    assert m.scope is None
+    assert m.has_breaking_change()
+    assert not m.has_new_feature()
+    assert not m.has_fix()
+
+def test_conventional_subject_break():
+    m = ConventionalCommit('''chore!: delete deprecated 'ci-driver' command''')
+    assert m.type_tag == 'chore'
+    assert m.scope is None
+    assert m.has_breaking_change()
+    assert not m.has_new_feature()
+    assert not m.has_fix()
+
+def test_conventional_subject_breaking_fix():
+    m = ConventionalCommit('''fix!: take parameter as unsigned instead of signed int''')
+    assert m.type_tag == 'fix'
+    assert m.scope is None
+    assert m.has_breaking_change()
+    assert not m.has_new_feature()
+    assert m.has_fix()
+
+def test_conventional_subject_breaking_new_feature():
+    m = ConventionalCommit('''feat!: support multiple non-global current working directories''')
+    assert m.type_tag == 'feat'
+    assert m.scope is None
+    assert m.has_breaking_change()
+    assert m.has_new_feature()
+    assert not m.has_fix()
+
+def test_conventional_fixup_fix():
+    m = ConventionalCommit('fixup! fix: only restore mtime for regular files and symlinks')
+    assert m.type_tag == 'fix'
+    assert m.scope is None
+    assert m.description == 'only restore mtime for regular files and symlinks'
+    assert not m.has_breaking_change()
+    assert not m.has_new_feature()
+    assert m.has_fix()

@@ -18,6 +18,7 @@ import re
 class CommitMessage(object):
     line_separator = '\n'
     paragraph_separator = '\n\n'
+    autosquash_re = re.compile(r'^(fixup|squash)!\s+')
 
     def __init__(self, message):
         self.message = _strip_message(message)
@@ -46,6 +47,13 @@ class CommitMessage(object):
     def subject(self):
         return self.message[:self._line_index[1] - 1]
 
+    def needs_autosquash(self):
+        return self.autosquash_re.match(self.subject) is not None
+
+    @property
+    def autosquashed_subject(self):
+        return self.autosquash_re.sub('', self.subject)
+
     @property
     def body(self):
         return self.message[self._paragraph_index[0]:]
@@ -59,6 +67,57 @@ class CommitMessage(object):
             idx += len(self._paragraph_index) - 1
         idx = self._paragraph_index[idx]
         return self.message[:idx].count(self.line_separator)
+
+
+class ConventionalCommit(CommitMessage):
+    strict_subject_re = re.compile(r'''
+    ^
+    # 1. Commits MUST be prefixed with a type, which consists of a noun, feat, fix, etc., ...
+    (?P<type_tag>\w+)
+
+    # 4. A scope MAY be provided after a type. A scope MUST consist of a noun describing a section of the codebase
+    #    surrounded by parenthesis, e.g., `fix(parser):`
+    (?: \( (?P<scope> \S+? ) \) )?
+
+    # 1. Commits MUST be prefixed with a type, ..., followed by ..., OPTIONAL `!`, ...
+    (?P<breaking>!)?
+
+    # 1. Commits MUST be prefixed with a type, ..., and REQUIRED terminal colon and space.
+    :[ ]
+
+    # 5. A description MUST immediately follow the colon and space after the type/scope prefix. The description is a
+    #    short description of the code changes, e.g., fix: array parsing issue when multiple spaces were contained in
+    #    string.
+    (?P<description>.+)
+    $
+    ''', re.VERBOSE)
+
+    def __init__(self, message):
+        super().__init__(message)
+        m = self.strict_subject_re.match(self.autosquashed_subject)
+        if not m:
+            raise RuntimeError("commit message's subject ({self.subject!r}) not formatted according to Conventional Commits ({self.strict_subject_re.pattern})".format(self=self))
+        self.type_tag     = m.group('type_tag')
+        self.scope        = m.group('scope')
+        self._is_breaking = m.group('breaking')
+        self.description  = m.group('description')
+
+    def has_breaking_change(self):
+        if self._is_breaking:
+            return True
+
+        for paragraph in self.paragraphs:
+            # 16. `BREAKING-CHANGE` MUST be synonymous with `BREAKING CHANGE`, when used as a token in a footer.
+            if re.match(r'^BREAKING[- ]CHANGE: ', paragraph):
+                return True
+
+        return False
+
+    def has_new_feature(self):
+        return self.type_tag.lower() == 'feat'
+
+    def has_fix(self):
+        return self.type_tag.lower() == 'fix'
 
 
 class _IndexedList(object):
