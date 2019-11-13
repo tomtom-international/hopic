@@ -14,13 +14,13 @@
 
 from __future__ import print_function
 from ..cli import cli
-from ..config_reader import ConfigurationError
 
 from click.testing import CliRunner
 from collections import OrderedDict
 import git
 import json
 import pytest
+import re
 import sys
 
 
@@ -77,7 +77,7 @@ image: !image-from-ivy-manifest
     assert output['image']['default'] == 'example.com/example/exemplar:3.1.4'
 
 
-def test_default_image(capfd):
+def test_default_image():
     result = run_with_config('''\
 image: example
 ''', ('show-config',))
@@ -87,15 +87,21 @@ image: example
 
 
 def test_default_image_type_error(capfd):
-    with pytest.raises(ConfigurationError, match=r'image\b.*\bmust be\b.*\bstring\b'):
-        run_with_config('''\
+    result = run_with_config('''\
 image: yes
 ''', ('show-config',))
 
+    assert result.exit_code == 32
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    assert re.search(r"^Error: configuration error in '.*?\bhopic-ci-config\.yaml': .*\bimage\b.*\bmust be\b.*\bstring\b", err, re.MULTILINE)
+
 
 def test_image_type_error(capfd):
-    with pytest.raises(ConfigurationError, match=r'image\b.*\bexemplare\b.*\bmust be\b.*\bstring\b'):
-        run_with_config('''\
+    result = run_with_config('''\
 image:
   exemplare:
     repository: example.com
@@ -103,3 +109,11 @@ image:
     name: exemplar
     rev: 3.1.4
 ''', ('show-config',))
+
+    assert result.exit_code == 32
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    assert re.search(r"^Error: configuration error in '.*?\bhopic-ci-config\.yaml': .*\bimage\b.*\bexemplare\b.*\bmust be\b.*\bstring\b", err, re.MULTILINE)
