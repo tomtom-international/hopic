@@ -54,6 +54,12 @@ class CommitMessage(object):
     def paragraphs(self):
         return _IndexedList(self.message, self._paragraph_index, self.paragraph_separator)
 
+    def paragraph_line(self, idx):
+        if idx < 0:
+            idx += len(self._paragraph_index) - 1
+        idx = self._paragraph_index[idx]
+        return self.message[:idx].count(self.line_separator)
+
 
 class _IndexedList(object):
     def __init__(self, message, index, separator):
