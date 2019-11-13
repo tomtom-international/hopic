@@ -791,7 +791,10 @@ def process_prepare_source_tree(
         
         # If the branch is not allowed to publish, skip version bump step
         is_publish_allowed = is_publish_branch(ctx)
-        
+
+        if 'file' in version_info:
+            relative_version_file = os.path.join(os.path.relpath(ctx.obj.config_dir, repo.working_dir), version_info['file'])
+
         if is_publish_allowed and version_info.get('bump', True):
             if ctx.obj.version is None:
                 if 'file' in version_info:
@@ -810,7 +813,7 @@ def process_prepare_source_tree(
 
             if 'file' in version_info:
                 replace_version(os.path.join(ctx.obj.config_dir, version_info['file']), ctx.obj.version)
-                repo.index.add([version_info['file']])
+                repo.index.add((relative_version_file,))
         else:
             log.info("Skip version bumping due to the configuration or the target branch is not allowed to publish")
 
@@ -893,7 +896,7 @@ def process_prepare_source_tree(
             replace_version(os.path.join(ctx.obj.config_dir, version_info['file']), after_submit_version, outfile=new_version_file)
             new_version_file = new_version_file.getvalue().encode(sys.getdefaultencoding())
 
-            old_version_blob = submit_commit.tree[version_info['file']]
+            old_version_blob = submit_commit.tree[relative_version_file]
             new_version_blob = git.Blob(
                     repo=repo,
                     binsha=repo.odb.store(gitdb.IStream(git.Blob.type, len(new_version_file), BytesIO(new_version_file))).binsha,
