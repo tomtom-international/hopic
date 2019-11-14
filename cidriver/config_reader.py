@@ -242,6 +242,10 @@ def read(config, volume_vars):
 
     cfg['volumes'] = expand_docker_volume_spec(config_dir, volume_vars, cfg.get('volumes', ()))
 
+    version_info = cfg.setdefault('version', OrderedDict())
+    if not isinstance(version_info, Mapping):
+        raise ConfigurationError("`version` must be a mapping", file=config)
+
     env_vars = cfg.setdefault('pass-through-environment-vars', ())
     if not (isinstance(env_vars, Sequence) and not isinstance(env_vars, string_types)):
         raise ConfigurationError('`pass-through-environment-vars` must be a sequence of strings', file=config)

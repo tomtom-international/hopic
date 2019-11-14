@@ -117,3 +117,27 @@ image:
     sys.stderr.write(err)
 
     assert re.search(r"^Error: configuration error in '.*?\bhopic-ci-config\.yaml': .*\bimage\b.*\bexemplare\b.*\bmust be\b.*\bstring\b", err, re.MULTILINE)
+
+
+def test_bad_version_config(capfd):
+    result = run_with_config('''\
+version: patch
+''', ('show-config',))
+
+    assert result.exit_code == 32
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    assert re.search(r"^Error: configuration error in '.*?\bhopic-ci-config\.yaml': .*\bversion\b.*\bmust be\b.*\bmapping\b", err, re.MULTILINE)
+
+
+def test_default_version_bumping_config(capfd):
+    result = run_with_config('''\
+{}
+''', ('show-config',))
+
+    assert result.exit_code == 0
+    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
+    assert isinstance(output['version'], OrderedDict)

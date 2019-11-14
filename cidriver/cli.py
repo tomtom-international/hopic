@@ -784,10 +784,7 @@ def process_prepare_source_tree(
 
             checkout_tree(ctx.obj.code_dir, code_remote, code_commit, code_clean)
 
-        try:
-            version_info = ctx.obj.config['version']
-        except (click.BadParameter, KeyError, TypeError):
-            version_info = {}
+        version_info = ctx.obj.config['version']
 
         # Re-read version to ensure that the version policy in the reloaded configuration is used for it
         ctx.obj.version = determine_version(version_info, ctx.obj.config_dir, ctx.obj.code_dir)
