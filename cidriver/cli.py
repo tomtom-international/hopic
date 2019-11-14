@@ -16,6 +16,9 @@ import click
 import click_log
 
 from . import binary_normalize
+from .commit import (
+        CommitMessage,
+    )
 from .config_reader import (
         JSONEncoder,
         expand_docker_volume_spec,
@@ -795,6 +798,14 @@ def process_prepare_source_tree(
         if 'file' in version_info:
             relative_version_file = os.path.relpath(os.path.join(os.path.relpath(ctx.obj.config_dir, repo.working_dir), version_info['file']))
 
+        source_commits = (() if source_commit is None
+                else [CommitMessage(commit) for commit in git.Commit.list_items(
+                        repo,
+                        '{target_commit}..{source_commit}'.format(**locals()),
+                        first_parent=True,
+                        no_merges=True,
+                    )])
+        
         if is_publish_allowed and version_info.get('bump', True):
             if ctx.obj.version is None:
                 if 'file' in version_info:
@@ -831,15 +842,17 @@ def process_prepare_source_tree(
         submit_commit = repo.index.commit(**commit_params)
         click.echo(submit_commit)
 
+        autosquash_commits = [commit
+                for commit in source_commits
+                if commit.needs_autosquash()
+            ]
+
         # Autosquash the merged commits (if any) to discover how that would look like.
         autosquash_base = None
-        if source_commit:
-            for commit in git.Commit.list_items(repo, '{target_commit}..{source_commit}'.format(**locals()), first_parent=True, no_merges=True):
-                subject = commit.message.splitlines()[0]
-                if subject.startswith('fixup!') or subject.startswith('squash!'):
-                    log.debug("Found an autosquash-commit in the source commits: '%s': %s", subject, click.style(text_type(commit), fg='yellow'))
-                    autosquash_base = repo.merge_base(target_commit, source_commit)
-                    break
+        if autosquash_commits:
+            commit = autosquash_commits[0]
+            log.debug("Found an autosquash-commit in the source commits: '%s': %s", commit.subject, click.style(commit.hexsha, fg='yellow'))
+            autosquash_base = repo.merge_base(target_commit, source_commit)
         autosquashed_commit = None
         if autosquash_base:
             repo.head.reference = source_commit
