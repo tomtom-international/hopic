@@ -14,6 +14,7 @@
 
 from collections import namedtuple
 import re
+from six import string_types
 
 
 _Footer = namedtuple('Footer', ('token', 'value'))
@@ -25,7 +26,14 @@ class CommitMessage(object):
     autosquash_re = re.compile(r'^(fixup|squash)!\s+')
 
     def __init__(self, message):
-        self.message = _strip_message(message)
+        if isinstance(message, string_types):
+            self.message = _strip_message(message)
+        else:
+            self.message = _strip_message(message.message)
+            try:
+                self.hexsha = message.hexsha
+            except AttributeError:
+                pass
 
         # Discover starts of lines
         self._line_index = [m.end() for m in re.finditer(self.line_separator, self.message)]
