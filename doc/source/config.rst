@@ -372,18 +372,29 @@ Sharing Output Data Between Variants
 
 .. option:: stash
 
-.. todo::
+The option ``stash`` will save files to be used in another Hopic phase.
+The stashed files are available for every executor/node in every phase and workspace after the current one.
 
-    Document :option:`stash` option.
+Use the option ``includes`` to identify the files to be stashed.
+Use Wildcards like `module/dist/**/*.zip`.
+A `*` expands only to a single directory entry, where `**` expands to multiple directory levels deep.
+
+**example:**
+
+.. literalinclude:: ../../examples/stash.yaml
+    :language: yaml
 
 Customizing Step Description
 ----------------------------
 
 .. option:: description
 
-.. todo::
+The option ``description`` adds a description to the step which will be printed in the logs.
 
-    Document :option:`description` option.
+**example:**
+
+.. literalinclude:: ../../examples/description.yaml
+    :language: yaml
 
 Branches in Subdirectory Worktrees
 ----------------------------------
