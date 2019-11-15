@@ -163,6 +163,16 @@ class ConventionalCommit(CommitMessage):
         return self.type_tag.lower() == 'fix'
 
 
+def parse_commit_message(message, policy=None, strict=False):
+    if policy == 'conventional-commits':
+        try:
+            return ConventionalCommit(message)
+        except Exception:
+            if strict:
+                raise
+    return CommitMessage(message)
+
+
 class _IndexedList(object):
     def __init__(self, message, index, separator):
         self._message = message
