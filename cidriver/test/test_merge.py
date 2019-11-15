@@ -160,7 +160,7 @@ def hopic_config_subdir_version_file_tester(capfd, config_dir, hopic_config, ver
     sys.stderr.write(err)
     version_out = out.splitlines()[2]
     assert version_out == expected_version
-    with git.Repo.init(str(toprepo), expand_vars=False) as repo:
+    with git.Repo(str(toprepo), expand_vars=False) as repo:
         repo.git.checkout('master')
         assert expected_version == repo.git.tag(l=True)
 
