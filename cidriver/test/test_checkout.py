@@ -17,6 +17,8 @@ from ..cli import cli
 
 from click.testing import CliRunner
 import git
+import os
+from pathlib import Path
 import pytest
 import sys
 
@@ -95,3 +97,33 @@ phases:
     # Ignore submodule failure only
     result = run(('checkout-source-tree', '--clean', '--ignore-initial-submodule-checkout-failure', '--target-remote', str(toprepo), '--target-ref', 'master'))
     assert result.exit_code == 0
+
+
+def test_default_clean_checkout_option(capfd, tmp_path):
+    author = git.Actor('Bob Tester', 'bob@example.net')
+    commitargs = dict(
+        author_date=_git_time,
+        commit_date=_git_time,
+        author=author,
+        committer=author,
+    )
+
+    toprepo = tmp_path / 'repo'
+    with git.Repo.init(str(toprepo), expand_vars=False) as repo:
+        with (toprepo / 'hopic-ci-config.yaml').open('w') as f:
+            f.write('''\
+{}
+''')
+        temp_test_file = 'random_file.txt'
+        with (toprepo / temp_test_file).open('w') as f:
+            f.write('''\
+nothing to see here
+''')
+
+        repo.index.add(('hopic-ci-config.yaml',))
+        repo.index.commit(message='Initial commit', **commitargs)
+        commit = list(repo.iter_commits('master', max_count=1))[0]
+        result = run(('--workspace', str(toprepo), 'checkout-source-tree', '--clean', '--target-remote', str(toprepo), '--target-ref', 'master'))
+        assert result.exit_code == 0
+        assert not (toprepo / temp_test_file).is_file()
+        assert commit.committed_date == (toprepo / 'hopic-ci-config.yaml').stat().st_mtime
