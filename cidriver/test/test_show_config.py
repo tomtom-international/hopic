@@ -180,3 +180,18 @@ version:
     output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
     assert output['version']['bump']['policy'] == 'conventional-commits'
     assert output['version']['bump']['strict'] == False
+
+    reject_breaking_changes_on = re.compile(output['version']['bump']['reject-breaking-changes-on'])
+    reject_new_features_on = re.compile(output['version']['bump']['reject-new-features-on'])
+    for major_branch in (
+            'release/42',
+            'rel-42',
+        ):
+        assert reject_breaking_changes_on.match(major_branch)
+        assert not reject_new_features_on.match(major_branch)
+    for minor_branch in (
+            'release/42.21',
+            'rel-42.21',
+        ):
+        assert reject_breaking_changes_on.match(minor_branch)
+        assert reject_new_features_on.match(minor_branch)

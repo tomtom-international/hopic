@@ -238,7 +238,7 @@ version={}'''.format(version),
         assert f.read() == "version=0.0.4-PRERELEASE-TEST"
 
 
-def merge_conventional_bump(capfd, tmp_path, message, strict=False, on_every_change=True):
+def merge_conventional_bump(capfd, tmp_path, message, strict=False, on_every_change=True, target='master'):
     author = git.Actor('Bob Tester', 'bob@example.net')
     commitargs = dict(
             author_date=_git_time,
@@ -263,6 +263,7 @@ version:
                 f.write('    on-every-change: no\n')
         repo.index.add(('hopic-ci-config.yaml',))
         repo.index.commit(message='Initial commit', **commitargs)
+        repo.git.branch(target, move=True)
         repo.create_tag('0.0.0')
 
         # PR branch
@@ -277,7 +278,7 @@ version:
 
     # Successful checkout and build
     return run(
-            ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'),
+            ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', target),
             ('prepare-source-tree', '--author-date', '@{_git_time}'.format(_git_time=_git_time), '--commit-date', '@{_git_time}'.format(_git_time=_git_time),
                 'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful'),
         )
@@ -353,3 +354,25 @@ def test_merge_conventional_feat_bump_not_on_change(capfd, tmp_path):
 
     checkout_commit, merge_commit, merge_version = out.splitlines()
     assert merge_version.startswith('0.0.1-2+g')
+
+
+def test_merge_conventional_breaking_change_on_major_branch(capfd, tmp_path):
+    result = merge_conventional_bump(capfd, tmp_path, message='refactor!: make the API type better', target='release/42')
+    assert result.exit_code != 0
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    assert 'Breaking changes are not allowed' in err
+
+
+def test_merge_conventional_feat_on_minor_branch(capfd, tmp_path):
+    result = merge_conventional_bump(capfd, tmp_path, message='feat: add something useful', target='release/42.21')
+    assert result.exit_code != 0
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    assert 'New features are not allowed' in err

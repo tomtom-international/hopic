@@ -802,6 +802,18 @@ def process_prepare_source_tree(
                         first_parent=True,
                         no_merges=True,
                     )])
+
+        if bump['policy'] == 'conventional-commits':
+            if bump['reject-breaking-changes-on'].match(target_ref):
+                for commit in source_commits:
+                    if commit.has_breaking_change():
+                        log.error("Breaking changes are not allowed on '%s', but commit '%s' contains one:\n%s", target_ref, commit.hexsha, commit.message)
+                        ctx.exit(1)
+            if bump['reject-new-features-on'].match(target_ref):
+                for commit in source_commits:
+                    if commit.has_new_feature():
+                        log.error("New features are not allowed on '%s', but commit '%s' contains one:\n%s", target_ref, commit.hexsha, commit.message)
+                        ctx.exit(1)
         
         if is_publish_allowed and bump['policy'] != 'disabled' and bump['on-every-change']:
             if ctx.obj.version is None:

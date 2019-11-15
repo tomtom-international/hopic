@@ -275,6 +275,12 @@ def read(config, volume_vars):
         bump.setdefault('strict', False)
         if not isinstance(version_info['bump']['strict'], bool):
             raise ConfigurationError("`version.bump.strict` field for the `conventional-commits` policy must be a boolean", file=config)
+        bump.setdefault('reject-breaking-changes-on', re.compile(r'^(?:release/|rel-).*$'))
+        bump.setdefault('reject-new-features-on', re.compile(r'^(?:release/|rel-)\d+\..*$'))
+        if not isinstance(bump['reject-breaking-changes-on'], (string_types, Pattern)):
+            raise ConfigurationError("`version.bump.reject-breaking-changes-on` field for the `conventional-commits` policy must be a regex or boolean", file=config)
+        if not isinstance(bump['reject-new-features-on'], (string_types, Pattern)):
+            raise ConfigurationError("`version.bump.reject-new-features-on` field for the `conventional-commits` policy must be a regex or boolean", file=config)
 
     env_vars = cfg.setdefault('pass-through-environment-vars', ())
     if not (isinstance(env_vars, Sequence) and not isinstance(env_vars, string_types)):

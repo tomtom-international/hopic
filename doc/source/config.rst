@@ -301,6 +301,10 @@ There are currently two version bumping policies available:
    If set to ``false`` invalidly formatted messages are just ignored and not taken into account to determine what to bump.
    Otherwise the merge will fail when encountering invalidly formatted messages.
 
+   The ``version.bump.reject-breaking-changes-on`` and ``version.bump.reject-new-features-on`` options specify regular expressions matching branch names.
+   Merges into these branches will be rejected if, respectively, they contain breaking changes or new features.
+   The purpose of this is to prevent accidental inclusion of these kinds of changes into release branches.
+
    .. literalinclude:: ../../examples/version-bump-conventional.yaml
        :language: yaml
 
