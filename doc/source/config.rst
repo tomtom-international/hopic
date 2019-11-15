@@ -263,13 +263,13 @@ The policy to use can be specified in the ``format`` option of the ``version`` o
 
 The version can be read from and stored in two locations:
 
-``file``
+``version.file``
     When this option is specified Hopic will always use this as the primary source for reading and storing the version.
     The first line to contain only a syntactically valid version, optionally prefixed with ``version=``, is assumed to be the version.
     When reading the version it'll use this verbatim.
     When storing a (likely bumped) version it'll only modify the version portion of that file.
 
-``tag``
+``version.tag``
     When this option is set to ``true`` or a non-empty string Hopic will, when storing, create a tag every time it creates a new version.
     When this option is set to a string it will be interpreted according to `Python Format Specification`_ with the named variable ``version`` containing the version.
     When this option is set and ``file`` is not set it will use `git describe <https://git-scm.com/docs/git-describe>`_ to read the current version from tags.
@@ -278,14 +278,20 @@ The version can be read from and stored in two locations:
     Setting this option to a string can, for example, be used to add a prefix like ``v`` to tags, e.g. by using ``v{version}``.
     Having it set to ``true`` instead uses the version policy's default formatting.
 
-Whether and what to bump can be controlled by the ``bump`` option.
+When and what to bump can be controlled by the ``version.bump`` option.
 When set to ``false`` it disables automated bumping completely.
+Otherwise it describes a version bumping policy in its ``version.bump.policy`` member.
+
+Currently the only available version bumping policy is ``constant``.
+Its ``version.bump.field`` property specifies what field to bump.
 When not specified it defaults to bumping the default-to-bump part of the used version policy.
-When set to a string it bumps the named component of the version.
 
 When bumping is enabled, Hopic bumps each time that it applies a change.
 Usually this means when it's merging a pull request.
 Another option is when it's performing a modality change (currently only ``UPDATE_DEPENDENCY_MANIFEST``).
+
+.. literalinclude:: ../../examples/version-bump-constant.yaml
+    :language: yaml
 
 .. todo:: Describe ``after-submit``. Maybe?
 
