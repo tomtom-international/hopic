@@ -813,10 +813,15 @@ def process_prepare_source_tree(
                     log.info("If this is a new repository you may wish to create a 0.0.0 tag for Hopic to start bumping from")
                 ctx.exit(1)
 
-            params = {}
-            if bump['policy'] == 'constant' and 'field' in bump:
-                params['bump'] = bump['field']
-            ctx.obj.version = ctx.obj.version.next_version(**params)
+            if bump['policy'] == 'constant':
+                params = {}
+                if 'field' in bump:
+                    params['bump'] = bump['field']
+                ctx.obj.version = ctx.obj.version.next_version(**params)
+            elif bump['policy'] in ('conventional-commits',):
+                ctx.obj.version = ctx.obj.version.next_version_for_commits(source_commits)
+            else:
+                raise NotImplementedError("unsupported version bumping policy {bump['policy']}".format(**locals()))
             log.debug("bumped version to: \x1B[34m%s\x1B[39m", ctx.obj.version)
 
             if 'file' in version_info:

@@ -236,3 +236,108 @@ version={}'''.format(version),
                                                         tmp_path)
     with (test_repo / config_dir / version_file).open('r') as f:
         assert f.read() == "version=0.0.4-PRERELEASE-TEST"
+
+
+def merge_conventional_bump(capfd, tmp_path, message, strict=False):
+    author = git.Actor('Bob Tester', 'bob@example.net')
+    commitargs = dict(
+            author_date=_git_time,
+            commit_date=_git_time,
+            author=author,
+            committer=author,
+        )
+
+    toprepo = tmp_path / 'repo'
+    with git.Repo.init(str(toprepo), expand_vars=False) as repo:
+        with (toprepo / 'hopic-ci-config.yaml').open('w') as f:
+            f.write('''\
+version:
+  format: semver
+  tag:    true
+  bump:
+    policy: conventional-commits
+''')
+            if strict:
+                f.write('''\
+    strict: yes
+''')
+        repo.index.add(('hopic-ci-config.yaml',))
+        repo.index.commit(message='Initial commit', **commitargs)
+        repo.create_tag('0.0.0')
+
+        # PR branch
+        repo.head.reference = repo.create_head('something-useful')
+        assert not repo.head.is_detached
+
+        # Some change
+        with (toprepo / 'something.txt').open('w') as f:
+            f.write('usable')
+        repo.index.add(('something.txt',))
+        repo.index.commit(message=message, **commitargs)
+
+    # Successful checkout and build
+    return run(
+            ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'),
+            ('prepare-source-tree', '--author-date', '@{_git_time}'.format(_git_time=_git_time), '--commit-date', '@{_git_time}'.format(_git_time=_git_time),
+                'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful'),
+        )
+
+
+def test_merge_conventional_fix_bump(capfd, tmp_path):
+    result = merge_conventional_bump(capfd, tmp_path, message='fix: some problem')
+    assert result.exit_code == 0
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    checkout_commit, merge_commit, merge_version = out.splitlines()
+    assert merge_version == '0.0.1'
+
+
+def test_merge_conventional_feat_bump(capfd, tmp_path):
+    result = merge_conventional_bump(capfd, tmp_path, message='feat: add something useful')
+    assert result.exit_code == 0
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    checkout_commit, merge_commit, merge_version = out.splitlines()
+    assert merge_version == '0.1.0'
+
+
+def test_merge_conventional_breaking_change_bump(capfd, tmp_path):
+    result = merge_conventional_bump(capfd, tmp_path, message='refactor!: make the API type better')
+    assert result.exit_code == 0
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    checkout_commit, merge_commit, merge_version = out.splitlines()
+    assert merge_version == '1.0.0'
+
+
+def test_merge_conventional_feat_with_breaking_bump(capfd, tmp_path):
+    result = merge_conventional_bump(capfd, tmp_path, message='''\
+refactor!: add something awesome
+
+This adds the new awesome feature.
+
+BREAKING CHANGE: unfortunately this was incompatible with the old feature for
+the same purpose, so you'll have to migrate.
+''')
+    assert result.exit_code == 0
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    checkout_commit, merge_commit, merge_version = out.splitlines()
+    assert merge_version == '1.0.0'
+
+
+def test_merge_conventional_broken_feat(capfd, tmp_path):
+    with pytest.raises(RuntimeError):
+        merge_conventional_bump(capfd, tmp_path, message='feat add something useful', strict=True)
