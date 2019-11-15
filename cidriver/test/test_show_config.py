@@ -140,4 +140,28 @@ def test_default_version_bumping_config(capfd):
 
     assert result.exit_code == 0
     output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
-    assert isinstance(output['version'], OrderedDict)
+    assert output['version']['bump']['policy'] == 'constant'
+
+
+def test_default_version_bumping_backwards_compatible_policy(capfd):
+    result = run_with_config('''\
+version:
+  bump: patch
+''', ('show-config',))
+
+    assert result.exit_code == 0
+    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
+    assert output['version']['bump']['policy'] == 'constant'
+    assert output['version']['bump']['field'] == 'patch'
+
+
+def test_disabled_version_bumping(capfd):
+    result = run_with_config('''\
+version:
+  bump: no
+''', ('show-config',))
+
+    assert result.exit_code == 0
+    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
+    assert output['version']['bump']['policy'] == 'disabled'
+    assert 'field' not in output['version']['bump']

@@ -246,6 +246,24 @@ def read(config, volume_vars):
     if not isinstance(version_info, Mapping):
         raise ConfigurationError("`version` must be a mapping", file=config)
 
+    bump = version_info.setdefault('bump', OrderedDict((('policy', 'constant'),)))
+    if not isinstance(bump, (string_types, Mapping, bool)) or isinstance(bump, bool) and bump:
+        raise ConfigurationError("`version.bump` must be a mapping, string or the boolean false", file=config)
+    elif isinstance(bump, string_types):
+        bump = version_info['bump'] = OrderedDict((
+                ('policy', 'constant'),
+                ('field', bump),
+            ))
+    elif isinstance(bump, bool):
+        assert bump == False
+        bump = version_info['bump'] = OrderedDict((
+                ('policy', 'disabled'),
+            ))
+    if not isinstance(bump.get('policy'), string_types):
+        raise ConfigurationError("`version.bump.policy` must be a string identifying a version bumping policy to use", file=config)
+    if bump['policy'] == 'constant' and not isinstance(bump.get('field'), (string_types, type(None))):
+        raise ConfigurationError("`version.bump.field`, if it exists, must be a string identifying a version field to bump for the `constant` policy", file=config)
+
     env_vars = cfg.setdefault('pass-through-environment-vars', ())
     if not (isinstance(env_vars, Sequence) and not isinstance(env_vars, string_types)):
         raise ConfigurationError('`pass-through-environment-vars` must be a sequence of strings', file=config)

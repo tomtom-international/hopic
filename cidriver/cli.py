@@ -803,7 +803,8 @@ def process_prepare_source_tree(
                         no_merges=True,
                     )])
         
-        if is_publish_allowed and version_info.get('bump', True):
+        bump = version_info['bump']
+        if is_publish_allowed and bump['policy'] != 'disabled':
             if ctx.obj.version is None:
                 if 'file' in version_info:
                     log.error("Failed to read the current version (from %r) while attempting to bump the version", version_info['file'])
@@ -814,8 +815,8 @@ def process_prepare_source_tree(
                 ctx.exit(1)
 
             params = {}
-            if 'bump' in version_info:
-                params['bump'] = version_info['bump']
+            if bump['policy'] == 'constant' and 'field' in bump:
+                params['bump'] = bump['field']
             ctx.obj.version = ctx.obj.version.next_version(**params)
             log.debug("bumped version to: \x1B[34m%s\x1B[39m", ctx.obj.version)
 
