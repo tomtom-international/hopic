@@ -17,6 +17,7 @@ from ..cli import cli
 
 from click.testing import CliRunner
 import git
+import os
 import pytest
 import sys
 
@@ -38,7 +39,7 @@ def run(*args, env=None):
 
             if result.exception is not None and not isinstance(result.exception, SystemExit):
                 raise result.exception
-            
+
             if result.exit_code != 0:
                 return result
 
@@ -110,3 +111,128 @@ phases:
     autosquashed_commits = build_out.split()
     assert str(final_commit) not in autosquashed_commits
     assert str(base_commit) in autosquashed_commits
+
+
+def hopic_config_subdir_version_file_tester(capfd, config_dir, hopic_config, version_file, version_input, expected_version, tmp_path):
+    author = git.Actor('Bob Tester', 'bob@example.net')
+    commitargs = dict(
+        author_date=_git_time,
+        commit_date=_git_time,
+        author=author,
+        committer=author,
+    )
+
+    toprepo = tmp_path / 'repo'
+    with git.Repo.init(str(toprepo), expand_vars=False) as repo:
+        if not os.path.exists(toprepo / config_dir):
+            os.mkdir(toprepo / config_dir)
+        with (toprepo / config_dir / 'hopic-ci-config.yaml').open('w') as f:
+            f.write(hopic_config)
+
+        with (toprepo / config_dir / version_file).open('w') as f:
+            f.write(version_input)
+        repo.index.add((os.path.join(config_dir, 'hopic-ci-config.yaml'),))
+        repo.index.add((os.path.join(config_dir, version_file),))
+        base_commit = repo.index.commit(message='Initial commit', **commitargs)
+
+        # PR branch from just before the main branch's HEAD
+        repo.head.reference = repo.create_head('something-useful', base_commit)
+        assert not repo.head.is_detached
+        repo.head.reset(index=True, working_tree=True)
+
+        # Some change
+        with (toprepo / 'something.txt').open('w') as f:
+            f.write('usable')
+        repo.index.add(('something.txt',))
+        repo.index.commit(message='feat: add something useful', **commitargs)
+
+    # Successful checkout and build
+    result = run(
+        ('--workspace', './', '--config', os.path.join(config_dir, 'hopic-ci-config.yaml'),
+         'checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'),
+        ('--workspace', './', '--config', os.path.join(config_dir, 'hopic-ci-config.yaml'), 'prepare-source-tree',
+         'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful'),
+        ('--workspace', './', '--config', os.path.join(config_dir, 'hopic-ci-config.yaml'), 'submit'),
+    )
+    assert result.exit_code == 0
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+    version_out = out.splitlines()[2]
+    assert version_out == expected_version
+    with git.Repo.init(str(toprepo), expand_vars=False) as repo:
+        repo.git.checkout('master')
+        assert expected_version == repo.git.tag(l=True)
+
+    return toprepo
+
+
+def test_hopic_config_subdir_version_file(capfd, tmp_path):
+    version = "0.0.1-SNAPSHOT"
+    commit_version = "0.0.1"
+    version_file = "revision_test.txt"
+    config_dir = "test_config"
+    hopic_config_subdir_version_file_tester(capfd,
+                                            config_dir,
+                                            '''\
+version:
+  file: {}
+  tag:  true
+  bump: patch
+  format: semver'''.format(version_file),
+                                            version_file,
+                                            '''\
+version={}'''.format(version),
+                                            commit_version,
+                                            tmp_path)
+
+
+def test_hopic_config_subdir_version_file_after_submit(capfd, tmp_path):
+    version = "0.0.42-SNAPSHOT"
+    commit_version = "0.0.42"
+    version_file = "revision_test.txt"
+    config_dir = ".ci"
+    test_repo = hopic_config_subdir_version_file_tester(capfd,
+                                                        config_dir,
+                                                        '''\
+version:
+  file: {}
+  tag:  true
+  bump: patch
+  format: semver
+  after-submit:
+    bump: prerelease
+    prerelease-seed: PRERELEASE-TEST'''.format(version_file),
+                                                        version_file,
+                                                        '''\
+version={}'''.format(version),
+                                                        commit_version,
+                                                        tmp_path)
+    with (test_repo / config_dir / version_file).open('r') as f:
+        assert f.read() == "version=0.0.43-PRERELEASE-TEST"
+
+
+def test_version_bump_after_submit_from_repo_root_dir(capfd, tmp_path):
+    version = "0.0.3-SNAPSHOT"
+    commit_version = "0.0.3"
+    version_file = "revision_test.txt"
+    config_dir = ""
+    test_repo = hopic_config_subdir_version_file_tester(capfd,
+                                                        config_dir,
+                                                        '''\
+version:
+  file: {}
+  tag:  true
+  bump: patch
+  format: semver
+  after-submit:
+    bump: prerelease
+    prerelease-seed: PRERELEASE-TEST  
+                                                    '''.format(version_file),
+                                                        version_file,
+                                                        '''\
+version={}'''.format(version),
+                                                        commit_version,
+                                                        tmp_path)
+    with (test_repo / config_dir / version_file).open('r') as f:
+        assert f.read() == "version=0.0.4-PRERELEASE-TEST"
