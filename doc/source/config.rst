@@ -282,21 +282,37 @@ When and what to bump can be controlled by the ``version.bump`` option.
 When set to ``false`` it disables automated bumping completely.
 Otherwise it describes a version bumping policy in its ``version.bump.policy`` member.
 
-Currently the only available version bumping policy is ``constant``.
-Its ``version.bump.field`` property specifies what field to bump.
-When not specified it defaults to bumping the default-to-bump part of the used version policy.
+There are currently two version bumping policies available:
+
+``constant``
+    Its ``version.bump.field`` property specifies what field to bump.
+    It will always bump that field and no other.
+    When not specified it defaults to bumping the default-to-bump part of the used version policy.
+
+   .. literalinclude:: ../../examples/version-bump-constant.yaml
+       :language: yaml
+
+``conventional-commits``
+   When used this policy determines the version field to bump based on commit messages formatted according to `Conventional Commits`_.
+   It searches all to-merge commits for breaking changes, new features and fixes.
+   If any of those are present it will bump, in order of precedence, the major, minor or patch number.
+
+   The ``version.bump.strict`` option of this policy controls whether each commit message is required to parse as a valid Conventional Commit.
+   If set to ``false`` invalidly formatted messages are just ignored and not taken into account to determine what to bump.
+   Otherwise the merge will fail when encountering invalidly formatted messages.
+
+   .. literalinclude:: ../../examples/version-bump-conventional.yaml
+       :language: yaml
 
 When bumping is enabled, Hopic bumps each time that it applies a change.
 Usually this means when it's merging a pull request.
 Another option is when it's performing a modality change (currently only ``UPDATE_DEPENDENCY_MANIFEST``).
 
-.. literalinclude:: ../../examples/version-bump-constant.yaml
-    :language: yaml
-
 .. todo:: Describe ``after-submit``. Maybe?
 
 .. _Semantic Versioning: https://semver.org/
 .. _Python Format Specification: https://docs.python.org/3/library/string.html#formatspec
+.. _Conventional Commits: https://www.conventionalcommits.org/en/v1.0.0/
 
 Modality Changes
 ----------------

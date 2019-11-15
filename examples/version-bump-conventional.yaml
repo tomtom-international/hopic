@@ -1,0 +1,6 @@
+version:
+  format: semver
+  tag: 'v.{version.major}.{version.minor}.{version.patch}'
+  bump:
+    policy: conventional-commits
+    strict: no # default
