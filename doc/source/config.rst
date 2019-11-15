@@ -304,6 +304,8 @@ There are currently two version bumping policies available:
    .. literalinclude:: ../../examples/version-bump-conventional.yaml
        :language: yaml
 
+In order to configure a version bumping policy without automatically bumping for every change the ``version.bump.on-every-change`` option can be set to ``false`` (defaults to ``true``).
+
 When bumping is enabled, Hopic bumps each time that it applies a change.
 Usually this means when it's merging a pull request.
 Another option is when it's performing a modality change (currently only ``UPDATE_DEPENDENCY_MANIFEST``).

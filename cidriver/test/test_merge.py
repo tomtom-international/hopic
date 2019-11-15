@@ -238,7 +238,7 @@ version={}'''.format(version),
         assert f.read() == "version=0.0.4-PRERELEASE-TEST"
 
 
-def merge_conventional_bump(capfd, tmp_path, message, strict=False):
+def merge_conventional_bump(capfd, tmp_path, message, strict=False, on_every_change=True):
     author = git.Actor('Bob Tester', 'bob@example.net')
     commitargs = dict(
             author_date=_git_time,
@@ -258,9 +258,9 @@ version:
     policy: conventional-commits
 ''')
             if strict:
-                f.write('''\
-    strict: yes
-''')
+                f.write('    strict: yes\n')
+            if not on_every_change:
+                f.write('    on-every-change: no\n')
         repo.index.add(('hopic-ci-config.yaml',))
         repo.index.commit(message='Initial commit', **commitargs)
         repo.create_tag('0.0.0')
@@ -292,7 +292,7 @@ def test_merge_conventional_fix_bump(capfd, tmp_path):
     sys.stderr.write(err)
 
     checkout_commit, merge_commit, merge_version = out.splitlines()
-    assert merge_version == '0.0.1'
+    assert merge_version.startswith('0.0.1+g')
 
 
 def test_merge_conventional_feat_bump(capfd, tmp_path):
@@ -304,7 +304,7 @@ def test_merge_conventional_feat_bump(capfd, tmp_path):
     sys.stderr.write(err)
 
     checkout_commit, merge_commit, merge_version = out.splitlines()
-    assert merge_version == '0.1.0'
+    assert merge_version.startswith('0.1.0+g')
 
 
 def test_merge_conventional_breaking_change_bump(capfd, tmp_path):
@@ -316,7 +316,7 @@ def test_merge_conventional_breaking_change_bump(capfd, tmp_path):
     sys.stderr.write(err)
 
     checkout_commit, merge_commit, merge_version = out.splitlines()
-    assert merge_version == '1.0.0'
+    assert merge_version.startswith('1.0.0+g')
 
 
 def test_merge_conventional_feat_with_breaking_bump(capfd, tmp_path):
@@ -335,9 +335,21 @@ the same purpose, so you'll have to migrate.
     sys.stderr.write(err)
 
     checkout_commit, merge_commit, merge_version = out.splitlines()
-    assert merge_version == '1.0.0'
+    assert merge_version.startswith('1.0.0+g')
 
 
 def test_merge_conventional_broken_feat(capfd, tmp_path):
     with pytest.raises(RuntimeError):
         merge_conventional_bump(capfd, tmp_path, message='feat add something useful', strict=True)
+
+
+def test_merge_conventional_feat_bump_not_on_change(capfd, tmp_path):
+    result = merge_conventional_bump(capfd, tmp_path, message='feat: add something useful', on_every_change=False)
+    assert result.exit_code == 0
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    checkout_commit, merge_commit, merge_version = out.splitlines()
+    assert merge_version.startswith('0.0.1-2+g')

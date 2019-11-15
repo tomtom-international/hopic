@@ -803,7 +803,7 @@ def process_prepare_source_tree(
                         no_merges=True,
                     )])
         
-        if is_publish_allowed and bump['policy'] != 'disabled':
+        if is_publish_allowed and bump['policy'] != 'disabled' and bump['on-every-change']:
             if ctx.obj.version is None:
                 if 'file' in version_info:
                     log.error("Failed to read the current version (from %r) while attempting to bump the version", version_info['file'])
@@ -895,10 +895,13 @@ def process_prepare_source_tree(
                 )
             repo.create_tag(tagname, submit_commit, force=True)
 
+        # Re-read version to ensure that the newly created tag is taken into account
+        ctx.obj.version = determine_version(version_info, ctx.obj.config_dir, ctx.obj.code_dir)
+
         log.info('%s', repo.git.show(submit_commit, format='fuller', stat=True))
 
         push_commit = submit_commit
-        if ctx.obj.version is not None and 'file' in version_info and 'bump' in version_info.get('after-submit', {}) and is_publish_allowed:
+        if ctx.obj.version is not None and 'file' in version_info and 'bump' in version_info.get('after-submit', {}) and is_publish_allowed and bump['on-every-change']:
             params = {'bump': version_info['after-submit']['bump']}
             try:
                 params['prerelease_seed'] = version_info['after-submit']['prerelease-seed']

@@ -1,6 +1,9 @@
 version:
   tag:    'v{version.major}.{version.minor}.{version.patch}'
   format: semver
+  bump:
+    policy: conventional-commits
+    on-every-change: no
 
 scm:
   git:

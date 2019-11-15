@@ -266,6 +266,9 @@ def read(config, volume_vars):
             ))
     if not isinstance(bump.get('policy'), string_types):
         raise ConfigurationError("`version.bump.policy` must be a string identifying a version bumping policy to use", file=config)
+    bump.setdefault('on-every-change', True)
+    if not isinstance(bump['on-every-change'], bool):
+        raise ConfigurationError("`version.bump.on-every-change` must be a boolean", file=config)
     if bump['policy'] == 'constant' and not isinstance(bump.get('field'), (string_types, type(None))):
         raise ConfigurationError("`version.bump.field`, if it exists, must be a string identifying a version field to bump for the `constant` policy", file=config)
     if bump['policy'] == 'conventional-commits':
