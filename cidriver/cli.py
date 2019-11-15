@@ -16,9 +16,7 @@ import click
 import click_log
 
 from . import binary_normalize
-from .commit import (
-        CommitMessage,
-    )
+from .commit import parse_commit_message
 from .config_reader import (
         JSONEncoder,
         expand_docker_volume_spec,
@@ -795,15 +793,16 @@ def process_prepare_source_tree(
         if 'file' in version_info:
             relative_version_file = os.path.relpath(os.path.join(os.path.relpath(ctx.obj.config_dir, repo.working_dir), version_info['file']))
 
+        bump = version_info['bump']
         source_commits = (() if source_commit is None
-                else [CommitMessage(commit) for commit in git.Commit.list_items(
+                else [parse_commit_message(commit, policy=bump['policy'], strict=bump.get('strict', False))
+                        for commit in git.Commit.list_items(
                         repo,
                         '{target_commit}..{source_commit}'.format(**locals()),
                         first_parent=True,
                         no_merges=True,
                     )])
         
-        bump = version_info['bump']
         if is_publish_allowed and bump['policy'] != 'disabled':
             if ctx.obj.version is None:
                 if 'file' in version_info:

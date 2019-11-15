@@ -40,6 +40,9 @@ __all__ = (
 )
 
 
+Pattern = type(re.compile(''))
+
+
 _variable_interpolation_re = re.compile(r'(?<!\$)\$(?:(\w+)|\{([^}]+)\})')
 def expand_vars(vars, expr):
     if isinstance(expr, string_types):
@@ -150,6 +153,8 @@ class JSONEncoder(json.JSONEncoder):
     def default(self, o):
         if isinstance(o, IvyManifestImage):
             return str(o)
+        elif isinstance(o, Pattern):
+            return o.pattern
         return super().default(o)
 
 
@@ -263,6 +268,10 @@ def read(config, volume_vars):
         raise ConfigurationError("`version.bump.policy` must be a string identifying a version bumping policy to use", file=config)
     if bump['policy'] == 'constant' and not isinstance(bump.get('field'), (string_types, type(None))):
         raise ConfigurationError("`version.bump.field`, if it exists, must be a string identifying a version field to bump for the `constant` policy", file=config)
+    if bump['policy'] == 'conventional-commits':
+        bump.setdefault('strict', False)
+        if not isinstance(version_info['bump']['strict'], bool):
+            raise ConfigurationError("`version.bump.strict` field for the `conventional-commits` policy must be a boolean", file=config)
 
     env_vars = cfg.setdefault('pass-through-environment-vars', ())
     if not (isinstance(env_vars, Sequence) and not isinstance(env_vars, string_types)):

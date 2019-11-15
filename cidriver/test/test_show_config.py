@@ -165,3 +165,18 @@ version:
     output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
     assert output['version']['bump']['policy'] == 'disabled'
     assert 'field' not in output['version']['bump']
+
+
+def test_default_conventional_bumping(capfd):
+    result = run_with_config('''\
+version:
+  format: semver
+  tag: 'v.{version.major}.{version.minor}.{version.patch}'
+  bump:
+    policy: conventional-commits
+''', ('show-config',))
+
+    assert result.exit_code == 0
+    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
+    assert output['version']['bump']['policy'] == 'conventional-commits'
+    assert output['version']['bump']['strict'] == False
