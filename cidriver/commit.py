@@ -83,6 +83,15 @@ class CommitMessage(object):
         idx = self._paragraph_index[idx]
         return self.message[:idx].count(self.line_separator)
 
+    def has_breaking_change(self):
+        return None
+
+    def has_new_feature(self):
+        return None
+
+    def has_fix(self):
+        return None
+
 
 class ConventionalCommit(CommitMessage):
     strict_subject_re = re.compile(r'''
