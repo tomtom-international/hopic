@@ -1,0 +1,7 @@
+phases:
+  upload:
+    Linux-x86_64-Release:
+      - run-on-change: only
+        stash:
+          includes: Build/Output/x86_64-Linux-clang/Release/ivy-repo/published_artifacts.yaml
+      - Build/build.py -f Build/Linux-x86_64.yaml Publish.ALL -m Release
