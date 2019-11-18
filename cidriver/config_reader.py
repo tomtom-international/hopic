@@ -232,6 +232,7 @@ def read(config, volume_vars):
     cfg['volumes'] = expand_docker_volume_spec(config_dir, volume_vars, cfg.get('volumes', ()))
 
     env_vars = cfg.setdefault('pass-through-environment-vars', ())
+    cfg.setdefault('clean', [])
     if not (isinstance(env_vars, Sequence) and not isinstance(env_vars, string_types)):
         raise ConfigurationError('`pass-through-environment-vars` must be a sequence of strings')
     for idx, var in enumerate(env_vars):
