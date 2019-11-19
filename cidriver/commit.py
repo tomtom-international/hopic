@@ -24,6 +24,7 @@ class CommitMessage(object):
     line_separator = '\n'
     paragraph_separator = '\n\n'
     autosquash_re = re.compile(r'^(fixup|squash)!\s+')
+    merge_re = re.compile(r'^Merge.*?:[ \t]*')
 
     def __init__(self, message):
         if isinstance(message, string_types):
@@ -41,8 +42,11 @@ class CommitMessage(object):
         if len(self._line_index) < 2 or self._line_index[-1] < len(self.message):
             self._line_index.append(len(self.message) + 1)
 
-        merge = re.match(r'^Merge.*?:[ \t]*', self.message)
-        self._subject_start = merge.end() if merge is not None else 0
+        autosquash = self.autosquash_re.match(self.message)
+        self._autosquash_end = autosquash.end() if autosquash is not None else 0
+
+        merge = self.merge_re.match(self.message[self._autosquash_end:])
+        self._subject_start = self._autosquash_end + (merge.end() if merge is not None else 0)
 
         # Discover starts of paragraphs
         self._paragraph_index = [m.end() for m in re.finditer(self.paragraph_separator, self.message)]
@@ -59,15 +63,27 @@ class CommitMessage(object):
         return _IndexedList(self.message, self._line_index, self.line_separator)
 
     @property
+    def full_subject(self):
+        return self.message[:self._line_index[1] - 1]
+
+    @property
+    def subject_start(self):
+        return self._subject_start
+
+    @property
     def subject(self):
-        return self.message[self._subject_start:self._line_index[1] - 1]
+        return self.full_subject[self.subject_start:]
+
+    @property
+    def autosquash_end(self):
+        return self._autosquash_end
 
     def needs_autosquash(self):
-        return self.autosquash_re.match(self.subject) is not None
+        return self.autosquash_end > 0
 
     @property
     def autosquashed_subject(self):
-        return self.autosquash_re.sub('', self.subject)
+        return self.full_subject[self.autosquash_end:]
 
     @property
     def body(self):
@@ -139,7 +155,7 @@ class ConventionalCommit(CommitMessage):
 
     def __init__(self, message):
         super().__init__(message)
-        m = self.strict_subject_re.match(self.autosquashed_subject)
+        m = self.strict_subject_re.match(self.subject)
         if not m:
             raise RuntimeError("commit message's subject ({self.subject!r}) not formatted according to Conventional Commits ({self.strict_subject_re.pattern})".format(self=self))
         self.type_tag     = m.group('type_tag')
