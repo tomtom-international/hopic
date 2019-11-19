@@ -14,6 +14,7 @@ phases:
       # Require each commit message to adhere to our requirements
       - foreach: AUTOSQUASHED_COMMIT
         sh: .ci/verify-commit-message.py ${AUTOSQUASHED_COMMIT}
+      - .ci/verify-commit-message.py HEAD
 
   test:
     python:

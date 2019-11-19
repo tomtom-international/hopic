@@ -85,6 +85,7 @@ if os.path.isfile(commit) and not re.match(r'^[0-9a-fA-F]{40}$', commit):
         while message[-2:] == '\n\n':
             message = message[:-1]
 else:
+    commit = subprocess.check_output(('git', 'rev-parse', commit))[:-1].decode('UTF-8')
     message = subprocess.check_output(('git', 'show', '-q', '--format=%B', commit, '--'))[:-1].decode('UTF-8')
 lines = message.splitlines()
 
