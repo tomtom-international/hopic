@@ -103,8 +103,11 @@ errors = []
 if body and not body[-1][1]:
     errors.append("\x1B[1m{commit}:{}:1: \x1B[31merror\x1B[39m: commit message body is followed by empty lines\x1B[m".format(len(lines), commit=commit))
 
-merge = re.match(r'^Merge.*?(?:$|:\s+)', lines[0])
-subject_start = merge.end() if merge is not None else 0
+autosquash = re.match(r'^(fixup|squash)!\s+', lines[0])
+subject_start = autosquash.end() if autosquash is not None else 0
+
+merge = re.match(r'^Merge.*?(?:$|:\s+)', lines[0][subject_start:])
+subject_start += merge.end() if merge is not None else 0
 if subject_start == len(lines[0]) and re.match(r"^Merge branch '.*?'(?:into '.*')?$", lines[0]):
     # Ignore branch merges
     sys.exit(0)
