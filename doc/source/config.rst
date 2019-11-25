@@ -32,6 +32,18 @@ For example, the configuration example listed results in an execution flow as sh
 
     Example execution flow of a Hopic build configuration.
 
+Clean
+-----
+
+.. option:: clean
+
+Hopic provides built-in clean check-out functionality by executing ``git clean -fxd`` on the ``${WORKSPACE}``.
+It is possible to add a list of commands that is executed before the ``git clean -fxd`` is executed.
+Within the list of commands ``$HOME`` and ``~`` will be expanded to the home directory of the current user. 
+
+.. literalinclude:: ../../examples/clean.yaml
+   :language: yaml
+
 Credentials
 -----------
 

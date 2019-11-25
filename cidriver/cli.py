@@ -546,7 +546,7 @@ def restore_mtime_from_git(repo, files=None):
         pass
 
 
-def checkout_tree(tree, remote, ref, clean=False, remote_name='origin', allow_submodule_checkout_failure=False):
+def checkout_tree(tree, remote, ref, clean=False, remote_name='origin', allow_submodule_checkout_failure=False, clean_config=[]):
     try:
         repo = git.Repo(tree)
         # Cleanup potential existing submodules to avoid conflicts in PR's where submodules are added
@@ -589,7 +589,7 @@ def checkout_tree(tree, remote, ref, clean=False, remote_name='origin', allow_su
                 raise
 
         if clean:
-            clean_repo(repo)
+            clean_repo(repo, clean_config)
 
         with repo.config_writer() as cfg:
             section = 'ci-driver.{commit}'.format(**locals())
@@ -614,7 +614,14 @@ def update_submodules(repo, clean):
                 clean_repo(sub_repo)
 
 
-def clean_repo(repo):
+def clean_repo(repo, clean_config=[]):
+    def substitute_home(arg):
+        volume_vars = {'HOME': os.path.expanduser('~')}
+        return expand_vars(volume_vars, os.path.expanduser(arg))
+    for cmd in clean_config:
+        cmd = [substitute_home(arg) for arg in shlex.split(cmd)]
+        echo_cmd(subprocess.check_call, cmd, cwd=repo.working_dir)
+
     clean_output = repo.git.clean('-xd', force=True)
     if clean_output:
         log.info('%s', clean_output)
@@ -659,6 +666,9 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean, ignore_initial_s
 
     try:
         ctx.obj.config = read_config(determine_config_file_name(ctx), ctx.obj.volume_vars)
+        if clean:
+            with git.Repo(workspace) as repo:
+                clean_repo(repo, ctx.obj.config['clean'])
         git_cfg = ctx.obj.config['scm']['git']
     except (click.BadParameter, KeyError, TypeError, OSError, IOError):
         return
@@ -718,7 +728,8 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean, ignore_initial_s
         cfg.set_value('ci-driver.code', 'cfg-ref', target_ref)
         cfg.set_value('ci-driver.code', 'cfg-clean', str(clean))
 
-    checkout_tree(ctx.obj.code_dir, git_cfg.get('remote', target_remote), git_cfg.get('ref', target_ref), clean)
+    checkout_tree(ctx.obj.code_dir, git_cfg.get('remote', target_remote), git_cfg.get('ref', target_ref),
+                  clean, clean_config=ctx.obj.config['clean'])
 
 
 @cli.group()
@@ -779,7 +790,7 @@ def process_prepare_source_tree(
                 except (KeyError, TypeError):
                     code_commit = cfg.get_value('ci-driver.code', 'cfg-ref')
 
-            checkout_tree(ctx.obj.code_dir, code_remote, code_commit, code_clean)
+            checkout_tree(ctx.obj.code_dir, code_remote, code_commit, code_clean, clean_config=ctx.obj.config['clean'])
 
         try:
             version_info = ctx.obj.config['version']
