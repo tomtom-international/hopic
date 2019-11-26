@@ -82,6 +82,10 @@ log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
 
 
+class VersioningError(click.ClickException):
+    exit_code = 33
+
+
 class DateTime(click.ParamType):
     name = 'date'
     stamp_re = re.compile(r'^@(?P<utcstamp>\d+(?:\.\d+)?)(?:\s+(?P<tzdir>[-+])(?P<tzhour>\d{1,2}):?(?P<tzmin>\d{2}))?$')
@@ -807,23 +811,22 @@ def process_prepare_source_tree(
             if bump['reject-breaking-changes-on'].match(target_ref):
                 for commit in source_commits:
                     if commit.has_breaking_change():
-                        log.error("Breaking changes are not allowed on '%s', but commit '%s' contains one:\n%s", target_ref, commit.hexsha, commit.message)
-                        ctx.exit(1)
+                        raise VersioningError("Breaking changes are not allowed on '{target_ref}', but commit '{commit.hexsha}' contains one:\n{commit.message}".format(**locals()))
             if bump['reject-new-features-on'].match(target_ref):
                 for commit in source_commits:
                     if commit.has_new_feature():
-                        log.error("New features are not allowed on '%s', but commit '%s' contains one:\n%s", target_ref, commit.hexsha, commit.message)
-                        ctx.exit(1)
+                        raise VersioningError("New features are not allowed on '{target_ref}', but commit '{commit.hexsha}' contains one:\n{commit.message}".format(**locals()))
         
         if is_publish_allowed and bump['policy'] != 'disabled' and bump['on-every-change']:
             if ctx.obj.version is None:
                 if 'file' in version_info:
-                    log.error("Failed to read the current version (from %r) while attempting to bump the version", version_info['file'])
+                    raise VersioningError("Failed to read the current version (from {version[file]}) while attempting to bump the version".format(**locals()))
                 else:
-                    log.error("Failed to determine the current version while attempting to bump the version")
+                    msg = "Failed to determine the current version while attempting to bump the version"
+                    log.error(msg)
                     # TODO: PIPE-309: provide an initial starting point instead
                     log.info("If this is a new repository you may wish to create a 0.0.0 tag for Hopic to start bumping from")
-                ctx.exit(1)
+                    raise VersioningError(msg)
 
             if bump['policy'] == 'constant':
                 params = {}

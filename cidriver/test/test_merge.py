@@ -358,7 +358,7 @@ def test_merge_conventional_feat_bump_not_on_change(capfd, tmp_path):
 
 def test_merge_conventional_breaking_change_on_major_branch(capfd, tmp_path):
     result = merge_conventional_bump(capfd, tmp_path, message='refactor!: make the API type better', target='release/42')
-    assert result.exit_code != 0
+    assert result.exit_code == 33
 
     out, err = capfd.readouterr()
     sys.stdout.write(out)
@@ -369,7 +369,7 @@ def test_merge_conventional_breaking_change_on_major_branch(capfd, tmp_path):
 
 def test_merge_conventional_feat_on_minor_branch(capfd, tmp_path):
     result = merge_conventional_bump(capfd, tmp_path, message='feat: add something useful', target='release/42.21')
-    assert result.exit_code != 0
+    assert result.exit_code == 33
 
     out, err = capfd.readouterr()
     sys.stdout.write(out)
