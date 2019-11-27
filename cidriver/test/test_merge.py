@@ -270,11 +270,19 @@ version:
         repo.head.reference = repo.create_head('something-useful')
         assert not repo.head.is_detached
 
+        # A preceding commit on this PR to detect whether we check more than the first commit's message in a PR
+        repo.index.commit(message='chore: some intermediate commit', **commitargs)
+        print(repo.git.log(format='fuller', color=True, stat=True), file=sys.stderr)
+
         # Some change
         with (toprepo / 'something.txt').open('w') as f:
             f.write('usable')
         repo.index.add(('something.txt',))
         repo.index.commit(message=message, **commitargs)
+
+        # A succeeding commit on this PR to detect whether we check more than the last commit's message in a PR
+        repo.index.commit(message='chore: some other intermediate commit', **commitargs)
+        print(repo.git.log(format='fuller', color=True, stat=True), file=sys.stderr)
 
     # Successful checkout and build
     return run(
@@ -353,7 +361,7 @@ def test_merge_conventional_feat_bump_not_on_change(capfd, tmp_path):
     sys.stderr.write(err)
 
     checkout_commit, merge_commit, merge_version = out.splitlines()
-    assert merge_version.startswith('0.0.1-2+g')
+    assert merge_version.startswith('0.0.1-4+g')
 
 
 def test_merge_conventional_breaking_change_on_major_branch(capfd, tmp_path):
