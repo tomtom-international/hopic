@@ -292,7 +292,6 @@ def read(config, volume_vars):
                         if var_key == 'with-credentials':
                             if isinstance(var[var_key], string_types):
                                 var[var_key] = OrderedDict([('id', var[var_key])])
-
                             if not isinstance(var[var_key], Sequence):
                                 var[var_key] = [var[var_key]]
 
