@@ -53,6 +53,7 @@ Sometimes it's necessary to execute commands with privileged access.
 For that purpose the :option:`with-credentials` configuration option can be used for a variant within a phase.
 You need to specify an identifier (``id``), used for looking up the credential and its type (``type``).
 In addition to that you can specify the name of the config and environment variable that should be set to contain them.
+:option:`with-credentials` value can be specified as a list to have multiple credentials for a variant within a phase.
 
 The supported types of credential are:
 

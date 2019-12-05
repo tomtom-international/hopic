@@ -426,62 +426,49 @@ exec ssh -i '''
     }
   }
 
-  private def subcommand_with_credentials(String cmd, String subcmd, credentials = null) {
-    if (credentials == null) {
-      return steps.sh(script: "${cmd} ${subcmd}")
-    }
+  private def subcommand_with_credentials(String cmd, String subcmd, credentials) {
+    def creds_info = credentials.collect({
+      def currentCredential = it
+      def credential_id = currentCredential['id']
+      def user_var      = currentCredential.getOrDefault('username-variable', 'USERNAME')
+      def pass_var      = currentCredential.getOrDefault('password-variable', 'PASSWORD')
+      def file_var      = currentCredential.getOrDefault('filename-variable', 'SECRET_FILE')
+      def string_var    = currentCredential.getOrDefault('string-variable',   'SECRET')
+      def type = currentCredential.getOrDefault('type', 'username-password')
 
-    def credential_id = credentials['id']
-    def user_var      = credentials.getOrDefault('username-variable', 'USERNAME')
-    def pass_var      = credentials.getOrDefault('password-variable', 'PASSWORD')
-    def file_var      = credentials.getOrDefault('filename-variable', 'SECRET_FILE')
-    def string_var    = credentials.getOrDefault('string-variable',   'SECRET')
-
-    def type = credentials.getOrDefault('type', 'username-password')
-
-    try {
-      if (type == 'username-password') {
-        return steps.withCredentials([steps.usernamePassword(
-            credentialsId: credential_id,
-            usernameVariable: user_var,
-            passwordVariable: pass_var,
-          )]) {
-          steps.sh(script: cmd
-              + ' --whitelisted-var=' + shell_quote(user_var)
-              + ' --whitelisted-var=' + shell_quote(pass_var)
-              + ' '
-              + subcmd
-            )
+      try {
+        final white_listed_var = '--whitelisted-var='
+        if (type == 'username-password') {
+          return [white_listed_vars: white_listed_var + shell_quote(user_var) + ' ' + white_listed_var + shell_quote(pass_var),
+            with_credentials: steps.usernamePassword(
+              credentialsId: credential_id,
+              usernameVariable: user_var,
+              passwordVariable: pass_var,)
+          ]
+        } else if (type == 'file') {
+          return [white_listed_vars: white_listed_var + shell_quote(file_var),
+            with_credentials: steps.file(
+              credentialsId: credential_id,
+              variable: file_var,)
+          ]
+        } else if (type == 'string') {
+          return [white_listed_vars: white_listed_var + shell_quote(string_var),
+            with_credentials: steps.string(
+              credentialsId: credential_id,
+              variable: string_var,)
+          ]
         }
-      } else if (type == 'file') {
-        return steps.withCredentials([steps.file(
-            credentialsId: credential_id,
-            variable: file_var,
-          )]) {
-          steps.sh(script: cmd
-              + ' --whitelisted-var=' + shell_quote(file_var)
-              + ' '
-              + subcmd
-            )
-        }
-      } else if (type == 'string') {
-        return steps.withCredentials([steps.string(
-            credentialsId: credential_id,
-            variable: string_var,
-          )]) {
-          steps.sh(script: cmd
-              + ' --whitelisted-var=' + shell_quote(string_var)
-              + ' '
-              + subcmd
-            )
-        }
-      } else {
-        steps.error("Unknown credential type: '${type}' for credential '${credential_id}'")
       }
-    }
-    catch (CredentialNotFoundException e) {
-      steps.println("\033[31m[error] credential '${credential_id}' does not exist or is not of type '${type}'\033[39m")
-      throw e
+      catch (CredentialNotFoundException e) {
+        steps.println("\033[31m[error] credential '${credential_id}' does not exist or is not of type '${type}'\033[39m")
+        throw e
+      }
+    })
+
+    return steps.withCredentials(creds_info*.with_credentials) {
+      steps.sh(script: cmd
+        + ' ' + creds_info*.white_listed_vars.join(" ")
+        + ' ' + subcmd)
     }
   }
 
@@ -822,7 +809,7 @@ exec ssh -i '''
                           'build'
                         + ' --phase=' + shell_quote(phase)
                         + ' --variant=' + shell_quote(variant)
-                        , meta['with-credentials'])
+                        , meta.getOrDefault('with-credentials', []))
                     } finally {
                       if (meta.containsKey('junit')) {
                         def results = meta.junit
