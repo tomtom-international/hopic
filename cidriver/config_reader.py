@@ -235,19 +235,7 @@ def expand_docker_volume_spec(config_dir, volume_vars, volume_specs):
     return volumes
 
 
-def read(config, volume_vars):
-    config_dir = os.path.dirname(config)
-
-    volume_vars = volume_vars.copy()
-    volume_vars['CFGDIR'] = config_dir
-    OrderedImageLoader = ordered_image_ivy_loader(volume_vars)
-
-    with open(config, 'r') as f:
-        cfg = yaml.load(f, OrderedImageLoader)
-
-    cfg['volumes'] = expand_docker_volume_spec(config_dir, volume_vars, cfg.get('volumes', ()))
-
-    version_info = cfg.setdefault('version', OrderedDict())
+def read_version_info(config, version_info):
     if not isinstance(version_info, Mapping):
         raise ConfigurationError("`version` must be a mapping", file=config)
 
@@ -281,6 +269,22 @@ def read(config, volume_vars):
             raise ConfigurationError("`version.bump.reject-breaking-changes-on` field for the `conventional-commits` policy must be a regex or boolean", file=config)
         if not isinstance(bump['reject-new-features-on'], (string_types, Pattern)):
             raise ConfigurationError("`version.bump.reject-new-features-on` field for the `conventional-commits` policy must be a regex or boolean", file=config)
+
+    return version_info
+
+
+def read(config, volume_vars):
+    config_dir = os.path.dirname(config)
+
+    volume_vars = volume_vars.copy()
+    volume_vars['CFGDIR'] = config_dir
+    OrderedImageLoader = ordered_image_ivy_loader(volume_vars)
+
+    with open(config, 'r') as f:
+        cfg = yaml.load(f, OrderedImageLoader)
+
+    cfg['volumes'] = expand_docker_volume_spec(config_dir, volume_vars, cfg.get('volumes', ()))
+    cfg['version'] = read_version_info(config, cfg.get('version', OrderedDict()))
 
     env_vars = cfg.setdefault('pass-through-environment-vars', ())
     if not (isinstance(env_vars, Sequence) and not isinstance(env_vars, string_types)):
