@@ -276,13 +276,13 @@ The policy to use can be specified in the ``format`` option of the ``version`` o
 
 The version can be read from and stored in two locations:
 
-``file``
+``version.file``
     When this option is specified Hopic will always use this as the primary source for reading and storing the version.
     The first line to contain only a syntactically valid version, optionally prefixed with ``version=``, is assumed to be the version.
     When reading the version it'll use this verbatim.
     When storing a (likely bumped) version it'll only modify the version portion of that file.
 
-``tag``
+``version.tag``
     When this option is set to ``true`` or a non-empty string Hopic will, when storing, create a tag every time it creates a new version.
     When this option is set to a string it will be interpreted according to `Python Format Specification`_ with the named variable ``version`` containing the version.
     When this option is set and ``file`` is not set it will use `git describe <https://git-scm.com/docs/git-describe>`_ to read the current version from tags.
@@ -291,10 +291,37 @@ The version can be read from and stored in two locations:
     Setting this option to a string can, for example, be used to add a prefix like ``v`` to tags, e.g. by using ``v{version}``.
     Having it set to ``true`` instead uses the version policy's default formatting.
 
-Whether and what to bump can be controlled by the ``bump`` option.
+When and what to bump can be controlled by the ``version.bump`` option.
 When set to ``false`` it disables automated bumping completely.
-When not specified it defaults to bumping the default-to-bump part of the used version policy.
-When set to a string it bumps the named component of the version.
+Otherwise it describes a version bumping policy in its ``version.bump.policy`` member.
+
+There are currently two version bumping policies available:
+
+``constant``
+    Its ``version.bump.field`` property specifies what field to bump.
+    It will always bump that field and no other.
+    When not specified it defaults to bumping the default-to-bump part of the used version policy.
+
+   .. literalinclude:: ../../examples/version-bump-constant.yaml
+       :language: yaml
+
+``conventional-commits``
+   When used this policy determines the version field to bump based on commit messages formatted according to `Conventional Commits`_.
+   It searches all to-merge commits for breaking changes, new features and fixes.
+   If any of those are present it will bump, in order of precedence, the major, minor or patch number.
+
+   The ``version.bump.strict`` option of this policy controls whether each commit message is required to parse as a valid Conventional Commit.
+   If set to ``false`` invalidly formatted messages are just ignored and not taken into account to determine what to bump.
+   Otherwise the merge will fail when encountering invalidly formatted messages.
+
+   The ``version.bump.reject-breaking-changes-on`` and ``version.bump.reject-new-features-on`` options specify regular expressions matching branch names.
+   Merges into these branches will be rejected if, respectively, they contain breaking changes or new features.
+   The purpose of this is to prevent accidental inclusion of these kinds of changes into release branches.
+
+   .. literalinclude:: ../../examples/version-bump-conventional.yaml
+       :language: yaml
+
+In order to configure a version bumping policy without automatically bumping for every change the ``version.bump.on-every-change`` option can be set to ``false`` (defaults to ``true``).
 
 When bumping is enabled, Hopic bumps each time that it applies a change.
 Usually this means when it's merging a pull request.
@@ -304,6 +331,7 @@ Another option is when it's performing a modality change (currently only ``UPDAT
 
 .. _Semantic Versioning: https://semver.org/
 .. _Python Format Specification: https://docs.python.org/3/library/string.html#formatspec
+.. _Conventional Commits: https://www.conventionalcommits.org/en/v1.0.0/
 
 Modality Changes
 ----------------

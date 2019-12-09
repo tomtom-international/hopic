@@ -16,6 +16,7 @@ import click
 import click_log
 
 from . import binary_normalize
+from .commit import parse_commit_message
 from .config_reader import (
         JSONEncoder,
         expand_docker_volume_spec,
@@ -79,6 +80,10 @@ except ImportError:
 
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
+
+
+class VersioningError(click.ClickException):
+    exit_code = 33
 
 
 class DateTime(click.ParamType):
@@ -792,10 +797,7 @@ def process_prepare_source_tree(
 
             checkout_tree(ctx.obj.code_dir, code_remote, code_commit, code_clean, clean_config=ctx.obj.config['clean'])
 
-        try:
-            version_info = ctx.obj.config['version']
-        except (click.BadParameter, KeyError, TypeError):
-            version_info = {}
+        version_info = ctx.obj.config['version']
 
         # Re-read version to ensure that the version policy in the reloaded configuration is used for it
         ctx.obj.version = determine_version(version_info, ctx.obj.config_dir, ctx.obj.code_dir)
@@ -806,20 +808,46 @@ def process_prepare_source_tree(
         if 'file' in version_info:
             relative_version_file = os.path.relpath(os.path.join(os.path.relpath(ctx.obj.config_dir, repo.working_dir), version_info['file']))
 
-        if is_publish_allowed and version_info.get('bump', True):
+        bump = version_info['bump']
+        source_commits = (() if source_commit is None
+                else [parse_commit_message(commit, policy=bump['policy'], strict=bump.get('strict', False))
+                        for commit in git.Commit.list_items(
+                        repo,
+                        '{target_commit}..{source_commit}'.format(**locals()),
+                        first_parent=True,
+                        no_merges=True,
+                    )])
+
+        if bump['policy'] == 'conventional-commits':
+            if bump['reject-breaking-changes-on'].match(target_ref):
+                for commit in source_commits:
+                    if commit.has_breaking_change():
+                        raise VersioningError("Breaking changes are not allowed on '{target_ref}', but commit '{commit.hexsha}' contains one:\n{commit.message}".format(**locals()))
+            if bump['reject-new-features-on'].match(target_ref):
+                for commit in source_commits:
+                    if commit.has_new_feature():
+                        raise VersioningError("New features are not allowed on '{target_ref}', but commit '{commit.hexsha}' contains one:\n{commit.message}".format(**locals()))
+        
+        if is_publish_allowed and bump['policy'] != 'disabled' and bump['on-every-change']:
             if ctx.obj.version is None:
                 if 'file' in version_info:
-                    log.error("Failed to read the current version (from %r) while attempting to bump the version", version_info['file'])
+                    raise VersioningError("Failed to read the current version (from {version[file]}) while attempting to bump the version".format(**locals()))
                 else:
-                    log.error("Failed to determine the current version while attempting to bump the version")
+                    msg = "Failed to determine the current version while attempting to bump the version"
+                    log.error(msg)
                     # TODO: PIPE-309: provide an initial starting point instead
                     log.info("If this is a new repository you may wish to create a 0.0.0 tag for Hopic to start bumping from")
-                ctx.exit(1)
+                    raise VersioningError(msg)
 
-            params = {}
-            if 'bump' in version_info:
-                params['bump'] = version_info['bump']
-            ctx.obj.version = ctx.obj.version.next_version(**params)
+            if bump['policy'] == 'constant':
+                params = {}
+                if 'field' in bump:
+                    params['bump'] = bump['field']
+                ctx.obj.version = ctx.obj.version.next_version(**params)
+            elif bump['policy'] in ('conventional-commits',):
+                ctx.obj.version = ctx.obj.version.next_version_for_commits(source_commits)
+            else:
+                raise NotImplementedError("unsupported version bumping policy {bump['policy']}".format(**locals()))
             log.debug("bumped version to: \x1B[34m%s\x1B[39m", ctx.obj.version)
 
             if 'file' in version_info:
@@ -842,15 +870,17 @@ def process_prepare_source_tree(
         submit_commit = repo.index.commit(**commit_params)
         click.echo(submit_commit)
 
+        autosquash_commits = [commit
+                for commit in source_commits
+                if commit.needs_autosquash()
+            ]
+
         # Autosquash the merged commits (if any) to discover how that would look like.
         autosquash_base = None
-        if source_commit:
-            for commit in git.Commit.list_items(repo, '{target_commit}..{source_commit}'.format(**locals()), first_parent=True, no_merges=True):
-                subject = commit.message.splitlines()[0]
-                if subject.startswith('fixup!') or subject.startswith('squash!'):
-                    log.debug("Found an autosquash-commit in the source commits: '%s': %s", subject, click.style(text_type(commit), fg='yellow'))
-                    autosquash_base = repo.merge_base(target_commit, source_commit)
-                    break
+        if autosquash_commits:
+            commit = autosquash_commits[0]
+            log.debug("Found an autosquash-commit in the source commits: '%s': %s", commit.subject, click.style(commit.hexsha, fg='yellow'))
+            autosquash_base = repo.merge_base(target_commit, source_commit)
         autosquashed_commit = None
         if autosquash_base:
             repo.head.reference = source_commit
@@ -891,10 +921,13 @@ def process_prepare_source_tree(
                 )
             repo.create_tag(tagname, submit_commit, force=True)
 
+        # Re-read version to ensure that the newly created tag is taken into account
+        ctx.obj.version = determine_version(version_info, ctx.obj.config_dir, ctx.obj.code_dir)
+
         log.info('%s', repo.git.show(submit_commit, format='fuller', stat=True))
 
         push_commit = submit_commit
-        if ctx.obj.version is not None and 'file' in version_info and 'bump' in version_info.get('after-submit', {}) and is_publish_allowed:
+        if ctx.obj.version is not None and 'file' in version_info and 'bump' in version_info.get('after-submit', {}) and is_publish_allowed and bump['on-every-change']:
             params = {'bump': version_info['after-submit']['bump']}
             try:
                 params['prerelease_seed'] = version_info['after-submit']['prerelease-seed']

@@ -160,7 +160,7 @@ def hopic_config_subdir_version_file_tester(capfd, config_dir, hopic_config, ver
     sys.stderr.write(err)
     version_out = out.splitlines()[2]
     assert version_out == expected_version
-    with git.Repo.init(str(toprepo), expand_vars=False) as repo:
+    with git.Repo(str(toprepo), expand_vars=False) as repo:
         repo.git.checkout('master')
         assert expected_version == repo.git.tag(l=True)
 
@@ -236,3 +236,151 @@ version={}'''.format(version),
                                                         tmp_path)
     with (test_repo / config_dir / version_file).open('r') as f:
         assert f.read() == "version=0.0.4-PRERELEASE-TEST"
+
+
+def merge_conventional_bump(capfd, tmp_path, message, strict=False, on_every_change=True, target='master'):
+    author = git.Actor('Bob Tester', 'bob@example.net')
+    commitargs = dict(
+            author_date=_git_time,
+            commit_date=_git_time,
+            author=author,
+            committer=author,
+        )
+
+    toprepo = tmp_path / 'repo'
+    with git.Repo.init(str(toprepo), expand_vars=False) as repo:
+        with (toprepo / 'hopic-ci-config.yaml').open('w') as f:
+            f.write('''\
+version:
+  format: semver
+  tag:    true
+  bump:
+    policy: conventional-commits
+''')
+            if strict:
+                f.write('    strict: yes\n')
+            if not on_every_change:
+                f.write('    on-every-change: no\n')
+        repo.index.add(('hopic-ci-config.yaml',))
+        repo.index.commit(message='Initial commit', **commitargs)
+        repo.git.branch(target, move=True)
+        repo.create_tag('0.0.0')
+
+        # PR branch
+        repo.head.reference = repo.create_head('something-useful')
+        assert not repo.head.is_detached
+
+        # A preceding commit on this PR to detect whether we check more than the first commit's message in a PR
+        repo.index.commit(message='chore: some intermediate commit', **commitargs)
+        print(repo.git.log(format='fuller', color=True, stat=True), file=sys.stderr)
+
+        # Some change
+        with (toprepo / 'something.txt').open('w') as f:
+            f.write('usable')
+        repo.index.add(('something.txt',))
+        repo.index.commit(message=message, **commitargs)
+
+        # A succeeding commit on this PR to detect whether we check more than the last commit's message in a PR
+        repo.index.commit(message='chore: some other intermediate commit', **commitargs)
+        print(repo.git.log(format='fuller', color=True, stat=True), file=sys.stderr)
+
+    # Successful checkout and build
+    return run(
+            ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', target),
+            ('prepare-source-tree', '--author-date', '@{_git_time}'.format(_git_time=_git_time), '--commit-date', '@{_git_time}'.format(_git_time=_git_time),
+                'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful'),
+        )
+
+
+def test_merge_conventional_fix_bump(capfd, tmp_path):
+    result = merge_conventional_bump(capfd, tmp_path, message='fix: some problem')
+    assert result.exit_code == 0
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    checkout_commit, merge_commit, merge_version = out.splitlines()
+    assert merge_version.startswith('0.0.1+g')
+
+
+def test_merge_conventional_feat_bump(capfd, tmp_path):
+    result = merge_conventional_bump(capfd, tmp_path, message='feat: add something useful')
+    assert result.exit_code == 0
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    checkout_commit, merge_commit, merge_version = out.splitlines()
+    assert merge_version.startswith('0.1.0+g')
+
+
+def test_merge_conventional_breaking_change_bump(capfd, tmp_path):
+    result = merge_conventional_bump(capfd, tmp_path, message='refactor!: make the API type better')
+    assert result.exit_code == 0
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    checkout_commit, merge_commit, merge_version = out.splitlines()
+    assert merge_version.startswith('1.0.0+g')
+
+
+def test_merge_conventional_feat_with_breaking_bump(capfd, tmp_path):
+    result = merge_conventional_bump(capfd, tmp_path, message='''\
+refactor!: add something awesome
+
+This adds the new awesome feature.
+
+BREAKING CHANGE: unfortunately this was incompatible with the old feature for
+the same purpose, so you'll have to migrate.
+''')
+    assert result.exit_code == 0
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    checkout_commit, merge_commit, merge_version = out.splitlines()
+    assert merge_version.startswith('1.0.0+g')
+
+
+def test_merge_conventional_broken_feat(capfd, tmp_path):
+    with pytest.raises(RuntimeError):
+        merge_conventional_bump(capfd, tmp_path, message='feat add something useful', strict=True)
+
+
+def test_merge_conventional_feat_bump_not_on_change(capfd, tmp_path):
+    result = merge_conventional_bump(capfd, tmp_path, message='feat: add something useful', on_every_change=False)
+    assert result.exit_code == 0
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    checkout_commit, merge_commit, merge_version = out.splitlines()
+    assert merge_version.startswith('0.0.1-4+g')
+
+
+def test_merge_conventional_breaking_change_on_major_branch(capfd, tmp_path):
+    result = merge_conventional_bump(capfd, tmp_path, message='refactor!: make the API type better', target='release/42')
+    assert result.exit_code == 33
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    assert 'Breaking changes are not allowed' in err
+
+
+def test_merge_conventional_feat_on_minor_branch(capfd, tmp_path):
+    result = merge_conventional_bump(capfd, tmp_path, message='feat: add something useful', target='release/42.21')
+    assert result.exit_code == 33
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    assert 'New features are not allowed' in err

@@ -117,3 +117,81 @@ image:
     sys.stderr.write(err)
 
     assert re.search(r"^Error: configuration error in '.*?\bhopic-ci-config\.yaml': .*\bimage\b.*\bexemplare\b.*\bmust be\b.*\bstring\b", err, re.MULTILINE)
+
+
+def test_bad_version_config(capfd):
+    result = run_with_config('''\
+version: patch
+''', ('show-config',))
+
+    assert result.exit_code == 32
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    assert re.search(r"^Error: configuration error in '.*?\bhopic-ci-config\.yaml': .*\bversion\b.*\bmust be\b.*\bmapping\b", err, re.MULTILINE)
+
+
+def test_default_version_bumping_config(capfd):
+    result = run_with_config('''\
+{}
+''', ('show-config',))
+
+    assert result.exit_code == 0
+    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
+    assert output['version']['bump']['policy'] == 'constant'
+
+
+def test_default_version_bumping_backwards_compatible_policy(capfd):
+    result = run_with_config('''\
+version:
+  bump: patch
+''', ('show-config',))
+
+    assert result.exit_code == 0
+    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
+    assert output['version']['bump']['policy'] == 'constant'
+    assert output['version']['bump']['field'] == 'patch'
+
+
+def test_disabled_version_bumping(capfd):
+    result = run_with_config('''\
+version:
+  bump: no
+''', ('show-config',))
+
+    assert result.exit_code == 0
+    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
+    assert output['version']['bump']['policy'] == 'disabled'
+    assert 'field' not in output['version']['bump']
+
+
+def test_default_conventional_bumping(capfd):
+    result = run_with_config('''\
+version:
+  format: semver
+  tag: 'v.{version.major}.{version.minor}.{version.patch}'
+  bump:
+    policy: conventional-commits
+''', ('show-config',))
+
+    assert result.exit_code == 0
+    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
+    assert output['version']['bump']['policy'] == 'conventional-commits'
+    assert output['version']['bump']['strict'] == False
+
+    reject_breaking_changes_on = re.compile(output['version']['bump']['reject-breaking-changes-on'])
+    reject_new_features_on = re.compile(output['version']['bump']['reject-new-features-on'])
+    for major_branch in (
+            'release/42',
+            'rel-42',
+        ):
+        assert reject_breaking_changes_on.match(major_branch)
+        assert not reject_new_features_on.match(major_branch)
+    for minor_branch in (
+            'release/42.21',
+            'rel-42.21',
+        ):
+        assert reject_breaking_changes_on.match(minor_branch)
+        assert reject_new_features_on.match(minor_branch)

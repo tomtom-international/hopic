@@ -40,6 +40,9 @@ __all__ = (
 )
 
 
+Pattern = type(re.compile(''))
+
+
 _variable_interpolation_re = re.compile(r'(?<!\$)\$(?:(\w+)|\{([^}]+)\})')
 def expand_vars(vars, expr):
     if isinstance(expr, string_types):
@@ -150,6 +153,8 @@ class JSONEncoder(json.JSONEncoder):
     def default(self, o):
         if isinstance(o, IvyManifestImage):
             return str(o)
+        elif isinstance(o, Pattern):
+            return o.pattern
         return super().default(o)
 
 
@@ -230,6 +235,44 @@ def expand_docker_volume_spec(config_dir, volume_vars, volume_specs):
     return volumes
 
 
+def read_version_info(config, version_info):
+    if not isinstance(version_info, Mapping):
+        raise ConfigurationError("`version` must be a mapping", file=config)
+
+    bump = version_info.setdefault('bump', OrderedDict((('policy', 'constant'),)))
+    if not isinstance(bump, (string_types, Mapping, bool)) or isinstance(bump, bool) and bump:
+        raise ConfigurationError("`version.bump` must be a mapping, string or the boolean false", file=config)
+    elif isinstance(bump, string_types):
+        bump = version_info['bump'] = OrderedDict((
+                ('policy', 'constant'),
+                ('field', bump),
+            ))
+    elif isinstance(bump, bool):
+        assert bump == False
+        bump = version_info['bump'] = OrderedDict((
+                ('policy', 'disabled'),
+            ))
+    if not isinstance(bump.get('policy'), string_types):
+        raise ConfigurationError("`version.bump.policy` must be a string identifying a version bumping policy to use", file=config)
+    bump.setdefault('on-every-change', True)
+    if not isinstance(bump['on-every-change'], bool):
+        raise ConfigurationError("`version.bump.on-every-change` must be a boolean", file=config)
+    if bump['policy'] == 'constant' and not isinstance(bump.get('field'), (string_types, type(None))):
+        raise ConfigurationError("`version.bump.field`, if it exists, must be a string identifying a version field to bump for the `constant` policy", file=config)
+    if bump['policy'] == 'conventional-commits':
+        bump.setdefault('strict', False)
+        if not isinstance(version_info['bump']['strict'], bool):
+            raise ConfigurationError("`version.bump.strict` field for the `conventional-commits` policy must be a boolean", file=config)
+        bump.setdefault('reject-breaking-changes-on', re.compile(r'^(?:release/|rel-).*$'))
+        bump.setdefault('reject-new-features-on', re.compile(r'^(?:release/|rel-)\d+\..*$'))
+        if not isinstance(bump['reject-breaking-changes-on'], (string_types, Pattern)):
+            raise ConfigurationError("`version.bump.reject-breaking-changes-on` field for the `conventional-commits` policy must be a regex or boolean", file=config)
+        if not isinstance(bump['reject-new-features-on'], (string_types, Pattern)):
+            raise ConfigurationError("`version.bump.reject-new-features-on` field for the `conventional-commits` policy must be a regex or boolean", file=config)
+
+    return version_info
+
+
 def read(config, volume_vars):
     config_dir = os.path.dirname(config)
 
@@ -241,6 +284,7 @@ def read(config, volume_vars):
         cfg = yaml.load(f, OrderedImageLoader)
 
     cfg['volumes'] = expand_docker_volume_spec(config_dir, volume_vars, cfg.get('volumes', ()))
+    cfg['version'] = read_version_info(config, cfg.get('version', OrderedDict()))
 
     env_vars = cfg.setdefault('pass-through-environment-vars', ())
     cfg.setdefault('clean', [])
