@@ -118,6 +118,7 @@ def extract_match_group(match, group, start=0):
     if match is None or match.group(group) is None:
         return None
     return MatchGroup(name=group, text=match.group(group), start=match.start(group)+start, end=match.end(group)+start)
+
 type_tag    = extract_match_group(subject, 'type_tag'   , message.subject_start)
 scope       = extract_match_group(subject, 'scope'      , message.subject_start)
 breaking    = extract_match_group(subject, 'breaking'   , message.subject_start)
