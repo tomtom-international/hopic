@@ -19,6 +19,7 @@ from click.testing import CliRunner
 from collections import OrderedDict
 import git
 import json
+import os
 import pytest
 import re
 import sys
@@ -27,20 +28,24 @@ import sys
 _source_date_epoch = 7 * 24 * 3600
 
 
-def run_with_config(config, args, files={}, env=None):
+def run_with_config(config, args, files={}, env=None, cfg_file='hopic-ci-config.yaml'):
     runner = CliRunner(mix_stderr=False, env=env)
     with runner.isolated_filesystem():
         with git.Repo.init() as repo:
-            with open('hopic-ci-config.yaml', 'w') as f:
+            if '/' in cfg_file and not os.path.exists(os.path.dirname(cfg_file)):
+                os.makedirs(os.path.dirname(cfg_file))
+            with open(cfg_file, 'w') as f:
                 f.write(config)
             for fname, content in files.items():
                 if '/' in fname and not os.path.exists(os.path.dirname(fname)):
                     os.makedirs(os.path.dirname(fname))
                 with open(fname, 'w') as f:
                     f.write(content)
-            repo.index.add(('hopic-ci-config.yaml',) + tuple(files.keys()))
+            repo.index.add((cfg_file,) + tuple(files.keys()))
             git_time = '{} +0000'.format(_source_date_epoch)
             repo.index.commit(message='Initial commit', author_date=git_time, commit_date=git_time)
+        if cfg_file != 'hopic-ci-config.yaml':
+            args = ('--config', cfg_file) + tuple(args)
         result = runner.invoke(cli, args)
 
     if result.stdout_bytes:
@@ -195,3 +200,19 @@ version:
         ):
         assert reject_breaking_changes_on.match(minor_branch)
         assert reject_new_features_on.match(minor_branch)
+
+
+def test_default_workspace_is_repo_toplevel(capfd):
+    """This checks whether the default workspace, when a --config option is given but not a --workspace option,
+    is the toplevel directory of the repository the --config file resides in."""
+    result = run_with_config('''\
+volumes:
+  - ${CFGDIR}:/cfg
+''', ('show-config',), cfg_file='.ci/some-special-config/hopic-ci-config.yaml')
+
+    assert result.exit_code == 0
+    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
+    workspace = output['volumes']['/code']['source']
+    cfgdir = output['volumes']['/cfg']['source']
+    assert not cfgdir.endswith('hopic-ci-config.yaml')
+    assert os.path.relpath(workspace, cfgdir) == '../..'
