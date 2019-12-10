@@ -383,7 +383,7 @@ def determine_config_file_name(ctx):
 @click.group(context_settings=dict(help_option_names=('-h', '--help')))
 @click.option('--color', type=click.Choice(('always', 'auto', 'never')), default='auto', show_default=True)
 @click.option('--config', type=click.Path(exists=False, file_okay=True, dir_okay=False, readable=True, resolve_path=True), default=lambda: None, show_default='${WORKSPACE}/hopic-ci-config.yaml or ${WORKSPACE}/cfg.yml')
-@click.option('--workspace', type=click.Path(exists=False, file_okay=False, dir_okay=True), default=lambda: None, show_default='current working directory')
+@click.option('--workspace', type=click.Path(exists=False, file_okay=False, dir_okay=True), default=lambda: None, show_default='git work tree of config file or current working directory')
 @click.option('--whitelisted-var', multiple=True, default=['CT_DEVENV_HOME'], show_default=True)
 @click_log.simple_verbosity_option(__package__,              envvar='HOPIC_VERBOSITY', autocompletion=cli_autocomplete_click_log_verbosity)
 @click_log.simple_verbosity_option('git', '--git-verbosity', envvar='GIT_VERBOSITY'  , autocompletion=cli_autocomplete_click_log_verbosity)
@@ -422,7 +422,16 @@ def cli(ctx, color, config, workspace, whitelisted_var):
 
     if workspace is None:
         # workspace default
-        workspace = (os.path.dirname(config) if config is not None else os.getcwd())
+        if config is not None:
+            try:
+                with git.Repo(os.path.dirname(config), search_parent_directories=True) as repo:
+                    # Default to containing repository of config file, ...
+                    workspace = repo.working_dir
+            except (git.InvalidGitRepositoryError, git.NoSuchPathError):
+                # ... but fall back to containing directory of config file.
+                workspace = os.path.dirname(config)
+        else:
+            workspace = os.getcwd()
     workspace = os.path.join(os.getcwd(), workspace)
     ctx.obj.workspace = workspace
 
