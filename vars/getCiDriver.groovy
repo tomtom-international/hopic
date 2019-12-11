@@ -436,39 +436,39 @@ exec ssh -i '''
       def string_var    = currentCredential.getOrDefault('string-variable',   'SECRET')
       def type = currentCredential.getOrDefault('type', 'username-password')
 
-      try {
-        final white_listed_var = '--whitelisted-var='
-        if (type == 'username-password') {
-          return [white_listed_vars: white_listed_var + shell_quote(user_var) + ' ' + white_listed_var + shell_quote(pass_var),
-            with_credentials: steps.usernamePassword(
-              credentialsId: credential_id,
-              usernameVariable: user_var,
-              passwordVariable: pass_var,)
-          ]
-        } else if (type == 'file') {
-          return [white_listed_vars: white_listed_var + shell_quote(file_var),
-            with_credentials: steps.file(
-              credentialsId: credential_id,
-              variable: file_var,)
-          ]
-        } else if (type == 'string') {
-          return [white_listed_vars: white_listed_var + shell_quote(string_var),
-            with_credentials: steps.string(
-              credentialsId: credential_id,
-              variable: string_var,)
-          ]
-        }
-      }
-      catch (CredentialNotFoundException e) {
-        steps.println("\033[31m[error] credential '${credential_id}' does not exist or is not of type '${type}'\033[39m")
-        throw e
+      final white_listed_var = '--whitelisted-var='
+      if (type == 'username-password') {
+        return [white_listed_vars: white_listed_var + shell_quote(user_var) + ' ' + white_listed_var + shell_quote(pass_var),
+          with_credentials: steps.usernamePassword(
+            credentialsId: credential_id,
+            usernameVariable: user_var,
+            passwordVariable: pass_var,)
+        ]
+      } else if (type == 'file') {
+        return [white_listed_vars: white_listed_var + shell_quote(file_var),
+          with_credentials: steps.file(
+            credentialsId: credential_id,
+            variable: file_var,)
+        ]
+      } else if (type == 'string') {
+        return [white_listed_vars: white_listed_var + shell_quote(string_var),
+          with_credentials: steps.string(
+            credentialsId: credential_id,
+            variable: string_var,)
+        ]
       }
     })
 
-    return steps.withCredentials(creds_info*.with_credentials) {
-      steps.sh(script: cmd
-        + ' ' + creds_info*.white_listed_vars.join(" ")
-        + ' ' + subcmd)
+    try {
+      return steps.withCredentials(creds_info*.with_credentials) {
+        steps.sh(script: cmd
+          + ' ' + creds_info*.white_listed_vars.join(" ")
+          + ' ' + subcmd)
+      }
+    }
+    catch (CredentialNotFoundException e) {
+      steps.println("\033[31m[error] credential '${credentials*.id}' does not exist or is not of type '${credentials*.type}'\033[39m")
+      throw e
     }
   }
 
