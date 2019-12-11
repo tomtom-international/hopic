@@ -459,6 +459,10 @@ exec ssh -i '''
       }
     })
 
+    if (creds_info.size() == 0) {
+      return steps.sh(script: "${cmd} ${subcmd}")
+    }
+
     try {
       return steps.withCredentials(creds_info*.with_credentials) {
         steps.sh(script: cmd
