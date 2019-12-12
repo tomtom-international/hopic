@@ -16,8 +16,13 @@ import click
 import click_log
 
 from . import binary_normalize
-from .config_reader import read as read_config
-from .config_reader import expand_vars, expand_docker_volume_spec
+from .commit import parse_commit_message
+from .config_reader import (
+        JSONEncoder,
+        expand_docker_volume_spec,
+        expand_vars,
+        read as read_config,
+    )
 from .execution import echo_cmd
 from .versioning import *
 from collections import OrderedDict
@@ -75,6 +80,10 @@ except ImportError:
 
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
+
+
+class VersioningError(click.ClickException):
+    exit_code = 33
 
 
 class DateTime(click.ParamType):
@@ -373,7 +382,7 @@ def determine_config_file_name(ctx):
 @click.group(context_settings=dict(help_option_names=('-h', '--help')))
 @click.option('--color', type=click.Choice(('always', 'auto', 'never')), default='auto', show_default=True)
 @click.option('--config', type=click.Path(exists=False, file_okay=True, dir_okay=False, readable=True, resolve_path=True), default=lambda: None, show_default='${WORKSPACE}/hopic-ci-config.yaml')
-@click.option('--workspace', type=click.Path(exists=False, file_okay=False, dir_okay=True), default=lambda: None, show_default='parent directory of config file or current working directory')
+@click.option('--workspace', type=click.Path(exists=False, file_okay=False, dir_okay=True), default=lambda: None, show_default='git work tree of config file or current working directory')
 @click.option('--whitelisted-var', multiple=True, default=['CT_DEVENV_HOME'], show_default=True)
 @click_log.simple_verbosity_option(__package__,              envvar='HOPIC_VERBOSITY', autocompletion=cli_autocomplete_click_log_verbosity)
 @click_log.simple_verbosity_option('git', '--git-verbosity', envvar='GIT_VERBOSITY'  , autocompletion=cli_autocomplete_click_log_verbosity)
@@ -412,7 +421,16 @@ def cli(ctx, color, config, workspace, whitelisted_var):
 
     if workspace is None:
         # workspace default
-        workspace = (os.path.dirname(config) if config is not None else os.getcwd())
+        if config is not None:
+            try:
+                with git.Repo(os.path.dirname(config), search_parent_directories=True) as repo:
+                    # Default to containing repository of config file, ...
+                    workspace = repo.working_dir
+            except (git.InvalidGitRepositoryError, git.NoSuchPathError):
+                # ... but fall back to containing directory of config file.
+                workspace = os.path.dirname(config)
+        else:
+            workspace = os.getcwd()
     workspace = os.path.join(os.getcwd(), workspace)
     ctx.obj.workspace = workspace
 
@@ -541,7 +559,7 @@ def restore_mtime_from_git(repo, files=None):
         pass
 
 
-def checkout_tree(tree, remote, ref, clean=False, remote_name='origin', allow_submodule_checkout_failure=False):
+def checkout_tree(tree, remote, ref, clean=False, remote_name='origin', allow_submodule_checkout_failure=False, clean_config=[]):
     try:
         repo = git.Repo(tree)
         # Cleanup potential existing submodules to avoid conflicts in PR's where submodules are added
@@ -584,7 +602,7 @@ def checkout_tree(tree, remote, ref, clean=False, remote_name='origin', allow_su
                 raise
 
         if clean:
-            clean_repo(repo)
+            clean_repo(repo, clean_config)
 
         with repo.config_writer() as cfg:
             section = 'hopic.{commit}'.format(**locals())
@@ -609,7 +627,14 @@ def update_submodules(repo, clean):
                 clean_repo(sub_repo)
 
 
-def clean_repo(repo):
+def clean_repo(repo, clean_config=[]):
+    def substitute_home(arg):
+        volume_vars = {'HOME': os.path.expanduser('~')}
+        return expand_vars(volume_vars, os.path.expanduser(arg))
+    for cmd in clean_config:
+        cmd = [substitute_home(arg) for arg in shlex.split(cmd)]
+        echo_cmd(subprocess.check_call, cmd, cwd=repo.working_dir)
+
     clean_output = repo.git.clean('-xd', force=True)
     if clean_output:
         log.info('%s', clean_output)
@@ -654,6 +679,9 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean, ignore_initial_s
 
     try:
         ctx.obj.config = read_config(determine_config_file_name(ctx), ctx.obj.volume_vars)
+        if clean:
+            with git.Repo(workspace) as repo:
+                clean_repo(repo, ctx.obj.config['clean'])
         git_cfg = ctx.obj.config['scm']['git']
     except (click.BadParameter, KeyError, TypeError, OSError, IOError):
         return
@@ -713,7 +741,8 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean, ignore_initial_s
         cfg.set_value('hopic.code', 'cfg-ref', target_ref)
         cfg.set_value('hopic.code', 'cfg-clean', str(clean))
 
-    checkout_tree(ctx.obj.code_dir, git_cfg.get('remote', target_remote), git_cfg.get('ref', target_ref), clean)
+    checkout_tree(ctx.obj.code_dir, git_cfg.get('remote', target_remote), git_cfg.get('ref', target_ref),
+                  clean, clean_config=ctx.obj.config['clean'])
 
 
 @cli.group()
@@ -774,38 +803,64 @@ def process_prepare_source_tree(
                 except (KeyError, TypeError):
                     code_commit = cfg.get_value('hopic.code', 'cfg-ref')
 
-            checkout_tree(ctx.obj.code_dir, code_remote, code_commit, code_clean)
+            checkout_tree(ctx.obj.code_dir, code_remote, code_commit, code_clean, clean_config=ctx.obj.config['clean'])
 
-        try:
-            version_info = ctx.obj.config['version']
-        except (click.BadParameter, KeyError, TypeError):
-            version_info = {}
+        version_info = ctx.obj.config['version']
 
         # Re-read version to ensure that the version policy in the reloaded configuration is used for it
         ctx.obj.version = determine_version(version_info, ctx.obj.config_dir, ctx.obj.code_dir)
         
         # If the branch is not allowed to publish, skip version bump step
         is_publish_allowed = is_publish_branch(ctx)
+
+        if 'file' in version_info:
+            relative_version_file = os.path.relpath(os.path.join(os.path.relpath(ctx.obj.config_dir, repo.working_dir), version_info['file']))
+
+        bump = version_info['bump']
+        source_commits = (() if source_commit is None
+                else [parse_commit_message(commit, policy=bump['policy'], strict=bump.get('strict', False))
+                        for commit in git.Commit.list_items(
+                        repo,
+                        '{target_commit}..{source_commit}'.format(**locals()),
+                        first_parent=True,
+                        no_merges=True,
+                    )])
+
+        if bump['policy'] == 'conventional-commits':
+            if bump['reject-breaking-changes-on'].match(target_ref):
+                for commit in source_commits:
+                    if commit.has_breaking_change():
+                        raise VersioningError("Breaking changes are not allowed on '{target_ref}', but commit '{commit.hexsha}' contains one:\n{commit.message}".format(**locals()))
+            if bump['reject-new-features-on'].match(target_ref):
+                for commit in source_commits:
+                    if commit.has_new_feature():
+                        raise VersioningError("New features are not allowed on '{target_ref}', but commit '{commit.hexsha}' contains one:\n{commit.message}".format(**locals()))
         
-        if is_publish_allowed and version_info.get('bump', True):
+        if is_publish_allowed and bump['policy'] != 'disabled' and bump['on-every-change']:
             if ctx.obj.version is None:
                 if 'file' in version_info:
-                    log.error("Failed to read the current version (from %r) while attempting to bump the version", version_info['file'])
+                    raise VersioningError("Failed to read the current version (from {version[file]}) while attempting to bump the version".format(**locals()))
                 else:
-                    log.error("Failed to determine the current version while attempting to bump the version")
+                    msg = "Failed to determine the current version while attempting to bump the version"
+                    log.error(msg)
                     # TODO: PIPE-309: provide an initial starting point instead
                     log.info("If this is a new repository you may wish to create a 0.0.0 tag for Hopic to start bumping from")
-                ctx.exit(1)
+                    raise VersioningError(msg)
 
-            params = {}
-            if 'bump' in version_info:
-                params['bump'] = version_info['bump']
-            ctx.obj.version = ctx.obj.version.next_version(**params)
+            if bump['policy'] == 'constant':
+                params = {}
+                if 'field' in bump:
+                    params['bump'] = bump['field']
+                ctx.obj.version = ctx.obj.version.next_version(**params)
+            elif bump['policy'] in ('conventional-commits',):
+                ctx.obj.version = ctx.obj.version.next_version_for_commits(source_commits)
+            else:
+                raise NotImplementedError("unsupported version bumping policy {bump['policy']}".format(**locals()))
             log.debug("bumped version to: \x1B[34m%s\x1B[39m", ctx.obj.version)
 
             if 'file' in version_info:
                 replace_version(os.path.join(ctx.obj.config_dir, version_info['file']), ctx.obj.version)
-                repo.index.add([version_info['file']])
+                repo.index.add((relative_version_file,))
         else:
             log.info("Skip version bumping due to the configuration or the target branch is not allowed to publish")
 
@@ -823,15 +878,17 @@ def process_prepare_source_tree(
         submit_commit = repo.index.commit(**commit_params)
         click.echo(submit_commit)
 
+        autosquash_commits = [commit
+                for commit in source_commits
+                if commit.needs_autosquash()
+            ]
+
         # Autosquash the merged commits (if any) to discover how that would look like.
         autosquash_base = None
-        if source_commit:
-            for commit in git.Commit.list_items(repo, '{target_commit}..{source_commit}'.format(**locals()), first_parent=True, no_merges=True):
-                subject = commit.message.splitlines()[0]
-                if subject.startswith('fixup!') or subject.startswith('squash!'):
-                    log.debug("Found an autosquash-commit in the source commits: '%s': %s", subject, click.style(text_type(commit), fg='yellow'))
-                    autosquash_base = repo.merge_base(target_commit, source_commit)
-                    break
+        if autosquash_commits:
+            commit = autosquash_commits[0]
+            log.debug("Found an autosquash-commit in the source commits: '%s': %s", commit.subject, click.style(commit.hexsha, fg='yellow'))
+            autosquash_base = repo.merge_base(target_commit, source_commit)
         autosquashed_commit = None
         if autosquash_base:
             repo.head.reference = source_commit
@@ -872,10 +929,13 @@ def process_prepare_source_tree(
                 )
             repo.create_tag(tagname, submit_commit, force=True)
 
+        # Re-read version to ensure that the newly created tag is taken into account
+        ctx.obj.version = determine_version(version_info, ctx.obj.config_dir, ctx.obj.code_dir)
+
         log.info('%s', repo.git.show(submit_commit, format='fuller', stat=True))
 
         push_commit = submit_commit
-        if ctx.obj.version is not None and 'file' in version_info and 'bump' in version_info.get('after-submit', {}) and is_publish_allowed:
+        if ctx.obj.version is not None and 'file' in version_info and 'bump' in version_info.get('after-submit', {}) and is_publish_allowed and bump['on-every-change']:
             params = {'bump': version_info['after-submit']['bump']}
             try:
                 params['prerelease_seed'] = version_info['after-submit']['prerelease-seed']
@@ -888,7 +948,7 @@ def process_prepare_source_tree(
             replace_version(os.path.join(ctx.obj.config_dir, version_info['file']), after_submit_version, outfile=new_version_file)
             new_version_file = new_version_file.getvalue().encode(sys.getdefaultencoding())
 
-            old_version_blob = submit_commit.tree[version_info['file']]
+            old_version_blob = submit_commit.tree[relative_version_file]
             new_version_blob = git.Blob(
                     repo=repo,
                     binsha=repo.odb.store(gitdb.IStream(git.Blob.type, len(new_version_file), BytesIO(new_version_file))).binsha,
@@ -1149,7 +1209,7 @@ def getinfo(ctx, phase, variant):
                             var_info[key].extend(val)
                         else:
                             var_info[key] = val
-    click.echo(json.dumps(info, indent=4, separators=(',', ': ')))
+    click.echo(json.dumps(info, indent=4, separators=(',', ': '), cls=JSONEncoder))
 
 
 @cli.command()
@@ -1202,12 +1262,11 @@ def build(ctx, phase, variant):
             if variant is not None and curvariant != variant:
                 continue
 
-            image = cfg.get('image', None)
-            if image is not None and isinstance(image, Mapping):
-                try:
-                    image = image[curvariant]
-                except KeyError:
-                    image = image.get('default', None)
+            images = cfg['image']
+            try:
+                image = images[curvariant]
+            except KeyError:
+                image = images.get('default', None)
 
             volume_vars = ctx.obj.volume_vars.copy()
             # Give commands executing inside a container image a different view than outside
@@ -1503,7 +1562,7 @@ def show_config(ctx):
     Diagnostic helper command to display the configuration after processing.
     """
 
-    click.echo(json.dumps(ctx.obj.config, indent=4, separators=(',', ': ')))
+    click.echo(json.dumps(ctx.obj.config, indent=4, separators=(',', ': '), cls=JSONEncoder))
 
 
 @cli.command()

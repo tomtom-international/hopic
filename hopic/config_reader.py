@@ -16,7 +16,17 @@ from collections import (
         OrderedDict,
         Sequence,
     )
+try:
+    from collections.abc import (
+            Mapping,
+        )
+except ImportError:
+    from collections import (
+            Mapping,
+        )
+from click import ClickException
 import errno
+import json
 import os
 import re
 from six import string_types
@@ -28,6 +38,9 @@ __all__ = (
     'read',
     'expand_docker_volume_spec',
 )
+
+
+Pattern = type(re.compile(''))
 
 
 _variable_interpolation_re = re.compile(r'(?<!\$)\$(?:(\w+)|\{([^}]+)\})')
@@ -54,8 +67,18 @@ def expand_vars(vars, expr):
     except TypeError:
         return expr
 
-class ConfigurationError(Exception):
-    pass
+class ConfigurationError(ClickException):
+    exit_code = 32
+
+    def __init__(self, message, file=None):
+        super().__init__(message)
+        self.file = file
+
+    def format_message(self):
+        if self.file is not None:
+            return "configuration error in '%s': %s" % (self.file, self.message)
+        else:
+            return "configuration error: %s" % (self.message,)
 
 
 class OrderedLoader(yaml.SafeLoader):
@@ -120,6 +143,15 @@ class IvyManifestImage:
         image['image'] = '/'.join(path for path in (image.get('repository'), image.get('path'), image['name']) if path)
 
         return '{image}:{rev}'.format(**image)
+
+
+class JSONEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, IvyManifestImage):
+            return str(o)
+        elif isinstance(o, Pattern):
+            return o.pattern
+        return super().default(o)
 
 
 def ordered_image_ivy_loader(volume_vars):
@@ -199,6 +231,44 @@ def expand_docker_volume_spec(config_dir, volume_vars, volume_specs):
     return volumes
 
 
+def read_version_info(config, version_info):
+    if not isinstance(version_info, Mapping):
+        raise ConfigurationError("`version` must be a mapping", file=config)
+
+    bump = version_info.setdefault('bump', OrderedDict((('policy', 'constant'),)))
+    if not isinstance(bump, (string_types, Mapping, bool)) or isinstance(bump, bool) and bump:
+        raise ConfigurationError("`version.bump` must be a mapping, string or the boolean false", file=config)
+    elif isinstance(bump, string_types):
+        bump = version_info['bump'] = OrderedDict((
+                ('policy', 'constant'),
+                ('field', bump),
+            ))
+    elif isinstance(bump, bool):
+        assert bump == False
+        bump = version_info['bump'] = OrderedDict((
+                ('policy', 'disabled'),
+            ))
+    if not isinstance(bump.get('policy'), string_types):
+        raise ConfigurationError("`version.bump.policy` must be a string identifying a version bumping policy to use", file=config)
+    bump.setdefault('on-every-change', True)
+    if not isinstance(bump['on-every-change'], bool):
+        raise ConfigurationError("`version.bump.on-every-change` must be a boolean", file=config)
+    if bump['policy'] == 'constant' and not isinstance(bump.get('field'), (string_types, type(None))):
+        raise ConfigurationError("`version.bump.field`, if it exists, must be a string identifying a version field to bump for the `constant` policy", file=config)
+    if bump['policy'] == 'conventional-commits':
+        bump.setdefault('strict', False)
+        if not isinstance(version_info['bump']['strict'], bool):
+            raise ConfigurationError("`version.bump.strict` field for the `conventional-commits` policy must be a boolean", file=config)
+        bump.setdefault('reject-breaking-changes-on', re.compile(r'^(?:release/|rel-).*$'))
+        bump.setdefault('reject-new-features-on', re.compile(r'^(?:release/|rel-)\d+\..*$'))
+        if not isinstance(bump['reject-breaking-changes-on'], (string_types, Pattern)):
+            raise ConfigurationError("`version.bump.reject-breaking-changes-on` field for the `conventional-commits` policy must be a regex or boolean", file=config)
+        if not isinstance(bump['reject-new-features-on'], (string_types, Pattern)):
+            raise ConfigurationError("`version.bump.reject-new-features-on` field for the `conventional-commits` policy must be a regex or boolean", file=config)
+
+    return version_info
+
+
 def read(config, volume_vars):
     config_dir = os.path.dirname(config)
 
@@ -210,13 +280,24 @@ def read(config, volume_vars):
         cfg = yaml.load(f, OrderedImageLoader)
 
     cfg['volumes'] = expand_docker_volume_spec(config_dir, volume_vars, cfg.get('volumes', ()))
+    cfg['version'] = read_version_info(config, cfg.get('version', OrderedDict()))
 
     env_vars = cfg.setdefault('pass-through-environment-vars', ())
+    cfg.setdefault('clean', [])
     if not (isinstance(env_vars, Sequence) and not isinstance(env_vars, string_types)):
-        raise ConfigurationError('`pass-through-environment-vars` must be a sequence of strings')
+        raise ConfigurationError('`pass-through-environment-vars` must be a sequence of strings', file=config)
     for idx, var in enumerate(env_vars):
         if not isinstance(var, string_types):
-            raise ConfigurationError("`pass-through-environment-vars` must be a sequence containing strings only: element {idx} has type {type!r}".format(idx=idx, type=type))
+            raise ConfigurationError("`pass-through-environment-vars` must be a sequence containing strings only: element {idx} has type {type!r}".format(idx=idx, type=type), file=config)
+
+    image = cfg.setdefault('image', OrderedDict())
+    if not isinstance(image, (Mapping, str, IvyManifestImage)):
+        raise ConfigurationError("`image` must be a string, mapping, or `!image-from-ivy-manifest`", file=config)
+    if not isinstance(image, Mapping):
+        image = cfg['image'] = OrderedDict((('default', cfg['image']),))
+    for variant, name in image.items():
+        if not isinstance(name, (str, IvyManifestImage)):
+            raise ConfigurationError("`image` member `{variant}` must be a string or `!image-from-ivy-manifest`".format(**locals()), file=config)
 
     # Convert multiple different syntaxes into a single one
     for phase in cfg.setdefault('phases', OrderedDict()).values():
@@ -251,6 +332,9 @@ def read(config, volume_vars):
                         if var_key == 'with-credentials':
                             if isinstance(var[var_key], string_types):
                                 var[var_key] = OrderedDict([('id', var[var_key])])
+                            if not isinstance(var[var_key], Sequence):
+                                var[var_key] = [var[var_key]]
+
                         if var_key == 'volumes-from':
                             var[var_key] = expand_docker_volumes_from(volume_vars, var[var_key])
 

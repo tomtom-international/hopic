@@ -1,0 +1,8 @@
+phases:
+  quality:
+    Coverity:
+      - description: Coverity run
+      - volumes-from:
+        - image-name: hub.docker.com/tomtom/coverity
+          image-version: 2.4.6
+      - echo -e "Run Coverity here, eg.:\n  cov-configure --template --compiler gcc --comptype gcc\n  cov-configure -co /tools/devenv/Linux/Linux/gcc-4.8.2/bin/c++ -- -msse -mfpmath=sse\netc.."

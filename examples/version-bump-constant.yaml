@@ -1,0 +1,6 @@
+version:
+  format: semver
+  tag: 'v.{version.major}.{version.minor}.{version.patch}'
+  bump:
+    policy: constant
+    field: patch

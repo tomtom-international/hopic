@@ -15,7 +15,7 @@
 from ..cli import cli
 
 from click.testing import CliRunner
-from collections import OrderedDict
+from collections import OrderedDict, Sequence
 import json
 import sys
 
@@ -97,3 +97,28 @@ phases:
     assert 'a' in output['test']
     assert 'a' in output['upload']
     assert 'b' in output['upload']
+
+
+def test_with_credentials_format():
+    result = run_with_config('''\
+    phases:
+      build:
+        a:
+        - with-credentials: test_id
+        - with-credentials:
+            id: second_id
+        - with-credentials:
+            - id: third_id
+            - id: fourth_id
+    ''', ('getinfo',))
+
+    assert result.exit_code == 0
+    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
+
+    with_credentials = output['build']['a']['with-credentials']
+    assert isinstance(with_credentials, Sequence)
+    assert len(with_credentials) == 4
+    assert 'test_id' in with_credentials[0]['id']
+    assert 'second_id' in with_credentials[1]['id']
+    assert 'third_id' in with_credentials[2]['id']
+    assert 'fourth_id' in with_credentials[3]['id']
