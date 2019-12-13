@@ -81,8 +81,8 @@ errors = []
 if not message.lines[-1]:
     errors.append("\x1B[1m{commit}:{}:1: \x1B[31merror\x1B[39m: commit message body is followed by empty lines\x1B[m".format(len(message.lines), commit=commit))
 
-if re.match(r"^Merge branch '.*?'(?:into '.*')?$", message.subject):
-    # Ignore branch merges
+if re.match(r"^Merge (?:branch|tag) '.*?'(?:into '.*')?$", message.subject):
+    # Ignore branch/tag merges
     sys.exit(0)
 
 subject_re = re.compile(r'''
