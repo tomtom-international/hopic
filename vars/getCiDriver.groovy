@@ -126,21 +126,33 @@ class BitbucketPullRequest extends ChangeRequest {
         if (!users.containsKey(username)) {
           def baseRestUrl = url
             .replaceFirst(/\/projects\/.*/, '/rest/api/1.0')
-          users[username] = steps.readJSON(text: steps.httpRequest(
+          def response = steps.httpRequest(
               url: "${baseRestUrl}/users/${username}",
               httpMode: 'GET',
               authentication: credentialsId,
-            ).content)
+              validResponseCodes: '200,404',
+            )
+          def json = response.content ? steps.readJSON(text: response.content) : [:]
+          if (response.status == 200) {
+            users[username] = json
+          } else {
+            def errors = json.getOrDefault('errors', [])
+            def msg = errors ? errors[0].getOrDefault('message', '') : ''
+            steps.println("\033[31m[error] could not find BitBucket user '${username}'${msg ? ': ' : ''}${msg}\033[39m")
+          }
         }
-        def user = users[username]
 
-        def str = user.getOrDefault('displayName', user.getOrDefault('name', username))
-        if (user.emailAddress) {
-          str = "${str} <${user.emailAddress}>"
+        if (users.containsKey(username)) {
+          def user = users[username]
+
+          def str = user.getOrDefault('displayName', user.getOrDefault('name', username))
+          if (user.emailAddress) {
+            str = "${str} <${user.emailAddress}>"
+          }
+
+          new_description = new_description + info.description[last_idx..start - 1] + str
+          last_idx = end
         }
-
-        new_description = new_description + info.description[last_idx..start - 1] + str
-        last_idx = end
       }
 
       new_description = new_description + info.description[last_idx..-1]
