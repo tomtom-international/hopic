@@ -759,9 +759,9 @@ def process_prepare_source_tree(
 
         with repo.config_writer() as cfg:
             section = f"hopic.{target_commit}"
-            target_ref    = cfg.get_value(section, 'ref')
-            target_remote = cfg.get_value(section, 'remote')
-            code_clean    = cfg.getboolean('hopic.code', 'cfg-clean')
+            target_ref    = cfg.get(section, 'ref', fallback=None)
+            target_remote = cfg.get(section, 'remote', fallback=None)
+            code_clean    = cfg.getboolean('hopic.code', 'cfg-clean', fallback=False)
 
         repo.git.submodule(["deinit", "--all", "--force"])  # Remove submodules in case it is changed in change_applicator
         commit_params = change_applicator(repo)
@@ -812,7 +812,7 @@ def process_prepare_source_tree(
                         no_merges=True,
                     )])
 
-        if bump['policy'] == 'conventional-commits':
+        if bump['policy'] == 'conventional-commits' and target_ref is not None:
             if bump['reject-breaking-changes-on'].match(target_ref):
                 for commit in source_commits:
                     if commit.has_breaking_change():
@@ -976,12 +976,16 @@ def process_prepare_source_tree(
         with repo.config_writer() as cfg:
             cfg.remove_section(f"hopic.{target_commit}")
             section = f"hopic.{submit_commit}"
-            cfg.set_value(section, 'remote', target_remote)
-            cfg.set_value(section, 'ref', target_ref)
-            refspecs = [f"{push_commit}:{target_ref}"]
+            if target_remote is not None:
+                cfg.set_value(section, 'remote', target_remote)
+            refspecs = []
+            if target_ref is not None:
+                cfg.set_value(section, 'ref', target_ref)
+                refspecs.append(f"{push_commit}:{target_ref}")
             if tagname is not None:
                 refspecs.append(f"refs/tags/{tagname}:refs/tags/{tagname}")
-            cfg.set_value(section, 'refspecs', ' '.join(shlex.quote(refspec) for refspec in refspecs))
+            if refspecs:
+                cfg.set_value(section, 'refspecs', ' '.join(shlex.quote(refspec) for refspec in refspecs))
             if source_commit:
                 cfg.set_value(section, 'target-commit', str(target_commit))
                 cfg.set_value(section, 'source-commit', str(source_commit))
