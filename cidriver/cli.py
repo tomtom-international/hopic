@@ -1409,16 +1409,16 @@ def build(ctx, phase, variant):
                                           '--net=host',
                                           '--tty',
                                           '--cap-add=SYS_PTRACE',
-                                          '--tmpfs', '{}:uid={},gid={}'.format(env['HOME'], uid, gid),
-                                          '-u', '{}:{}'.format(uid, gid),
-                                          '-v', '/etc/passwd:/etc/passwd:ro',
-                                          '-v', '/etc/group:/etc/group:ro',
-                                          '-w', '/code',
+                                          '--tmpfs={}:uid={},gid={}'.format(env['HOME'], uid, gid),
+                                          '--user={}:{}'.format(uid, gid),
+                                          '--volume=/etc/passwd:/etc/passwd:ro',
+                                          '--volume=/etc/group:/etc/group:ro',
+                                          '--workdir=/code',
                                           ] + list(chain(*[
-                                              ['-e', '{}={}'.format(k, v)] for k, v in env.items()
+                                              ['--env={}={}'.format(k, v)] for k, v in env.items()
                                           ]))
                             for volume in volumes.values():
-                                docker_run += ['-v', volume_spec_to_docker_param(volume)]
+                                docker_run += ['--volume={}'.format(volume_spec_to_docker_param(volume))]
 
                             for volume_from in volumes_from:
                                 docker_run += ['--volumes-from=' + volume_from]

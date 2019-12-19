@@ -116,8 +116,10 @@ phases:
     assert not expected
 
 
-def test_docker_run_default_arguments(monkeypatch, tmp_path):
-    image_and_command_argument_length = len(['buildpack-deps:18.04', './a.sh'])
+def test_docker_run_arguments(monkeypatch, tmp_path):
+    expected_image_command = [
+        ('buildpack-deps:18.04', './a.sh'),
+    ]
     uid = 42
     gid = 4242
 
@@ -132,7 +134,9 @@ def test_docker_run_default_arguments(monkeypatch, tmp_path):
 
         assert args[0] == 'docker'
         assert args[1] == 'run'
-        docker_argument_list = args[2:-image_and_command_argument_length]
+        image_command_length = len(tuple(expected_image_command[0]))
+        assert tuple(args[-image_command_length:]) == expected_image_command.pop(0)
+        docker_argument_list = args[2:-image_command_length]
         for docker_arg in expected_docker_args:
             assert docker_arg in docker_argument_list
             docker_argument_list.remove(docker_arg)
@@ -152,6 +156,7 @@ phases:
       - ./a.sh
 ''', ('build',))
     assert result.exit_code == 0
+    assert not expected_image_command
 
 
 def test_image_override_per_phase(monkeypatch):
