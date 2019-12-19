@@ -1408,6 +1408,7 @@ def build(ctx, phase, variant):
                                           '--rm',
                                           '--net=host',
                                           '--tty',
+                                          '--cap-add=SYS_PTRACE',
                                           '--tmpfs', '{}:uid={},gid={}'.format(env['HOME'], uid, gid),
                                           '-u', '{}:{}'.format(uid, gid),
                                           '-v', '/etc/passwd:/etc/passwd:ro',

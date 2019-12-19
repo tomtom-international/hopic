@@ -116,6 +116,44 @@ phases:
     assert not expected
 
 
+def test_docker_run_default_arguments(monkeypatch, tmp_path):
+    image_and_command_argument_length = len(['buildpack-deps:18.04', './a.sh'])
+    uid = 42
+    gid = 4242
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        expected_docker_args = [
+            '--cap-add=SYS_PTRACE', '--rm', '--tty', '--volume=/etc/passwd:/etc/passwd:ro',
+            '--volume=/etc/group:/etc/group:ro', '--workdir=/code',
+            '--volume={}:/code'.format(os.getcwd()), '--env=SOURCE_DATE_EPOCH={}'.format(_source_date_epoch),
+            '--env=HOME=/home/sandbox', '--env=_JAVA_OPTIONS=-Duser.home=/home/sandbox', '--user={}:{}'.format(uid, gid),
+            '--net=host', '--tmpfs={}:uid={},gid={}'.format('/home/sandbox', uid, gid)
+        ]
+
+        assert args[0] == 'docker'
+        assert args[1] == 'run'
+        docker_argument_list = args[2:-image_and_command_argument_length]
+        for docker_arg in expected_docker_args:
+            assert docker_arg in docker_argument_list
+            docker_argument_list.remove(docker_arg)
+        assert(docker_argument_list == [])
+
+    with monkeypatch.context() as m:
+        m.setattr(subprocess, 'check_call', mock_check_call)
+        m.setattr(os, 'getuid', lambda: uid)
+        m.setattr(os, 'getgid', lambda: gid)
+        result = run_with_config('''\
+image:
+  default: buildpack-deps:18.04
+
+phases:
+  build:
+    a:
+      - ./a.sh
+''', ('build',))
+    assert result.exit_code == 0
+
+
 def test_image_override_per_phase(monkeypatch):
     expected = [
         ('buildpack-deps:18.04', './build-a.sh'),
