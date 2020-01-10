@@ -1350,6 +1350,11 @@ def build(ctx, phase, variant):
                             pass
 
                         try:
+                            image = cmd['image']
+                        except KeyError:
+                            pass
+
+                        try:
                             cmd = cmd['sh']
                         except (KeyError, TypeError):
                             continue

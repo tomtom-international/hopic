@@ -53,7 +53,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'Hopic'
-copyright = u'2018 - 2019, TomTom N.V.'
+copyright = u'2018 - 2020, TomTom N.V.'
 author = u'Giel van Schijndel'
 
 pkg_name = 'cidriver'
