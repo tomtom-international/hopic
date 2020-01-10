@@ -116,6 +116,52 @@ phases:
     assert not expected
 
 
+def test_image_override_per_phase(monkeypatch):
+    expected = [
+        ('buildpack-deps:18.04', './build-a.sh'),
+        ('buildpack-deps:buster', './build-b.sh'),
+        ('test-image-a:latest', './test-a.sh'),
+        ('test-image-b:bleeding-edge', './test-b.sh'),
+        ('buildpack-deps:18.04', './deploy-a.sh'),
+        ('buildpack-deps:buster', './deploy-b.sh'),
+    ]
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        assert args[0] == 'docker'
+        assert tuple(args[-2:]) == expected.pop(0)
+
+    with monkeypatch.context() as m:
+        m.setattr(subprocess, 'check_call', mock_check_call)
+        result = run_with_config('''\
+image:
+  default: buildpack-deps:18.04
+  b: buildpack-deps:buster
+
+phases:
+  build:
+    a:
+      - ./build-a.sh
+    b:
+      - ./build-b.sh
+      
+  test:
+    a:
+      - image: test-image-a:latest
+      - ./test-a.sh
+    b: 
+      - image: test-image-b:bleeding-edge
+      - ./test-b.sh
+      
+  deploy:
+    a:
+      - ./deploy-a.sh
+    b: 
+      - ./deploy-b.sh
+    
+''', ('build',))
+    assert result.exit_code == 0
+    assert not expected
+
 @docker
 def test_container_with_env_var():
     result = run_with_config('''\
