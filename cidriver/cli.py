@@ -854,6 +854,17 @@ def process_prepare_source_tree(
                     params['bump'] = bump['field']
                 ctx.obj.version = ctx.obj.version.next_version(**params)
             elif bump['policy'] in ('conventional-commits',):
+                if log.isEnabledFor(logging.DEBUG):
+                    log.debug("bumping based on conventional commits:")
+                    for commit in source_commits:
+                        breaking = ('breaking' if commit.has_breaking_change() else '')
+                        feat = ('feat' if commit.has_new_feature() else '')
+                        fix = ('fix' if commit.has_fix() else '')
+                        try:
+                            hash_prefix = click.style(commit.hexsha, fg='yellow') + ': '
+                        except AttributeError:
+                            hash_prefix = ''
+                        log.debug("%s [%-8s][%-4s][%-3s]: %s", hash_prefix, breaking,feat, fix, commit.full_subject)
                 ctx.obj.version = ctx.obj.version.next_version_for_commits(source_commits)
             else:
                 raise NotImplementedError("unsupported version bumping policy {bump['policy']}".format(**locals()))
