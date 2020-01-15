@@ -23,11 +23,27 @@ import pytest
 import subprocess
 import sys
 
-
 _source_date_epoch = 7 * 24 * 3600
 
 
-def run_with_config(config, *args, files={}, env=None):
+class MonkeypatchInjector:
+    def __init__(self, monkeypatch=None, context_entry_function=lambda dum: None):
+        self.monkeypatch = monkeypatch
+        self.context_entry_function = context_entry_function
+
+    def __enter__(self):
+        if self.monkeypatch:
+            self.monkeypatch_context = self.monkeypatch.context()
+            empty_monkeypatch_context = self.monkeypatch_context.__enter__()
+            self.context_entry_function(empty_monkeypatch_context)
+            return empty_monkeypatch_context
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.monkeypatch:
+            return self.monkeypatch_context.__exit__(exc_type, exc_val, exc_tb)
+
+
+def run_with_config(config, *args, files={}, env=None, monkeypatch_injector=MonkeypatchInjector()):
     runner = CliRunner(mix_stderr=False, env=env)
     with runner.isolated_filesystem():
         with git.Repo.init() as repo:
@@ -42,7 +58,8 @@ def run_with_config(config, *args, files={}, env=None):
             git_time = '{} +0000'.format(_source_date_epoch)
             repo.index.commit(message='Initial commit', author_date=git_time, commit_date=git_time)
         for arg in args:
-            result = runner.invoke(cli, arg)
+            with monkeypatch_injector:
+                result = runner.invoke(cli, arg)
 
             if result.stdout_bytes:
                 print(result.stdout, end='')
@@ -114,6 +131,52 @@ phases:
 ''', ('build',))
     assert result.exit_code == 0
     assert not expected
+
+
+def test_docker_run_arguments(monkeypatch, tmp_path):
+    expected_image_command = [
+        ('buildpack-deps:18.04', './a.sh'),
+    ]
+    uid = 42
+    gid = 4242
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        expected_docker_args = [
+            '--cap-add=SYS_PTRACE', '--rm', '--tty', '--volume=/etc/passwd:/etc/passwd:ro',
+            '--volume=/etc/group:/etc/group:ro', '--workdir=/code',
+            '--volume={}:/code'.format(os.getcwd()), '--env=SOURCE_DATE_EPOCH={}'.format(_source_date_epoch),
+            '--env=HOME=/home/sandbox', '--env=_JAVA_OPTIONS=-Duser.home=/home/sandbox',
+            '--user={}:{}'.format(uid, gid),
+            '--net=host', '--tmpfs={}:uid={},gid={}'.format('/home/sandbox', uid, gid)
+        ]
+
+        assert args[0] == 'docker'
+        assert args[1] == 'run'
+        image_command_length = len(tuple(expected_image_command[0]))
+        assert tuple(args[-image_command_length:]) == expected_image_command.pop(0)
+        docker_argument_list = args[2:-image_command_length]
+
+        for docker_arg in expected_docker_args:
+            assert docker_arg in docker_argument_list
+            docker_argument_list.remove(docker_arg)
+        assert docker_argument_list == []
+
+    def set_monkey_patch_attrs(monkeypatch):
+        monkeypatch.setattr(os, 'getuid', lambda: uid)
+        monkeypatch.setattr(os, 'getgid', lambda: gid)
+        monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+
+    result = run_with_config('''\
+image:
+  default: buildpack-deps:18.04
+
+phases:
+  build:
+    a:
+      - ./a.sh
+''', ('build',), monkeypatch_injector=MonkeypatchInjector(monkeypatch, set_monkey_patch_attrs))
+    assert result.exit_code == 0
+    assert not expected_image_command
 
 
 def test_image_override_per_phase(monkeypatch):
