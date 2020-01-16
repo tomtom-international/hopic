@@ -123,6 +123,10 @@ class IvyManifestImage:
     def __str__(self):
         if 'manifest' in self.props:
             manifest = expand_vars(self.volume_vars, self.props['manifest'])
+            for dir in ('CFGDIR', 'WORKSPACE'):
+                if dir not in self.volume_vars:
+                    continue
+                manifest = os.path.join(self.volume_vars[dir], manifest)
         else:
             # Fall back to searching for dependency_manifest.xml in these directories
             for dir in ('WORKSPACE', 'CFGDIR'):
