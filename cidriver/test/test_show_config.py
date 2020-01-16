@@ -82,6 +82,31 @@ image: !image-from-ivy-manifest
     assert output['image']['default'] == 'example.com/example/exemplar:3.1.4'
 
 
+def test_image_from_cfgdir_relative_manifest():
+    result = run_with_config('''\
+image: !image-from-ivy-manifest
+  manifest: ../dependency_manifest.xml
+  repository: example.com
+  path: example
+''', ('show-config',),
+    cfg_file='.ci/some-special-config/hopic-ci-config.yaml',
+    files={
+        '.ci/dependency_manifest.xml': '''\
+<?xml version="1.0" encoding="UTF-8"?>
+<ivy-module version="2.0">
+  <dependencies>
+    <dependency name="relative-exemplar" rev="2.7.1">
+      <conf mapped="toolchain" name="default" />
+    </dependency>
+  </dependencies>
+</ivy-module>
+'''
+    })
+    assert result.exit_code == 0
+    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
+    assert output['image']['default'] == 'example.com/example/relative-exemplar:2.7.1'
+
+
 def test_default_image():
     result = run_with_config('''\
 image: example

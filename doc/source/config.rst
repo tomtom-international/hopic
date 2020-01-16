@@ -94,6 +94,7 @@ When used its contents are a mapping with these keys:
 
 ``manifest``
     Path to the Ivy manifest file.
+    Relative paths are interpreted relative to the first of the ${CFGDIR} or ${WORKSPACE} directories that exists.
     This defaults to the first of these to exist:
 
     * ``${WORKSPACE}/dependency_manifest.xml``
