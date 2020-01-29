@@ -20,10 +20,15 @@ phases:
       - .ci/verify-commit-message.py HEAD
 
   test:
+    python2:
+      - python2 -m virtualenv --clear venv2
+      - junit: junit-test.xml
+        sh: venv2/bin/python setup.py pytest
+
     python:
       - python3 -m virtualenv --clear venv
-      - venv/bin/python setup.py pytest
       - junit: junit-test.xml
+        sh: venv/bin/python setup.py pytest
 
   build:
     sphinx-doc:

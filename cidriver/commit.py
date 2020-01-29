@@ -163,7 +163,7 @@ class ConventionalCommit(CommitMessage):
     ''', re.VERBOSE)
 
     def __init__(self, message):
-        super().__init__(message)
+        super(ConventionalCommit, self).__init__(message)
         m = self.strict_subject_re.match(self.subject)
         if not m:
             raise RuntimeError("commit message's subject ({self.subject!r}) not formatted according to Conventional Commits ({self.strict_subject_re.pattern})".format(self=self))
@@ -201,7 +201,7 @@ def parse_commit_message(message, policy=None, strict=False):
     if policy == 'conventional-commits':
         try:
             return ConventionalCommit(message)
-        except Exception:
+        except RuntimeError:
             if strict:
                 raise
     return CommitMessage(message)

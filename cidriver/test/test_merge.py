@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from __future__ import print_function
+from __future__ import unicode_literals
 from ..cli import cli
 
 from click.testing import CliRunner
@@ -26,7 +27,9 @@ _source_date_epoch = 42 * 365 * 24 * 3600
 _git_time = '{} +0000'.format(_source_date_epoch)
 
 
-def run(*args, env=None):
+def run(*args, **kwargs):
+    env = kwargs.get('env')
+
     runner = CliRunner(mix_stderr=False, env=env)
     with runner.isolated_filesystem():
         for arg in args:
@@ -107,7 +110,7 @@ phases:
     sys.stdout.write(out)
     sys.stderr.write(err)
 
-    build_out = ''.join(out.splitlines(keepends=True)[2:])
+    build_out = ''.join(out.splitlines(True)[2:])
     autosquashed_commits = build_out.split()
     assert str(final_commit) not in autosquashed_commits
     assert str(base_commit) in autosquashed_commits
@@ -124,8 +127,8 @@ def hopic_config_subdir_version_file_tester(capfd, config_dir, hopic_config, ver
 
     toprepo = tmp_path / 'repo'
     with git.Repo.init(str(toprepo), expand_vars=False) as repo:
-        if not os.path.exists(toprepo / config_dir):
-            os.mkdir(toprepo / config_dir)
+        if not (toprepo / config_dir).exists():
+            (toprepo / config_dir).mkdir()
         with (toprepo / config_dir / 'hopic-ci-config.yaml').open('w') as f:
             f.write(hopic_config)
 

@@ -43,7 +43,11 @@ class MonkeypatchInjector:
             return self.monkeypatch_context.__exit__(exc_type, exc_val, exc_tb)
 
 
-def run_with_config(config, *args, files={}, env=None, monkeypatch_injector=MonkeypatchInjector()):
+def run_with_config(config, *args, **kwargs):
+    files = kwargs.get('files', {})
+    env = kwargs.get('env')
+    monkeypatch_injector = kwargs.get('monkeypatch_injector', MonkeypatchInjector())
+
     runner = CliRunner(mix_stderr=False, env=env)
     with runner.isolated_filesystem():
         with git.Repo.init() as repo:
@@ -76,6 +80,12 @@ def run_with_config(config, *args, files={}, env=None, monkeypatch_injector=Monk
 
 
 def test_missing_manifest():
+    try:
+        FileNotFoundError
+    except NameError:
+        # Python 2
+        FileNotFoundError = IOError
+
     with pytest.raises(FileNotFoundError, match=r'(?:i).*\bivy manifest\b.*/dependency_manifest.xml\b'):
         result = run_with_config('''\
 image: !image-from-ivy-manifest {}
