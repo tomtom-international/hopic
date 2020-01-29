@@ -43,7 +43,8 @@ setup(
       'GitPython>=2.1.3,<3',
       'python-dateutil',
       'PyYAML',
-      'setuptools',
+      'setuptools<=44; python_version < "3"', # last version with Python 2 support
+      'setuptools<=44; python_version >= "3"',
       'six',
     ),
     setup_requires=(
@@ -52,7 +53,8 @@ setup(
       'setuptools_scm_git_archive',
     ),
     tests_require=(
-      'pytest',
+      'pytest<5; python_version < "3"', # last version with Python 2 support
+      'pytest; python_version >= "3"',
     ),
     use_scm_version={"relative_to": __file__},
     entry_points='''
