@@ -13,12 +13,16 @@
 # limitations under the License.
 
 from __future__ import print_function
+from __future__ import unicode_literals
 from ..cli import cli
 
 from click.testing import CliRunner
 import git
 import os
-from pathlib import Path
+try:
+    from pathlib import Path
+except ImportError:
+    from pathlib2 import Path
 import pytest
 import sys
 
@@ -27,7 +31,9 @@ _source_date_epoch = 7 * 24 * 3600
 _git_time = '{} +0000'.format(_source_date_epoch)
 
 
-def run(*args, env=None):
+def run(*args, **kwargs):
+    env = kwargs.get('env')
+
     runner = CliRunner(mix_stderr=False, env=env)
     with runner.isolated_filesystem():
         for arg in args:
@@ -84,7 +90,7 @@ phases:
         )
     assert result.exit_code == 0
     out, err = capfd.readouterr()
-    build_out = ''.join(out.splitlines(keepends=True)[1:])
+    build_out = ''.join(out.splitlines(True)[1:])
     assert build_out == dummy_content
 
     # Make submodule checkout fail

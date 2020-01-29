@@ -53,6 +53,7 @@ setup(
       'setuptools_scm_git_archive',
     ),
     tests_require=(
+      'pathlib2; python_version < "3"',
       'pytest<5; python_version < "3"', # last version with Python 2 support
       'pytest; python_version >= "3"',
     ),
