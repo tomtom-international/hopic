@@ -864,7 +864,7 @@ def process_prepare_source_tree(
                             hash_prefix = click.style(commit.hexsha, fg='yellow') + ': '
                         except AttributeError:
                             hash_prefix = ''
-                        log.debug("%s [%-8s][%-4s][%-3s]: %s", hash_prefix, breaking,feat, fix, commit.full_subject)
+                        log.debug("%s[%-8s][%-4s][%-3s]: %s", hash_prefix, breaking, feat, fix, commit.full_subject)
                 ctx.obj.version = ctx.obj.version.next_version_for_commits(source_commits)
             else:
                 raise NotImplementedError("unsupported version bumping policy {bump['policy']}".format(**locals()))
