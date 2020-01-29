@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import unicode_literals
 from ..commit import *
 
 
@@ -53,9 +54,9 @@ in the output.
     assert m.paragraphs[0] == m.body.splitlines()[0]
     assert m.body.splitlines()[0] == m.message.splitlines()[2]
 
-    assert m.paragraphs[1].splitlines(keepends=True)[0] == '''This changes the type of ConfigurationError such that Click will display\n'''
+    assert m.paragraphs[1].splitlines(True)[0] == '''This changes the type of ConfigurationError such that Click will display\n'''
 
-    assert m.paragraphs[-1].splitlines(keepends=True)[-1] == '''is more to the point.'''
+    assert m.paragraphs[-1].splitlines(True)[-1] == '''is more to the point.'''
     assert m.paragraphs[-1].splitlines()[-1] == m.body.splitlines()[-1]
     assert m.body.splitlines()[-1] == m.message.splitlines()[-1]
 
