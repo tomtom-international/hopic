@@ -71,7 +71,7 @@ class ConfigurationError(ClickException):
     exit_code = 32
 
     def __init__(self, message, file=None):
-        super().__init__(message)
+        super(ConfigurationError, self).__init__(message)
         self.file = file
 
     def format_message(self):
