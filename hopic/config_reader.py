@@ -29,7 +29,6 @@ import errno
 import json
 import os
 import re
-from six import string_types
 import xml.etree.ElementTree as ET
 import yaml
 
@@ -45,7 +44,7 @@ Pattern = type(re.compile(''))
 
 _variable_interpolation_re = re.compile(r'(?<!\$)\$(?:(\w+)|\{([^}]+)\})')
 def expand_vars(vars, expr):
-    if isinstance(expr, string_types):
+    if isinstance(expr, str):
         # Expand variables from our "virtual" environment
         last_idx = 0
         new_val = expr[:last_idx]
@@ -188,7 +187,7 @@ def expand_docker_volume_spec(config_dir, volume_vars, volume_specs):
     volumes = OrderedDict({});
     for volume in volume_specs:
         # Expand string format to dictionary format
-        if isinstance(volume, string_types):
+        if isinstance(volume, str):
             volume = volume.split(':')
             source = volume.pop(0)
             try:
@@ -240,9 +239,9 @@ def read_version_info(config, version_info):
         raise ConfigurationError("`version` must be a mapping", file=config)
 
     bump = version_info.setdefault('bump', OrderedDict((('policy', 'constant'),)))
-    if not isinstance(bump, (string_types, Mapping, bool)) or isinstance(bump, bool) and bump:
+    if not isinstance(bump, (str, Mapping, bool)) or isinstance(bump, bool) and bump:
         raise ConfigurationError("`version.bump` must be a mapping, string or the boolean false", file=config)
-    elif isinstance(bump, string_types):
+    elif isinstance(bump, str):
         bump = version_info['bump'] = OrderedDict((
                 ('policy', 'constant'),
                 ('field', bump),
@@ -252,12 +251,12 @@ def read_version_info(config, version_info):
         bump = version_info['bump'] = OrderedDict((
                 ('policy', 'disabled'),
             ))
-    if not isinstance(bump.get('policy'), string_types):
+    if not isinstance(bump.get('policy'), str):
         raise ConfigurationError("`version.bump.policy` must be a string identifying a version bumping policy to use", file=config)
     bump.setdefault('on-every-change', True)
     if not isinstance(bump['on-every-change'], bool):
         raise ConfigurationError("`version.bump.on-every-change` must be a boolean", file=config)
-    if bump['policy'] == 'constant' and not isinstance(bump.get('field'), (string_types, type(None))):
+    if bump['policy'] == 'constant' and not isinstance(bump.get('field'), (str, type(None))):
         raise ConfigurationError("`version.bump.field`, if it exists, must be a string identifying a version field to bump for the `constant` policy", file=config)
     if bump['policy'] == 'conventional-commits':
         bump.setdefault('strict', False)
@@ -265,9 +264,9 @@ def read_version_info(config, version_info):
             raise ConfigurationError("`version.bump.strict` field for the `conventional-commits` policy must be a boolean", file=config)
         bump.setdefault('reject-breaking-changes-on', re.compile(r'^(?:release/|rel-).*$'))
         bump.setdefault('reject-new-features-on', re.compile(r'^(?:release/|rel-)\d+\..*$'))
-        if not isinstance(bump['reject-breaking-changes-on'], (string_types, Pattern)):
+        if not isinstance(bump['reject-breaking-changes-on'], (str, Pattern)):
             raise ConfigurationError("`version.bump.reject-breaking-changes-on` field for the `conventional-commits` policy must be a regex or boolean", file=config)
-        if not isinstance(bump['reject-new-features-on'], (string_types, Pattern)):
+        if not isinstance(bump['reject-new-features-on'], (str, Pattern)):
             raise ConfigurationError("`version.bump.reject-new-features-on` field for the `conventional-commits` policy must be a regex or boolean", file=config)
 
     return version_info
@@ -288,10 +287,10 @@ def read(config, volume_vars):
 
     env_vars = cfg.setdefault('pass-through-environment-vars', ())
     cfg.setdefault('clean', [])
-    if not (isinstance(env_vars, Sequence) and not isinstance(env_vars, string_types)):
+    if not (isinstance(env_vars, Sequence) and not isinstance(env_vars, str)):
         raise ConfigurationError('`pass-through-environment-vars` must be a sequence of strings', file=config)
     for idx, var in enumerate(env_vars):
-        if not isinstance(var, string_types):
+        if not isinstance(var, str):
             raise ConfigurationError("`pass-through-environment-vars` must be a sequence containing strings only: element {idx} has type {type!r}".format(idx=idx, type=type), file=config)
 
     image = cfg.setdefault('image', OrderedDict())
@@ -307,7 +306,7 @@ def read(config, volume_vars):
     for phase in cfg.setdefault('phases', OrderedDict()).values():
         for variant in phase.values():
             for var in variant:
-                if isinstance(var, string_types):
+                if isinstance(var, str):
                     continue
                 if isinstance(var, (OrderedDict, dict)):
                     for var_key in var:
@@ -315,11 +314,11 @@ def read(config, volume_vars):
                             artifacts = var[var_key]['artifacts']
 
                             # Convert single artifact string to list of single artifact specification
-                            if isinstance(artifacts, string_types):
+                            if isinstance(artifacts, str):
                                 artifacts = [{'pattern': artifacts}]
 
                             # Expand short hand notation of just the artifact pattern to a full dictionary
-                            artifacts = [({'pattern': artifact} if isinstance(artifact, string_types) else artifact) for artifact in artifacts]
+                            artifacts = [({'pattern': artifact} if isinstance(artifact, str) else artifact) for artifact in artifacts]
 
                             try:
                                 target = var[var_key]['upload-artifactory'].pop('target')
@@ -331,10 +330,10 @@ def read(config, volume_vars):
 
                             var[var_key]['artifacts'] = artifacts
                         if var_key == 'junit':
-                            if isinstance(var[var_key], string_types):
+                            if isinstance(var[var_key], str):
                                 var[var_key] = [var[var_key]]
                         if var_key == 'with-credentials':
-                            if isinstance(var[var_key], string_types):
+                            if isinstance(var[var_key], str):
                                 var[var_key] = OrderedDict([('id', var[var_key])])
                             if not isinstance(var[var_key], Sequence):
                                 var[var_key] = [var[var_key]]

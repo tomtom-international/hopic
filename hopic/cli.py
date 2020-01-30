@@ -54,10 +54,6 @@ import pkg_resources
 import re
 import shlex
 import shutil
-from six import (
-        string_types,
-        text_type,
-    )
 import subprocess
 import sys
 
@@ -918,7 +914,7 @@ def process_prepare_source_tree(
                         log.debug('Autosquashed to:')
                         for commit in git.Commit.list_items(repo, '{target_commit}..{autosquashed_commit}'.format(**locals()), first_parent=True, no_merges=True):
                             subject = commit.message.splitlines()[0]
-                            log.debug('%s %s', click.style(text_type(commit), fg='yellow'), subject)
+                            log.debug('%s %s', click.style(str(commit), fg='yellow'), subject)
             finally:
                 repo.head.reference = submit_commit
                 repo.head.reset(index=True, working_tree=True)
@@ -932,7 +928,7 @@ def process_prepare_source_tree(
         tagname = None
         version_tag = version_info.get('tag', False)
         if ctx.obj.version is not None and not ctx.obj.version.prerelease and version_tag and is_publish_allowed:
-            if version_tag and not isinstance(version_tag, string_types):
+            if version_tag and not isinstance(version_tag, str):
                 version_tag = ctx.obj.version.default_tag_name
             tagname = version_tag.format(
                     version        = ctx.obj.version,
@@ -990,10 +986,10 @@ def process_prepare_source_tree(
                 refspecs.append('refs/tags/{tagname}:refs/tags/{tagname}'.format(**locals()))
             cfg.set_value(section, 'refspecs', ' '.join(shquote(refspec) for refspec in refspecs))
             if source_commit:
-                cfg.set_value(section, 'target-commit', text_type(target_commit))
-                cfg.set_value(section, 'source-commit', text_type(source_commit))
+                cfg.set_value(section, 'target-commit', str(target_commit))
+                cfg.set_value(section, 'source-commit', str(source_commit))
             if autosquashed_commit:
-                cfg.set_value(section, 'autosquashed-commit', text_type(autosquashed_commit))
+                cfg.set_value(section, 'autosquashed-commit', str(autosquashed_commit))
         if ctx.obj.version is not None:
             click.echo(ctx.obj.version)
 
@@ -1143,7 +1139,7 @@ def apply_modality_change(
         volume_vars.setdefault('HOME', os.path.expanduser('~'))
 
         for cmd in modality_cmds:
-            if isinstance(cmd, string_types):
+            if isinstance(cmd, str):
                 cmd = {"sh": cmd}
 
             if 'description' in cmd:
@@ -1165,7 +1161,7 @@ def apply_modality_change(
 
             if 'changed-files' in cmd:
                 changed_files = cmd["changed-files"]
-                if isinstance(changed_files, string_types):
+                if isinstance(changed_files, str):
                     changed_files = [changed_files]
                 changed_files = [expand_vars(volume_vars, f) for f in changed_files]
                 repo.index.add(changed_files)
@@ -1263,7 +1259,7 @@ def getinfo(ctx, phase, variant):
                 var_info = var_info.setdefault(variantname, OrderedDict())
 
             for var in curvariant:
-                if isinstance(var, string_types):
+                if isinstance(var, str):
                     continue
                 for key, val in var.items():
                     try:
@@ -1353,7 +1349,7 @@ def build(ctx, phase, variant):
                 for cmd in cmds:
                     worktrees = {}
                     foreach = None
-                    if not isinstance(cmd, string_types):
+                    if not isinstance(cmd, str):
                         try:
                             run_on_change = cmd['run-on-change']
                         except (KeyError, TypeError):
@@ -1456,7 +1452,7 @@ def build(ctx, phase, variant):
                                 'SOURCE_COMMIT',
                                 'AUTOSQUASHED_COMMIT',
                             ):
-                            cfg_vars[foreach] = text_type(foreach_item)
+                            cfg_vars[foreach] = str(foreach_item)
 
                         # Strip off prefixed environment variables from this command-line and apply them
                         final_cmd = copy(cmd)
@@ -1504,13 +1500,13 @@ def build(ctx, phase, variant):
                     for subdir, worktree in worktrees.items():
                         with git.Repo(os.path.join(ctx.obj.workspace, subdir)) as repo:
                             worktree_commits.setdefault(subdir, [
-                                text_type(repo.head.commit),
-                                text_type(repo.head.commit),
+                                str(repo.head.commit),
+                                str(repo.head.commit),
                             ])
 
                             if 'changed-files' in worktree:
                                 changed_files = worktree["changed-files"]
-                                if isinstance(changed_files, string_types):
+                                if isinstance(changed_files, str):
                                     changed_files = [changed_files]
                                 changed_files = [expand_vars(volume_vars, f) for f in changed_files]
                                 repo.index.add(changed_files)
@@ -1537,7 +1533,7 @@ def build(ctx, phase, variant):
                                         author_date = to_git_time(parent.authored_datetime),
                                     )
                             restore_mtime_from_git(repo)
-                            worktree_commits[subdir][1] = text_type(submit_commit)
+                            worktree_commits[subdir][1] = str(submit_commit)
                             log.info('%s', repo.git.show(submit_commit, format='fuller', stat=True))
 
                 if worktrees:
