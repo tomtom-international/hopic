@@ -238,7 +238,7 @@ class _ConventionalFooterList(object):
                 # Python2-compatible fallback
                 return string.upper().lower()
 
-        if isinstance(idx, str):
+        if isinstance(idx, string_types):
             matches = [footer.value for footer in self if casefold(footer.token) == casefold(idx)]
             if not matches:
                 raise KeyError("{} not found in footer list".format(idx))
