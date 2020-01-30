@@ -222,13 +222,13 @@ class DockerContainers(object):
 
 class OptionContext(object):
     def __init__(self):
-        super(OptionContext, self).__init__()
+        super().__init__()
         self._opts = {}
         self._missing_parameters = {}
 
     def __getattr__(self, name):
         if name in frozenset({'_opts', '_missing_parameters'}):
-            return super(OptionContext, self).__getattr__(name)
+            return super().__getattr__(name)
 
         try:
             return self._opts[name]
@@ -244,7 +244,7 @@ class OptionContext(object):
 
     def __setattr__(self, name, value):
         if name in frozenset({'_opts', '_missing_parameters'}):
-            return super(OptionContext, self).__setattr__(name, value)
+            return super().__setattr__(name, value)
 
         self._opts[name] = value
 
