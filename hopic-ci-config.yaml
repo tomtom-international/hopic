@@ -22,8 +22,8 @@ phases:
   test:
     python:
       - python3 -m virtualenv --clear venv
-      - venv/bin/python setup.py pytest
       - junit: junit-test.xml
+        sh: venv/bin/python setup.py pytest
 
   build:
     sphinx-doc:

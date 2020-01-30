@@ -156,7 +156,7 @@ class BitbucketPullRequest extends ChangeRequest {
       }
 
       new_description = new_description + info.description[last_idx..-1]
-      info.description = new_description
+      info.description = new_description.replace('\r\n', '\n')
     }
 
     info['author_time'] = info.getOrDefault('updatedDate', steps.currentBuild.timeInMillis) / 1000.0

@@ -853,6 +853,17 @@ def process_prepare_source_tree(
                     params['bump'] = bump['field']
                 ctx.obj.version = ctx.obj.version.next_version(**params)
             elif bump['policy'] in ('conventional-commits',):
+                if log.isEnabledFor(logging.DEBUG):
+                    log.debug("bumping based on conventional commits:")
+                    for commit in source_commits:
+                        breaking = ('breaking' if commit.has_breaking_change() else '')
+                        feat = ('feat' if commit.has_new_feature() else '')
+                        fix = ('fix' if commit.has_fix() else '')
+                        try:
+                            hash_prefix = click.style(commit.hexsha, fg='yellow') + ': '
+                        except AttributeError:
+                            hash_prefix = ''
+                        log.debug("%s[%-8s][%-4s][%-3s]: %s", hash_prefix, breaking, feat, fix, commit.full_subject)
                 ctx.obj.version = ctx.obj.version.next_version_for_commits(source_commits)
             else:
                 raise NotImplementedError("unsupported version bumping policy {bump['policy']}".format(**locals()))
@@ -1406,6 +1417,11 @@ def build(ctx, phase, variant):
                             pass
 
                         try:
+                            image = cmd['image']
+                        except KeyError:
+                            pass
+
+                        try:
                             cmd = cmd['sh']
                         except (KeyError, TypeError):
                             continue
@@ -1459,16 +1475,17 @@ def build(ctx, phase, variant):
                                           '--rm',
                                           '--net=host',
                                           '--tty',
-                                          '--tmpfs', '{}:uid={},gid={}'.format(env['HOME'], uid, gid),
-                                          '-u', '{}:{}'.format(uid, gid),
-                                          '-v', '/etc/passwd:/etc/passwd:ro',
-                                          '-v', '/etc/group:/etc/group:ro',
-                                          '-w', '/code',
+                                          '--cap-add=SYS_PTRACE',
+                                          '--tmpfs={}:uid={},gid={}'.format(env['HOME'], uid, gid),
+                                          '--user={}:{}'.format(uid, gid),
+                                          '--volume=/etc/passwd:/etc/passwd:ro',
+                                          '--volume=/etc/group:/etc/group:ro',
+                                          '--workdir=/code',
                                           ] + list(chain(*[
-                                              ['-e', '{}={}'.format(k, v)] for k, v in env.items()
+                                              ['--env={}={}'.format(k, v)] for k, v in env.items()
                                           ]))
                             for volume in volumes.values():
-                                docker_run += ['-v', volume_spec_to_docker_param(volume)]
+                                docker_run += ['--volume={}'.format(volume_spec_to_docker_param(volume))]
 
                             for volume_from in volumes_from:
                                 docker_run += ['--volumes-from=' + volume_from]

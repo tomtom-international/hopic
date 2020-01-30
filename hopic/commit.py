@@ -26,15 +26,18 @@ class CommitMessage(object):
     autosquash_re = re.compile(r'^(fixup|squash)!\s+')
     merge_re = re.compile(r'^Merge.*?:[ \t]*')
 
-    def __init__(self, message):
+    def __init__(self, message, hexsha=None):
         if isinstance(message, string_types):
             self.message = _strip_message(message)
         else:
             self.message = _strip_message(message.message)
             try:
-                self.hexsha = message.hexsha
+                if hexsha is None:
+                    hexsha = message.hexsha
             except AttributeError:
                 pass
+            if hexsha is not None:
+                self.hexsha = hexsha
 
         # Discover starts of lines
         self._line_index = [m.end() for m in re.finditer(self.line_separator, self.message)]
@@ -107,6 +110,12 @@ class CommitMessage(object):
 
     def has_fix(self):
         return None
+
+    def __repr__(self):
+        try:
+            return "{self.__class__.__name__}({self.message!r}, {self.hexsha!r})".format(self=self)
+        except AttributeError:
+            return "{self.__class__.__name__}({self.message!r})".format(self=self)
 
 
 class ConventionalCommit(CommitMessage):
@@ -192,7 +201,7 @@ def parse_commit_message(message, policy=None, strict=False):
     if policy == 'conventional-commits':
         try:
             return ConventionalCommit(message)
-        except Exception:
+        except RuntimeError:
             if strict:
                 raise
     return CommitMessage(message)

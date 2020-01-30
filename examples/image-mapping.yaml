@@ -8,3 +8,8 @@ phases:
       - cc -o hello hello.c
     whoami:
       - curl --output ip-address.txt https://api.ipify.org
+
+  run:
+    hello:
+      - image: busybox:latest
+      - ./hello
