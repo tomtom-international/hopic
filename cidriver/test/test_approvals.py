@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import print_function
+from __future__ import unicode_literals
+
 import sys
 import os.path
 import git
@@ -28,7 +31,9 @@ _BASE_APPROVER = 'Joe Approver1 <joe.approver1@nerds-r-us.eu>'
 _PRESQUASH_APPROVER = 'Bob Approver2 <bob.approver2@acme.net>'
 _POSTSQUASH_APPROVER = '"Hank: The Approver 3" <hank.approver3@business.ie>'
 
-def run(*args, env=None):
+def run(*args, **kwargs):
+    env = kwargs.get('env')
+
     runner = CliRunner(mix_stderr=False, env=env)
     with runner.isolated_filesystem():
         for arg in args:
@@ -101,10 +106,8 @@ def _perform_merge(repo, approvals):
                 '--source-remote', repo.working_dir,
                 '--source-ref', 'merge-branch',
                 '--change-request=42',
-                '--title=feat: something interesting',
-
-                *('--approved-by={}:{}'.format(*approval) for approval in approvals),
-            ),
+                '--title=feat: something interesting',) +
+                tuple('--approved-by={}:{}'.format(*approval) for approval in approvals),
             ('submit',),
         )
     assert result.exit_code == 0
