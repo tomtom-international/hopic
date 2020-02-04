@@ -1019,6 +1019,62 @@ def merge_change_request(
     Merges the change request from the specified branch.
     """
 
+    def get_valid_approvers(repo, approved_by_list, source_remote, source_commit):
+        """Inspects approvers list and, where possible, checks if approval is still valid."""
+
+        valid_hash_re = re.compile(r"^(.+):([0-9a-zA-Z]{40})$")
+        autosquash_re = re.compile(r'^(fixup|squash)!\s+')
+        valid_approvers = []
+
+        # Fetch the hashes from the remote in one go
+        approved_hashes = [entry.group(2) for entry in (valid_hash_re.match(entry) for entry in approved_by_list) if entry]
+        try:
+            source_remote.fetch(approved_hashes)
+        except git.GitCommandError:
+            log.warning("One or more of the last reviewed commit hashes invalid: '%s'", ' '.join(approved_hashes))
+
+        for approval_entry in approved_by_list:
+            hash_match = valid_hash_re.match(approval_entry)
+            if not hash_match:
+                valid_approvers.append(approval_entry)
+                continue
+
+            approver, last_reviewed_commit_hash = hash_match.groups()
+            try:
+                last_reviewed_commit = repo.commit(last_reviewed_commit_hash)
+            except ValueError:
+                log.warning("Approval for '%s' is ignored, as the associated hash is unknown or invalid: '%s'", approver, last_reviewed_commit_hash)
+                continue
+
+            if last_reviewed_commit_hash == source_commit.hexsha:
+                valid_approvers.append(approver)
+                continue
+            if last_reviewed_commit.diff(source_commit):
+                log.warning("Approval for '%s' is not valid anymore due to content changes compared to last reviewed commit '%s'", approver, last_reviewed_commit_hash)
+                continue
+
+            # Source has a different hash, but no content diffs.
+            # Now 'squash' and compare metadata (author, date, commit message).
+            merge_base = repo.merge_base(repo.head.commit, source_commit)
+
+            source_commits = [(commit.author, commit.authored_date, commit.message.rstrip()) for commit in
+                git.Commit.list_items(repo, merge_base[0].hexsha + '..' + source_commit.hexsha, first_parent=True, no_merges=True)]
+
+            autosquashed_reviewed_commits = [(commit.author, commit.authored_date, commit.message.rstrip()) for commit in
+                git.Commit.list_items(repo, merge_base[0].hexsha + '..' + last_reviewed_commit.hexsha, first_parent=True, no_merges=True)
+                if not autosquash_re.match(commit.message)]
+
+            log.debug("For approver '%s', checking source commits:\n%s\n.. against squashed reviewed commits:\n%s",
+                    approver, str(source_commits), str(autosquashed_reviewed_commits))
+
+            if autosquashed_reviewed_commits == source_commits:
+                log.debug("Approval for '%s' is still valid", approver)
+                valid_approvers.append(approver)
+            else:
+                log.warning("Approval for '%s' is not valid anymore due to metadata changes compared to last reviewed commit '%s'", approver, last_reviewed_commit_hash)
+        return valid_approvers
+
+
     def change_applicator(repo):
         try:
             source = repo.remotes.source
@@ -1037,7 +1093,8 @@ def merge_change_request(
             msg = u"{msg}\n{description}\n".format(msg=msg, description=description)
         msg += u'\n'
         if approved_by:
-            msg += u'\n'.join(u'Acked-by: {approval}'.format(**locals()) for approval in approved_by) + u'\n'
+            approvers = get_valid_approvers(repo, approved_by, source, source_commit)
+            msg += u'\n'.join(u'Acked-by: {approver}'.format(**locals()) for approver in approvers) + u'\n'
         msg += u'Merged-by: Hopic {pkg.version}\n'.format(pkg=pkg_resources.get_distribution(__package__))
         return {
                 'message': msg,
