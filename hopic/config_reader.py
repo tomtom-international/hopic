@@ -12,18 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections import (
-        OrderedDict,
+from collections import OrderedDict
+from collections.abc import (
+        Mapping,
         Sequence,
     )
-try:
-    from collections.abc import (
-            Mapping,
-        )
-except ImportError:
-    from collections import (
-            Mapping,
-        )
 from click import ClickException
 import errno
 import json

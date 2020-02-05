@@ -26,16 +26,14 @@ from .config_reader import (
 from .execution import echo_cmd
 from .versioning import *
 from collections import OrderedDict
-try:
-    from collections.abc import (
-            Mapping,
-            MutableSequence,
-        )
-except ImportError:
-    from collections import (
-            Mapping,
-            MutableSequence,
-        )
+from collections.abc import (
+        Mapping,
+        MutableSequence,
+    )
+from configparser import (
+        NoOptionError,
+        NoSectionError,
+    )
 from copy import copy
 from datetime import (datetime, timedelta)
 from dateutil.parser import parse as date_parse
@@ -56,23 +54,6 @@ import shlex
 import shutil
 import subprocess
 import sys
-
-try:
-    from shlex import quote as shquote
-except ImportError:
-    from pipes import quote as shquote
-
-try:
-    from ConfigParser import (
-            NoOptionError,
-            NoSectionError,
-        )
-except ImportError:
-    # PY3
-    from configparser import (
-            NoOptionError,
-            NoSectionError,
-        )
 
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
@@ -983,7 +964,7 @@ def process_prepare_source_tree(
             refspecs = [f"{push_commit}:{target_ref}"]
             if tagname is not None:
                 refspecs.append(f"refs/tags/{tagname}:refs/tags/{tagname}")
-            cfg.set_value(section, 'refspecs', ' '.join(shquote(refspec) for refspec in refspecs))
+            cfg.set_value(section, 'refspecs', ' '.join(shlex.quote(refspec) for refspec in refspecs))
             if source_commit:
                 cfg.set_value(section, 'target-commit', str(target_commit))
                 cfg.set_value(section, 'source-commit', str(source_commit))
@@ -1549,7 +1530,7 @@ def build(ctx, phase, variant):
                         repo.git.bundle('create', os.path.join(ctx.obj.workspace, 'worktree-transfer.bundle'), *bundle_commits)
 
                         submit_commit = repo.head.commit
-                        cfg.set_value(f"hopic.{submit_commit}", 'refspecs', ' '.join(shquote(refspec) for refspec in refspecs))
+                        cfg.set_value(f"hopic.{submit_commit}", 'refspecs', ' '.join(shlex.quote(refspec) for refspec in refspecs))
 
                 # Post-processing to make these artifacts as reproducible as possible
                 for artifact in artifacts:
@@ -1600,7 +1581,7 @@ def unbundle_worktrees(ctx, bundle):
         refspecs = new_refspecs
 
         with repo.config_writer() as cfg:
-            cfg.set_value(section, 'refspecs', ' '.join(shquote(refspec) for refspec in refspecs))
+            cfg.set_value(section, 'refspecs', ' '.join(shlex.quote(refspec) for refspec in refspecs))
 
 @cli.command()
 @click.option('--target-remote', metavar='<url>', help='''The remote to push to, if not specified this will default to the checkout remote.''')
