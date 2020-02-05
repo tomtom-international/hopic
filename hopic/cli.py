@@ -124,8 +124,7 @@ def is_publish_branch(ctx):
         with git.Repo(ctx.obj.workspace) as repo:
             target_commit = repo.head.commit
             with repo.config_reader() as cfg:
-                section = 'hopic.{target_commit}'.format(**locals())
-                target_ref = cfg.get_value(section, 'ref')
+                target_ref = cfg.get_value(f"hopic.{target_commit}", 'ref')
     except (NoOptionError, NoSectionError):
         return False
 
@@ -134,7 +133,7 @@ def is_publish_branch(ctx):
     except KeyError:
         return True
 
-    publish_branch_pattern = re.compile('(?:{})$'.format(publish_from_branch))
+    publish_branch_pattern = re.compile(f"(?:{publish_from_branch})$")
     return publish_branch_pattern.match(target_ref)
 
 
@@ -233,7 +232,7 @@ class OptionContext(object):
         try:
             missing_param = self._missing_parameters[name].copy()
         except KeyError:
-            raise AttributeError("'{}' object has no attribute '{}'.".format(self.__class__.__name__, name))
+            raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'.")
         else:
             exception_raiser = missing_param.pop('exception_raiser')
             exception_raiser(**missing_param)
@@ -402,7 +401,7 @@ def cli(ctx, color, config, workspace, whitelisted_var):
                 # Require the workspace directory to exist for anything but the checkout command
                 if not os.path.isdir(workspace):
                     raise click.BadParameter(
-                        'Directory "{workspace}" does not exist.'.format(**locals()),
+                        f"Directory '{workspace}' does not exist.",
                         ctx=ctx, param=param
                     )
         elif param.human_readable_name == 'config' and config is not None:
@@ -410,7 +409,7 @@ def cli(ctx, color, config, workspace, whitelisted_var):
             if not os.path.isfile(config):
                 def exception_raiser(ctx, param):
                     raise click.BadParameter(
-                        'File "{config}" does not exist.'.format(config=config),
+                        f"File '{config}' does not exist.",
                         ctx=ctx, param=param
                     )
                 ctx.obj.register_parameter(ctx=ctx, param=param, exception_raiser=exception_raiser)
@@ -601,7 +600,7 @@ def checkout_tree(tree, remote, ref, clean=False, remote_name='origin', allow_su
             clean_repo(repo, clean_config)
 
         with repo.config_writer() as cfg:
-            section = 'hopic.{commit}'.format(**locals())
+            section = f"hopic.{commit}"
             cfg.set_value(section, 'ref', ref)
             cfg.set_value(section, 'remote', remote)
 
@@ -654,7 +653,7 @@ def to_git_time(date):
     utctime = int((
         date - datetime.utcfromtimestamp(0).replace(tzinfo=tzutc())
     ).total_seconds())
-    return '{utctime} {date:%z}'.format(**locals())
+    return f"{utctime} {date:%z}"
 
 
 @cli.command()
@@ -722,7 +721,7 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean, ignore_initial_s
     else:
         seq = 0
         while True:
-            dir = ('code' if seq == 0 else 'code-{seq:03}'.format(seq=seq))
+            dir = ('code' if seq == 0 else f"code-{seq:03}")
             seq += 1
             if dir not in code_dirs:
                 code_dir = dir
@@ -769,7 +768,7 @@ def process_prepare_source_tree(
         target_commit = repo.head.commit
 
         with repo.config_writer() as cfg:
-            section = 'hopic.{target_commit}'.format(**locals())
+            section = f"hopic.{target_commit}"
             target_ref    = cfg.get_value(section, 'ref')
             target_remote = cfg.get_value(section, 'remote')
             code_clean    = cfg.getboolean('hopic.code', 'cfg-clean')
@@ -817,7 +816,7 @@ def process_prepare_source_tree(
                 else [parse_commit_message(commit, policy=bump['policy'], strict=bump.get('strict', False))
                         for commit in git.Commit.list_items(
                         repo,
-                        '{target_commit}..{source_commit}'.format(**locals()),
+                        f"{target_commit}..{source_commit}",
                         first_parent=True,
                         no_merges=True,
                     )])
@@ -826,16 +825,16 @@ def process_prepare_source_tree(
             if bump['reject-breaking-changes-on'].match(target_ref):
                 for commit in source_commits:
                     if commit.has_breaking_change():
-                        raise VersioningError("Breaking changes are not allowed on '{target_ref}', but commit '{commit.hexsha}' contains one:\n{commit.message}".format(**locals()))
+                        raise VersioningError(f"Breaking changes are not allowed on '{target_ref}', but commit '{commit.hexsha}' contains one:\n{commit.message}")
             if bump['reject-new-features-on'].match(target_ref):
                 for commit in source_commits:
                     if commit.has_new_feature():
-                        raise VersioningError("New features are not allowed on '{target_ref}', but commit '{commit.hexsha}' contains one:\n{commit.message}".format(**locals()))
+                        raise VersioningError(f"New features are not allowed on '{target_ref}', but commit '{commit.hexsha}' contains one:\n{commit.message}")
         
         if is_publish_allowed and bump['policy'] != 'disabled' and bump['on-every-change']:
             if ctx.obj.version is None:
                 if 'file' in version_info:
-                    raise VersioningError("Failed to read the current version (from {version[file]}) while attempting to bump the version".format(**locals()))
+                    raise VersioningError(f"Failed to read the current version (from {version[file]}) while attempting to bump the version")
                 else:
                     msg = "Failed to determine the current version while attempting to bump the version"
                     log.error(msg)
@@ -862,7 +861,7 @@ def process_prepare_source_tree(
                         log.debug("%s[%-8s][%-4s][%-3s]: %s", hash_prefix, breaking, feat, fix, commit.full_subject)
                 ctx.obj.version = ctx.obj.version.next_version_for_commits(source_commits)
             else:
-                raise NotImplementedError("unsupported version bumping policy {bump['policy']}".format(**locals()))
+                raise NotImplementedError(f"unsupported version bumping policy {bump['policy']}")
             log.debug("bumped version to: \x1B[34m%s\x1B[39m", ctx.obj.version)
 
             if 'file' in version_info:
@@ -912,7 +911,7 @@ def process_prepare_source_tree(
                     autosquashed_commit = repo.head.commit
                     if log.isEnabledFor(logging.DEBUG):
                         log.debug('Autosquashed to:')
-                        for commit in git.Commit.list_items(repo, '{target_commit}..{autosquashed_commit}'.format(**locals()), first_parent=True, no_merges=True):
+                        for commit in git.Commit.list_items(repo, f"{target_commit}..{autosquashed_commit}", first_parent=True, no_merges=True):
                             subject = commit.message.splitlines()[0]
                             log.debug('%s %s', click.style(str(commit), fg='yellow'), subject)
             finally:
@@ -968,7 +967,7 @@ def process_prepare_source_tree(
             del commit_params['author']
             if 'author_date' in commit_params and 'commit_date' in commit_params:
                 commit_params['author_date'] = commit_params['commit_date']
-            commit_params['message'] = '[ Release build ] new version commit: {after_submit_version}\n'.format(**locals())
+            commit_params['message'] = f"[ Release build ] new version commit: {after_submit_version}\n"
             commit_params['parent_commits'] = (submit_commit,)
             # Prevent advancing HEAD
             commit_params['head'] = False
@@ -977,13 +976,13 @@ def process_prepare_source_tree(
             log.info('%s', repo.git.show(push_commit, format='fuller', stat=True))
 
         with repo.config_writer() as cfg:
-            cfg.remove_section('hopic.{target_commit}'.format(**locals()))
-            section = 'hopic.{submit_commit}'.format(**locals())
+            cfg.remove_section(f"hopic.{target_commit}")
+            section = f"hopic.{submit_commit}"
             cfg.set_value(section, 'remote', target_remote)
             cfg.set_value(section, 'ref', target_ref)
-            refspecs = ['{push_commit}:{target_ref}'.format(**locals())]
+            refspecs = [f"{push_commit}:{target_ref}"]
             if tagname is not None:
-                refspecs.append('refs/tags/{tagname}:refs/tags/{tagname}'.format(**locals()))
+                refspecs.append(f"refs/tags/{tagname}:refs/tags/{tagname}")
             cfg.set_value(section, 'refspecs', ' '.join(shquote(refspec) for refspec in refspecs))
             if source_commit:
                 cfg.set_value(section, 'target-commit', str(target_commit))
@@ -1081,15 +1080,15 @@ def merge_change_request(
 
         repo.git.merge(source_commit, no_ff=True, no_commit=True)
 
-        msg = u"Merge #{}".format(change_request)
+        msg = f"Merge #{change_request}"
         if title is not None:
-            msg = u"{msg}: {title}\n".format(msg=msg, title=title)
+            msg = f"{msg}: {title}\n"
         if description is not None:
-            msg = u"{msg}\n{description}\n".format(msg=msg, description=description)
+            msg = f"{msg}\n{description}\n"
         msg += u'\n'
         if approved_by:
             approvers = get_valid_approvers(repo, approved_by, source, source_commit)
-            msg += u'\n'.join(u'Acked-by: {approver}'.format(**locals()) for approver in approvers) + u'\n'
+            msg += '\n'.join(f"Acked-by: {approver}" for approver in approvers) + u'\n'
         msg += u'Merged-by: Hopic {pkg.version}\n'.format(pkg=pkg_resources.get_distribution(__package__))
         return {
                 'message': msg,
@@ -1297,7 +1296,7 @@ def build(ctx, phase, variant):
     try:
         with git.Repo(ctx.obj.workspace) as repo:
             submit_commit = repo.head.commit
-            section = 'hopic.{submit_commit}'.format(**locals())
+            section = f"hopic.{submit_commit}"
             with repo.config_reader() as git_cfg:
                 # Determine remote ref for current commit
                 submit_ref = git_cfg.get_value(section, 'ref')
@@ -1308,12 +1307,12 @@ def build(ctx, phase, variant):
                 if git_cfg.has_option(section, 'target-commit') and git_cfg.has_option(section, 'source-commit'):
                     target_commit = repo.commit(git_cfg.get_value(section, 'target-commit'))
                     source_commit = repo.commit(git_cfg.get_value(section, 'source-commit'))
-                    source_commits = git.Commit.list_items(repo, '{target_commit}..{source_commit}'.format(**locals()), first_parent=True, no_merges=True)
+                    source_commits = git.Commit.list_items(repo, f"{target_commit}..{source_commit}", first_parent=True, no_merges=True)
                     autosquashed_commits = source_commits
                     log.debug('Building for source commits: %s', source_commits)
                 if git_cfg.has_option(section, 'autosquashed-commit'):
                     autosquashed_commit = repo.commit(git_cfg.get_value(section, 'autosquashed-commit'))
-                    autosquashed_commits = git.Commit.list_items(repo, '{target_commit}..{autosquashed_commit}'.format(**locals()), first_parent=True, no_merges=True)
+                    autosquashed_commits = git.Commit.list_items(repo, f"{target_commit}..{autosquashed_commit}", first_parent=True, no_merges=True)
     except NoSectionError:
         pass
     has_change = bool(refspecs)
@@ -1472,14 +1471,14 @@ def build(ctx, phase, variant):
                                           '--net=host',
                                           '--tty',
                                           '--cap-add=SYS_PTRACE',
-                                          '--tmpfs={}:uid={},gid={}'.format(env['HOME'], uid, gid),
-                                          '--user={}:{}'.format(uid, gid),
+                                          f"--tmpfs={env['HOME']}:uid={uid},gid={gid}",
+                                          f"--user={uid}:{gid}",
                                           '--volume=/etc/passwd:/etc/passwd:ro',
                                           '--volume=/etc/group:/etc/group:ro',
                                           '--workdir=/code',
-                                          ] + list(chain(*[
-                                              ['--env={}={}'.format(k, v)] for k, v in env.items()
-                                          ]))
+                                          ] + [
+                                              f"--env={k}={v}" for k, v in env.items()
+                                          ]
                             for volume in volumes.values():
                                 docker_run += ['--volume={}'.format(volume_spec_to_docker_param(volume))]
 
@@ -1545,13 +1544,12 @@ def build(ctx, phase, variant):
                                 repo.heads[worktree_ref].set_commit(submit_commit, logmsg='Prepare for git-bundle')
                             else:
                                 repo.create_head(worktree_ref, submit_commit)
-                            bundle_commits.append('{base_commit}..{worktree_ref}'.format(**locals()))
-                            refspecs.append('{submit_commit}:{worktree_ref}'.format(**locals()))
+                            bundle_commits.append(f"{base_commit}..{worktree_ref}")
+                            refspecs.append(f"{submit_commit}:{worktree_ref}")
                         repo.git.bundle('create', os.path.join(ctx.obj.workspace, 'worktree-transfer.bundle'), *bundle_commits)
 
                         submit_commit = repo.head.commit
-                        section = 'hopic.{submit_commit}'.format(**locals())
-                        cfg.set_value(section, 'refspecs', ' '.join(shquote(refspec) for refspec in refspecs))
+                        cfg.set_value(f"hopic.{submit_commit}", 'refspecs', ' '.join(shquote(refspec) for refspec in refspecs))
 
                 # Post-processing to make these artifacts as reproducible as possible
                 for artifact in artifacts:
@@ -1568,7 +1566,7 @@ def unbundle_worktrees(ctx, bundle):
 
     with git.Repo(ctx.obj.workspace) as repo:
         submit_commit = repo.head.commit
-        section = 'hopic.{submit_commit}'.format(**locals())
+        section = f"hopic.{submit_commit}"
         with repo.config_reader() as git_cfg:
             try:
                 refspecs = list(shlex.split(git_cfg.get_value(section, 'refspecs')))
@@ -1588,7 +1586,7 @@ def unbundle_worktrees(ctx, bundle):
             subdir = worktrees[ref]
             log.debug("Checkout worktree '%s' to '%s' (proposed branch '%s')", subdir, commit, ref)
             checkout_tree(os.path.join(ctx.obj.workspace, subdir), bundle, ref, remote_name='bundle')
-            refspecs.append('{commit}:{ref}'.format(**locals()))
+            refspecs.append(f"{commit}:{ref}")
 
         # Eliminate duplicate pushes to the same ref and replace it by a single push to the _last_ specified object
         seen_refs = set()
@@ -1613,7 +1611,7 @@ def submit(ctx, target_remote):
     """
 
     with git.Repo(ctx.obj.workspace) as repo:
-        section = 'hopic.{repo.head.commit}'.format(**locals())
+        section = f"hopic.{repo.head.commit}"
         with repo.config_reader() as cfg:
             if target_remote is None:
                 target_remote = cfg.get_value(section, 'remote')

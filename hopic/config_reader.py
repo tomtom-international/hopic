@@ -300,7 +300,7 @@ def read(config, volume_vars):
         image = cfg['image'] = OrderedDict((('default', cfg['image']),))
     for variant, name in image.items():
         if not isinstance(name, (str, IvyManifestImage)):
-            raise ConfigurationError("`image` member `{variant}` must be a string or `!image-from-ivy-manifest`".format(**locals()), file=config)
+            raise ConfigurationError(f"`image` member `{variant}` must be a string or `!image-from-ivy-manifest`", file=config)
 
     # Convert multiple different syntaxes into a single one
     for phase in cfg.setdefault('phases', OrderedDict()).values():

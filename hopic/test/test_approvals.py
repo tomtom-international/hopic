@@ -23,7 +23,7 @@ from click.testing import CliRunner
 from ..cli import cli
 from ..commit import ConventionalCommit
 
-_GIT_TIME = '{} +0000'.format(42 * 365 * 24 * 3600)
+_GIT_TIME = f"{42 * 365 * 24 * 3600} +0000"
 _BASE_APPROVER = 'Joe Approver1 <joe.approver1@nerds-r-us.eu>'
 _PRESQUASH_APPROVER = 'Bob Approver2 <bob.approver2@acme.net>'
 _POSTSQUASH_APPROVER = '"Hank: The Approver 3" <hank.approver3@business.ie>'
@@ -95,8 +95,8 @@ def _perform_merge(repo, approvals):
             ('prepare-source-tree',
                 '--author-name', 'Damian Eveloper',
                 '--author-email', 'd.eveloper@mycompany.com',
-                '--author-date', '@{}'.format(_GIT_TIME),
-                '--commit-date', '@{}'.format(_GIT_TIME),
+                '--author-date', f"@{_GIT_TIME}",
+                '--commit-date', f"@{_GIT_TIME}",
                 'merge-change-request',
                 '--source-remote', repo.working_dir,
                 '--source-ref', 'merge-branch',

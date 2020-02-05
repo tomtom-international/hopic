@@ -54,7 +54,7 @@ def run_with_config(config, *args, files={}, env=None, monkeypatch_injector=Monk
                 with open(fname, 'w') as f:
                     f.write(content)
             repo.index.add(('hopic-ci-config.yaml',) + tuple(files.keys()))
-            git_time = '{} +0000'.format(_source_date_epoch)
+            git_time = f"{_source_date_epoch} +0000"
             repo.index.commit(message='Initial commit', author_date=git_time, commit_date=git_time)
         for arg in args:
             with monkeypatch_injector:
@@ -143,10 +143,11 @@ def test_docker_run_arguments(monkeypatch, tmp_path):
         expected_docker_args = [
             '--cap-add=SYS_PTRACE', '--rm', '--tty', '--volume=/etc/passwd:/etc/passwd:ro',
             '--volume=/etc/group:/etc/group:ro', '--workdir=/code',
-            '--volume={}:/code'.format(os.getcwd()), '--env=SOURCE_DATE_EPOCH={}'.format(_source_date_epoch),
+            f"--volume={os.getcwd()}:/code",
+            f"--env=SOURCE_DATE_EPOCH={_source_date_epoch}",
             '--env=HOME=/home/sandbox', '--env=_JAVA_OPTIONS=-Duser.home=/home/sandbox',
-            '--user={}:{}'.format(uid, gid),
-            '--net=host', '--tmpfs={}:uid={},gid={}'.format('/home/sandbox', uid, gid)
+            f"--user={uid}:{gid}",
+            '--net=host', f"--tmpfs=/home/sandbox:uid={uid},gid={gid}"
         ]
 
         assert args[0] == 'docker'

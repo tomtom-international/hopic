@@ -24,7 +24,7 @@ import re
 import sys
 
 
-_source_date_epoch = 7 * 24 * 3600
+_git_time = f"{7 * 24 * 3600} +0000"
 
 
 def run_with_config(config, args, files={}, env=None, cfg_file='hopic-ci-config.yaml'):
@@ -41,8 +41,7 @@ def run_with_config(config, args, files={}, env=None, cfg_file='hopic-ci-config.
                 with open(fname, 'w') as f:
                     f.write(content)
             repo.index.add((cfg_file,) + tuple(files.keys()))
-            git_time = '{} +0000'.format(_source_date_epoch)
-            repo.index.commit(message='Initial commit', author_date=git_time, commit_date=git_time)
+            repo.index.commit(message='Initial commit', author_date=_git_time, commit_date=_git_time)
         if cfg_file != 'hopic-ci-config.yaml':
             args = ('--config', cfg_file) + tuple(args)
         result = runner.invoke(cli, args)
