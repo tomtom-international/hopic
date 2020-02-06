@@ -96,7 +96,7 @@ class ArInfo(object):
 
     def write(self, buf):
         if self.mode != 'ab':
-            raise IOError("bad operation for mode {self.mode!r}".format(self=self))
+            raise IOError(f"bad operation for mode {self.mode!r}")
 
         self.fileobj.seek(self.offset + self.pos)
         self.fileobj.write(buf)
@@ -132,7 +132,7 @@ class ArInfo(object):
     @classmethod
     def frombuf(cls, fileobj, buf, data_offset):
         if len(buf) != cls.HEADER_SIZE:
-            raise IOError("Too short a header for ar file: {} instead of {}".format(len(buf), HEADER_SIZE))
+            raise IOError(f"Too short a header for ar file: {len(buf)} instead of {HEADER_SIZE}")
         member_name, mtime, uid, gid, perm, size, ending = (
             buf[ 0:16],
             buf[16:28],
@@ -159,9 +159,9 @@ class ArInfo(object):
         return arinfo
 
     def tobuf(self):
-        buf = u'{self.name:<16.16}{self.mtime:<12d}{self.uid:<6d}{self.gid:<6d}{self.perm:<8o}{self.size:<10d}`\n'.format(self=self).encode('ASCII')
+        buf = f"{self.name:<16.16}{self.mtime:<12d}{self.uid:<6d}{self.gid:<6d}{self.perm:<8o}{self.size:<10d}`\n".encode('ASCII')
         if len(buf) != self.HEADER_SIZE:
-            raise IOError("Exceeding maximum header size: {buf}".format(buf=buf))
+            raise IOError(f"Exceeding maximum header size: {buf}")
         return buf
 
 
@@ -211,7 +211,7 @@ class ArFile(object):
         if self.closed:
             raise IOError("ArFile is closed")
         if self.mode != 'r':
-            raise IOError("bad operation for mode {self.mode!r}".format(self=self))
+            raise IOError(f"bad operation for mode {self.mode!r}")
 
         self.fileobj.seek(self.offset)
         if not self.read_signature:
@@ -239,7 +239,7 @@ class ArFile(object):
         if self.closed:
             raise IOError("ArFile is closed")
         if self.mode != 'r':
-            raise IOError("bad operation for mode {self.mode!r}".format(self=self))
+            raise IOError(f"bad operation for mode {self.mode!r}")
 
         self.offset = 0
         self.read_signature = False
@@ -249,7 +249,7 @@ class ArFile(object):
         if self.closed:
             raise IOError("ArFile is closed")
         if self.mode != 'w':
-            raise IOError("bad operation for mode {self.mode!r}".format(self=self))
+            raise IOError(f"bad operation for mode {self.mode!r}")
 
         arinfo = copy.copy(arinfo)
 

@@ -57,7 +57,7 @@ def type_check(f):
                 continue
 
             if attr_name in kw and not isinstance(kw[attr_name], attr_type):
-                raise TypeError('Argument {!r} is not of type {}'.format(attr_name, attr_type))
+                raise TypeError(f"Argument {attr_name!r} is not of type {attr_type}")
         return f(*args, **kwargs)
     return validate_parameters
 
@@ -79,7 +79,7 @@ else:
 errors = []
 
 if not message.lines[-1]:
-    errors.append("\x1B[1m{commit}:{}:1: \x1B[31merror\x1B[39m: commit message body is followed by empty lines\x1B[m".format(len(message.lines), commit=commit))
+    errors.append(f"\x1B[1m{commit}:{len(message.lines)}:1: \x1B[31merror\x1B[39m: commit message body is followed by empty lines\x1B[m")
 
 if re.match(r"^Merge (?:branch|tag) '.*?'(?:into '.*')?$", message.subject):
     # Ignore branch/tag merges
@@ -109,7 +109,7 @@ subject_re = re.compile(r'''
     ''', re.VERBOSE)
 subject = subject_re.match(message.subject)
 if not subject:
-    error = "\x1B[1m{commit}:1:1: \x1B[31merror\x1B[39m: commit message's subject not formatted according to Conventional Commits\x1B[m\n{subject_re.pattern}\n".format(**locals())
+    error = f"\x1B[1m{commit}:1:1: \x1B[31merror\x1B[39m: commit message's subject not formatted according to Conventional Commits\x1B[m\n{subject_re.pattern}\n"
     error += message.full_subject + '\n'
     error += ' ' * message.subject_start + '\x1B[32m' + '^' * max(len(message.full_subject) - message.subject_start, 1) + '\x1B[39m'
     errors.append(error)
@@ -157,7 +157,7 @@ accepted_tags = (
 # 2. The type feat MUST be used when a commit adds a new feature to your application or library.
 # 3. The type fix MUST be used when a commit represents a bug fix for your application.
 if type_tag and type_tag.text not in accepted_tags and type_tag.text not in ('feat', 'fix'):
-    error = "\x1B[1m{commit}:1:1: \x1B[31merror\x1B[39m: use of type tag that's neither 'feat', 'fix' nor whitelisted ({})\x1B[m\n".format(', '.join(accepted_tags), **locals())
+    error = f"\x1B[1m{commit}:1:1: \x1B[31merror\x1B[39m: use of type tag that's neither 'feat', 'fix' nor whitelisted ({', '.join(accepted_tags)})\x1B[m\n"
     error += message.full_subject + '\n'
     error += ' ' * type_tag.start + '\x1B[31m' + '~' * (type_tag.end - type_tag.start) + '\x1B[39m'
     possibilities = difflib.get_close_matches(type_tag.text, ('feat', 'fix') + accepted_tags, n=1)
@@ -174,14 +174,14 @@ if scope is not None:
 #     If `!` is used, `BREAKING CHANGE: ` MAY be ommitted from the footer section, and the commit description SHALL be
 #     used to describe the breaking change.
 if breaking is not None and breaking.text != '!':
-    error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: breaking change indicator in commit message's subject should be exactly '!'\x1B[m\n".format(breaking.start + 1, **locals())
+    error = f"\x1B[1m{commit}:1:{breaking.start + 1}: \x1B[31merror\x1B[39m: breaking change indicator in commit message's subject should be exactly '!'\x1B[m\n"
     error += message.full_subject + '\n'
     error += breaking.start * ' ' + '\x1B[31m' + breaking.text.find('!') * '~' + ' ' + (len(breaking.text) - 1 - breaking.text.find('!')) * '~' + '\x1B[39m'
     errors.append(error)
 
 # 1. Commits MUST be prefixed with a type, ..., followed by a colon and a space.
 if separator and separator.text != ': ':
-    error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's subject lacks a ': ' separator after the type tag\x1B[m\n".format(separator.start + 1, **locals())
+    error = f"\x1B[1m{commit}:1:{separator.start + 1}: \x1B[31merror\x1B[39m: commit message's subject lacks a ': ' separator after the type tag\x1B[m\n"
     error += message.full_subject + '\n'
     error += separator.start * ' ' + '\x1B[32m^' * max(1, separator.end - separator.start) + '\x1B[39m'
     errors.append(error)
@@ -189,7 +189,7 @@ if separator and separator.text != ': ':
 # 5. A description MUST immediately follow the type/scope prefix. The description is a short description of the
 #    code changes, e.g., fix: array parsing issue when multiple spaces were contained in string.
 if description and not description.text:
-    error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's subject lacks a description after the type tag\x1B[m\n".format(description.start + 1, **locals())
+    error = f"\x1B[1m{commit}:1:{description.start + 1}: \x1B[31merror\x1B[39m: commit message's subject lacks a description after the type tag\x1B[m\n"
     error += message.full_subject + '\n'
     error += ' ' * description.start + '\x1B[32m^\x1B[39m'
     errors.append(error)
@@ -204,7 +204,7 @@ if description is not None:
         title_case_re = regex.compile(r'\b[\p{Lu}\p{Lt}]\p{Ll}*(?:\s+[\p{Lu}\p{Lt}]\p{Ll}*)*\b')
     title_case_word = extract_match_group(title_case_re.match(description.text), 0, description.start)
     if title_case_word:
-        error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: don't use title case in the description\x1B[m\n".format(title_case_word.start + 1, **locals())
+        error = f"\x1B[1m{commit}:1:{title_case_word.start + 1}: \x1B[31merror\x1B[39m: don't use title case in the description\x1B[m\n"
         error += message.full_subject + '\n'
         error += ' ' * title_case_word.start + '\x1B[32m' + '^' + '~' * (title_case_word.end - title_case_word.start - 1) + '\x1B[39m'
         errors.append(error)
@@ -299,10 +299,10 @@ if description is not None:
 
     if review_comment_ref:
         start = review_comment_ref.start
-        error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: add context directly to commit messages instead of referring to review comments\x1B[m\n".format(start + 1, **locals())
+        error = f"\x1B[1m{commit}:1:{start + 1}: \x1B[31merror\x1B[39m: add context directly to commit messages instead of referring to review comments\x1B[m\n"
         error += message.full_subject + '\n'
         error += ' ' * start + '\x1B[32m' + '^' * (review_comment_ref.end - review_comment_ref.start) + '\x1B[39m\n'
-        error += "\x1B[1m{commit}:1:{}: \x1B[30mnote\x1B[39m: prefer using --fixup when fixing previous commits in the same pull request\x1B[m".format(start + 1, **locals())
+        error += f"\x1B[1m{commit}:1:{start + 1}: \x1B[30mnote\x1B[39m: prefer using --fixup when fixing previous commits in the same pull request\x1B[m"
         errors.append(error)
 
     # Our own requirements on the description
@@ -331,7 +331,7 @@ if description is not None:
 
     # Disallow ending the description with punctuation
     if re.match(r'.*[.!?,]$', description.text):
-        error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's subject ends with punctuation\x1B[m\n".format(len(message.full_subject), **locals())
+        error = f"\x1B[1m{commit}:1:{len(message.full_subject)}: \x1B[31merror\x1B[39m: commit message's subject ends with punctuation\x1B[m\n"
         error += message.full_subject + '\n'
         error += ' ' * (len(message.full_subject) - 1) + '\x1B[32m^\x1B[39m'
         errors.append(error)
@@ -379,20 +379,20 @@ if description is not None:
         )
     blacklisted = extract_match_group(re.match(r'^(?:' + '|'.join(re.escape(w) for w in blacklist_start_words) + r')\b', description.text, flags=re.IGNORECASE), 0, description.start)
     if blacklisted:
-        error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's description contains blacklisted word or repeats type tag\x1B[m\n".format(blacklisted.start + 1, **locals())
+        error = f"\x1B[1m{commit}:1:{blacklisted.start + 1}: \x1B[31merror\x1B[39m: commit message's description contains blacklisted word or repeats type tag\x1B[m\n"
         error += message.full_subject + '\n'
         error += blacklisted.start * ' ' + '\x1B[32m^' * (blacklisted.end - blacklisted.start) + '\x1B[39m\n'
-        error += "\x1B[1m{commit}:1:{}: \x1B[30mnote\x1B[39m: prefer using the imperative for verbs\x1B[m".format(blacklisted.start + 1, **locals())
+        error += f"\x1B[1m{commit}:1:{blacklisted.start + 1}: \x1B[30mnote\x1B[39m: prefer using the imperative for verbs\x1B[m"
         errors.append(error)
 
 if len(message.subject) > 80:
-    error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: commit message's subject exceeds line length of 80 by {} characters\x1B[m\n".format(81 + message.subject_start, len(message.subject) - 80, **locals())
+    error = f"\x1B[1m{commit}:1:{81 + message.subject_start}: \x1B[31merror\x1B[39m: commit message's subject exceeds line length of 80 by {len(message.subject) - 80} characters\x1B[m\n"
     error += message.full_subject + '\n'
     error += ' ' * 79 + '\x1B[32m^' + '~' * (len(message.full_subject) - 80) + '\x1B[39m'
     errors.append(error)
 
 if len(message.lines) > 1 and message.lines[1]:
-    error = "\x1B[1m{commit}:2:1: \x1B[31merror\x1B[39m: commit message subject and body are not separated by an empty line\x1B[m\n".format(**locals())
+    error = f"\x1B[1m{commit}:2:1: \x1B[31merror\x1B[39m: commit message subject and body are not separated by an empty line\x1B[m\n"
     error += message.lines[1] + '\n'
     error += '\x1B[31m' + '~' * len(message.lines[1]) + '\x1B[39m'
     errors.append(error)
@@ -405,7 +405,7 @@ for paraidx, paragraph in enumerate(message.paragraphs):
         if m.start() == 0:
             if paragraph[:m.end(4)] != 'BREAKING CHANGE: ' or not m.group(m.lastindex):
                 line_end = paragraph.find('\n')
-                error = "\x1B[1m{commit}:{line}:1: \x1B[31merror\x1B[39m: breaking changes should start with _exactly_ 'BREAKING CHANGE: ' and be followed by text immediately\x1B[m\n".format(line=lineno + 1, commit=commit)
+                error = f"\x1B[1m{commit}:{lineno + 1}:1: \x1B[31merror\x1B[39m: breaking changes should start with _exactly_ 'BREAKING CHANGE: ' and be followed by text immediately\x1B[m\n"
                 error += paragraph[:line_end] + '\n'
                 error += '\x1B[32m'
                 cur = 0
@@ -427,7 +427,7 @@ for paraidx, paragraph in enumerate(message.paragraphs):
             line_end = paragraph.find('\n', m.start(2))
             line = lineno + paragraph[:line_start + 1].count('\n')
             start = m.start() - line_start
-            error = "\x1B[1m{commit}:{line}:{col}: \x1B[31merror\x1B[39m: body contains 'BREAKING CHANGE' at other location than start of paragraph\x1B[m\n".format(line=line + 1, col=start + 1, commit=commit)
+            error = f"\x1B[1m{commit}:{line + 1}:{start + 1}: \x1B[31merror\x1B[39m: body contains 'BREAKING CHANGE' at other location than start of paragraph\x1B[m\n"
             error += paragraph[line_start:line_end] + '\n'
             error += '\x1B[32m' + ' ' * start
             error += ''.join('\n' if c == '\n' else '^' for c in paragraph[m.start():m.start(2)])

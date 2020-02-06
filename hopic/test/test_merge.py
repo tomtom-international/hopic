@@ -21,8 +21,7 @@ import pytest
 import sys
 
 
-_source_date_epoch = 42 * 365 * 24 * 3600
-_git_time = '{} +0000'.format(_source_date_epoch)
+_git_time = f"{42 * 365 * 24 * 3600} +0000"
 
 
 def run(*args, env=None):
@@ -173,15 +172,15 @@ def test_hopic_config_subdir_version_file(capfd, tmp_path):
     config_dir = "test_config"
     hopic_config_subdir_version_file_tester(capfd,
                                             config_dir,
-                                            '''\
+                                            f"""\
 version:
-  file: {}
+  file: {version_file}
   tag:  true
   bump: patch
-  format: semver'''.format(version_file),
+  format: semver""",
                                             version_file,
-                                            '''\
-version={}'''.format(version),
+                                            f"""\
+version={version}""",
                                             commit_version,
                                             tmp_path)
 
@@ -193,18 +192,18 @@ def test_hopic_config_subdir_version_file_after_submit(capfd, tmp_path):
     config_dir = ".ci"
     test_repo = hopic_config_subdir_version_file_tester(capfd,
                                                         config_dir,
-                                                        '''\
+                                                        f"""\
 version:
-  file: {}
+  file: {version_file}
   tag:  true
   bump: patch
   format: semver
   after-submit:
     bump: prerelease
-    prerelease-seed: PRERELEASE-TEST'''.format(version_file),
+    prerelease-seed: PRERELEASE-TEST""",
                                                         version_file,
-                                                        '''\
-version={}'''.format(version),
+                                                        f"""\
+version={version}""",
                                                         commit_version,
                                                         tmp_path)
     with (test_repo / config_dir / version_file).open('r') as f:
@@ -218,19 +217,18 @@ def test_version_bump_after_submit_from_repo_root_dir(capfd, tmp_path):
     config_dir = ""
     test_repo = hopic_config_subdir_version_file_tester(capfd,
                                                         config_dir,
-                                                        '''\
+                                                        f"""\
 version:
-  file: {}
+  file: {version_file}
   tag:  true
   bump: patch
   format: semver
   after-submit:
     bump: prerelease
-    prerelease-seed: PRERELEASE-TEST  
-                                                    '''.format(version_file),
+    prerelease-seed: PRERELEASE-TEST""",
                                                         version_file,
-                                                        '''\
-version={}'''.format(version),
+                                                        f"""\
+version={version}""",
                                                         commit_version,
                                                         tmp_path)
     with (test_repo / config_dir / version_file).open('r') as f:
@@ -286,7 +284,7 @@ version:
     # Successful checkout and build
     return run(
             ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', target),
-            ('prepare-source-tree', '--author-date', '@{_git_time}'.format(_git_time=_git_time), '--commit-date', '@{_git_time}'.format(_git_time=_git_time),
+            ('prepare-source-tree', '--author-date', f"@{_git_time}", '--commit-date', f"@{_git_time}",
                 'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful'),
         )
 

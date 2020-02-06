@@ -14,7 +14,6 @@
 
 from collections import namedtuple
 import re
-from six import string_types
 
 
 _Footer = namedtuple('Footer', ('token', 'value'))
@@ -27,7 +26,7 @@ class CommitMessage(object):
     merge_re = re.compile(r'^Merge.*?:[ \t]*')
 
     def __init__(self, message, hexsha=None):
-        if isinstance(message, string_types):
+        if isinstance(message, str):
             self.message = _strip_message(message)
         else:
             self.message = _strip_message(message.message)
@@ -113,9 +112,9 @@ class CommitMessage(object):
 
     def __repr__(self):
         try:
-            return "{self.__class__.__name__}({self.message!r}, {self.hexsha!r})".format(self=self)
+            return f"{self.__class__.__name__}({self.message!r}, {self.hexsha!r})"
         except AttributeError:
-            return "{self.__class__.__name__}({self.message!r})".format(self=self)
+            return f"{self.__class__.__name__}({self.message!r})"
 
 
 class ConventionalCommit(CommitMessage):
@@ -166,7 +165,7 @@ class ConventionalCommit(CommitMessage):
         super().__init__(message)
         m = self.strict_subject_re.match(self.subject)
         if not m:
-            raise RuntimeError("commit message's subject ({self.subject!r}) not formatted according to Conventional Commits ({self.strict_subject_re.pattern})".format(self=self))
+            raise RuntimeError(f"commit message's subject ({self.subject!r}) not formatted according to Conventional Commits ({self.strict_subject_re.pattern})")
         self.type_tag     = m.group('type_tag')
         self.scope        = m.group('scope')
         self._is_breaking = m.group('breaking')
@@ -241,7 +240,7 @@ class _ConventionalFooterList(object):
         if isinstance(idx, str):
             matches = [footer.value for footer in self if casefold(footer.token) == casefold(idx)]
             if not matches:
-                raise KeyError("{} not found in footer list".format(idx))
+                raise KeyError(f"{idx} not found in footer list")
             return matches
 
         if idx < 0:

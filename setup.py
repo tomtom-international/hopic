@@ -44,7 +44,6 @@ setup(
       'python-dateutil',
       'PyYAML',
       'setuptools',
-      'six',
     ),
     setup_requires=(
       'pytest-runner',

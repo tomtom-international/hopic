@@ -15,18 +15,14 @@
 import click
 import logging
 import os
-
-try:
-    from shlex import quote as shquote
-except ImportError:
-    from pipes import quote as shquote
+import shlex
 
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
 
 
 def echo_cmd(fun, cmd, *args, **kwargs):
-    log.info('Executing: %s', click.style(' '.join(shquote(word) for word in cmd), fg='yellow'))
+    log.info('Executing: %s', click.style(' '.join(shlex.quote(word) for word in cmd), fg='yellow'))
 
     # Set our locale for machine readability with UTF-8
     kwargs = kwargs.copy()

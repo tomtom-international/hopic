@@ -15,7 +15,8 @@
 from ..cli import cli
 
 from click.testing import CliRunner
-from collections import OrderedDict, Sequence
+from collections import OrderedDict
+from collections.abc import Sequence
 import json
 import sys
 

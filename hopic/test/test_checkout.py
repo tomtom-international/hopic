@@ -22,8 +22,7 @@ import pytest
 import sys
 
 
-_source_date_epoch = 7 * 24 * 3600
-_git_time = '{} +0000'.format(_source_date_epoch)
+_git_time = f"{7 * 24 * 3600} +0000"
 
 
 def run(*args, env=None):
