@@ -284,7 +284,7 @@ def read(config, volume_vars):
         raise ConfigurationError('`pass-through-environment-vars` must be a sequence of strings', file=config)
     for idx, var in enumerate(env_vars):
         if not isinstance(var, str):
-            raise ConfigurationError("`pass-through-environment-vars` must be a sequence containing strings only: element {idx} has type {type!r}".format(idx=idx, type=type), file=config)
+            raise ConfigurationError("`pass-through-environment-vars` must be a sequence containing strings only: element {idx} has type {type!r}".format(idx=idx, type=type(idx)), file=config)
 
     image = cfg.setdefault('image', OrderedDict())
     if not isinstance(image, (Mapping, str, IvyManifestImage)):
