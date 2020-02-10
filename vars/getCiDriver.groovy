@@ -32,7 +32,7 @@ class ChangeRequest {
   }
 
   protected def maySubmitImpl(target_commit, source_commit, allow_cache = true) {
-    return !line_split(steps.sh(script: 'git log ' + shell_quote(target_commit) + '..' + shell_quote(source_commit) + " --pretty='%H:%s' --reverse", returnStdout: true)
+    return !line_split(steps.sh(script: 'LC_ALL=C.UTF-8 git log ' + shell_quote(target_commit) + '..' + shell_quote(source_commit) + " --pretty='%H:%s' --reverse", returnStdout: true)
       .trim()).find { line ->
         def (commit, subject) = line.split(':', 2)
         if (subject.startsWith('fixup!') || subject.startsWith('squash!')) {
@@ -355,12 +355,14 @@ class CiDriver {
       // Timeout prevents infinite downloads from blocking the build forever
       steps.timeout(time: 1, unit: 'MINUTES', activity: true) {
         steps.sh(script: """\
+LC_ALL=C.UTF-8
+export LC_ALL
 rm -rf ${shell_quote(venv)}
 python3 -m virtualenv --clear ${shell_quote(venv)}
 ${shell_quote(venv)}/bin/python -m pip install ${shell_quote(this.repo)}
 """)
       }
-      this.base_cmds[steps.env.NODE_NAME] = shell_quote("${venv}/bin/python") + ' ' + shell_quote("${venv}/bin/hopic") + ' --color=always'
+      this.base_cmds[steps.env.NODE_NAME] = 'LC_ALL=C.UTF-8 ' + shell_quote("${venv}/bin/python") + ' ' + shell_quote("${venv}/bin/hopic") + ' --color=always'
     }
     return this.base_cmds[steps.env.NODE_NAME]
   }
@@ -539,7 +541,7 @@ exec ssh -i '''
     }
 
     def code_dir_output = tmpdir + '/code-dir.txt'
-    if (steps.sh(script: 'git config --get hopic.code.dir > ' + shell_quote(code_dir_output), returnStatus: true) == 0) {
+    if (steps.sh(script: 'LC_ALL=C.UTF-8 git config --get hopic.code.dir > ' + shell_quote(code_dir_output), returnStatus: true) == 0) {
       workspace = steps.readFile(code_dir_output).trim()
     }
 
@@ -714,7 +716,7 @@ exec ssh -i '''
          */
         def scm = steps.checkout(steps.scm)
         // Don't trust Jenkin's scm.GIT_COMMIT because it sometimes lies
-        steps.env.GIT_COMMIT          = steps.sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+        steps.env.GIT_COMMIT          = steps.sh(script: 'LC_ALL=C.UTF-8 git rev-parse HEAD', returnStdout: true).trim()
         steps.env.GIT_COMMITTER_NAME  = scm.GIT_COMMITTER_NAME
         steps.env.GIT_COMMITTER_EMAIL = scm.GIT_COMMITTER_EMAIL
         steps.env.GIT_AUTHOR_NAME     = scm.GIT_AUTHOR_NAME
