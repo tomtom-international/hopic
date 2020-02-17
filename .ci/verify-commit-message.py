@@ -317,10 +317,16 @@ if description is not None:
     else:
         title_case_re = regex.compile(r'\b[\p{Lu}\p{Lt}]\p{Ll}*(?:\s+[\p{Lu}\p{Lt}]\p{Ll}*)*\b')
     title_case_word = extract_match_group(title_case_re.match(description.text), 0, description.start)
-    if title_case_word:
+    safe_words = (
+            'TomTom',
+        )
+    if title_case_word and title_case_word.text not in safe_words:
         error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: don't use title case in the description\x1B[m\n".format(title_case_word.start + 1, **locals())
         error += message.full_subject + '\n'
         error += ' ' * title_case_word.start + '\x1B[32m' + '^' + '~' * (title_case_word.end - title_case_word.start - 1) + '\x1B[39m'
+        possibilities = difflib.get_close_matches(title_case_word.text, safe_words, n=1)
+        if possibilities:
+            error += "\n\x1B[1m{commit}:1:{}: \x1B[30mnote\x1B[39m: did you mean {possibilities[0]!r}?\x1B[m".format(title_case_word.start + 1, **locals())
         errors.append(error)
 
     complain_about_review_refs(description.text, description.start, quote_text=message.full_subject)
