@@ -194,25 +194,13 @@ if description and not description.text:
     error += ' ' * description.start + '\x1B[32m^\x1B[39m'
     errors.append(error)
 
-if description is not None:
-    complain_about_excess_space(description)
-
-    # Prevent upper casing the first letter of the first word, this is not a book-style sentence.
-    if regex is None:
-        title_case_re = re.compile(r'\b[A-Z][a-z]*(?:\s+[A-Z][a-z]*)*\b')
-    else:
-        title_case_re = regex.compile(r'\b[\p{Lu}\p{Lt}]\p{Ll}*(?:\s+[\p{Lu}\p{Lt}]\p{Ll}*)*\b')
-    title_case_word = extract_match_group(title_case_re.match(description.text), 0, description.start)
-    if title_case_word:
-        error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: don't use title case in the description\x1B[m\n".format(title_case_word.start + 1, **locals())
-        error += message.full_subject + '\n'
-        error += ' ' * title_case_word.start + '\x1B[32m' + '^' + '~' * (title_case_word.end - title_case_word.start - 1) + '\x1B[39m'
-        errors.append(error)
-
-    # Disallow referring to review comments because it's a poor excuse for a proper commit message
+def complain_about_review_refs(component, component_start=0, lineno=0, quote_text=None):
+    """
+    Disallow referring to review comments because it's a poor excuse for a proper commit message
+    """
     review_comment_ref = None
     if stem is not None:
-        description_words = tuple((word.group(), stem(word.group()).lower(), word.start(), word.end()) for word in re.finditer(r'\b(?:\w|[-])+\b', description.text))
+        words = tuple((word.group(), stem(word.group()).lower(), word.start(), word.end()) for word in re.finditer(r'\b(?:\w|[-])+\b', component))
         opt_prefix = frozenset({
                 'all',
                 'as',
@@ -245,43 +233,43 @@ if description is not None:
         ref_start, ref_end = None, None
         def encounter(word: str, opts: Sequence[str]) -> bool:
             return bool(word in opts or difflib.get_close_matches(word, opts, cutoff=0.9))
-        for idx, (word, stemmed, start, end) in enumerate(description_words):
+        for idx, (word, stemmed, start, end) in enumerate(words):
             if stemmed not in ('review', 'onlin'):
                 continue
             min_idx = idx
-            while min_idx > 0 and encounter(description_words[min_idx-1][1], opt_prefix):
+            while min_idx > 0 and encounter(words[min_idx-1][1], opt_prefix):
                 min_idx -= 1
-            if min_idx > 0 and encounter(description_words[min_idx-1][1], reference_words):
+            if min_idx > 0 and encounter(words[min_idx-1][1], reference_words):
                 min_idx -= 1
-                ref_start = description_words[min_idx][2]
+                ref_start = words[min_idx][2]
                 ref_end = end
             max_idx = idx
-            while max_idx + 1 < len(description_words) and encounter(description_words[max_idx+1][1], opt_suffix):
+            while max_idx + 1 < len(words) and encounter(words[max_idx+1][1], opt_suffix):
                 max_idx += 1
                 if ref_end is not None:
-                    ref_end = max(ref_end, description_words[max_idx][3])
-            if max_idx + 1 < len(description_words) and encounter(description_words[max_idx+1][1], reference_words):
+                    ref_end = max(ref_end, words[max_idx][3])
+            if max_idx + 1 < len(words) and encounter(words[max_idx+1][1], reference_words):
                 max_idx += 1
                 if ref_start is None:
-                    ref_start = len(description.text)
+                    ref_start = len(component)
                 if ref_end is None:
                     ref_end = 0
-                ref_start = min(ref_start, description_words[min_idx][2])
-                ref_end = max(ref_end, description_words[max_idx][3])
+                ref_start = min(ref_start, words[min_idx][2])
+                ref_end = max(ref_end, words[max_idx][3])
             if ref_start is None and ref_end is None:
-                brace_prefix = re.match(r'^.*([(])\s*', description.text[:start])
-                brace_suffix = re.match(r'\s*([)])', description.text[description_words[max_idx][3]:])
+                brace_prefix = re.match(r'^.*([(])\s*', component[:start])
+                brace_suffix = re.match(r'\s*([)])', component[words[max_idx][3]:])
                 if brace_prefix and brace_suffix:
                     ref_start = brace_prefix.start(1)
                     ref_end = brace_prefix.end(1)
             if ref_start is None and ref_end is None:
-                for try_idx, (try_word, try_stemmed, _, _) in enumerate(description_words[min_idx:max_idx+1], min_idx):
+                for try_idx, (try_word, try_stemmed, _, _) in enumerate(words[min_idx:max_idx+1], min_idx):
                     if encounter(try_stemmed, reference_words):
-                        ref_start = description_words[min_idx][2]
-                        ref_end = description_words[max_idx][3]
+                        ref_start = words[min_idx][2]
+                        ref_end = words[max_idx][3]
                         break
             if ref_start is not None and ref_end is not None:
-                review_comment_ref = MatchGroup(name=0, text=description.text[ref_start:ref_end], start=ref_start+description.start, end=ref_end+description.start)
+                review_comment_ref = MatchGroup(name=0, text=component[ref_start:ref_end], start=ref_start+component_start, end=ref_end+component_start)
                 break
     else:
         review_comment_ref = re.search(r'''
@@ -294,16 +282,48 @@ if description is not None:
             |\breview\s+rework(?:ing|ed)?\b
             |[(] \s* review \s+ (?:comment|finding)s? \s* [)]
             ''',
-            description.text, re.VERBOSE|re.IGNORECASE)
-        review_comment_ref = extract_match_group(review_comment_ref, 0, description.start)
+            component, re.VERBOSE|re.IGNORECASE)
+        review_comment_ref = extract_match_group(review_comment_ref, 0, component_start)
 
     if review_comment_ref:
-        start = review_comment_ref.start
-        error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: add context directly to commit messages instead of referring to review comments\x1B[m\n".format(start + 1, **locals())
-        error += message.full_subject + '\n'
-        error += ' ' * start + '\x1B[32m' + '^' * (review_comment_ref.end - review_comment_ref.start) + '\x1B[39m\n'
-        error += "\x1B[1m{commit}:1:{}: \x1B[30mnote\x1B[39m: prefer using --fixup when fixing previous commits in the same pull request\x1B[m".format(start + 1, **locals())
+        if quote_text is None:
+            quote_text = component
+        quote_start = quote_text.rfind('\n', 0, review_comment_ref.start) + 1
+        quote_end = (quote_text + '\n').find('\n', review_comment_ref.end)
+        line = lineno + quote_text[:quote_start + 1].count('\n')
+        start = review_comment_ref.start - quote_start
+
+        error = "\x1B[1m{commit}:{line}:{col}: \x1B[31merror\x1B[39m: add context directly to commit messages instead of referring to review comments\x1B[m\n".format(line=line + 1, col=start + 1, commit=commit)
+        last = 0
+        for linem in re.finditer('\n', review_comment_ref.text + '\n'):
+            if last == 0:
+                error += quote_text[quote_start:quote_start + start + linem.start() + 1] + '\n'
+                error += ' ' * start
+            else:
+                error += review_comment_ref.text[last:linem.start()] + '\n'
+            error += '\x1B[32m' + '^' * (linem.start() - last) + '\x1B[39m\n'
+            
+            last = linem.end()
+        error += "\x1B[1m{commit}:{line}:{col}: \x1B[30mnote\x1B[39m: prefer using --fixup when fixing previous commits in the same pull request\x1B[m".format(line=line + 1, col=start + 1, commit=commit)
         errors.append(error)
+
+
+if description is not None:
+    complain_about_excess_space(description)
+
+    # Prevent upper casing the first letter of the first word, this is not a book-style sentence.
+    if regex is None:
+        title_case_re = re.compile(r'\b[A-Z][a-z]*(?:\s+[A-Z][a-z]*)*\b')
+    else:
+        title_case_re = regex.compile(r'\b[\p{Lu}\p{Lt}]\p{Ll}*(?:\s+[\p{Lu}\p{Lt}]\p{Ll}*)*\b')
+    title_case_word = extract_match_group(title_case_re.match(description.text), 0, description.start)
+    if title_case_word:
+        error = "\x1B[1m{commit}:1:{}: \x1B[31merror\x1B[39m: don't use title case in the description\x1B[m\n".format(title_case_word.start + 1, **locals())
+        error += message.full_subject + '\n'
+        error += ' ' * title_case_word.start + '\x1B[32m' + '^' + '~' * (title_case_word.end - title_case_word.start - 1) + '\x1B[39m'
+        errors.append(error)
+
+    complain_about_review_refs(description.text, description.start, quote_text=message.full_subject)
 
     # Our own requirements on the description
     # No JIRA tickets in the subject line, because it wastes precious screen estate (80 chars)
@@ -433,6 +453,9 @@ for paraidx, paragraph in enumerate(message.paragraphs):
             error += ''.join('\n' if c == '\n' else '^' for c in paragraph[m.start():m.start(2)])
             error += '\x1B[39m'
             errors.append(error)
+
+    complain_about_review_refs(paragraph, lineno=lineno)
+
 
 for error in errors:
     print(error, file=sys.stderr)
