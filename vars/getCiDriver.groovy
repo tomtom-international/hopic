@@ -669,11 +669,7 @@ exec ssh -i '''
       if (stash.nodes[steps.env.NODE_NAME]) {
         return
       }
-      if (stash.dir) {
-        steps.dir(stash.dir) {
-          steps.unstash(name)
-        }
-      } else {
+      steps.dir(stash.dir) {
         steps.unstash(name)
       }
       this.stashes[name].nodes[steps.env.NODE_NAME] = true
@@ -850,14 +846,18 @@ exec ssh -i '''
                       if (meta.stash.containsKey('includes')) {
                         params['includes'] = meta.stash.includes
                       }
-                      if (meta.stash.dir) {
-                        steps.dir(meta.stash.dir) {
-                          steps.stash(params)
+                      def stash_dir = workspace
+                      if (meta.stash.containsKey('dir')) {
+                        if (meta.stash.dir.startsWith('/')) {
+                          stash_dir = meta.stash.dir
+                        } else {
+                          stash_dir = "${workspace}/${meta.stash.dir}"
                         }
-                      } else {
+                      }
+                      steps.dir(stash_dir) {
                         steps.stash(params)
                       }
-                      this.stashes[name] = [dir: meta.stash.dir, nodes: [(steps.env.NODE_NAME): true]]
+                      this.stashes[name] = [dir: stash_dir, nodes: [(steps.env.NODE_NAME): true]]
                     }
                     if (meta.containsKey('worktrees')) {
                       def name = "${phase}-${variant}-worktree-transfer.bundle"
