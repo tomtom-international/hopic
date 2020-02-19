@@ -810,7 +810,9 @@ exec ssh -i '''
                 }
                 steps.node(label) {
                   steps.stage("${phase}-${variant}") {
-                    def cmd = this.ensure_checkout(clean).cmd
+                    def checkout = this.ensure_checkout(clean)
+                    final cmd = checkout.cmd
+                    final workspace = checkout.workspace
                     this.pin_variant_to_current_node(variant)
 
                     this.ensure_unstashed()
@@ -831,7 +833,7 @@ exec ssh -i '''
                     } finally {
                       if (meta.containsKey('junit')) {
                         def results = meta.junit
-                        steps.dir(this.checkouts[steps.env.NODE_NAME].workspace) {
+                        steps.dir(workspace) {
                           meta.junit.each { result ->
                             steps.junit(result)
                           }
@@ -871,7 +873,7 @@ exec ssh -i '''
                       if (artifacts == null) {
                         steps.error("Archive configuration entry for ${phase}.${variant} does not contain 'artifacts' property")
                       }
-                      steps.dir(this.checkouts[steps.env.NODE_NAME].workspace) {
+                      steps.dir(workspace) {
                         artifacts.each { artifact ->
                           def pattern = artifact.pattern.replace('(*)', '*')
                           if (archiving_cfg == 'archive') {
