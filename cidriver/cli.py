@@ -593,6 +593,7 @@ def checkout_tree(tree, remote, ref, clean=False, remote_name='origin', allow_su
         commit = origin.fetch(ref, tags=True)[0].commit
         repo.head.reference = commit
         repo.head.reset(index=True, working_tree=True)
+        repo.git.submodule(["deinit", "--all", "--force"]) # Remove potential moved submodules
 
         try:
             update_submodules(repo, clean)
@@ -779,6 +780,7 @@ def process_prepare_source_tree(
             target_remote = cfg.get_value(section, 'remote')
             code_clean    = cfg.getboolean('ci-driver.code', 'cfg-clean')
 
+        repo.git.submodule(["deinit", "--all", "--force"])  # Remove submodules in case it is changed in change_applicator
         commit_params = change_applicator(repo)
         if not commit_params:
             return
