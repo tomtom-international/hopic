@@ -2,11 +2,14 @@ method hudson.plugins.git.GitSCM getUserRemoteConfigs
 method hudson.plugins.git.UserRemoteConfig getCredentialsId
 method hudson.plugins.git.UserRemoteConfig getRefspec
 method hudson.plugins.git.UserRemoteConfig getUrl
+method java.io.File toPath
+method java.nio.file.Path relativize java.nio.file.Path
 method java.util.regex.MatchResult start
 method java.util.regex.MatchResult end
 method java.util.Map getOrDefault
 method org.jenkinsci.plugins.workflow.support.steps.build.RunWrapper getRawBuild
 method hudson.model.Run delete
+new java.io.File java.lang.String
 staticMethod groovy.json.JsonOutput toJson java.lang.Object
 staticMethod org.codehaus.groovy.runtime.DefaultGroovyMethods getAt java.util.List java.util.Collection
 staticMethod org.codehaus.groovy.runtime.DefaultGroovyMethods getAt java.lang.Object java.lang.String

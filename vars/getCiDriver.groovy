@@ -854,6 +854,20 @@ exec ssh -i '''
                           stash_dir = "${workspace}/${meta.stash.dir}"
                         }
                       }
+                      // Make stash locations node-independent by making them relative to the Jenkins workspace
+                      if (stash_dir.startsWith('/')) {
+                        def cwd = steps.pwd()
+                        // This check, unlike relativize() below, doesn't depend on File() and thus doesn't require script approval
+                        if (stash_dir == cwd) {
+                          stash_dir = '.'
+                        } else {
+                          cwd = new File(cwd).toPath()
+                          stash_dir = cwd.relativize(new File(stash_dir).toPath()) as String
+                        }
+                        if (stash_dir == '') {
+                          stash_dir = '.'
+                        }
+                      }
                       steps.dir(stash_dir) {
                         steps.stash(params)
                       }
