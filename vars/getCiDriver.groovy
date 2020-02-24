@@ -669,11 +669,7 @@ exec ssh -i '''
       if (stash.nodes[steps.env.NODE_NAME]) {
         return
       }
-      if (stash.dir) {
-        steps.dir(stash.dir) {
-          steps.unstash(name)
-        }
-      } else {
+      steps.dir(stash.dir) {
         steps.unstash(name)
       }
       this.stashes[name].nodes[steps.env.NODE_NAME] = true
@@ -810,7 +806,9 @@ exec ssh -i '''
                 }
                 steps.node(label) {
                   steps.stage("${phase}-${variant}") {
-                    def cmd = this.ensure_checkout(clean).cmd
+                    def checkout = this.ensure_checkout(clean)
+                    final cmd = checkout.cmd
+                    final workspace = checkout.workspace
                     this.pin_variant_to_current_node(variant)
 
                     this.ensure_unstashed()
@@ -831,7 +829,7 @@ exec ssh -i '''
                     } finally {
                       if (meta.containsKey('junit')) {
                         def results = meta.junit
-                        steps.dir(this.checkouts[steps.env.NODE_NAME].workspace) {
+                        steps.dir(workspace) {
                           meta.junit.each { result ->
                             steps.junit(result)
                           }
@@ -848,14 +846,32 @@ exec ssh -i '''
                       if (meta.stash.containsKey('includes')) {
                         params['includes'] = meta.stash.includes
                       }
-                      if (meta.stash.dir) {
-                        steps.dir(meta.stash.dir) {
-                          steps.stash(params)
+                      def stash_dir = workspace
+                      if (meta.stash.containsKey('dir')) {
+                        if (meta.stash.dir.startsWith('/')) {
+                          stash_dir = meta.stash.dir
+                        } else {
+                          stash_dir = "${workspace}/${meta.stash.dir}"
                         }
-                      } else {
+                      }
+                      // Make stash locations node-independent by making them relative to the Jenkins workspace
+                      if (stash_dir.startsWith('/')) {
+                        def cwd = steps.pwd()
+                        // This check, unlike relativize() below, doesn't depend on File() and thus doesn't require script approval
+                        if (stash_dir == cwd) {
+                          stash_dir = '.'
+                        } else {
+                          cwd = new File(cwd).toPath()
+                          stash_dir = cwd.relativize(new File(stash_dir).toPath()) as String
+                        }
+                        if (stash_dir == '') {
+                          stash_dir = '.'
+                        }
+                      }
+                      steps.dir(stash_dir) {
                         steps.stash(params)
                       }
-                      this.stashes[name] = [dir: meta.stash.dir, nodes: [(steps.env.NODE_NAME): true]]
+                      this.stashes[name] = [dir: stash_dir, nodes: [(steps.env.NODE_NAME): true]]
                     }
                     if (meta.containsKey('worktrees')) {
                       def name = "${phase}-${variant}-worktree-transfer.bundle"
@@ -871,7 +887,7 @@ exec ssh -i '''
                       if (artifacts == null) {
                         steps.error("Archive configuration entry for ${phase}.${variant} does not contain 'artifacts' property")
                       }
-                      steps.dir(this.checkouts[steps.env.NODE_NAME].workspace) {
+                      steps.dir(workspace) {
                         artifacts.each { artifact ->
                           def pattern = artifact.pattern.replace('(*)', '*')
                           if (archiving_cfg == 'archive') {
