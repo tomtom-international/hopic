@@ -910,7 +910,7 @@ def process_prepare_source_tree(
                     env = {'GIT_EDITOR': ':'}
                     if 'commit_date' in commit_params:
                         env['GIT_COMMITTER_DATE'] = commit_params['commit_date']
-                    repo.git.rebase(autosquash_base, interactive=True, autosquash=True, env=env, kill_after_timeout=5)
+                    repo.git.rebase(autosquash_base, interactive=True, autosquash=True, env=env, kill_after_timeout=300)
                 except git.GitCommandError as e:
                     log.warning('Failed to perform auto squashing rebase: %s', e)
                 else:
