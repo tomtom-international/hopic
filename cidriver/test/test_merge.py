@@ -387,3 +387,63 @@ def test_merge_conventional_feat_on_minor_branch(capfd, tmp_path):
     sys.stderr.write(err)
 
     assert 'New features are not allowed' in err
+
+
+def test_move_submodule(capfd, tmp_path):
+    author = git.Actor('Bob Tester', 'bob@example.net')
+    commitargs = dict(
+            author_date=_git_time,
+            commit_date=_git_time,
+            author=author,
+            committer=author,
+        )
+
+    subrepo = tmp_path / 'subrepo'
+    with git.Repo.init(str(subrepo), expand_vars=False) as repo:
+        with (subrepo / 'dummy.txt').open('w') as f:
+            f.write('Lalalala!\n')
+        repo.index.add(('dummy.txt',))
+        repo.index.commit(message='Initial dummy commit', **commitargs)
+
+    toprepo = tmp_path / 'repo'
+    with git.Repo.init(str(toprepo), expand_vars=False) as repo:
+        with (toprepo / 'hopic-ci-config.yaml').open('w') as f:
+            f.write('''\
+version:
+  bump: no            
+
+phases:
+  build:
+    test:
+      - cat subrepo_test/dummy.txt
+''')
+        repo.index.add(('hopic-ci-config.yaml',))
+        repo.git.submodule(('add', subrepo, 'subrepo_test'))
+        repo.index.add(('.gitmodules',))
+        repo.index.commit(message='Initial commit', **commitargs)
+
+    # Move submodule
+    repo.create_head("move_submodule_branch")
+    repo.git.checkout('move_submodule_branch')
+    repo.index.remove(['subrepo_test'])
+    with (toprepo / '.gitmodules').open('r+') as f:
+        f.truncate(0)
+
+    repo.git.submodule(('add', subrepo, 'moved_subrepo'))
+    repo.index.commit(message='Move submodule', **commitargs)
+
+    result = run(('--workspace', str(toprepo), 'checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'))
+    assert result.exit_code == 0
+    assert (toprepo / 'subrepo_test' / 'dummy.txt').is_file()
+    assert not (toprepo / 'moved_subrepo' / 'dummy.txt').is_file()
+
+    result = run(('--workspace', str(toprepo), 'prepare-source-tree', 'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'move_submodule_branch'))
+    assert result.exit_code == 0
+    assert not (toprepo / 'subrepo_test' / 'dummy.txt').is_file()
+    assert (toprepo / 'moved_subrepo' / 'dummy.txt').is_file()
+
+    # Do checkout of master again to fake build retrigger of an PR
+    result = run(('--workspace', str(toprepo), 'checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'))
+    assert result.exit_code == 0
+    assert (toprepo / 'subrepo_test' / 'dummy.txt').is_file()
+    assert not (toprepo / 'moved_subrepo' / 'dummy.txt').is_file()
