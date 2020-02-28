@@ -295,6 +295,18 @@ version:
         )
 
 
+def test_merge_conventional_refactor_no_bump(capfd, tmp_path):
+    result = merge_conventional_bump(capfd, tmp_path, message='refactor: some problem')
+    assert result.exit_code == 0
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    checkout_commit, merge_commit, merge_version = out.splitlines()
+    assert merge_version.startswith('0.0.1-'), "post merge version should be a pre-release of 0.0.1, not 0.0.1 itself"
+
+
 def test_merge_conventional_fix_bump(capfd, tmp_path):
     result = merge_conventional_bump(capfd, tmp_path, message='fix: some problem')
     assert result.exit_code == 0
