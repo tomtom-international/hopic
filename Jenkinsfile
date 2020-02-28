@@ -1,4 +1,6 @@
-/* Copyright (c) 2019 - 2019 TomTom N.V. (https://tomtom.com)
+
+/*
+ * Copyright (c) 2019 - 2020 TomTom N.V. (https://tomtom.com)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -11,7 +13,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
  */
 
 def version = 'release/0'
@@ -42,6 +43,12 @@ pipeline {
   agent none
 
   parameters {
+    choice(name:        'HOPIC_VERBOSITY',
+           choices:      ['INFO', 'DEBUG'],
+           description:  'Verbosity level to execute Hopic at.')
+    choice(name:         'GIT_VERBOSITY',
+           choices:      ['INFO', 'DEBUG'],
+           description:  'Verbosity level to execute Git commands at.')
     booleanParam(defaultValue: false,
                  description: 'Clean build',
                  name: 'CLEAN')

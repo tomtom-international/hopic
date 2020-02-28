@@ -125,18 +125,18 @@ class ConventionalCommit(CommitMessage):
 
     # 4. A scope MAY be provided after a type. A scope MUST consist of a noun describing a section of the codebase
     #    surrounded by parenthesis, e.g., `fix(parser):`
-    (?: \( (?P<scope> \S+? ) \) )?
+    (?: \( (?P<scope> [^()]* ) \) )?
 
     # 1. Commits MUST be prefixed with a type, ..., followed by ..., OPTIONAL `!`, ...
-    (?P<breaking>!)?
+    (?P<breaking>\s*!(?:\s+(?=:))?)?
 
     # 1. Commits MUST be prefixed with a type, ..., and REQUIRED terminal colon and space.
-    :[ ]
+    (?P<separator>:?[ ]?)
 
     # 5. A description MUST immediately follow the colon and space after the type/scope prefix. The description is a
     #    short description of the code changes, e.g., fix: array parsing issue when multiple spaces were contained in
     #    string.
-    (?P<description>.+)
+    (?P<description>.*)
     $
     ''', re.VERBOSE)
 
@@ -170,6 +170,21 @@ class ConventionalCommit(CommitMessage):
         self.scope        = m.group('scope')
         self._is_breaking = m.group('breaking')
         self.description  = m.group('description')
+
+        if re.search(r'[A-Z]', self.type_tag):
+            raise RuntimeError("commit message's type tag ({self.type_tag!r}) contains upper case letters but isn't allowed to".format(self=self))
+
+        if self.scope is not None and not re.match(r'^\S+$', self.scope):
+            raise RuntimeError("commit message's scope ({self.scope!r}) is empty or contains whitespace but shouldn't".format(self=self))
+
+        if self._is_breaking is not None and self._is_breaking != '!':
+            raise RuntimeError("breaking change indicator in commit message's subject should be exactly '!' (have: {self._is_breaking!r})".format(self=self))
+
+        if m.group('separator') != ': ':
+            raise RuntimeError("commit message's subject lacks a ': ' separator after the type tag (subject={self.subject!r})".format(self=self))
+
+        if not self.description:
+            raise RuntimeError("commit message's subject lacks a description after the type tag (subject={self.subject!r})".format(self=self))
 
         # 10. A footer's value MAY contain spaces and newlines, and parsing MUST terminate when the next valid footer
         #     token/separator pair is observed.
