@@ -870,6 +870,8 @@ def process_prepare_source_tree(
             else:
                 raise NotImplementedError("unsupported version bumping policy {bump['policy']}".format(**locals()))
 
+            assert new_version >= ctx.obj.version, "the new version should be more recent than the old one"
+
             if new_version != ctx.obj.version:
                 version_bumped = True
                 ctx.obj.version = new_version
