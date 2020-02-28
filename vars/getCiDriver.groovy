@@ -359,6 +359,7 @@ LC_ALL=C.UTF-8
 export LC_ALL
 rm -rf ${shell_quote(venv)}
 python -m virtualenv --clear ${shell_quote(venv)}
+cd /
 ${shell_quote(venv)}/bin/python -m pip install ${shell_quote(this.repo)}
 """)
       }
