@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-def version = 'release/0'
+def version = 'release/1'
 @NonCPS
 String transform_ssh_to_https(String url)
 {

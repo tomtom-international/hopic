@@ -16,7 +16,7 @@ Using Hopic locally
 
 .. code-block:: console
 
-   pip install --user git+https://github.com/tomtom-international/hopic.git@master
+   pip install --user git+https://github.com/tomtom-international/hopic.git@release/1
 
 .. _BashComplete: https://click.palletsprojects.com/en/7.x/bashcomplete/#activation
 
