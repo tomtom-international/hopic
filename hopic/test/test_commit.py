@@ -14,6 +14,8 @@
 
 from ..commit import *
 
+import pytest
+
 
 def test_basic_message_strip_and_splitup():
     """
@@ -59,6 +61,17 @@ in the output.
     assert m.paragraphs[-1].splitlines()[-1] == m.body.splitlines()[-1]
     assert m.body.splitlines()[-1] == m.message.splitlines()[-1]
 
+def test_conventional_missing_separator():
+    with pytest.raises(RuntimeError, match=r'(lack|miss).*separator'):
+        ConventionalCommit('fix display config error messages without backtrace')
+
+    with pytest.raises(RuntimeError, match=r'(lack|miss).*separator'):
+        ConventionalCommit('fix:display config error messages without backtrace')
+
+def test_conventional_wrong_case_type_tag():
+    with pytest.raises(RuntimeError, match=r'type.*tag.*upper.*case'):
+        ConventionalCommit('Fix: display config error messages without backtrace')
+
 def test_conventional_scoped_improvement():
     m = ConventionalCommit('improvement(config): display config error messages without backtrace')
     assert m.type_tag == 'improvement'
@@ -67,6 +80,16 @@ def test_conventional_scoped_improvement():
     assert not m.has_breaking_change()
     assert not m.has_new_feature()
     assert not m.has_fix()
+
+def test_conventional_badly_scoped():
+    with pytest.raises(RuntimeError, match=r'scope.*empty'):
+        ConventionalCommit('fix(): display config error messages without backtrace')
+
+    with pytest.raises(RuntimeError, match=r'scope.*whitespace'):
+        ConventionalCommit('fix( config ): display config error messages without backtrace')
+
+    with pytest.raises(RuntimeError, match=r'scope.*whitespace'):
+        x = ConventionalCommit('fix(config error): display config error messages without backtrace')
 
 def test_conventional_fix():
     m = ConventionalCommit('fix: use the common ancestor of the source and target commit for autosquash')
@@ -117,6 +140,16 @@ def test_conventional_subject_breaking_fix():
     assert m.has_breaking_change()
     assert not m.has_new_feature()
     assert m.has_fix()
+
+def test_conventional_badly_marked_as_breaking():
+    with pytest.raises(RuntimeError, match=r'breaking.*indicator'):
+        ConventionalCommit('fix !: display config error messages without backtrace')
+
+    with pytest.raises(RuntimeError, match=r'breaking.*indicator'):
+        ConventionalCommit('fix! : display config error messages without backtrace')
+
+    with pytest.raises(RuntimeError, match=r'breaking.*indicator'):
+        ConventionalCommit('fix ! : display config error messages without backtrace')
 
 def test_conventional_subject_breaking_new_feature():
     m = ConventionalCommit('''feat!: support multiple non-global current working directories''')

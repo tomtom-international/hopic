@@ -568,6 +568,7 @@ def checkout_tree(tree, remote, ref, clean=False, remote_name='origin', allow_su
         commit = origin.fetch(ref, tags=True)[0].commit
         repo.head.reference = commit
         repo.head.reset(index=True, working_tree=True)
+        repo.git.submodule(["deinit", "--all", "--force"]) # Remove potential moved submodules
 
         try:
             update_submodules(repo, clean)
@@ -754,6 +755,7 @@ def process_prepare_source_tree(
             target_remote = cfg.get_value(section, 'remote')
             code_clean    = cfg.getboolean('hopic.code', 'cfg-clean')
 
+        repo.git.submodule(["deinit", "--all", "--force"])  # Remove submodules in case it is changed in change_applicator
         commit_params = change_applicator(repo)
         if not commit_params:
             return
@@ -812,6 +814,7 @@ def process_prepare_source_tree(
                     if commit.has_new_feature():
                         raise VersioningError(f"New features are not allowed on '{target_ref}', but commit '{commit.hexsha}' contains one:\n{commit.message}")
         
+        version_bumped = False
         if is_publish_allowed and bump['policy'] != 'disabled' and bump['on-every-change']:
             if ctx.obj.version is None:
                 if 'file' in version_info:
@@ -827,7 +830,7 @@ def process_prepare_source_tree(
                 params = {}
                 if 'field' in bump:
                     params['bump'] = bump['field']
-                ctx.obj.version = ctx.obj.version.next_version(**params)
+                new_version = ctx.obj.version.next_version(**params)
             elif bump['policy'] in ('conventional-commits',):
                 if log.isEnabledFor(logging.DEBUG):
                     log.debug("bumping based on conventional commits:")
@@ -840,14 +843,20 @@ def process_prepare_source_tree(
                         except AttributeError:
                             hash_prefix = ''
                         log.debug("%s[%-8s][%-4s][%-3s]: %s", hash_prefix, breaking, feat, fix, commit.full_subject)
-                ctx.obj.version = ctx.obj.version.next_version_for_commits(source_commits)
+                new_version = ctx.obj.version.next_version_for_commits(source_commits)
             else:
                 raise NotImplementedError(f"unsupported version bumping policy {bump['policy']}")
-            log.debug("bumped version to: \x1B[34m%s\x1B[39m", ctx.obj.version)
 
-            if 'file' in version_info:
-                replace_version(os.path.join(ctx.obj.config_dir, version_info['file']), ctx.obj.version)
-                repo.index.add((relative_version_file,))
+            assert new_version >= ctx.obj.version, "the new version should be more recent than the old one"
+
+            if new_version != ctx.obj.version:
+                version_bumped = True
+                ctx.obj.version = new_version
+                log.debug("bumped version to: %s", click.style(str(ctx.obj.version), fg='blue'))
+
+                if 'file' in version_info:
+                    replace_version(os.path.join(ctx.obj.config_dir, version_info['file']), ctx.obj.version)
+                    repo.index.add((relative_version_file,))
         else:
             log.info("Skip version bumping due to the configuration or the target branch is not allowed to publish")
 
@@ -885,7 +894,7 @@ def process_prepare_source_tree(
                     env = {'GIT_EDITOR': ':'}
                     if 'commit_date' in commit_params:
                         env['GIT_COMMITTER_DATE'] = commit_params['commit_date']
-                    repo.git.rebase(autosquash_base, interactive=True, autosquash=True, env=env, kill_after_timeout=5)
+                    repo.git.rebase(autosquash_base, interactive=True, autosquash=True, env=env, kill_after_timeout=300)
                 except git.GitCommandError as e:
                     log.warning('Failed to perform auto squashing rebase: %s', e)
                 else:
@@ -907,7 +916,7 @@ def process_prepare_source_tree(
         # Tagging after bumping the version
         tagname = None
         version_tag = version_info.get('tag', False)
-        if ctx.obj.version is not None and not ctx.obj.version.prerelease and version_tag and is_publish_allowed:
+        if version_bumped and not ctx.obj.version.prerelease and version_tag and is_publish_allowed:
             if version_tag and not isinstance(version_tag, str):
                 version_tag = ctx.obj.version.default_tag_name
             tagname = version_tag.format(

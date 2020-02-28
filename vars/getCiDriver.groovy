@@ -359,6 +359,7 @@ LC_ALL=C.UTF-8
 export LC_ALL
 rm -rf ${shell_quote(venv)}
 python3 -m virtualenv --clear ${shell_quote(venv)}
+cd /
 ${shell_quote(venv)}/bin/python -m pip install ${shell_quote(this.repo)}
 """)
       }
@@ -577,6 +578,7 @@ exec ssh -i '''
       assert !this.has_change() || (this.target_commit != null && this.source_commit != null)
       this.may_submit_result = this.has_change() && this.get_change().maySubmit(target_commit, source_commit, /* allow_cache =*/ false) && !this.is_build_a_replay()
     }
+    this.may_submit_result = this.may_submit_result && steps.currentBuild.currentResult == 'SUCCESS'
     return this.may_submit_result
   }
 
@@ -772,23 +774,27 @@ exec ssh -i '''
       lock_if_necessary {
         phases.each {
           def phase    = it.phase
-
+          def is_build_successful = steps.currentBuild.currentResult == 'SUCCESS'
           // Make sure steps exclusive to changes, or not intended to execute for changes, are skipped when appropriate
-          def variants = it.variants.findAll {
-            def run_on_change = it.run_on_change
+          def variants = it.variants.findAll { variant ->
+            def run_on_change = variant.run_on_change
 
             if (run_on_change == 'always') {
               return true
             } else if (run_on_change == 'never') {
               return !this.has_change()
             } else if (run_on_change == 'only') {
-              if (this.source_commit == null
-               || this.target_commit == null) {
-                // Don't have enough information to determine whether this is a submittable change: assume it is
-                return true
+              if (is_build_successful) {
+                if (this.source_commit == null
+                 || this.target_commit == null) {
+                  // Don't have enough information to determine whether this is a submittable change: assume it is
+                  return true
+                }
+                return is_publishable_change
+              } else {
+                steps.println("Skipping variant ${variant.variant} in ${phase} because build is not successful")
+                return false
               }
-
-              return is_publishable_change
             }
             assert false : "Unknown 'run-on-change' option: ${run_on_change}"
           }
