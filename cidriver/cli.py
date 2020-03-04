@@ -1074,7 +1074,7 @@ def merge_change_request(
                 if not autosquash_re.match(commit.message)]
 
             log.debug("For approver '%s', checking source commits:\n%s\n.. against squashed reviewed commits:\n%s",
-                    approver, str(source_commits), str(autosquashed_reviewed_commits))
+                    approver, source_commits, autosquashed_reviewed_commits)
 
             if autosquashed_reviewed_commits == source_commits:
                 log.debug("Approval for '%s' is still valid", approver)

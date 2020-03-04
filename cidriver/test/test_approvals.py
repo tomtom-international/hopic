@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) 2020 - 2020 TomTom N.V. (https://tomtom.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,7 +29,7 @@ from ..commit import ConventionalCommit
 
 _GIT_TIME = '{} +0000'.format(42 * 365 * 24 * 3600)
 _BASE_APPROVER = 'Joe Approver1 <joe.approver1@nerds-r-us.eu>'
-_PRESQUASH_APPROVER = 'Bob Approver2 <bob.approver2@acme.net>'
+_PRESQUASH_APPROVER = 'Bob Approvér2 <bob.approver2@acme.net>'
 _POSTSQUASH_APPROVER = '"Hank: The Approver 3" <hank.approver3@business.ie>'
 
 def run(*args, **kwargs):
@@ -98,7 +99,7 @@ def _perform_merge(repo, approvals):
     result = run(
             ('-v', 'DEBUG', 'checkout-source-tree', '--target-remote', repo.working_dir, '--target-ref', 'master'),
             ('prepare-source-tree',
-                '--author-name', 'Damian Eveloper',
+                '--author-name', 'Damièn Evelopér',
                 '--author-email', 'd.eveloper@mycompany.com',
                 '--author-date', '@{}'.format(_GIT_TIME),
                 '--commit-date', '@{}'.format(_GIT_TIME),

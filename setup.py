@@ -56,6 +56,7 @@ setup(
       'pathlib2; python_version < "3"',
       'pytest<5; python_version < "3"', # last version with Python 2 support
       'pytest; python_version >= "3"',
+      'zipp<2; python_version < "3"', # last version with Python 2 support
     ),
     use_scm_version={"relative_to": __file__},
     entry_points='''
