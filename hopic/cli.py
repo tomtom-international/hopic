@@ -16,7 +16,7 @@ import click
 import click_log
 
 from . import binary_normalize
-from .commit import parse_commit_message
+from commisery.commit import parse_commit_message
 from .config_reader import (
         JSONEncoder,
         expand_docker_volume_spec,
