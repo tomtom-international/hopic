@@ -50,10 +50,12 @@ import logging
 import os
 import pkg_resources
 import re
+import signal
 import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
@@ -61,6 +63,11 @@ log.addHandler(logging.NullHandler())
 
 class VersioningError(click.ClickException):
     exit_code = 33
+
+
+class FatalSignal(Exception):
+    def __init__(self, signum):
+        self.signal = signum
 
 
 class DateTime(click.ParamType):
@@ -1423,37 +1430,61 @@ def build(ctx, phase, variant):
                         final_cmd = [expand_vars(cfg_vars, arg) for arg in final_cmd]
 
                         # Handle execution inside docker
-                        if image is not None:
-                            uid, gid = os.getuid(), os.getgid()
-                            docker_run = ['docker', 'run',
-                                          '--rm',
-                                          '--net=host',
-                                          '--tty',
-                                          '--cap-add=SYS_PTRACE',
-                                          f"--tmpfs={env['HOME']}:uid={uid},gid={gid}",
-                                          f"--user={uid}:{gid}",
-                                          '--volume=/etc/passwd:/etc/passwd:ro',
-                                          '--volume=/etc/group:/etc/group:ro',
-                                          '--workdir=/code',
-                                          ] + [
-                                              f"--env={k}={v}" for k, v in env.items()
-                                          ]
-                            for volume in volumes.values():
-                                docker_run += ['--volume={}'.format(volume_spec_to_docker_param(volume))]
+                        with tempfile.TemporaryDirectory(prefix='hopic-run-state') as tmpdir:
+                            cidfile = None
+                            if image is not None:
+                                uid, gid = os.getuid(), os.getgid()
+                                cidfile = os.path.join(tmpdir, 'cid')
+                                docker_run = ['docker', 'run',
+                                              '--rm',
+                                              f"--cidfile={cidfile}",
+                                              '--net=host',
+                                              '--tty',
+                                              '--cap-add=SYS_PTRACE',
+                                              f"--tmpfs={env['HOME']}:uid={uid},gid={gid}",
+                                              f"--user={uid}:{gid}",
+                                              '--volume=/etc/passwd:/etc/passwd:ro',
+                                              '--volume=/etc/group:/etc/group:ro',
+                                              '--workdir=/code',
+                                              ] + [
+                                                  f"--env={k}={v}" for k, v in env.items()
+                                              ]
+                                for volume in volumes.values():
+                                    docker_run += ['--volume={}'.format(volume_spec_to_docker_param(volume))]
 
-                            for volume_from in volumes_from:
-                                docker_run += ['--volumes-from=' + volume_from]
+                                for volume_from in volumes_from:
+                                    docker_run += ['--volumes-from=' + volume_from]
 
-                            docker_run.append(str(image))
-                            final_cmd = docker_run + final_cmd
-                        new_env = os.environ.copy()
-                        if image is None:
-                            new_env.update(env)
-                        try:
-                            echo_cmd(subprocess.check_call, final_cmd, env=new_env, cwd=ctx.obj.code_dir)
-                        except subprocess.CalledProcessError as e:
-                            log.error("Command fatally terminated with exit code %d", e.returncode)
-                            sys.exit(e.returncode)
+                                docker_run.append(str(image))
+                                final_cmd = docker_run + final_cmd
+                            new_env = os.environ.copy()
+                            if image is None:
+                                new_env.update(env)
+                            def signal_handler(signum, frame):
+                                raise FatalSignal(signum)
+                            old_handler = signal.signal(signal.SIGTERM, signal_handler)
+                            try:
+                                echo_cmd(subprocess.check_call, final_cmd, env=new_env, cwd=ctx.obj.code_dir)
+                            except subprocess.CalledProcessError as e:
+                                log.error("Command fatally terminated with exit code %d", e.returncode)
+                                sys.exit(e.returncode)
+                            except (KeyboardInterrupt, FatalSignal) as e:
+                                if cidfile and os.path.isfile(cidfile):
+                                    # If we're being signalled to shut down ensure the spawned docker container also gets cleaned up.
+                                    with open(cidfile) as f:
+                                        cid = f.read()
+                                    try:
+                                        # Will also remove the container due to the '--rm' it was started with.
+                                        echo_cmd(subprocess.check_call, ('docker', 'stop', cid))
+                                    except subprocess.CalledProcessError as e:
+                                        log.error('Could not stop Docker container (maybe it was stopped already?), command failed with exit code %d', e.returncode)
+                                exit_code = 128
+                                if isinstance(e, KeyboardInterrupt):
+                                    exit_code += signal.SIGINT
+                                elif isinstance(e, FatalSignal):
+                                    exit_code += e.signal
+                                sys.exit(exit_code)
+                            signal.signal(signal.SIGTERM, old_handler)
 
                     for subdir, worktree in worktrees.items():
                         with git.Repo(os.path.join(ctx.obj.workspace, subdir)) as repo:

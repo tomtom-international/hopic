@@ -17,6 +17,7 @@ from .markers import *
 
 from click.testing import CliRunner
 from textwrap import dedent
+from typing import Pattern
 import git
 import os
 import pytest
@@ -150,7 +151,8 @@ def test_docker_run_arguments(monkeypatch, tmp_path):
             f"--env=SOURCE_DATE_EPOCH={_source_date_epoch}",
             '--env=HOME=/home/sandbox', '--env=_JAVA_OPTIONS=-Duser.home=/home/sandbox',
             f"--user={uid}:{gid}",
-            '--net=host', f"--tmpfs=/home/sandbox:uid={uid},gid={gid}"
+            '--net=host', f"--tmpfs=/home/sandbox:uid={uid},gid={gid}",
+            re.compile(r'^--cidfile=.*'),
         ]
 
         assert args[0] == 'docker'
@@ -160,8 +162,12 @@ def test_docker_run_arguments(monkeypatch, tmp_path):
         docker_argument_list = args[2:-image_command_length]
 
         for docker_arg in expected_docker_args:
-            assert docker_arg in docker_argument_list
-            docker_argument_list.remove(docker_arg)
+            if isinstance(docker_arg, Pattern):
+                assert any(docker_arg.match(arg) for arg in docker_argument_list)
+                docker_argument_list = [arg for arg in docker_argument_list if not docker_arg.match(arg)]
+            else:
+                assert docker_arg in docker_argument_list
+                docker_argument_list.remove(docker_arg)
         assert docker_argument_list == []
 
     def set_monkey_patch_attrs(monkeypatch):
