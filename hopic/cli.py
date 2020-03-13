@@ -1462,13 +1462,13 @@ def build(ctx, phase, variant):
                                 new_env.update(env)
                             def signal_handler(signum, frame):
                                 raise FatalSignal(signum)
-                            old_handler = signal.signal(signal.SIGTERM, signal_handler)
+                            old_handlers = dict((num, signal.signal(num, signal_handler)) for num in (signal.SIGINT, signal.SIGTERM))
                             try:
                                 echo_cmd(subprocess.check_call, final_cmd, env=new_env, cwd=ctx.obj.code_dir)
                             except subprocess.CalledProcessError as e:
                                 log.error("Command fatally terminated with exit code %d", e.returncode)
                                 sys.exit(e.returncode)
-                            except (KeyboardInterrupt, FatalSignal) as e:
+                            except FatalSignal as e:
                                 if cidfile and os.path.isfile(cidfile):
                                     # If we're being signalled to shut down ensure the spawned docker container also gets cleaned up.
                                     with open(cidfile) as f:
@@ -1478,13 +1478,9 @@ def build(ctx, phase, variant):
                                         echo_cmd(subprocess.check_call, ('docker', 'stop', cid))
                                     except subprocess.CalledProcessError as e:
                                         log.error('Could not stop Docker container (maybe it was stopped already?), command failed with exit code %d', e.returncode)
-                                exit_code = 128
-                                if isinstance(e, KeyboardInterrupt):
-                                    exit_code += signal.SIGINT
-                                elif isinstance(e, FatalSignal):
-                                    exit_code += e.signal
-                                sys.exit(exit_code)
-                            signal.signal(signal.SIGTERM, old_handler)
+                                sys.exit(128 + e.signal)
+                            for num, old_handler in old_handlers.items():
+                                signal.signal(num, old_handler)
 
                     for subdir, worktree in worktrees.items():
                         with git.Repo(os.path.join(ctx.obj.workspace, subdir)) as repo:
