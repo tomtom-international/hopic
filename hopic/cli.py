@@ -1461,6 +1461,7 @@ def build(ctx, phase, variant):
                             if image is None:
                                 new_env.update(env)
                             def signal_handler(signum, frame):
+                                log.warning('Received fatal signal %d', signum)
                                 raise FatalSignal(signum)
                             old_handlers = dict((num, signal.signal(num, signal_handler)) for num in (signal.SIGINT, signal.SIGTERM))
                             try:
