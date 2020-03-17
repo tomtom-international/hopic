@@ -16,9 +16,12 @@ from ..cli import cli
 from .markers import *
 
 from click.testing import CliRunner
+from textwrap import dedent
 import git
 import os
 import pytest
+import re
+import signal
 import subprocess
 import sys
 
@@ -224,6 +227,56 @@ phases:
 ''', ('build',))
     assert result.exit_code == 0
     assert not expected
+
+
+@pytest.mark.parametrize('signum', (
+    signal.SIGINT,
+    signal.SIGTERM,
+))
+def test_docker_terminated(monkeypatch, signum):
+    expected = [
+            ('docker', 'run'),
+            ('docker', 'stop'),
+        ]
+
+    cid = 'the-magical-container-id'
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        assert tuple(args[:2]) == expected.pop(0)
+
+        if args[:2] == ['docker', 'run']:
+            for arg in args:
+                m = re.match(r'^--cidfile=(.*)', arg)
+                if not m:
+                    continue
+                with open(m.group(1), 'w') as f:
+                    f.write(cid)
+            os.kill(os.getpid(), signum)
+        else:
+            assert tuple(args) == ('docker', 'stop', cid)
+
+    monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+
+    def signal_handler(signum, frame):
+        assert False, f"Failed to handle signal {signum}"
+    old_handler = signal.signal(signum, signal_handler)
+    if old_handler == signal.default_int_handler:
+        signal.signal(signum, old_handler)
+    try:
+        result = run_with_config(dedent('''\
+            image: buildpack-deps:18.04
+
+            phases:
+              build:
+                a:
+                  - ./build-a.sh
+            '''), ('build',))
+    finally:
+        signal.signal(signum, old_handler)
+
+    assert result.exit_code == 128 + signum
+    assert not expected
+
 
 @docker
 def test_container_with_env_var():
