@@ -1,0 +1,12 @@
+version:
+  bump: false
+
+phases:
+  build:
+    example:
+      - archive:
+          artifacts:
+            produce_output.txt
+          upload-on-failure: yes
+      - touch produce_output.txt
+      - "false"
