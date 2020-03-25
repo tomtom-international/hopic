@@ -690,57 +690,58 @@ exec ssh -i '''
     }
   }
 
-  private def archive_artifacts_if_enabled(Map meta, String workspace) {
+  private void archive_artifacts_if_enabled(Map meta, String workspace, boolean error_occurred, Closure get_build_info) {
     def archiving_cfg = meta.containsKey('archive') ? 'archive' : meta.containsKey('fingerprint') ? 'fingerprint' : null
-    if (archiving_cfg) {
-      def artifacts = meta[archiving_cfg].artifacts
-      if (artifacts == null) {
-        steps.error("Archive configuration entry for ${phase}.${variant} does not contain 'artifacts' property")
+    if (!archiving_cfg) {
+      return
+    }
+
+    def upload_on_failure = meta[archiving_cfg].getOrDefault('upload-on-failure', false)
+    if (!upload_on_failure && (error_occurred || steps.currentBuild.currentResult != 'SUCCESS')) {
+      return
+    }
+
+    def artifacts = meta[archiving_cfg].artifacts
+    if (artifacts == null) {
+      steps.error("Archive configuration entry for ${phase}.${variant} does not contain 'artifacts' property")
+    }
+    steps.dir(workspace) {
+      artifacts.each { artifact ->
+        def pattern = artifact.pattern.replace('(*)', '*')
+        if (archiving_cfg == 'archive') {
+          steps.archiveArtifacts(
+              artifacts: pattern,
+              fingerprint: meta.archive.getOrDefault('fingerprint', true),
+            )
+        } else if (archiving_cfg == 'fingerprint') {
+          steps.fingerprint(pattern)
+        }
       }
-      steps.dir(workspace) {
-        artifacts.each { artifact ->
-          def pattern = artifact.pattern.replace('(*)', '*')
-          if (archiving_cfg == 'archive') {
-            steps.archiveArtifacts(
-                artifacts: pattern,
-                fingerprint: meta.archive.getOrDefault('fingerprint', true),
-              )
-          } else if (archiving_cfg == 'fingerprint') {
-            steps.fingerprint(pattern)
-          }
+      if (meta[archiving_cfg].containsKey('upload-artifactory')) {
+        def server_id = meta[archiving_cfg]['upload-artifactory'].id
+        if (server_id == null) {
+          steps.error("Artifactory upload configuration entry for ${phase}.${variant} does not contain 'id' property to identify Artifactory server")
         }
-        if (meta[archiving_cfg].containsKey('upload-artifactory')) {
-          def server_id = meta[archiving_cfg]['upload-artifactory'].id
-          if (server_id == null) {
-            steps.error("Artifactory upload configuration entry for ${phase}.${variant} does not contain 'id' property to identify Artifactory server")
-          }
-          def uploadSpec = JsonOutput.toJson([
-              files: artifacts.collect { artifact ->
-                def fileSpec = [
-                  pattern: artifact.pattern,
-                  target: artifact.target,
-                ]
-                if (fileSpec.target == null) {
-                  steps.error("Artifactory upload configuration entry for ${phase}.${variant} does not contain 'target' property to identify target repository")
-                }
-                if (artifact.props != null) {
-                  fileSpec.props = artifact.props
-                }
-                return fileSpec
+        def uploadSpec = JsonOutput.toJson([
+            files: artifacts.collect { artifact ->
+              def fileSpec = [
+                pattern: artifact.pattern,
+                target: artifact.target,
+              ]
+              if (fileSpec.target == null) {
+                steps.error("Artifactory upload configuration entry for ${phase}.${variant} does not contain 'target' property to identify target repository")
               }
-            ])
-          if (!artifactoryBuildInfo.containsKey(server_id)) {
-            def newBuildInfo = steps.Artifactory.newBuildInfo()
-            def (build_name, build_identifier) = get_build_id()
-            newBuildInfo.name = build_name
-            newBuildInfo.number = build_identifier
-            artifactoryBuildInfo[server_id] = newBuildInfo
-          }
-          def server = steps.Artifactory.server server_id
-          server.upload(spec: uploadSpec, buildInfo: artifactoryBuildInfo[server_id])
-          // Work around Artifactory Groovy bug
-          server = null
-        }
+              if (artifact.props != null) {
+                fileSpec.props = artifact.props
+              }
+              return fileSpec
+            }
+          ])
+        def buildInfo = get_build_info(server_id)
+        def server = steps.Artifactory.server server_id
+        server.upload(spec: uploadSpec, buildInfo: buildInfo)
+        // Work around Artifactory Groovy bug
+        server = null
       }
     }
   }
@@ -881,6 +882,7 @@ exec ssh -i '''
                         returnStdout: true,
                       ))
 
+                    def error_occurred = false
                     try {
                       this.subcommand_with_credentials(
                           cmd,
@@ -888,6 +890,9 @@ exec ssh -i '''
                         + ' --phase=' + shell_quote(phase)
                         + ' --variant=' + shell_quote(variant)
                         , meta.getOrDefault('with-credentials', []))
+                    } catch(Exception e) {
+                      error_occurred = true // Jenkins only sets its currentResult to Failure after all user code is executed
+                      throw e
                     } finally {
                       if (meta.containsKey('junit')) {
                         def results = meta.junit
@@ -897,6 +902,16 @@ exec ssh -i '''
                           }
                         }
                       }
+                      this.archive_artifacts_if_enabled(meta, workspace, error_occurred, { server_id ->
+                        if (!artifactoryBuildInfo.containsKey(server_id)) {
+                          def newBuildInfo = steps.Artifactory.newBuildInfo()
+                          def (build_name, build_identifier) = get_build_id()
+                          newBuildInfo.name = build_name
+                          newBuildInfo.number = build_identifier
+                          artifactoryBuildInfo[server_id] = newBuildInfo
+                        }
+                        return artifactoryBuildInfo[server_id]
+                      })
                     }
 
                     // FIXME: re-evaluate if we can and need to get rid of special casing for stashing
@@ -943,7 +958,6 @@ exec ssh -i '''
                         )
                       this.worktree_bundles[name] = [nodes: [(steps.env.NODE_NAME): true]]
                     }
-                    this.archive_artifacts_if_enabled(meta, workspace)
                   }
                 }
               }]
