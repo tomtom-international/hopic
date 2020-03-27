@@ -24,7 +24,7 @@ class ChangeRequest {
   }
 
   protected def shell_quote(word) {
-    return "'" + word.replace("'", "'\\''") + "'"
+    return "'" + (word as String).replace("'", "'\\''") + "'"
   }
 
   protected ArrayList line_split(String text) {
@@ -220,17 +220,18 @@ class BitbucketPullRequest extends ChangeRequest {
     def (remote_ref, local_ref) = source_refspec.tokenize(':')
     if (remote_ref.startsWith('+'))
       remote_ref = remote_ref.substring(1)
+    def cr_author = change_request.getOrDefault('author', [:]).getOrDefault('user', [:])
     def output = line_split(steps.sh(script: cmd
                                 + ' prepare-source-tree'
-                                + ' --author-name=' + shell_quote(steps.env.CHANGE_AUTHOR)
-                                + ' --author-email=' + shell_quote(steps.env.CHANGE_AUTHOR_EMAIL)
+                                + ' --author-name=' + shell_quote(cr_author.getOrDefault('name', steps.env.CHANGE_AUTHOR))
+                                + ' --author-email=' + shell_quote(cr_author.getOrDefault('emailAddress', steps.env.CHANGE_AUTHOR_EMAIL))
                                 + ' --author-date=' + shell_quote(sprintf('@%.3f', change_request.author_time))
                                 + ' --commit-date=' + shell_quote(sprintf('@%.3f', change_request.commit_time))
                                 + ' merge-change-request'
                                 + ' --source-remote=' + shell_quote(source_remote)
                                 + ' --source-ref=' + shell_quote(remote_ref)
-                                + ' --change-request=' + shell_quote(steps.env.CHANGE_ID)
-                                + ' --title=' + shell_quote(steps.env.CHANGE_TITLE)
+                                + ' --change-request=' + shell_quote(change_request.getOrDefault('id', steps.env.CHANGE_ID))
+                                + ' --title=' + shell_quote(change_request.getOrDefault('title', steps.env.CHANGE_TITLE))
                                 + extra_params,
                           returnStdout: true)).findAll{it.size() > 0}
     if (output.size() <= 0) {
@@ -341,7 +342,7 @@ class CiDriver {
   }
 
   private def shell_quote(word) {
-    return "'" + word.replace("'", "'\\''") + "'"
+    return "'" + (word as String).replace("'", "'\\''") + "'"
   }
 
   protected ArrayList line_split(String text) {
