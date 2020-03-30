@@ -22,14 +22,22 @@ phases:
 
   test:
     python3.6:
-      - python3 -m virtualenv --python=/usr/bin/python3.6 --clear venv3.6
       - junit: junit-test.xml
-        sh: venv3.6/bin/python setup.py pytest
+        image: python:3.6
+        volumes:
+          - ${WORKSPACE}/.local:~/.local
+      - python -m pip install --user --upgrade virtualenv
+      - python -m virtualenv --clear venv3.6
+      - venv3.6/bin/python setup.py pytest
 
     python3.7:
-      - python3 -m virtualenv --python=/usr/bin/python3.7 --clear venv3.7
       - junit: junit-test.xml
-        sh: venv3.7/bin/python setup.py pytest
+        image: python:3.7
+        volumes:
+          - ${WORKSPACE}/.local:~/.local
+      - python -m pip install --user --upgrade virtualenv
+      - python -m virtualenv --clear venv3.7
+      - venv3.7/bin/python setup.py pytest
 
   build:
     sphinx-doc:
