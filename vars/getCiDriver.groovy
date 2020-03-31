@@ -281,7 +281,6 @@ class ModalityRequest extends ChangeRequest {
 class CiDriver {
   private repo
   private steps
-  private base_cmds          = [:]
   private cmds               = [:]
   private nodes              = [:]
   private checkouts          = [:]
@@ -357,32 +356,6 @@ class CiDriver {
       def docker_src = steps.pwd(tmp: true) + '/docker-src'
       steps.sh(script: "mkdir -p ${shell_quote(docker_src)}")
       steps.dir(docker_src) {
-        steps.writeFile(
-            file: 'Dockerfile',
-            text: '''\
-FROM python:3.6-slim
-
-ARG DOCKERVERSION=18.06.3-ce
-
-RUN apt-get update \
- && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        build-essential \
-        curl \
-        git \
-        openssh-client \
- && rm -rf /var/lib/apt/lists/* \
- && curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKERVERSION}.tgz | tar -C /usr/local/bin --strip-components=1 -xzv docker/docker \
- && echo '82c7ae1ce6e314b697ec8a59074cf56b81b256b4a5f8c2f8614b57dd1709169c */usr/local/bin/docker' | sha256sum -c
-RUN pip install --upgrade virtualenv
-''')
-        this.docker_images[steps.env.NODE_NAME] = steps.docker.build('hopic-env:snapshot')
-      }
-    }
-
-    return this.docker_images[steps.env.NODE_NAME].inside {
-      if (!this.base_cmds.containsKey(steps.env.NODE_NAME)) {
-        def venv = steps.pwd(tmp: true) + "/hopic-venv"
-        def workspace = steps.pwd()
         // Timeout prevents infinite downloads from blocking the build forever
         steps.timeout(time: 1, unit: 'MINUTES', activity: true) {
           // Use the exact same Hopic version on every build node
@@ -399,19 +372,31 @@ RUN pip install --upgrade virtualenv
             }
           }
 
-          steps.sh(script: """\
-LC_ALL=C.UTF-8
-export LC_ALL
-rm -rf ${shell_quote(venv)}
-python -m virtualenv --clear ${shell_quote(venv)}
-cd /
-${shell_quote(venv)}/bin/python -m pip install ${shell_quote(this.repo)}
-""")
-        }
-        this.base_cmds[steps.env.NODE_NAME] = 'LC_ALL=C.UTF-8 ' + shell_quote("${venv}/bin/python") + ' ' + shell_quote("${venv}/bin/hopic") + ' --color=always'
-      }
+          steps.writeFile(
+              file: 'Dockerfile',
+              text: """\
+FROM python:3.6-slim
 
-      return closure(this.base_cmds[steps.env.NODE_NAME])
+ARG DOCKERVERSION=18.06.3-ce
+
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        build-essential \
+        curl \
+        git \
+        openssh-client \
+ && rm -rf /var/lib/apt/lists/* \
+ && curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKERVERSION}.tgz | tar -C /usr/local/bin --strip-components=1 -xzv docker/docker \
+ && echo '82c7ae1ce6e314b697ec8a59074cf56b81b256b4a5f8c2f8614b57dd1709169c */usr/local/bin/docker' | sha256sum -c
+RUN pip install --upgrade virtualenv ${shell_quote(this.repo)}
+""")
+          this.docker_images[steps.env.NODE_NAME] = steps.docker.build('hopic-env:snapshot')
+        }
+      }
+    }
+
+    return this.docker_images[steps.env.NODE_NAME].inside('--volume=/etc/passwd:/etc/passwd:ro --volume=/etc/group:/etc/group:ro') {
+      return closure('LC_ALL=C.UTF-8 hopic --color=always')
     }
   }
 
