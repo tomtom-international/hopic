@@ -395,7 +395,14 @@ RUN pip install --no-cache-dir --upgrade virtualenv ${shell_quote(this.repo)}
       }
     }
 
-    return this.docker_images[steps.env.NODE_NAME].inside('--volume=/etc/passwd:/etc/passwd:ro --volume=/etc/group:/etc/group:ro') {
+    return this.docker_images[steps.env.NODE_NAME].inside([
+        '--volume=/etc/passwd:/etc/passwd:ro',
+        '--volume=/etc/group:/etc/group:ro',
+
+        // Docker in Docker access
+        '--volume=/var/run/docker.sock:/var/run/docker.sock',
+        "--group-add=${shell_quote(steps.sh(script: 'stat -c %g /var/run/docker.sock', returnStdout: true).trim())}",
+      ].join(' ')) {
       return closure('LC_ALL=C.UTF-8 hopic --color=always')
     }
   }
