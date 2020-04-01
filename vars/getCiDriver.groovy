@@ -399,6 +399,9 @@ RUN pip install --no-cache-dir --upgrade virtualenv ${shell_quote(this.repo)}
         '--volume=/etc/passwd:/etc/passwd:ro',
         '--volume=/etc/group:/etc/group:ro',
 
+        // Extra writable directories
+        "--volume=${steps.env.HOME}:${steps.env.HOME}:rw",
+
         // Docker in Docker access
         '--volume=/var/run/docker.sock:/var/run/docker.sock',
         "--group-add=${shell_quote(steps.sh(script: 'stat -c %g /var/run/docker.sock', returnStdout: true).trim())}",
