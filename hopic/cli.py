@@ -1446,6 +1446,8 @@ def build(ctx, phase, variant):
                                               '--volume=/etc/passwd:/etc/passwd:ro',
                                               '--volume=/etc/group:/etc/group:ro',
                                               '--workdir=/code',
+                                              '--volume=/var/run/docker.sock:/var/run/docker.sock',
+                                              f"--group-add={os.stat('/var/run/docker.sock').st_gid}",
                                               ] + [
                                                   f"--env={k}={v}" for k, v in env.items()
                                               ]

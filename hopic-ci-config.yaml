@@ -25,6 +25,7 @@ phases:
       - junit: junit-test.xml
         image: python:3.6
         volumes:
+          - /usr/bin/docker:/usr/bin/docker:ro
           - ${WORKSPACE}/.local:~/.local
       - python -m pip install --user --upgrade virtualenv
       - python -m virtualenv --clear venv3.6
@@ -34,6 +35,7 @@ phases:
       - junit: junit-test.xml
         image: python:3.7
         volumes:
+          - /usr/bin/docker:/usr/bin/docker:ro
           - ${WORKSPACE}/.local:~/.local
       - python -m pip install --user --upgrade virtualenv
       - python -m virtualenv --clear venv3.7
