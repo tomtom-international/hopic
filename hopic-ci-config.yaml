@@ -26,20 +26,20 @@ phases:
 
   test:
     python3.6:
+      - docker build --build-arg=PYTHON_VERSION=3.6 -t hopic-python:3.6-alpine-git hopic/test/docker-images/python
       - junit: junit-test.xml
-        image: python:3.6
+        image: hopic-python:3.6-alpine-git
         volumes:
-          - /usr/bin/docker:/usr/bin/docker:ro
           - ${WORKSPACE}/.local:~/.local
       - python -m pip install --user --upgrade virtualenv
       - python -m virtualenv --clear venv3.6
       - venv3.6/bin/python setup.py pytest
 
     python3.7:
+      - docker build --build-arg=PYTHON_VERSION=3.7 -t hopic-python:3.7-alpine-git hopic/test/docker-images/python
       - junit: junit-test.xml
-        image: python:3.7
+        image: hopic-python:3.7-alpine-git
         volumes:
-          - /usr/bin/docker:/usr/bin/docker:ro
           - ${WORKSPACE}/.local:~/.local
       - python -m pip install --user --upgrade virtualenv
       - python -m virtualenv --clear venv3.7
