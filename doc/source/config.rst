@@ -140,6 +140,18 @@ The result will be to use the ``hub.docker.com/tomtom/python:3.6.5`` image by de
 The ``PyPy`` build will instead use the ``hub.docker.com/tomtom/pypy:3.6.5`` image.
 I.e. for that build the image name is overridden from that used in the Ivy manifest, while still using the version from it.
 
+Docker in Docker
+----------------
+
+.. option:: docker-in-docker
+
+Sometimes it may be necessary to perform operations on the Docker daemon from within a Docker container.
+E.g. trying to use some tool that resides in a different Docker container from within a build running in a container.
+If that happens this option can be used to make the required Docker socket available within the first container.
+
+.. literalinclude:: ../../examples/docker-in-docker.yaml
+    :language: yaml
+
 Volumes
 -------
 

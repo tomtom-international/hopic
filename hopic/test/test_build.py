@@ -190,6 +190,7 @@ image:
 phases:
   build:
     a:
+      - docker-in-docker: yes
       - ./a.sh
 ''', ('build',), monkeypatch_injector=MonkeypatchInjector(monkeypatch, set_monkey_patch_attrs))
     assert result.exit_code == 0
@@ -303,6 +304,7 @@ pass-through-environment-vars:
 phases:
   build:
     test:
+      - docker-in-docker: yes
       - printenv THE_ENVIRONMENT
 ''', ('build',),
     env={'THE_ENVIRONMENT': 'The Real Environment!'})

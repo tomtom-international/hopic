@@ -1298,6 +1298,8 @@ def build(ctx, phase, variant):
             except KeyError:
                 image = images.get('default', None)
 
+            docker_in_docker = False
+
             volume_vars = ctx.obj.volume_vars.copy()
             # Give commands executing inside a container image a different view than outside
             if image is not None:
@@ -1384,6 +1386,11 @@ def build(ctx, phase, variant):
                             pass
 
                         try:
+                            docker_in_docker = cmd['docker-in-docker']
+                        except KeyError:
+                            pass
+
+                        try:
                             cmd = cmd['sh']
                         except (KeyError, TypeError):
                             continue
@@ -1451,19 +1458,18 @@ def build(ctx, phase, variant):
                                                   f"--env={k}={v}" for k, v in env.items()
                                               ]
 
-                                # Give Docker in Docker access if possible
-                                try:
-                                    sock = '/var/run/docker.sock'
-                                    st = os.stat(sock)
-                                except OSError:
-                                    # Docker socket doesn't exist
-                                    pass
-                                else:
-                                    if stat.S_ISSOCK(st.st_mode):
-                                        docker_run += [f"--volume={sock}:{sock}"]
-                                        # Give group access to the socket if it's group accessible but not world accessible
-                                        if st.st_mode & 0o0060 == 0o0060 and st.st_mode & 0o0006 != 0o0006:
-                                            docker_run += [f"--group-add={st.st_gid}"]
+                                if docker_in_docker:
+                                    try:
+                                        sock = '/var/run/docker.sock'
+                                        st = os.stat(sock)
+                                    except OSError as e:
+                                        log.error("Docker in Docker access requested but cannot access Docker socket: %s", e)
+                                    else:
+                                        if stat.S_ISSOCK(st.st_mode):
+                                            docker_run += [f"--volume={sock}:{sock}"]
+                                            # Give group access to the socket if it's group accessible but not world accessible
+                                            if st.st_mode & 0o0060 == 0o0060 and st.st_mode & 0o0006 != 0o0006:
+                                                docker_run += [f"--group-add={st.st_gid}"]
 
                                 for volume in volumes.values():
                                     docker_run += ['--volume={}'.format(volume_spec_to_docker_param(volume))]
