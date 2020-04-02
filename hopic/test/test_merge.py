@@ -95,7 +95,7 @@ phases:
     # Successful checkout and build
     result = run(
             ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'),
-            ('prepare-source-tree',
+            ('prepare-source-tree', '--author-name', author.name, '--author-email', author.email,
                 'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful'),
             ('build',),
         )
@@ -148,7 +148,8 @@ def hopic_config_subdir_version_file_tester(capfd, config_dir, hopic_config, ver
     result = run(
         ('--workspace', './', '--config', os.path.join(config_dir, 'hopic-ci-config.yaml'),
          'checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'),
-        ('--workspace', './', '--config', os.path.join(config_dir, 'hopic-ci-config.yaml'), 'prepare-source-tree',
+        ('--workspace', './', '--config', os.path.join(config_dir, 'hopic-ci-config.yaml'),
+         'prepare-source-tree', '--author-name', author.name, '--author-email', author.email,
          'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful'),
         ('--workspace', './', '--config', os.path.join(config_dir, 'hopic-ci-config.yaml'), 'submit'),
     )
@@ -284,7 +285,7 @@ version:
     # Successful checkout and build
     return run(
             ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', target),
-            ('prepare-source-tree', '--author-date', f"@{_git_time}", '--commit-date', f"@{_git_time}",
+            ('prepare-source-tree', '--author-date', f"@{_git_time}", '--commit-date', f"@{_git_time}", '--author-name', author.name, '--author-email', author.email,
                 'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful'),
         )
 
@@ -443,7 +444,8 @@ phases:
     assert (toprepo / 'subrepo_test' / 'dummy.txt').is_file()
     assert not (toprepo / 'moved_subrepo' / 'dummy.txt').is_file()
 
-    result = run(('--workspace', str(toprepo), 'prepare-source-tree', 'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'move_submodule_branch'))
+    result = run(('--workspace', str(toprepo), 'prepare-source-tree', '--author-name', author.name, '--author-email', author.email,
+                  'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'move_submodule_branch'))
     assert result.exit_code == 0
     assert not (toprepo / 'subrepo_test' / 'dummy.txt').is_file()
     assert (toprepo / 'moved_subrepo' / 'dummy.txt').is_file()

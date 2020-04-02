@@ -1,0 +1,11 @@
+image:
+  default: buildpack-deps:testing
+
+phases:
+  prepare:
+    whoami:
+      - image: buildpack-deps:testing-curl
+        docker-in-docker: yes
+        volumes:
+          - /usr/bin/docker:/usr/bin/docker:ro
+      - docker pull buildpack-deps:testing-curl

@@ -23,6 +23,7 @@ import os
 import pytest
 import re
 import signal
+import stat
 import subprocess
 import sys
 
@@ -142,6 +143,9 @@ def test_docker_run_arguments(monkeypatch, tmp_path):
     ]
     uid = 42
     gid = 4242
+    class MockDockerSockStat:
+        st_gid = 2323
+        st_mode = stat.S_IFSOCK | 0o0660
 
     def mock_check_call(args, *popenargs, **kwargs):
         expected_docker_args = [
@@ -152,6 +156,8 @@ def test_docker_run_arguments(monkeypatch, tmp_path):
             '--env=HOME=/home/sandbox', '--env=_JAVA_OPTIONS=-Duser.home=/home/sandbox',
             f"--user={uid}:{gid}",
             '--net=host', f"--tmpfs=/home/sandbox:uid={uid},gid={gid}",
+            '--volume=/var/run/docker.sock:/var/run/docker.sock',
+            f"--group-add={MockDockerSockStat.st_gid}",
             re.compile(r'^--cidfile=.*'),
         ]
 
@@ -173,6 +179,8 @@ def test_docker_run_arguments(monkeypatch, tmp_path):
     def set_monkey_patch_attrs(monkeypatch):
         monkeypatch.setattr(os, 'getuid', lambda: uid)
         monkeypatch.setattr(os, 'getgid', lambda: gid)
+        old_os_stat = os.stat
+        monkeypatch.setattr(os, 'stat', lambda path: MockDockerSockStat() if path == '/var/run/docker.sock' else old_os_stat(path))
         monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
 
     result = run_with_config('''\
@@ -182,6 +190,7 @@ image:
 phases:
   build:
     a:
+      - docker-in-docker: yes
       - ./a.sh
 ''', ('build',), monkeypatch_injector=MonkeypatchInjector(monkeypatch, set_monkey_patch_attrs))
     assert result.exit_code == 0
@@ -295,6 +304,7 @@ pass-through-environment-vars:
 phases:
   build:
     test:
+      - docker-in-docker: yes
       - printenv THE_ENVIRONMENT
 ''', ('build',),
     env={'THE_ENVIRONMENT': 'The Real Environment!'})
