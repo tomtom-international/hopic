@@ -53,6 +53,7 @@ import re
 import signal
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -1446,11 +1447,24 @@ def build(ctx, phase, variant):
                                               '--volume=/etc/passwd:/etc/passwd:ro',
                                               '--volume=/etc/group:/etc/group:ro',
                                               '--workdir=/code',
-                                              '--volume=/var/run/docker.sock:/var/run/docker.sock',
-                                              f"--group-add={os.stat('/var/run/docker.sock').st_gid}",
                                               ] + [
                                                   f"--env={k}={v}" for k, v in env.items()
                                               ]
+
+                                # Give Docker in Docker access if possible
+                                try:
+                                    sock = '/var/run/docker.sock'
+                                    st = os.stat(sock)
+                                except OSError:
+                                    # Docker socket doesn't exist
+                                    pass
+                                else:
+                                    if stat.S_ISSOCK(st.st_mode):
+                                        docker_run += [f"--volume={sock}:{sock}"]
+                                        # Give group access to the socket if it's group accessible but not world accessible
+                                        if st.st_mode & 0o0060 == 0o0060 and st.st_mode & 0o0006 != 0o0006:
+                                            docker_run += [f"--group-add={st.st_gid}"]
+
                                 for volume in volumes.values():
                                     docker_run += ['--volume={}'.format(volume_spec_to_docker_param(volume))]
 

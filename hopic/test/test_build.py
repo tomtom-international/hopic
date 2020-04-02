@@ -23,6 +23,7 @@ import os
 import pytest
 import re
 import signal
+import stat
 import subprocess
 import sys
 
@@ -144,6 +145,7 @@ def test_docker_run_arguments(monkeypatch, tmp_path):
     gid = 4242
     class MockDockerSockStat:
         st_gid = 2323
+        st_mode = stat.S_IFSOCK | 0o0660
 
     def mock_check_call(args, *popenargs, **kwargs):
         expected_docker_args = [
