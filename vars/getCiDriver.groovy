@@ -355,6 +355,20 @@ class CiDriver {
       def workspace = steps.pwd()
       // Timeout prevents infinite downloads from blocking the build forever
       steps.timeout(time: 1, unit: 'MINUTES', activity: true) {
+        // Use the exact same Hopic version on every build node
+        if (this.repo.startsWith("git+") && this.repo !=~ /.*@[0-9a-fA-F]{40}/) {
+          def (remote, ref) = this.repo[4..-1].split('@', 2)
+          def commit = line_split(steps.sh(script: "git ls-remote ${shell_quote(remote)}", returnStdout: true)).find { line ->
+            def (hash, remote_ref) = line.split('\t')
+            return (remote_ref == ref || remote_ref == "refs/heads/${ref}" || remote_ref == "refs/tags/${ref}")
+          }
+          if (commit != null)
+          {
+            def (hash, remote_ref) = commit.split('\t')
+            this.repo = "git+${remote}@${hash}"
+          }
+        }
+
         steps.sh(script: """\
 LC_ALL=C.UTF-8
 export LC_ALL
