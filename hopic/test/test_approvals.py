@@ -22,7 +22,7 @@ import pytest
 from click.testing import CliRunner
 
 from ..cli import cli
-from ..commit import ConventionalCommit
+from commisery.commit import ConventionalCommit
 
 _GIT_TIME = f"{42 * 365 * 24 * 3600} +0000"
 _BASE_APPROVER = 'Joe Approver1 <joe.approver1@nerds-r-us.eu>'

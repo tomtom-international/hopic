@@ -16,7 +16,7 @@ import click
 import click_log
 
 from . import binary_normalize
-from .commit import parse_commit_message
+from commisery.commit import parse_commit_message
 from .config_reader import (
         JSONEncoder,
         expand_docker_volume_spec,
@@ -50,10 +50,13 @@ import logging
 import os
 import pkg_resources
 import re
+import signal
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
+import tempfile
 
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
@@ -61,6 +64,11 @@ log.addHandler(logging.NullHandler())
 
 class VersioningError(click.ClickException):
     exit_code = 33
+
+
+class FatalSignal(Exception):
+    def __init__(self, signum):
+        self.signal = signum
 
 
 class DateTime(click.ParamType):
@@ -1290,6 +1298,8 @@ def build(ctx, phase, variant):
             except KeyError:
                 image = images.get('default', None)
 
+            docker_in_docker = False
+
             volume_vars = ctx.obj.volume_vars.copy()
             # Give commands executing inside a container image a different view than outside
             if image is not None:
@@ -1376,6 +1386,11 @@ def build(ctx, phase, variant):
                             pass
 
                         try:
+                            docker_in_docker = cmd['docker-in-docker']
+                        except KeyError:
+                            pass
+
+                        try:
                             cmd = cmd['sh']
                         except (KeyError, TypeError):
                             continue
@@ -1423,37 +1438,72 @@ def build(ctx, phase, variant):
                         final_cmd = [expand_vars(cfg_vars, arg) for arg in final_cmd]
 
                         # Handle execution inside docker
-                        if image is not None:
-                            uid, gid = os.getuid(), os.getgid()
-                            docker_run = ['docker', 'run',
-                                          '--rm',
-                                          '--net=host',
-                                          '--tty',
-                                          '--cap-add=SYS_PTRACE',
-                                          f"--tmpfs={env['HOME']}:uid={uid},gid={gid}",
-                                          f"--user={uid}:{gid}",
-                                          '--volume=/etc/passwd:/etc/passwd:ro',
-                                          '--volume=/etc/group:/etc/group:ro',
-                                          '--workdir=/code',
-                                          ] + [
-                                              f"--env={k}={v}" for k, v in env.items()
-                                          ]
-                            for volume in volumes.values():
-                                docker_run += ['--volume={}'.format(volume_spec_to_docker_param(volume))]
+                        with tempfile.TemporaryDirectory(prefix='hopic-run-state') as tmpdir:
+                            cidfile = None
+                            if image is not None:
+                                uid, gid = os.getuid(), os.getgid()
+                                cidfile = os.path.join(tmpdir, 'cid')
+                                docker_run = ['docker', 'run',
+                                              '--rm',
+                                              f"--cidfile={cidfile}",
+                                              '--net=host',
+                                              '--tty',
+                                              '--cap-add=SYS_PTRACE',
+                                              f"--tmpfs={env['HOME']}:uid={uid},gid={gid}",
+                                              f"--user={uid}:{gid}",
+                                              '--volume=/etc/passwd:/etc/passwd:ro',
+                                              '--volume=/etc/group:/etc/group:ro',
+                                              '--workdir=/code',
+                                              ] + [
+                                                  f"--env={k}={v}" for k, v in env.items()
+                                              ]
 
-                            for volume_from in volumes_from:
-                                docker_run += ['--volumes-from=' + volume_from]
+                                if docker_in_docker:
+                                    try:
+                                        sock = '/var/run/docker.sock'
+                                        st = os.stat(sock)
+                                    except OSError as e:
+                                        log.error("Docker in Docker access requested but cannot access Docker socket: %s", e)
+                                    else:
+                                        if stat.S_ISSOCK(st.st_mode):
+                                            docker_run += [f"--volume={sock}:{sock}"]
+                                            # Give group access to the socket if it's group accessible but not world accessible
+                                            if st.st_mode & 0o0060 == 0o0060 and st.st_mode & 0o0006 != 0o0006:
+                                                docker_run += [f"--group-add={st.st_gid}"]
 
-                            docker_run.append(str(image))
-                            final_cmd = docker_run + final_cmd
-                        new_env = os.environ.copy()
-                        if image is None:
-                            new_env.update(env)
-                        try:
-                            echo_cmd(subprocess.check_call, final_cmd, env=new_env, cwd=ctx.obj.code_dir)
-                        except subprocess.CalledProcessError as e:
-                            log.error("Command fatally terminated with exit code %d", e.returncode)
-                            sys.exit(e.returncode)
+                                for volume in volumes.values():
+                                    docker_run += ['--volume={}'.format(volume_spec_to_docker_param(volume))]
+
+                                for volume_from in volumes_from:
+                                    docker_run += ['--volumes-from=' + volume_from]
+
+                                docker_run.append(str(image))
+                                final_cmd = docker_run + final_cmd
+                            new_env = os.environ.copy()
+                            if image is None:
+                                new_env.update(env)
+                            def signal_handler(signum, frame):
+                                log.warning('Received fatal signal %d', signum)
+                                raise FatalSignal(signum)
+                            old_handlers = dict((num, signal.signal(num, signal_handler)) for num in (signal.SIGINT, signal.SIGTERM))
+                            try:
+                                echo_cmd(subprocess.check_call, final_cmd, env=new_env, cwd=ctx.obj.code_dir)
+                            except subprocess.CalledProcessError as e:
+                                log.error("Command fatally terminated with exit code %d", e.returncode)
+                                sys.exit(e.returncode)
+                            except FatalSignal as e:
+                                if cidfile and os.path.isfile(cidfile):
+                                    # If we're being signalled to shut down ensure the spawned docker container also gets cleaned up.
+                                    with open(cidfile) as f:
+                                        cid = f.read()
+                                    try:
+                                        # Will also remove the container due to the '--rm' it was started with.
+                                        echo_cmd(subprocess.check_call, ('docker', 'stop', cid))
+                                    except subprocess.CalledProcessError as e:
+                                        log.error('Could not stop Docker container (maybe it was stopped already?), command failed with exit code %d', e.returncode)
+                                sys.exit(128 + e.signal)
+                            for num, old_handler in old_handlers.items():
+                                signal.signal(num, old_handler)
 
                     for subdir, worktree in worktrees.items():
                         with git.Repo(os.path.join(ctx.obj.workspace, subdir)) as repo:

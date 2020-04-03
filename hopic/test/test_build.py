@@ -16,9 +16,14 @@ from ..cli import cli
 from .markers import *
 
 from click.testing import CliRunner
+from textwrap import dedent
+from typing import Pattern
 import git
 import os
 import pytest
+import re
+import signal
+import stat
 import subprocess
 import sys
 
@@ -138,6 +143,9 @@ def test_docker_run_arguments(monkeypatch, tmp_path):
     ]
     uid = 42
     gid = 4242
+    class MockDockerSockStat:
+        st_gid = 2323
+        st_mode = stat.S_IFSOCK | 0o0660
 
     def mock_check_call(args, *popenargs, **kwargs):
         expected_docker_args = [
@@ -147,7 +155,10 @@ def test_docker_run_arguments(monkeypatch, tmp_path):
             f"--env=SOURCE_DATE_EPOCH={_source_date_epoch}",
             '--env=HOME=/home/sandbox', '--env=_JAVA_OPTIONS=-Duser.home=/home/sandbox',
             f"--user={uid}:{gid}",
-            '--net=host', f"--tmpfs=/home/sandbox:uid={uid},gid={gid}"
+            '--net=host', f"--tmpfs=/home/sandbox:uid={uid},gid={gid}",
+            '--volume=/var/run/docker.sock:/var/run/docker.sock',
+            f"--group-add={MockDockerSockStat.st_gid}",
+            re.compile(r'^--cidfile=.*'),
         ]
 
         assert args[0] == 'docker'
@@ -157,13 +168,19 @@ def test_docker_run_arguments(monkeypatch, tmp_path):
         docker_argument_list = args[2:-image_command_length]
 
         for docker_arg in expected_docker_args:
-            assert docker_arg in docker_argument_list
-            docker_argument_list.remove(docker_arg)
+            if isinstance(docker_arg, Pattern):
+                assert any(docker_arg.match(arg) for arg in docker_argument_list)
+                docker_argument_list = [arg for arg in docker_argument_list if not docker_arg.match(arg)]
+            else:
+                assert docker_arg in docker_argument_list
+                docker_argument_list.remove(docker_arg)
         assert docker_argument_list == []
 
     def set_monkey_patch_attrs(monkeypatch):
         monkeypatch.setattr(os, 'getuid', lambda: uid)
         monkeypatch.setattr(os, 'getgid', lambda: gid)
+        old_os_stat = os.stat
+        monkeypatch.setattr(os, 'stat', lambda path: MockDockerSockStat() if path == '/var/run/docker.sock' else old_os_stat(path))
         monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
 
     result = run_with_config('''\
@@ -173,6 +190,7 @@ image:
 phases:
   build:
     a:
+      - docker-in-docker: yes
       - ./a.sh
 ''', ('build',), monkeypatch_injector=MonkeypatchInjector(monkeypatch, set_monkey_patch_attrs))
     assert result.exit_code == 0
@@ -225,6 +243,56 @@ phases:
     assert result.exit_code == 0
     assert not expected
 
+
+@pytest.mark.parametrize('signum', (
+    signal.SIGINT,
+    signal.SIGTERM,
+))
+def test_docker_terminated(monkeypatch, signum):
+    expected = [
+            ('docker', 'run'),
+            ('docker', 'stop'),
+        ]
+
+    cid = 'the-magical-container-id'
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        assert tuple(args[:2]) == expected.pop(0)
+
+        if args[:2] == ['docker', 'run']:
+            for arg in args:
+                m = re.match(r'^--cidfile=(.*)', arg)
+                if not m:
+                    continue
+                with open(m.group(1), 'w') as f:
+                    f.write(cid)
+            os.kill(os.getpid(), signum)
+        else:
+            assert tuple(args) == ('docker', 'stop', cid)
+
+    monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+
+    def signal_handler(signum, frame):
+        assert False, f"Failed to handle signal {signum}"
+    old_handler = signal.signal(signum, signal_handler)
+    if old_handler == signal.default_int_handler:
+        signal.signal(signum, old_handler)
+    try:
+        result = run_with_config(dedent('''\
+            image: buildpack-deps:18.04
+
+            phases:
+              build:
+                a:
+                  - ./build-a.sh
+            '''), ('build',))
+    finally:
+        signal.signal(signum, old_handler)
+
+    assert result.exit_code == 128 + signum
+    assert not expected
+
+
 @docker
 def test_container_with_env_var():
     result = run_with_config('''\
@@ -236,6 +304,7 @@ pass-through-environment-vars:
 phases:
   build:
     test:
+      - docker-in-docker: yes
       - printenv THE_ENVIRONMENT
 ''', ('build',),
     env={'THE_ENVIRONMENT': 'The Real Environment!'})
