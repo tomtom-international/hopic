@@ -568,3 +568,17 @@ For more information about this feature see: https://jenkins.io/doc/pipeline/ste
 
 .. literalinclude:: ../../examples/fingerprint.yaml
     :language: yaml
+
+Artifact upload-on-fail
+-----------------------
+
+.. option:: upload-on-failure
+
+The option ``upload-on-failure`` allows artifacts to be uploaded regardless of the build status.
+By default option is disabled (set to ``false``), which means that artifacts are not published when build is not marked as success.
+Set this value to ``true`` to enable this option.
+
+**example:**
+
+.. literalinclude:: ../../examples/upload-on-fail.yaml
+    :language: yaml
