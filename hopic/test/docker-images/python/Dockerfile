@@ -1,5 +1,9 @@
 ARG PYTHON_VERSION
-FROM python:${PYTHON_VERSION}-alpine
+FROM python:${PYTHON_VERSION}-slim
 
-RUN apk add --no-cache docker-cli git openssh-client
-RUN apk add --no-cache --virtual .build-deps gcc musl-dev
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends docker.io git openssh-client \
+ && rm -rf /var/lib/apt/lists/*
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends build-essential \
+ && rm -rf /var/lib/apt/lists/*
