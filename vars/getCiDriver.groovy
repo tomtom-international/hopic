@@ -281,10 +281,10 @@ class ModalityRequest extends ChangeRequest {
 class CiDriver {
   private repo
   private steps
-  private base_cmds          = [:]
   private cmds               = [:]
   private nodes              = [:]
   private checkouts          = [:]
+  private docker_images      = [:]
   private stashes            = [:]
   private worktree_bundles   = [:]
   private submit_version     = null
@@ -352,13 +352,13 @@ class CiDriver {
   public def with_hopic(closure) {
     assert steps.env.NODE_NAME != null, "with_hopic must be executed on a node"
 
-    if (!this.base_cmds.containsKey(steps.env.NODE_NAME)) {
-      def venv = steps.pwd(tmp: true) + "/hopic-venv"
-      def workspace = steps.pwd()
+    if (!this.docker_images.containsKey(steps.env.NODE_NAME)) {
       // Timeout prevents infinite downloads from blocking the build forever
       steps.timeout(time: 1, unit: 'MINUTES', activity: true) {
+        assert this.repo.startsWith('git+'), "getCiDriver repo URL _must_ start with 'git+' but doesn't: ${this.repo}"
+
         // Use the exact same Hopic version on every build node
-        if (this.repo.startsWith("git+") && this.repo !=~ /.*@[0-9a-fA-F]{40}/) {
+        if (this.repo !=~ /.*@[0-9a-fA-F]{40}/) {
           def (remote, ref) = this.repo[4..-1].split('@', 2)
           def commit = line_split(steps.sh(script: "git ls-remote ${shell_quote(remote)}", returnStdout: true)).find { line ->
             def (hash, remote_ref) = line.split('\t')
@@ -371,19 +371,39 @@ class CiDriver {
           }
         }
 
+        def (remote, ref) = this.repo[4..-1].split('@', 2)
+
+        def docker_src = steps.pwd(tmp: true) + '/docker-src'
         steps.sh(script: """\
-LC_ALL=C.UTF-8
-export LC_ALL
-rm -rf ${shell_quote(venv)}
-python3 -m virtualenv --clear ${shell_quote(venv)}
-cd /
-${shell_quote(venv)}/bin/python -m pip install ${shell_quote(this.repo)}
+mkdir -p ${shell_quote(docker_src)}
+cd ${shell_quote(docker_src)}
+git init
+git fetch --depth=1 ${shell_quote(remote)} ${shell_quote(ref)}
+git reset --hard FETCH_HEAD
+# Append Hopic install
+cat >> hopic/test/docker-images/python/Dockerfile <<EOF
+RUN pip install --no-cache-dir --upgrade virtualenv ${shell_quote(this.repo)}
+EOF
+docker build --build-arg=PYTHON_VERSION=3.6 --iidfile=${shell_quote(docker_src)}/id.txt hopic/test/docker-images/python
 """)
+        final imageId = steps.readFile("${docker_src}/id.txt").trim()
+        this.docker_images[steps.env.NODE_NAME] = steps.docker.image(imageId)
       }
-      this.base_cmds[steps.env.NODE_NAME] = 'LC_ALL=C.UTF-8 ' + shell_quote("${venv}/bin/python") + ' ' + shell_quote("${venv}/bin/hopic") + ' --color=always'
     }
 
-    return closure(this.base_cmds[steps.env.NODE_NAME])
+    return this.docker_images[steps.env.NODE_NAME].inside([
+        '--volume=/etc/passwd:/etc/passwd:ro',
+        '--volume=/etc/group:/etc/group:ro',
+
+        // Extra writable directories
+        "--volume=${steps.env.HOME}:${steps.env.HOME}:rw",
+
+        // Docker in Docker access
+        '--volume=/var/run/docker.sock:/var/run/docker.sock',
+        "--group-add=${shell_quote(steps.sh(script: 'stat -c %g /var/run/docker.sock', returnStdout: true).trim())}",
+      ].join(' ')) {
+      return closure('LC_ALL=C.UTF-8 hopic --color=always')
+    }
   }
 
   private def with_credentials(closure) {
