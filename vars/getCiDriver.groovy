@@ -1,4 +1,4 @@
-/* Copyright (c) 2018 - 2019 TomTom N.V. (https://tomtom.com)
+/* Copyright (c) 2018 - 2020 TomTom N.V. (https://tomtom.com)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -763,9 +763,9 @@ exec ssh -i '''
   public def on_build_node(Map params = [:], closure) {
     def node_expr = this.nodes.collect { variant, node -> node }.join(" || ") ?: params.getOrDefault('default_node_expr', this.default_node_expr)
     return steps.node(node_expr) {
-      this.ensure_checkout(params.getOrDefault('clean', false))
+      def cmd = this.ensure_checkout(params.getOrDefault('clean', false)).cmd
       this.ensure_unstashed()
-      return closure()
+      return closure(cmd)
     }
   }
 
@@ -981,12 +981,11 @@ exec ssh -i '''
         }
 
         if (this.may_submit_result != false) {
-          this.on_build_node {
+          this.on_build_node { cmd ->
             if (this.has_submittable_change()) {
               steps.stage('submit') {
                 this.with_credentials() {
                   // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
-                  def cmd = this.ensure_checkout(clean).cmd
                   steps.sh(script: "${cmd} submit")
                 }
               }
@@ -997,8 +996,7 @@ exec ssh -i '''
 
       if (artifactoryBuildInfo) {
         assert this.nodes : "When we have artifactory build info we expect to have execution nodes that it got produced on"
-        this.on_build_node {
-          def cmd = this.ensure_checkout(clean).cmd
+        this.on_build_node { cmd ->
           def config = steps.readJSON(text: steps.sh(
               script: "${cmd} show-config",
               returnStdout: true,
