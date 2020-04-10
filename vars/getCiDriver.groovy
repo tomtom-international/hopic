@@ -506,11 +506,8 @@ exec ssh -i '''
     }
   }
 
-  private def checkout(clean = false) {
-    def cmd = this.install_prerequisites()
-
+  private def checkout(String cmd, clean = false) {
     def tmpdir = steps.pwd(tmp: true)
-    def venv = tmpdir + "/hopic-venv"
     def workspace = steps.pwd()
 
     cmd += ' --workspace=' + shell_quote(workspace)
@@ -561,10 +558,7 @@ exec ssh -i '''
       workspace = steps.readFile(code_dir_output).trim()
     }
 
-    return [
-        workspace: workspace,
-        cmd: cmd,
-      ]
+    return workspace
   }
 
   public def get_submit_version() {
@@ -604,7 +598,7 @@ exec ssh -i '''
     if (this.may_publish_result == null) {
       assert steps.env.NODE_NAME != null, "has_publishable_change must be executed on a node the first time"
 
-      def cmd = this.checkouts[steps.env.NODE_NAME].cmd
+      def cmd = this.install_prerequisites()
       def may_publish = steps.sh(
           script: "${cmd} may-publish",
           returnStatus: true,
@@ -617,18 +611,17 @@ exec ssh -i '''
   /**
    * @pre this has to be executed on a node
    */
-  private def ensure_checkout(clean = false) {
+  private def ensure_checkout(String cmd, clean = false) {
     assert steps.env.NODE_NAME != null, "ensure_checkout must be executed on a node"
 
     if (!this.checkouts.containsKey(steps.env.NODE_NAME)) {
-      this.checkouts[steps.env.NODE_NAME] = this.checkout(clean)
+      this.checkouts[steps.env.NODE_NAME] = this.checkout(cmd, clean)
     }
     this.worktree_bundles.each { name, bundle ->
       if (bundle.nodes[steps.env.NODE_NAME]) {
         return
       }
       steps.unstash(name)
-      def cmd = this.checkouts[steps.env.NODE_NAME].cmd
       steps.sh(
           script: "${cmd} unbundle-worktrees --bundle=worktree-transfer.bundle",
         )
@@ -763,7 +756,8 @@ exec ssh -i '''
   public def on_build_node(Map params = [:], closure) {
     def node_expr = this.nodes.collect { variant, node -> node }.join(" || ") ?: params.getOrDefault('default_node_expr', this.default_node_expr)
     return steps.node(node_expr) {
-      def cmd = this.ensure_checkout(params.getOrDefault('clean', false)).cmd
+      def cmd = this.install_prerequisites()
+      this.ensure_checkout(cmd, params.getOrDefault('clean', false))
       this.ensure_unstashed()
       return closure(cmd)
     }
@@ -802,7 +796,7 @@ exec ssh -i '''
 
         // Force a full based checkout & change application, instead of relying on the checkout done above, to ensure that we're building the list of phases and
         // variants to execute (below) using the final config file.
-        this.ensure_checkout(clean)
+        this.ensure_checkout(cmd, clean)
 
         def phases = steps.readJSON(text: steps.sh(script: "${cmd} getinfo",
             returnStdout: true))
@@ -883,9 +877,8 @@ exec ssh -i '''
                 }
                 steps.node(label) {
                   steps.stage("${phase}-${variant}") {
-                    def checkout = this.ensure_checkout(clean)
-                    final cmd = checkout.cmd
-                    final workspace = checkout.workspace
+                    final cmd = this.install_prerequisites()
+                    final workspace = this.ensure_checkout(cmd, clean)
                     this.pin_variant_to_current_node(variant)
 
                     this.ensure_unstashed()
