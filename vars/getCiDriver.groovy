@@ -353,28 +353,28 @@ class CiDriver {
     assert steps.env.NODE_NAME != null, "with_hopic must be executed on a node"
 
     if (!this.docker_images.containsKey(steps.env.NODE_NAME)) {
-      def docker_src = steps.pwd(tmp: true) + '/docker-src'
-      steps.sh(script: "mkdir -p ${shell_quote(docker_src)}")
-      steps.dir(docker_src) {
-        // Timeout prevents infinite downloads from blocking the build forever
-        steps.timeout(time: 1, unit: 'MINUTES', activity: true) {
-          // Use the exact same Hopic version on every build node
-          if (this.repo.startsWith("git+") && this.repo !=~ /.*@[0-9a-fA-F]{40}/) {
-            def (remote, ref) = this.repo[4..-1].split('@', 2)
-            def commit = line_split(steps.sh(script: "git ls-remote ${shell_quote(remote)}", returnStdout: true)).find { line ->
-              def (hash, remote_ref) = line.split('\t')
-              return (remote_ref == ref || remote_ref == "refs/heads/${ref}" || remote_ref == "refs/tags/${ref}")
-            }
-            if (commit != null)
-            {
-              def (hash, remote_ref) = commit.split('\t')
-              this.repo = "git+${remote}@${hash}"
-            }
+      // Timeout prevents infinite downloads from blocking the build forever
+      steps.timeout(time: 1, unit: 'MINUTES', activity: true) {
+        // Use the exact same Hopic version on every build node
+        if (this.repo.startsWith("git+") && this.repo !=~ /.*@[0-9a-fA-F]{40}/) {
+          def (remote, ref) = this.repo[4..-1].split('@', 2)
+          def commit = line_split(steps.sh(script: "git ls-remote ${shell_quote(remote)}", returnStdout: true)).find { line ->
+            def (hash, remote_ref) = line.split('\t')
+            return (remote_ref == ref || remote_ref == "refs/heads/${ref}" || remote_ref == "refs/tags/${ref}")
           }
+          if (commit != null)
+          {
+            def (hash, remote_ref) = commit.split('\t')
+            this.repo = "git+${remote}@${hash}"
+          }
+        }
 
-          steps.writeFile(
-              file: 'Dockerfile',
-              text: """\
+        def docker_src = steps.pwd(tmp: true) + '/docker-src'
+        steps.sh(script: "mkdir -p ${shell_quote(docker_src)}")
+
+        steps.writeFile(
+            file: "${docker_src}/Dockerfile",
+            text: """\
 FROM python:3.6-slim
 
 ARG DOCKERVERSION=18.06.3-ce
@@ -390,8 +390,9 @@ RUN apt-get update \
  && echo '82c7ae1ce6e314b697ec8a59074cf56b81b256b4a5f8c2f8614b57dd1709169c */usr/local/bin/docker' | sha256sum -c
 RUN pip install --no-cache-dir --upgrade virtualenv ${shell_quote(this.repo)}
 """)
-          this.docker_images[steps.env.NODE_NAME] = steps.docker.build('hopic-env:snapshot')
-        }
+        steps.sh(script: "docker build --iidfile=${shell_quote(docker_src)}/id.txt ${shell_quote(docker_src)}")
+        final imageId = steps.readFile("${docker_src}/id.txt").trim()
+        this.docker_images[steps.env.NODE_NAME] = steps.docker.image(imageId)
       }
     }
 
