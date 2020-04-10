@@ -382,9 +382,20 @@ git fetch --depth=1 ${shell_quote(remote)} ${shell_quote(ref)}
 git reset --hard FETCH_HEAD
 # Append Hopic install
 cat >> hopic/test/docker-images/python/Dockerfile <<EOF
-RUN pip install --no-cache-dir --upgrade virtualenv ${shell_quote(this.repo)}
+# Install Hopic's dependencies in a separate layer to improve reuse between images produced for different Hopic versions.
+ADD setup.py /hopic-reqs/setup.py
+RUN mkdir -p /hopic-reqs/hopic \\
+ && cd /hopic-reqs \\
+ && touch hopic/__init__.py \\
+ && sed -i '/setuptools.scm/ d' setup.py \\
+ && python setup.py egg_info \\
+ && cd / \\
+ && pip install --no-cache-dir --upgrade virtualenv --requirement /hopic-reqs/hopic.egg-info/requires.txt \\
+ && rm -rf /hopic-reqs
+
+RUN pip install --no-cache-dir --upgrade ${shell_quote(this.repo)}
 EOF
-docker build --build-arg=PYTHON_VERSION=3.6 --iidfile=${shell_quote(docker_src)}/id.txt hopic/test/docker-images/python
+docker build --build-arg=PYTHON_VERSION=3.6 --iidfile=${shell_quote(docker_src)}/id.txt -f hopic/test/docker-images/python/Dockerfile .
 """)
         final imageId = steps.readFile("${docker_src}/id.txt").trim()
         this.docker_images[steps.env.NODE_NAME] = steps.docker.image(imageId)
