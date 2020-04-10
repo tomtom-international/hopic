@@ -1,4 +1,4 @@
-/* Copyright (c) 2018 - 2019 TomTom N.V. (https://tomtom.com)
+/* Copyright (c) 2018 - 2020 TomTom N.V. (https://tomtom.com)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -349,7 +349,9 @@ class CiDriver {
     return text.split('\\r?\\n') as ArrayList
   }
 
-  public def install_prerequisites() {
+  public def with_hopic(closure) {
+    assert steps.env.NODE_NAME != null, "with_hopic must be executed on a node"
+
     if (!this.base_cmds.containsKey(steps.env.NODE_NAME)) {
       def venv = steps.pwd(tmp: true) + "/hopic-venv"
       def workspace = steps.pwd()
@@ -380,7 +382,8 @@ ${shell_quote(venv)}/bin/python -m pip install ${shell_quote(this.repo)}
       }
       this.base_cmds[steps.env.NODE_NAME] = 'LC_ALL=C.UTF-8 ' + shell_quote("${venv}/bin/python") + ' ' + shell_quote("${venv}/bin/hopic") + ' --color=always'
     }
-    return this.base_cmds[steps.env.NODE_NAME]
+
+    return closure(this.base_cmds[steps.env.NODE_NAME])
   }
 
   private def with_credentials(closure) {
@@ -506,11 +509,8 @@ exec ssh -i '''
     }
   }
 
-  private def checkout(clean = false) {
-    def cmd = this.install_prerequisites()
-
+  private def checkout(String cmd, clean = false) {
     def tmpdir = steps.pwd(tmp: true)
-    def venv = tmpdir + "/hopic-venv"
     def workspace = steps.pwd()
 
     cmd += ' --workspace=' + shell_quote(workspace)
@@ -561,10 +561,7 @@ exec ssh -i '''
       workspace = steps.readFile(code_dir_output).trim()
     }
 
-    return [
-        workspace: workspace,
-        cmd: cmd,
-      ]
+    return workspace
   }
 
   public def get_submit_version() {
@@ -604,11 +601,12 @@ exec ssh -i '''
     if (this.may_publish_result == null) {
       assert steps.env.NODE_NAME != null, "has_publishable_change must be executed on a node the first time"
 
-      def cmd = this.checkouts[steps.env.NODE_NAME].cmd
-      def may_publish = steps.sh(
-          script: "${cmd} may-publish",
-          returnStatus: true,
-        ) == 0
+      def may_publish = this.with_hopic { cmd ->
+        return steps.sh(
+            script: "${cmd} may-publish",
+            returnStatus: true,
+          ) == 0
+      }
       this.may_publish_result = may_publish && this.has_submittable_change()
     }
     return this.may_publish_result
@@ -617,18 +615,17 @@ exec ssh -i '''
   /**
    * @pre this has to be executed on a node
    */
-  private def ensure_checkout(clean = false) {
+  private def ensure_checkout(String cmd, clean = false) {
     assert steps.env.NODE_NAME != null, "ensure_checkout must be executed on a node"
 
     if (!this.checkouts.containsKey(steps.env.NODE_NAME)) {
-      this.checkouts[steps.env.NODE_NAME] = this.checkout(clean)
+      this.checkouts[steps.env.NODE_NAME] = this.checkout(cmd, clean)
     }
     this.worktree_bundles.each { name, bundle ->
       if (bundle.nodes[steps.env.NODE_NAME]) {
         return
       }
       steps.unstash(name)
-      def cmd = this.checkouts[steps.env.NODE_NAME].cmd
       steps.sh(
           script: "${cmd} unbundle-worktrees --bundle=worktree-transfer.bundle",
         )
@@ -763,9 +760,11 @@ exec ssh -i '''
   public def on_build_node(Map params = [:], closure) {
     def node_expr = this.nodes.collect { variant, node -> node }.join(" || ") ?: params.getOrDefault('default_node_expr', this.default_node_expr)
     return steps.node(node_expr) {
-      this.ensure_checkout(params.getOrDefault('clean', false))
-      this.ensure_unstashed()
-      return closure()
+      return this.with_hopic { cmd ->
+        this.ensure_checkout(cmd, params.getOrDefault('clean', false))
+        this.ensure_unstashed()
+        return closure(cmd)
+      }
     }
   }
 
@@ -774,59 +773,60 @@ exec ssh -i '''
     def default_node = buildParams.getOrDefault('default_node_expr', this.default_node_expr)
     steps.ansiColor('xterm') {
       def (phases, is_publishable_change) = steps.node(default_node) {
-        def cmd = this.install_prerequisites()
-        def workspace = steps.pwd()
+        return this.with_hopic { cmd ->
+          def workspace = steps.pwd()
 
-        /*
-         * We're splitting the enumeration of phases and variants from their execution in order to
-         * enable Jenkins to execute the different variants within a phase in parallel.
-         *
-         * In order to do this we only check out the CI config file to the orchestrator node.
-         */
-        def scm = steps.checkout(steps.scm)
-        // Don't trust Jenkin's scm.GIT_COMMIT because it sometimes lies
-        steps.env.GIT_COMMIT          = steps.sh(script: 'LC_ALL=C.UTF-8 git rev-parse HEAD', returnStdout: true).trim()
-        steps.env.GIT_COMMITTER_NAME  = scm.GIT_COMMITTER_NAME
-        steps.env.GIT_COMMITTER_EMAIL = scm.GIT_COMMITTER_EMAIL
-        steps.env.GIT_AUTHOR_NAME     = scm.GIT_AUTHOR_NAME
-        steps.env.GIT_AUTHOR_EMAIL    = scm.GIT_AUTHOR_EMAIL
+          /*
+           * We're splitting the enumeration of phases and variants from their execution in order to
+           * enable Jenkins to execute the different variants within a phase in parallel.
+           *
+           * In order to do this we only check out the CI config file to the orchestrator node.
+           */
+          def scm = steps.checkout(steps.scm)
+          // Don't trust Jenkin's scm.GIT_COMMIT because it sometimes lies
+          steps.env.GIT_COMMIT          = steps.sh(script: 'LC_ALL=C.UTF-8 git rev-parse HEAD', returnStdout: true).trim()
+          steps.env.GIT_COMMITTER_NAME  = scm.GIT_COMMITTER_NAME
+          steps.env.GIT_COMMITTER_EMAIL = scm.GIT_COMMITTER_EMAIL
+          steps.env.GIT_AUTHOR_NAME     = scm.GIT_AUTHOR_NAME
+          steps.env.GIT_AUTHOR_EMAIL    = scm.GIT_AUTHOR_EMAIL
 
-        if (steps.env.CHANGE_TARGET) {
-          this.source_commit = steps.env.GIT_COMMIT
+          if (steps.env.CHANGE_TARGET) {
+            this.source_commit = steps.env.GIT_COMMIT
+          }
+
+          cmd += ' --workspace=' + shell_quote("${workspace}")
+          if (this.config_file != null) {
+            cmd += ' --config=' + shell_quote("${workspace}/${config_file}")
+          }
+
+          // Force a full based checkout & change application, instead of relying on the checkout done above, to ensure that we're building the list of phases and
+          // variants to execute (below) using the final config file.
+          this.ensure_checkout(cmd, clean)
+
+          def phases = steps.readJSON(text: steps.sh(script: "${cmd} getinfo",
+              returnStdout: true))
+              .collect { phase, variants ->
+            [
+              phase: phase,
+              variants: variants.collect { variant, meta ->
+                [
+                  variant: variant,
+                  label: meta.getOrDefault('node-label', default_node),
+                  run_on_change: meta.getOrDefault('run-on-change', 'always'),
+                ]
+              }
+            ]
+          }
+
+          def is_publishable = this.has_publishable_change()
+
+          if (is_publishable) {
+            // Ensure a new checkout is performed because the target repository may change while waiting for the lock
+            this.checkouts.remove(steps.env.NODE_NAME)
+          }
+
+          return [phases, is_publishable]
         }
-
-        cmd += ' --workspace=' + shell_quote("${workspace}")
-        if (this.config_file != null) {
-          cmd += ' --config=' + shell_quote("${workspace}/${config_file}")
-        }
-
-        // Force a full based checkout & change application, instead of relying on the checkout done above, to ensure that we're building the list of phases and
-        // variants to execute (below) using the final config file.
-        this.ensure_checkout(clean)
-
-        def phases = steps.readJSON(text: steps.sh(script: "${cmd} getinfo",
-            returnStdout: true))
-            .collect { phase, variants ->
-          [
-            phase: phase,
-            variants: variants.collect { variant, meta ->
-              [
-                variant: variant,
-                label: meta.getOrDefault('node-label', default_node),
-                run_on_change: meta.getOrDefault('run-on-change', 'always'),
-              ]
-            }
-          ]
-        }
-
-        def is_publishable = this.has_publishable_change()
-
-        if (is_publishable) {
-          // Ensure a new checkout is performed because the target repository may change while waiting for the lock
-          this.checkouts.remove(steps.env.NODE_NAME)
-        }
-
-        return [phases, is_publishable]
       }
 
       // NOP as default
@@ -883,94 +883,94 @@ exec ssh -i '''
                 }
                 steps.node(label) {
                   steps.stage("${phase}-${variant}") {
-                    def checkout = this.ensure_checkout(clean)
-                    final cmd = checkout.cmd
-                    final workspace = checkout.workspace
-                    this.pin_variant_to_current_node(variant)
+                    this.with_hopic { cmd ->
+                      final workspace = this.ensure_checkout(cmd, clean)
+                      this.pin_variant_to_current_node(variant)
 
-                    this.ensure_unstashed()
+                      this.ensure_unstashed()
 
-                    // Meta-data retrieval needs to take place on the executing node to ensure environment variable expansion happens properly
-                    def meta = steps.readJSON(text: steps.sh(
-                        script: "${cmd} getinfo --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant),
-                        returnStdout: true,
-                      ))
+                      // Meta-data retrieval needs to take place on the executing node to ensure environment variable expansion happens properly
+                      def meta = steps.readJSON(text: steps.sh(
+                          script: "${cmd} getinfo --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant),
+                          returnStdout: true,
+                        ))
 
-                    def error_occurred = false
-                    try {
-                      this.subcommand_with_credentials(
-                          cmd,
-                          'build'
-                        + ' --phase=' + shell_quote(phase)
-                        + ' --variant=' + shell_quote(variant)
-                        , meta.getOrDefault('with-credentials', []))
-                    } catch(Exception e) {
-                      error_occurred = true // Jenkins only sets its currentResult to Failure after all user code is executed
-                      throw e
-                    } finally {
-                      if (meta.containsKey('junit')) {
-                        def results = meta.junit
-                        steps.dir(workspace) {
-                          meta.junit.each { result ->
-                            steps.junit(result)
+                      def error_occurred = false
+                      try {
+                        this.subcommand_with_credentials(
+                            cmd,
+                            'build'
+                          + ' --phase=' + shell_quote(phase)
+                          + ' --variant=' + shell_quote(variant)
+                          , meta.getOrDefault('with-credentials', []))
+                      } catch(Exception e) {
+                        error_occurred = true // Jenkins only sets its currentResult to Failure after all user code is executed
+                        throw e
+                      } finally {
+                        if (meta.containsKey('junit')) {
+                          def results = meta.junit
+                          steps.dir(workspace) {
+                            meta.junit.each { result ->
+                              steps.junit(result)
+                            }
                           }
                         }
+                        this.archive_artifacts_if_enabled(meta, workspace, error_occurred, { server_id ->
+                          if (!artifactoryBuildInfo.containsKey(server_id)) {
+                            def newBuildInfo = steps.Artifactory.newBuildInfo()
+                            def (build_name, build_identifier) = get_build_id()
+                            newBuildInfo.name = build_name
+                            newBuildInfo.number = build_identifier
+                            artifactoryBuildInfo[server_id] = newBuildInfo
+                          }
+                          return artifactoryBuildInfo[server_id]
+                        })
                       }
-                      this.archive_artifacts_if_enabled(meta, workspace, error_occurred, { server_id ->
-                        if (!artifactoryBuildInfo.containsKey(server_id)) {
-                          def newBuildInfo = steps.Artifactory.newBuildInfo()
-                          def (build_name, build_identifier) = get_build_id()
-                          newBuildInfo.name = build_name
-                          newBuildInfo.number = build_identifier
-                          artifactoryBuildInfo[server_id] = newBuildInfo
-                        }
-                        return artifactoryBuildInfo[server_id]
-                      })
-                    }
 
-                    // FIXME: re-evaluate if we can and need to get rid of special casing for stashing
-                    if (meta.containsKey('stash')) {
-                      def name  = "${phase}-${variant}"
-                      def params = [
-                          name: name,
-                        ]
-                      if (meta.stash.containsKey('includes')) {
-                        params['includes'] = meta.stash.includes
-                      }
-                      def stash_dir = workspace
-                      if (meta.stash.containsKey('dir')) {
-                        if (meta.stash.dir.startsWith('/')) {
-                          stash_dir = meta.stash.dir
-                        } else {
-                          stash_dir = "${workspace}/${meta.stash.dir}"
+                      // FIXME: re-evaluate if we can and need to get rid of special casing for stashing
+                      if (meta.containsKey('stash')) {
+                        def name  = "${phase}-${variant}"
+                        def params = [
+                            name: name,
+                          ]
+                        if (meta.stash.containsKey('includes')) {
+                          params['includes'] = meta.stash.includes
                         }
-                      }
-                      // Make stash locations node-independent by making them relative to the Jenkins workspace
-                      if (stash_dir.startsWith('/')) {
-                        def cwd = steps.pwd()
-                        // This check, unlike relativize() below, doesn't depend on File() and thus doesn't require script approval
-                        if (stash_dir == cwd) {
-                          stash_dir = '.'
-                        } else {
-                          cwd = new File(cwd).toPath()
-                          stash_dir = cwd.relativize(new File(stash_dir).toPath()) as String
+                        def stash_dir = workspace
+                        if (meta.stash.containsKey('dir')) {
+                          if (meta.stash.dir.startsWith('/')) {
+                            stash_dir = meta.stash.dir
+                          } else {
+                            stash_dir = "${workspace}/${meta.stash.dir}"
+                          }
                         }
-                        if (stash_dir == '') {
-                          stash_dir = '.'
+                        // Make stash locations node-independent by making them relative to the Jenkins workspace
+                        if (stash_dir.startsWith('/')) {
+                          def cwd = steps.pwd()
+                          // This check, unlike relativize() below, doesn't depend on File() and thus doesn't require script approval
+                          if (stash_dir == cwd) {
+                            stash_dir = '.'
+                          } else {
+                            cwd = new File(cwd).toPath()
+                            stash_dir = cwd.relativize(new File(stash_dir).toPath()) as String
+                          }
+                          if (stash_dir == '') {
+                            stash_dir = '.'
+                          }
                         }
+                        steps.dir(stash_dir) {
+                          steps.stash(params)
+                        }
+                        this.stashes[name] = [dir: stash_dir, nodes: [(steps.env.NODE_NAME): true]]
                       }
-                      steps.dir(stash_dir) {
-                        steps.stash(params)
+                      if (meta.containsKey('worktrees')) {
+                        def name = "${phase}-${variant}-worktree-transfer.bundle"
+                        steps.stash(
+                            name: name,
+                            includes: 'worktree-transfer.bundle',
+                          )
+                        this.worktree_bundles[name] = [nodes: [(steps.env.NODE_NAME): true]]
                       }
-                      this.stashes[name] = [dir: stash_dir, nodes: [(steps.env.NODE_NAME): true]]
-                    }
-                    if (meta.containsKey('worktrees')) {
-                      def name = "${phase}-${variant}-worktree-transfer.bundle"
-                      steps.stash(
-                          name: name,
-                          includes: 'worktree-transfer.bundle',
-                        )
-                      this.worktree_bundles[name] = [nodes: [(steps.env.NODE_NAME): true]]
                     }
                   }
                 }
@@ -981,12 +981,11 @@ exec ssh -i '''
         }
 
         if (this.may_submit_result != false) {
-          this.on_build_node {
+          this.on_build_node { cmd ->
             if (this.has_submittable_change()) {
               steps.stage('submit') {
                 this.with_credentials() {
                   // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
-                  def cmd = this.ensure_checkout(clean).cmd
                   steps.sh(script: "${cmd} submit")
                 }
               }
@@ -997,8 +996,7 @@ exec ssh -i '''
 
       if (artifactoryBuildInfo) {
         assert this.nodes : "When we have artifactory build info we expect to have execution nodes that it got produced on"
-        this.on_build_node {
-          def cmd = this.ensure_checkout(clean).cmd
+        this.on_build_node { cmd ->
           def config = steps.readJSON(text: steps.sh(
               script: "${cmd} show-config",
               returnStdout: true,
