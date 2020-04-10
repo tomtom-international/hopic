@@ -355,8 +355,10 @@ class CiDriver {
     if (!this.docker_images.containsKey(steps.env.NODE_NAME)) {
       // Timeout prevents infinite downloads from blocking the build forever
       steps.timeout(time: 1, unit: 'MINUTES', activity: true) {
+        assert this.repo.startsWith('git+'), "getCiDriver repo URL _must_ start with 'git+' but doesn't: ${this.repo}"
+
         // Use the exact same Hopic version on every build node
-        if (this.repo.startsWith("git+") && this.repo !=~ /.*@[0-9a-fA-F]{40}/) {
+        if (this.repo !=~ /.*@[0-9a-fA-F]{40}/) {
           def (remote, ref) = this.repo[4..-1].split('@', 2)
           def commit = line_split(steps.sh(script: "git ls-remote ${shell_quote(remote)}", returnStdout: true)).find { line ->
             def (hash, remote_ref) = line.split('\t')
@@ -369,28 +371,21 @@ class CiDriver {
           }
         }
 
+        def (remote, ref) = this.repo[4..-1].split('@', 2)
+
         def docker_src = steps.pwd(tmp: true) + '/docker-src'
-        steps.sh(script: "mkdir -p ${shell_quote(docker_src)}")
-
-        steps.writeFile(
-            file: "${docker_src}/Dockerfile",
-            text: """\
-FROM python:3.6-slim
-
-ARG DOCKERVERSION=18.06.3-ce
-
-RUN apt-get update \
- && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        build-essential \
-        curl \
-        git \
-        openssh-client \
- && rm -rf /var/lib/apt/lists/* \
- && curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKERVERSION}.tgz | tar -C /usr/local/bin --strip-components=1 -xzv docker/docker \
- && echo '82c7ae1ce6e314b697ec8a59074cf56b81b256b4a5f8c2f8614b57dd1709169c */usr/local/bin/docker' | sha256sum -c
+        steps.sh(script: """\
+mkdir -p ${shell_quote(docker_src)}
+cd ${shell_quote(docker_src)}
+git init
+git fetch --depth=1 ${shell_quote(remote)} ${shell_quote(ref)}
+git reset --hard FETCH_HEAD
+# Append Hopic install
+cat >> hopic/test/docker-images/python/Dockerfile <<EOF
 RUN pip install --no-cache-dir --upgrade virtualenv ${shell_quote(this.repo)}
+EOF
+docker build --build-arg=PYTHON_VERSION=3.6 --iidfile=${shell_quote(docker_src)}/id.txt hopic/test/docker-images/python
 """)
-        steps.sh(script: "docker build --iidfile=${shell_quote(docker_src)}/id.txt ${shell_quote(docker_src)}")
         final imageId = steps.readFile("${docker_src}/id.txt").trim()
         this.docker_images[steps.env.NODE_NAME] = steps.docker.image(imageId)
       }
