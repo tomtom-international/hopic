@@ -16,8 +16,8 @@ pass-through-environment-vars:
 
 modality-source-preparation:
   AUTO_MERGE:
-    - git fetch origin release/1
-    - sh: git merge --no-commit --no-ff release/0
+    - git fetch origin release/0
+    - sh: git merge --no-commit --no-ff FETCH_HEAD
       changed-files: []
       commit-message: "Merge branch 'release/0'"
 
