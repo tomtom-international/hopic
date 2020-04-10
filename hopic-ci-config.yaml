@@ -3,6 +3,7 @@ version:
   format: semver
   bump:
     policy: conventional-commits
+    on-every-change: no
     strict: yes
 
 scm:
