@@ -14,6 +14,13 @@ pass-through-environment-vars:
   - GIT_COMMITTER_NAME
   - GIT_COMMITTER_EMAIL
 
+modality-source-preparation:
+  AUTO_MERGE:
+    - git fetch origin release/1
+    - sh: git merge --no-commit --no-ff release/0
+      changed-files: []
+      commit-message: "Merge branch 'release/0'"
+
 phases:
   style:
     commit-messages:

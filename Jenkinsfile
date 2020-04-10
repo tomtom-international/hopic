@@ -42,6 +42,11 @@ def cidriver = getCiDriver("git+${repo}@${version}")
 pipeline {
   agent none
 
+  triggers {
+    // trigger build as AUTO_MERGE each 2 hours, on master and release branches only
+    parameterizedCron(BRANCH_NAME =~ /^master$|^release\/\d+(?:\.\d+)?$/ ? '0 */2 * * * % MODALITY=AUTO_MERGE' : '')
+  }
+
   parameters {
     choice(name:        'HOPIC_VERBOSITY',
            choices:      ['INFO', 'DEBUG'],
@@ -49,6 +54,9 @@ pipeline {
     choice(name:         'GIT_VERBOSITY',
            choices:      ['INFO', 'DEBUG'],
            description:  'Verbosity level to execute Git commands at.')
+    choice(name: 'MODALITY',
+           choices: 'NORMAL\nAUTO_MERGE',
+           description: 'Modality of this execution of the pipeline.')
     booleanParam(defaultValue: false,
                  description: 'Clean build',
                  name: 'CLEAN')
@@ -64,7 +72,9 @@ pipeline {
     stage("Commit Stage") {
       steps {
         script {
-          cidriver.build(clean: params.CLEAN)
+          cidriver.build(
+            clean: params.CLEAN || params.MODALITY != "NORMAL",
+          )
         }
       }
     }
