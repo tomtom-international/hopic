@@ -380,7 +380,13 @@ cd /
 ${shell_quote(venv)}/bin/python -m pip install ${shell_quote(this.repo)}
 """)
       }
-      this.base_cmds[steps.env.NODE_NAME] = 'LC_ALL=C.UTF-8 ' + shell_quote("${venv}/bin/python") + ' ' + shell_quote("${venv}/bin/hopic") + ' --color=always'
+
+      def cmd = 'LC_ALL=C.UTF-8 ' + shell_quote("${venv}/bin/python") + ' ' + shell_quote("${venv}/bin/hopic") + ' --color=always'
+      if (this.config_file != null) {
+        cmd += ' --workspace=' + shell_quote(workspace)
+        cmd += ' --config=' + shell_quote("${workspace}/${config_file}")
+      }
+      this.base_cmds[steps.env.NODE_NAME] = cmd
     }
 
     return closure(this.base_cmds[steps.env.NODE_NAME])
@@ -512,11 +518,6 @@ exec ssh -i '''
   private def checkout(String cmd, clean = false) {
     def tmpdir = steps.pwd(tmp: true)
     def workspace = steps.pwd()
-
-    cmd += ' --workspace=' + shell_quote(workspace)
-    if (this.config_file != null) {
-      cmd += ' --config=' + shell_quote("${workspace}/${config_file}")
-    }
 
     def params = ''
     if (clean) {
@@ -792,11 +793,6 @@ exec ssh -i '''
 
           if (steps.env.CHANGE_TARGET) {
             this.source_commit = steps.env.GIT_COMMIT
-          }
-
-          cmd += ' --workspace=' + shell_quote("${workspace}")
-          if (this.config_file != null) {
-            cmd += ' --config=' + shell_quote("${workspace}/${config_file}")
           }
 
           // Force a full based checkout & change application, instead of relying on the checkout done above, to ensure that we're building the list of phases and
