@@ -413,7 +413,13 @@ docker build --build-arg=PYTHON_VERSION=3.6 --iidfile=${shell_quote(docker_src)}
         '--volume=/var/run/docker.sock:/var/run/docker.sock',
         "--group-add=${shell_quote(steps.sh(script: 'stat -c %g /var/run/docker.sock', returnStdout: true).trim())}",
       ].join(' ')) {
-      return closure('LC_ALL=C.UTF-8 hopic --color=always')
+      def cmd = 'LC_ALL=C.UTF-8 hopic --color=always'
+      if (this.config_file != null) {
+        cmd += ' --workspace=' + shell_quote(workspace)
+        cmd += ' --config=' + shell_quote("${workspace}/${config_file}")
+      }
+
+      return closure(cmd)
     }
   }
 
@@ -543,11 +549,6 @@ exec ssh -i '''
   private def checkout(String cmd, clean = false) {
     def tmpdir = steps.pwd(tmp: true)
     def workspace = steps.pwd()
-
-    cmd += ' --workspace=' + shell_quote(workspace)
-    if (this.config_file != null) {
-      cmd += ' --config=' + shell_quote("${workspace}/${config_file}")
-    }
 
     def params = ''
     if (clean) {
@@ -823,11 +824,6 @@ exec ssh -i '''
 
           if (steps.env.CHANGE_TARGET) {
             this.source_commit = steps.env.GIT_COMMIT
-          }
-
-          cmd += ' --workspace=' + shell_quote("${workspace}")
-          if (this.config_file != null) {
-            cmd += ' --config=' + shell_quote("${workspace}/${config_file}")
           }
 
           // Force a full based checkout & change application, instead of relying on the checkout done above, to ensure that we're building the list of phases and
