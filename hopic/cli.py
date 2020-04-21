@@ -1191,7 +1191,18 @@ def apply_modality_change(
             return None
         commit_message = (commit_message.rstrip()
                 + u'\n\nMerged-by: Hopic {pkg.version}\n'.format(pkg=pkg_resources.get_distribution(__package__)))
-        return {'message': commit_message}
+
+        commit_params = {'message': commit_message}
+        # If this change was a merge make sure to produce a merge commit for it
+        try:
+            commit_params['parent_commits'] = (
+                    repo.commit('ORIG_HEAD'),
+                    repo.commit('MERGE_HEAD'),
+                )
+        except git.BadName:
+            pass
+        return commit_params
+
     return change_applicator
 
 

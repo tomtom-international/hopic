@@ -571,6 +571,9 @@ exec ssh -i '''
         def submit_info = this.get_change().apply(cmd, steps.scm.userRemoteConfigs[0].url)
         if (submit_info == null)
         {
+          // Marking the build as ABORTED _before_ deleting it to prevent an exception from reincarnating it
+          steps.currentBuild.result = 'ABORTED'
+
           def timerCauses = steps.currentBuild.buildCauses.findAll { cause ->
             cause._class.contains('TimerTriggerCause')
           }
@@ -578,7 +581,6 @@ exec ssh -i '''
             steps.currentBuild.rawBuild.delete()
           }
 
-          steps.currentBuild.result = 'ABORTED'
           steps.error('No changes to build')
         }
 
