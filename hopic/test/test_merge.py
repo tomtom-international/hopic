@@ -18,6 +18,7 @@ from click.testing import CliRunner
 import git
 import os
 import pytest
+from textwrap import dedent
 import sys
 
 
@@ -430,3 +431,50 @@ phases:
     assert result.exit_code == 0
     assert (toprepo / 'subrepo_test' / 'dummy.txt').is_file()
     assert not (toprepo / 'moved_subrepo' / 'dummy.txt').is_file()
+
+
+def test_modality_merge_has_all_parents(tmp_path):
+    toprepo = tmp_path / 'repo'
+    with git.Repo.init(toprepo, expand_vars=False) as repo:
+        with open(toprepo / 'hopic-ci-config.yaml', 'w') as f:
+            f.write(dedent('''\
+                version:
+                  bump: no
+
+                modality-source-preparation:
+                  AUTO_MERGE:
+                    - git fetch origin release/0
+                    - sh: git merge --no-commit --no-ff FETCH_HEAD
+                      changed-files: []
+                      commit-message: "Merge branch 'release/0'"
+                '''))
+        repo.index.add(('hopic-ci-config.yaml',))
+        base_commit = repo.index.commit(message='Initial commit', **_commitargs)
+
+        # Main branch moves on
+        with (toprepo / 'A.txt').open('w') as f:
+            f.write('A')
+        repo.index.add(('A.txt',))
+        final_commit = repo.index.commit(message='feat: add A', **_commitargs)
+
+        # release branch from just before the main branch's HEAD
+        repo.head.reference = repo.create_head('release/0', base_commit)
+        assert not repo.head.is_detached
+        repo.head.reset(index=True, working_tree=True)
+
+        # Some change
+        with open(toprepo / 'something.txt', 'w') as f:
+            f.write('usable')
+        repo.index.add(('something.txt',))
+        merge_commit = repo.index.commit(message='feat: add something useful', **_commitargs)
+
+    result = run(
+            ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'),
+            ('prepare-source-tree', '--author-name', _author.name, '--author-email', _author.email, '--author-date', f"@{_git_time}", '--commit-date', f"@{_git_time}",
+                'apply-modality-change', 'AUTO_MERGE'),
+            ('submit',),
+        )
+    assert result.exit_code == 0
+
+    with git.Repo(toprepo, expand_vars=False) as repo:
+        assert repo.heads.master.commit.parents == (final_commit, merge_commit), f"Produced commit {repo.heads.master.commit} is not a merge commit"
