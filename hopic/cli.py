@@ -1154,7 +1154,7 @@ def apply_modality_change(
                     args.pop(0)
 
                 args = [expand_vars(volume_vars, arg) for arg in args]
-                echo_cmd(subprocess.check_call, args, cwd=repo.working_dir, env=env, stdout=sys.stderr)
+                echo_cmd(subprocess.check_call, args, cwd=repo.working_dir, env=env, stdout=sys.__stderr__)
 
             if 'changed-files' in cmd:
                 changed_files = cmd["changed-files"]
