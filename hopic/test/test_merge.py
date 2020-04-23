@@ -18,10 +18,18 @@ from click.testing import CliRunner
 import git
 import os
 import pytest
+from textwrap import dedent
 import sys
 
 
 _git_time = f"{42 * 365 * 24 * 3600} +0000"
+_author = git.Actor('Bob Tester', 'bob@example.net')
+_commitargs = dict(
+        author_date=_git_time,
+        commit_date=_git_time,
+        author=_author,
+        committer=_author,
+    )
 
 
 def run(*args, env=None):
@@ -45,14 +53,6 @@ def run(*args, env=None):
 
 
 def test_autosquash_base(capfd, tmp_path):
-    author = git.Actor('Bob Tester', 'bob@example.net')
-    commitargs = dict(
-            author_date=_git_time,
-            commit_date=_git_time,
-            author=author,
-            committer=author,
-        )
-
     toprepo = tmp_path / 'repo'
     with git.Repo.init(str(toprepo), expand_vars=False) as repo:
         with (toprepo / 'hopic-ci-config.yaml').open('w') as f:
@@ -67,13 +67,13 @@ phases:
         sh: git log -1 --format=%P ${AUTOSQUASHED_COMMIT}
 ''')
         repo.index.add(('hopic-ci-config.yaml',))
-        base_commit = repo.index.commit(message='Initial commit', **commitargs)
+        base_commit = repo.index.commit(message='Initial commit', **_commitargs)
 
         # Main branch moves on
         with (toprepo / 'A.txt').open('w') as f:
             f.write('A')
         repo.index.add(('A.txt',))
-        final_commit = repo.index.commit(message='feat: add A', **commitargs)
+        final_commit = repo.index.commit(message='feat: add A', **_commitargs)
 
         # PR branch from just before the main branch's HEAD
         repo.head.reference = repo.create_head('something-useful', base_commit)
@@ -84,18 +84,18 @@ phases:
         with (toprepo / 'something.txt').open('w') as f:
             f.write('usable')
         repo.index.add(('something.txt',))
-        repo.index.commit(message='feat: add something useful', **commitargs)
+        repo.index.commit(message='feat: add something useful', **_commitargs)
 
         # A fixup on top of that change
         with (toprepo / 'something.txt').open('w') as f:
             f.write('useful')
         repo.index.add(('something.txt',))
-        repo.index.commit(message='fixup! feat: add something useful', **commitargs)
+        repo.index.commit(message='fixup! feat: add something useful', **_commitargs)
 
     # Successful checkout and build
     result = run(
             ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'),
-            ('prepare-source-tree', '--author-name', author.name, '--author-email', author.email,
+            ('prepare-source-tree', '--author-name', _author.name, '--author-email', _author.email,
                 'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful'),
             ('build',),
         )
@@ -112,14 +112,6 @@ phases:
 
 
 def hopic_config_subdir_version_file_tester(capfd, config_dir, hopic_config, version_file, version_input, expected_version, tmp_path):
-    author = git.Actor('Bob Tester', 'bob@example.net')
-    commitargs = dict(
-        author_date=_git_time,
-        commit_date=_git_time,
-        author=author,
-        committer=author,
-    )
-
     toprepo = tmp_path / 'repo'
     with git.Repo.init(str(toprepo), expand_vars=False) as repo:
         if not os.path.exists(toprepo / config_dir):
@@ -131,7 +123,7 @@ def hopic_config_subdir_version_file_tester(capfd, config_dir, hopic_config, ver
             f.write(version_input)
         repo.index.add((os.path.join(config_dir, 'hopic-ci-config.yaml'),))
         repo.index.add((os.path.join(config_dir, version_file),))
-        base_commit = repo.index.commit(message='Initial commit', **commitargs)
+        base_commit = repo.index.commit(message='Initial commit', **_commitargs)
 
         # PR branch from just before the main branch's HEAD
         repo.head.reference = repo.create_head('something-useful', base_commit)
@@ -142,14 +134,14 @@ def hopic_config_subdir_version_file_tester(capfd, config_dir, hopic_config, ver
         with (toprepo / 'something.txt').open('w') as f:
             f.write('usable')
         repo.index.add(('something.txt',))
-        repo.index.commit(message='feat: add something useful', **commitargs)
+        repo.index.commit(message='feat: add something useful', **_commitargs)
 
     # Successful checkout and build
     result = run(
         ('--workspace', './', '--config', os.path.join(config_dir, 'hopic-ci-config.yaml'),
          'checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'),
         ('--workspace', './', '--config', os.path.join(config_dir, 'hopic-ci-config.yaml'),
-         'prepare-source-tree', '--author-name', author.name, '--author-email', author.email,
+         'prepare-source-tree', '--author-name', _author.name, '--author-email', _author.email,
          'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful'),
         ('--workspace', './', '--config', os.path.join(config_dir, 'hopic-ci-config.yaml'), 'submit'),
     )
@@ -237,14 +229,6 @@ version={version}""",
 
 
 def merge_conventional_bump(capfd, tmp_path, message, strict=False, on_every_change=True, target='master'):
-    author = git.Actor('Bob Tester', 'bob@example.net')
-    commitargs = dict(
-            author_date=_git_time,
-            commit_date=_git_time,
-            author=author,
-            committer=author,
-        )
-
     toprepo = tmp_path / 'repo'
     with git.Repo.init(str(toprepo), expand_vars=False) as repo:
         with (toprepo / 'hopic-ci-config.yaml').open('w') as f:
@@ -260,7 +244,7 @@ version:
             if not on_every_change:
                 f.write('    on-every-change: no\n')
         repo.index.add(('hopic-ci-config.yaml',))
-        repo.index.commit(message='Initial commit', **commitargs)
+        repo.index.commit(message='Initial commit', **_commitargs)
         repo.git.branch(target, move=True)
         repo.create_tag('0.0.0')
 
@@ -269,23 +253,23 @@ version:
         assert not repo.head.is_detached
 
         # A preceding commit on this PR to detect whether we check more than the first commit's message in a PR
-        repo.index.commit(message='chore: some intermediate commit', **commitargs)
+        repo.index.commit(message='chore: some intermediate commit', **_commitargs)
         print(repo.git.log(format='fuller', color=True, stat=True), file=sys.stderr)
 
         # Some change
         with (toprepo / 'something.txt').open('w') as f:
             f.write('usable')
         repo.index.add(('something.txt',))
-        repo.index.commit(message=message, **commitargs)
+        repo.index.commit(message=message, **_commitargs)
 
         # A succeeding commit on this PR to detect whether we check more than the last commit's message in a PR
-        repo.index.commit(message='chore: some other intermediate commit', **commitargs)
+        repo.index.commit(message='chore: some other intermediate commit', **_commitargs)
         print(repo.git.log(format='fuller', color=True, stat=True), file=sys.stderr)
 
     # Successful checkout and build
     return run(
             ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', target),
-            ('prepare-source-tree', '--author-date', f"@{_git_time}", '--commit-date', f"@{_git_time}", '--author-name', author.name, '--author-email', author.email,
+            ('prepare-source-tree', '--author-date', f"@{_git_time}", '--commit-date', f"@{_git_time}", '--author-name', _author.name, '--author-email', _author.email,
                 'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful'),
         )
 
@@ -397,20 +381,12 @@ def test_merge_conventional_feat_on_minor_branch(capfd, tmp_path):
 
 
 def test_move_submodule(capfd, tmp_path):
-    author = git.Actor('Bob Tester', 'bob@example.net')
-    commitargs = dict(
-            author_date=_git_time,
-            commit_date=_git_time,
-            author=author,
-            committer=author,
-        )
-
     subrepo = tmp_path / 'subrepo'
     with git.Repo.init(str(subrepo), expand_vars=False) as repo:
         with (subrepo / 'dummy.txt').open('w') as f:
             f.write('Lalalala!\n')
         repo.index.add(('dummy.txt',))
-        repo.index.commit(message='Initial dummy commit', **commitargs)
+        repo.index.commit(message='Initial dummy commit', **_commitargs)
 
     toprepo = tmp_path / 'repo'
     with git.Repo.init(str(toprepo), expand_vars=False) as repo:
@@ -427,7 +403,7 @@ phases:
         repo.index.add(('hopic-ci-config.yaml',))
         repo.git.submodule(('add', subrepo, 'subrepo_test'))
         repo.index.add(('.gitmodules',))
-        repo.index.commit(message='Initial commit', **commitargs)
+        repo.index.commit(message='Initial commit', **_commitargs)
 
     # Move submodule
     repo.create_head("move_submodule_branch")
@@ -437,14 +413,14 @@ phases:
         f.truncate(0)
 
     repo.git.submodule(('add', subrepo, 'moved_subrepo'))
-    repo.index.commit(message='Move submodule', **commitargs)
+    repo.index.commit(message='Move submodule', **_commitargs)
 
     result = run(('--workspace', str(toprepo), 'checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'))
     assert result.exit_code == 0
     assert (toprepo / 'subrepo_test' / 'dummy.txt').is_file()
     assert not (toprepo / 'moved_subrepo' / 'dummy.txt').is_file()
 
-    result = run(('--workspace', str(toprepo), 'prepare-source-tree', '--author-name', author.name, '--author-email', author.email,
+    result = run(('--workspace', str(toprepo), 'prepare-source-tree', '--author-name', _author.name, '--author-email', _author.email,
                   'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'move_submodule_branch'))
     assert result.exit_code == 0
     assert not (toprepo / 'subrepo_test' / 'dummy.txt').is_file()
@@ -455,3 +431,50 @@ phases:
     assert result.exit_code == 0
     assert (toprepo / 'subrepo_test' / 'dummy.txt').is_file()
     assert not (toprepo / 'moved_subrepo' / 'dummy.txt').is_file()
+
+
+def test_modality_merge_has_all_parents(tmp_path):
+    toprepo = tmp_path / 'repo'
+    with git.Repo.init(toprepo, expand_vars=False) as repo:
+        with open(toprepo / 'hopic-ci-config.yaml', 'w') as f:
+            f.write(dedent('''\
+                version:
+                  bump: no
+
+                modality-source-preparation:
+                  AUTO_MERGE:
+                    - git fetch origin release/0
+                    - sh: git merge --no-commit --no-ff FETCH_HEAD
+                      changed-files: []
+                      commit-message: "Merge branch 'release/0'"
+                '''))
+        repo.index.add(('hopic-ci-config.yaml',))
+        base_commit = repo.index.commit(message='Initial commit', **_commitargs)
+
+        # Main branch moves on
+        with (toprepo / 'A.txt').open('w') as f:
+            f.write('A')
+        repo.index.add(('A.txt',))
+        final_commit = repo.index.commit(message='feat: add A', **_commitargs)
+
+        # release branch from just before the main branch's HEAD
+        repo.head.reference = repo.create_head('release/0', base_commit)
+        assert not repo.head.is_detached
+        repo.head.reset(index=True, working_tree=True)
+
+        # Some change
+        with open(toprepo / 'something.txt', 'w') as f:
+            f.write('usable')
+        repo.index.add(('something.txt',))
+        merge_commit = repo.index.commit(message='feat: add something useful', **_commitargs)
+
+    result = run(
+            ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'),
+            ('prepare-source-tree', '--author-name', _author.name, '--author-email', _author.email, '--author-date', f"@{_git_time}", '--commit-date', f"@{_git_time}",
+                'apply-modality-change', 'AUTO_MERGE'),
+            ('submit',),
+        )
+    assert result.exit_code == 0
+
+    with git.Repo(toprepo, expand_vars=False) as repo:
+        assert repo.heads.master.commit.parents == (final_commit, merge_commit), f"Produced commit {repo.heads.master.commit} is not a merge commit"
