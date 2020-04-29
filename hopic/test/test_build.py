@@ -53,11 +53,12 @@ def run_with_config(config, *args, files={}, env=None, monkeypatch_injector=Monk
         with git.Repo.init() as repo:
             with open('hopic-ci-config.yaml', 'w') as f:
                 f.write(config)
-            for fname, content in files.items():
+            for fname, (content, on_file_created_callback) in files.items():
                 if '/' in fname and not os.path.exists(os.path.dirname(fname)):
                     os.makedirs(os.path.dirname(fname))
                 with open(fname, 'w') as f:
                     f.write(content)
+                on_file_created_callback()
             repo.index.add(('hopic-ci-config.yaml',) + tuple(files.keys()))
             git_time = f"{_source_date_epoch} +0000"
             repo.index.commit(message='Initial commit', author_date=git_time, commit_date=git_time)
@@ -368,3 +369,63 @@ def test_empty_variant():
           build:
             test: {}'''), ('build',))
     assert result.exit_code == 0
+
+
+def test_embed_variants(monkeypatch):
+    expected = [
+        ('./a.sh', 'test_argument'),
+        ('./b.sh',),
+        ('./test-a.sh',),
+        ('./test-b.sh',),
+    ]
+    generate_script_path = "generate-variants.py"
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        assert tuple(args) == expected.pop(0)
+
+    with monkeypatch.context() as m:
+        m.setattr(subprocess, 'check_call', mock_check_call)
+        result = run_with_config(dedent(f'''\
+                    phases:
+                      build:
+                        a: 
+                          - ./a.sh test_argument
+                        b:
+                          - ./b.sh 
+                        
+                      test: !embed
+                        cmd: {generate_script_path}'''),
+                    ('build',),
+                    files={generate_script_path: (dedent('''\
+                    #!/usr/bin/env python3
+                    print(\'\'\'a:
+                      - ./test-a.sh
+                    b:
+                      - ./test-b.sh \'\'\')'''),
+                    lambda: os.chmod(generate_script_path, os.stat(generate_script_path).st_mode | stat.S_IEXEC))})
+    assert result.exit_code == 0
+    assert not expected
+
+
+def test_embed_variants_syntax_error(capfd):
+    generate_script_path = "generate-variants.py"
+
+    result = run_with_config(dedent(f'''\
+                phases:
+                  test: !embed
+                    cmd: {generate_script_path}
+                '''),
+                ('build',),
+                files={generate_script_path: (dedent('''\
+                #!/usr/bin/env python3
+                print(\'\'\'a:
+                  - ./a-test.sh
+                b:
+                  - ./b-test.sh
+                yaml_error \'\'\')
+                '''), lambda: os.chmod(generate_script_path, os.stat(generate_script_path).st_mode | stat.S_IEXEC))})
+    assert result.exit_code == 42
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+    assert 'An error occurred when parsing the hopic configuration file' in out
