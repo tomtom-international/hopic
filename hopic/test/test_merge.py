@@ -478,3 +478,37 @@ def test_modality_merge_has_all_parents(tmp_path):
 
     with git.Repo(toprepo, expand_vars=False) as repo:
         assert repo.heads.master.commit.parents == (final_commit, merge_commit), f"Produced commit {repo.heads.master.commit} is not a merge commit"
+
+
+def test_separate_modality_change(tmp_path):
+    """It should be possible to apply modality changes without requiring to perform a checkout-source-tree first.
+
+    This will allow using this command locally by users and developers to make testing of those configs easier."""
+
+    toprepo = tmp_path / 'repo'
+    with git.Repo.init(toprepo, expand_vars=False) as repo:
+        with open(toprepo / 'hopic-ci-config.yaml', 'w') as f:
+            f.write(dedent('''\
+                version:
+                  bump: no
+
+                modality-source-preparation:
+                  CHANGE:
+                    - sh: touch new-file.txt
+                      changed-files:
+                        - new-file.txt
+                      commit-message: Add new file
+                '''))
+        repo.index.add(('hopic-ci-config.yaml',))
+        base_commit = repo.index.commit(message='Initial commit', **_commitargs)
+
+    result = run(
+            ('--workspace', str(toprepo),
+                'prepare-source-tree', '--author-name', _author.name, '--author-email', _author.email, '--author-date', f"@{_git_time}", '--commit-date', f"@{_git_time}",
+                'apply-modality-change', 'CHANGE'),
+        )
+    assert result.exit_code == 0
+
+    with git.Repo(toprepo, expand_vars=False) as repo:
+        assert repo.head.commit != base_commit
+        assert repo.head.commit.parents == (base_commit,)
