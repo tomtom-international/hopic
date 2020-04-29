@@ -1559,7 +1559,7 @@ def build(ctx, phase, variant):
                             worktree_commits[subdir][1] = str(submit_commit)
                             log.info('%s', repo.git.show(submit_commit, format='fuller', stat=True))
 
-                if worktrees:
+                if worktree_commits:
                     with git.Repo(ctx.obj.workspace) as repo, repo.config_writer() as cfg:
                         bundle_commits = []
                         for subdir, (base_commit, submit_commit) in worktree_commits.items():
