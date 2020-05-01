@@ -360,3 +360,11 @@ phases:
     claimed_branch, claimed_commit = out.splitlines()[1].split('=')
     assert claimed_branch == 'master'
     assert claimed_commit == checkout_commit
+
+
+def test_empty_variant():
+    result = run_with_config(dedent('''\
+        phases:
+          build:
+            test: {}'''), ('build',))
+    assert result.exit_code == 0
