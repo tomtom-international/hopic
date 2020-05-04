@@ -1,0 +1,8 @@
+phases:
+  build: 
+    x86_64:
+      - echo "building..."
+
+  generate: !embed
+    cmd: yaml-generation.py variant
+
