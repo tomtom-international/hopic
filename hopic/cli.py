@@ -553,6 +553,19 @@ def checkout_tree(tree, remote, ref, clean=False, remote_name='origin', allow_su
         if os.path.isdir(modules_dir):
             shutil.rmtree(modules_dir) # Hacky way to restore git repo to clean state
     except (git.InvalidGitRepositoryError, git.NoSuchPathError):
+        if clean and os.path.exists(tree):
+            # Wipe the directory to allow 'git clone' to succeed.
+            # It would fail if it isn't empty.
+
+            # We're deleting only the content of the directory, because deleting 'tree' when it's the current working
+            # directory of processes would cause getcwd(3) to fail.
+            for name in os.listdir(tree):
+                path = os.path.join(tree, name)
+                if os.path.isdir(path):
+                    shutil.rmtree(tree)
+                else:
+                    os.remove(path)
+
         repo = git.Repo.clone_from(remote, tree)
 
     with repo:
