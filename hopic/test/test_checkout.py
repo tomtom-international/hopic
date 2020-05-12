@@ -107,10 +107,6 @@ phases:
 def test_clean_checkout_in_non_empty_dir(capfd, tmp_path):
     toprepo = tmp_path / 'repo'
     with git.Repo.init(str(toprepo), expand_vars=False) as repo:
-        with (toprepo / 'hopic-ci-config.yaml').open('w') as f:
-            f.write('{}')
-
-        repo.index.add(('hopic-ci-config.yaml',))
         repo.index.commit(message='Initial commit', **_commitargs)
 
     non_empty_dir = tmp_path / 'non-empty-clone'
