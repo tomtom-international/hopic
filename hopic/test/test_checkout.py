@@ -115,8 +115,14 @@ def test_clean_checkout_in_non_empty_dir(capfd, tmp_path):
     with open(garbage_file, 'w') as f:
         f.write('Garbage!')
 
-    result = run(('--workspace', str(non_empty_dir), 'checkout-source-tree', '--clean', '--target-remote', str(toprepo), '--target-ref', 'master'))
-    assert result.exit_code == 0
+    # Verify first that a checkout without --clean fails
+    with pytest.raises(git.GitCommandError, match=r'(?is).*\bfatal:\s+destination\s+path\b.*\bexists\b.*\bnot\b.*\bempty\s+directory\b'):
+        regular_result = run(('--workspace', str(non_empty_dir), 'checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'))
+    assert garbage_file.exists()
+
+    # Now notice the difference and expect it to succeed with --clean
+    clean_result = run(('--workspace', str(non_empty_dir), 'checkout-source-tree', '--clean', '--target-remote', str(toprepo), '--target-ref', 'master'))
+    assert clean_result.exit_code == 0
     assert not garbage_file.exists()
 
 
