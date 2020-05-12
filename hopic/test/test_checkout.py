@@ -23,6 +23,13 @@ import sys
 
 
 _git_time = f"{7 * 24 * 3600} +0000"
+_author = git.Actor('Bob Tester', 'bob@example.net')
+_commitargs = dict(
+    author_date=_git_time,
+    commit_date=_git_time,
+    author=_author,
+    committer=_author,
+)
 
 
 def run(*args, env=None):
@@ -95,6 +102,28 @@ phases:
     # Ignore submodule failure only
     result = run(('checkout-source-tree', '--clean', '--ignore-initial-submodule-checkout-failure', '--target-remote', str(toprepo), '--target-ref', 'master'))
     assert result.exit_code == 0
+
+
+def test_clean_checkout_in_non_empty_dir(capfd, tmp_path):
+    toprepo = tmp_path / 'repo'
+    with git.Repo.init(str(toprepo), expand_vars=False) as repo:
+        repo.index.commit(message='Initial commit', **_commitargs)
+
+    non_empty_dir = tmp_path / 'non-empty-clone'
+    non_empty_dir.mkdir(parents=True)
+    garbage_file = non_empty_dir / 'not-empty'
+    with open(garbage_file, 'w') as f:
+        f.write('Garbage!')
+
+    # Verify first that a checkout without --clean fails
+    with pytest.raises(git.GitCommandError, match=r'(?is).*\bfatal:\s+destination\s+path\b.*\bexists\b.*\bnot\b.*\bempty\s+directory\b'):
+        regular_result = run(('--workspace', str(non_empty_dir), 'checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'))
+    assert garbage_file.exists()
+
+    # Now notice the difference and expect it to succeed with --clean
+    clean_result = run(('--workspace', str(non_empty_dir), 'checkout-source-tree', '--clean', '--target-remote', str(toprepo), '--target-ref', 'master'))
+    assert clean_result.exit_code == 0
+    assert not garbage_file.exists()
 
 
 def test_default_clean_checkout_option(capfd, tmp_path):
