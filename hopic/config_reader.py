@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from .execution import echo_cmd
+
 from collections import OrderedDict
 from collections.abc import (
         Mapping,
@@ -20,8 +22,11 @@ from collections.abc import (
 from click import ClickException
 import errno
 import json
+import logging
 import os
 import re
+import shlex
+import subprocess
 import xml.etree.ElementTree as ET
 import yaml
 
@@ -31,6 +36,7 @@ __all__ = (
     'expand_docker_volume_spec',
 )
 
+log = logging.getLogger(__name__)
 
 Pattern = type(re.compile(''))
 
@@ -58,6 +64,7 @@ def expand_vars(vars, expr):
         return [expand_vars(vars, val) for val in expr]
     except TypeError:
         return expr
+
 
 class ConfigurationError(ClickException):
     exit_code = 32
@@ -141,6 +148,37 @@ class IvyManifestImage:
         return '{image}:{rev}'.format(**image)
 
 
+def get_default_error_variant(error_msg):
+    error_str = 'An error occurred when parsing the hopic configuration file\n'
+    return OrderedDict({'error-variant': [f'echo -e {shlex.quote("{}{}".format(error_str, error_msg))}', 'sh -c \'exit 42\'']})
+
+# Non failure function in order to always be able to load hopic file, use default (error) variant in case of error
+def load_embedded_command(volume_vars, loader, node):
+    try:
+        props = loader.construct_mapping(node) if node.value else {}
+        if 'cmd' not in props:
+            raise ConfigurationError('No \'cmd\' found for !embed')
+
+        cmd = shlex.split(props['cmd'])
+        for dir in ('CFGDIR', 'WORKSPACE'):
+            if dir not in volume_vars:
+                continue
+
+            script_file = os.path.join(volume_vars[dir], cmd[0])
+            if os.path.exists(script_file):
+                cmd[0] = script_file
+                break
+
+        script_output = echo_cmd(subprocess.check_output, cmd)
+        yaml_load = yaml.load(script_output, OrderedLoader)
+
+    except Exception as e:
+        log.error("Fatal error occurred, using empty variant %s" % format(e))
+        return get_default_error_variant(e)
+
+    return yaml_load
+
+
 class JSONEncoder(json.JSONEncoder):
     def default(self, o):
         if isinstance(o, IvyManifestImage):
@@ -150,13 +188,18 @@ class JSONEncoder(json.JSONEncoder):
         return super().default(o)
 
 
-def ordered_image_ivy_loader(volume_vars):
-    OrderedImageLoader = type('OrderedImageLoader', (OrderedLoader,), {})
-    OrderedImageLoader.add_constructor(
+def ordered_config_loader(volume_vars):
+    OrderedConfigLoader = type('OrderedConfigLoader', (OrderedLoader,), {})
+    OrderedConfigLoader.add_constructor(
         '!image-from-ivy-manifest',
         lambda *args: IvyManifestImage(volume_vars, *args)
     )
-    return OrderedImageLoader
+    OrderedConfigLoader.add_constructor(
+        '!embed',
+        lambda *args: load_embedded_command(volume_vars, *args)
+    )
+
+    return OrderedConfigLoader
 
 
 def expand_docker_volumes_from(volume_vars, volumes_from_vars):
@@ -270,10 +313,10 @@ def read(config, volume_vars):
 
     volume_vars = volume_vars.copy()
     volume_vars['CFGDIR'] = config_dir
-    OrderedImageLoader = ordered_image_ivy_loader(volume_vars)
+    OrderedConfigLoader = ordered_config_loader(volume_vars)
 
     with open(config, 'r') as f:
-        cfg = yaml.load(f, OrderedImageLoader)
+        cfg = yaml.load(f, OrderedConfigLoader)
 
     cfg['volumes'] = expand_docker_volume_spec(config_dir, volume_vars, cfg.get('volumes', ()))
     cfg['version'] = read_version_info(config, cfg.get('version', OrderedDict()))

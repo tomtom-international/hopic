@@ -582,3 +582,25 @@ Set this value to ``true`` to enable this option.
 
 .. literalinclude:: ../../examples/upload-on-fail.yaml
     :language: yaml
+
+Embed scripts
+-------------
+
+.. option:: !embed
+
+The option ``!embed`` allows Hopic to embed a part of the configuration file from an external source.
+This can be via a command line script (sed, cat, etc), or by evaluating a script.
+The ``!embed`` option requires to have a ``cmd`` argument which is the command to execute.
+The command should output the part of the configuration file to standard output.
+
+The location of a script should be specified either from the workspace directory or the configuration file directory.
+
+**example:**
+
+.. literalinclude:: ../../examples/embed/embed.yaml
+    :language: yaml
+
+With yaml-generation.py:
+
+.. literalinclude:: ../../examples/embed/yaml-generation.py
+    :language: python
