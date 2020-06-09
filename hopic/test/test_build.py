@@ -62,6 +62,7 @@ def run_with_config(config, *args, files={}, env=None, monkeypatch_injector=Monk
             repo.index.add(('hopic-ci-config.yaml',) + tuple(files.keys()))
             git_time = f"{_source_date_epoch} +0000"
             repo.index.commit(message='Initial commit', author_date=git_time, commit_date=git_time)
+            repo.create_tag('0.0.0')
         for arg in args:
             with monkeypatch_injector:
                 result = runner.invoke(cli, arg)
@@ -591,3 +592,27 @@ def test_embed_variants_syntax_error(capfd):
     sys.stdout.write(out)
     sys.stderr.write(err)
     assert 'An error occurred when parsing the hopic configuration file' in out
+
+def test_version_variables_content(capfd):
+    result = run_with_config(dedent('''\
+                version:
+                  format: semver
+                  tag:    true
+                  bump:   patch
+
+                phases:
+                  test:
+                    version:
+                      - echo ${VERSION}
+                      - sh -c 'echo $${VERSION}'
+                      - echo ${PURE_VERSION}
+                      - sh -c 'echo $${PURE_VERSION}'
+                '''), ('build',))
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    assert out.splitlines()[0].startswith('0.0.0+g')
+    assert out.splitlines()[0] == out.splitlines()[1]
+    assert out.splitlines()[2] == '0.0.0'
+    assert out.splitlines()[2] == out.splitlines()[3]
