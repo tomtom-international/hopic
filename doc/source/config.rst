@@ -33,15 +33,41 @@ Version                                     Meaning
 ``1.8.1-1.dirty.20200609152429+g4dbb6b4``   tag **1.8.1**, with one commit on top of it, as well as uncommitted changes
 =========================================== ==================================================
 
+.. option:: PURE_VERSION
+
+Contains the :option:`VERSION` (see above), but without ``+gCOMMIT_ID``.
+
+For example:
+
+=========================================== ==================================================
+Version                                     Meaning
+=========================================== ==================================================
+``1.8.1``                                   tag **1.8.1**, clean, unmodified
+``1.8.1-0.dirty.20200609131656``            tag **1.8.1**, with uncommited changes
+``1.8.1-1``                                 tag **1.8.1**, with one commit on top of it
+``1.8.1-1.dirty.20200609152429``            tag **1.8.1**, with one commit on top of it, as well as uncommitted changes
+=========================================== ==================================================
+
 .. option:: DEBVERSION
 
 Contains a Debian version-compliant representation of the :option:`VERSION` as outlined above.
 Its specification can be found at: https://www.debian.org/doc/debian-policy/ch-controlfields.html#version
 
+For example:
+
+=========================================== ==================================================
+Version                                     Meaning
+=========================================== ==================================================
+``1.8.1+g3269de8``                          tag **1.8.1**, clean, unmodified, ``HEAD`` is at commit **3269de8**
+``1.8.1~0+dirty20200609131656+g3269de8``    tag **1.8.1**, with uncommited changes
+``1.8.1~1+gdaffe9c``                        tag **1.8.1**, with one commit on top of it (**~1**)
+``1.8.1~1+dirty20200609152429+g4dbb6b4``    tag **1.8.1**, with one commit on top of it, as well as uncommitted changes
+=========================================== ==================================================
+
 Pre-defined environment variables
 ---------------------------------
 
-The **VERSION** and **DEBVERSION** variables (documented above) are also available in the environment of any process spawned by Hopic.
+The **VERSION**, **PURE_VERSION** and **DEBVERSION** variables (documented above) are also available in the environment of any process spawned by Hopic.
 
 Build Phases
 ------------
