@@ -631,7 +631,11 @@ def clean_repo(repo, clean_config=[]):
         return expand_vars(volume_vars, os.path.expanduser(arg))
     for cmd in clean_config:
         cmd = [substitute_home(arg) for arg in shlex.split(cmd)]
-        echo_cmd(subprocess.check_call, cmd, cwd=repo.working_dir)
+        try:
+            echo_cmd(subprocess.check_call, cmd, cwd=repo.working_dir)
+        except subprocess.CalledProcessError as e:
+            log.error("Command fatally terminated with exit code %d", e.returncode)
+            sys.exit(e.returncode)
 
     clean_output = repo.git.clean('-xd', force=True)
     if clean_output:
@@ -1171,7 +1175,11 @@ def apply_modality_change(
                     args.pop(0)
 
                 args = [expand_vars(volume_vars, arg) for arg in args]
-                echo_cmd(subprocess.check_call, args, cwd=repo.working_dir, env=env, stdout=sys.__stderr__)
+                try:
+                    echo_cmd(subprocess.check_call, args, cwd=repo.working_dir, env=env, stdout=sys.__stderr__)
+                except subprocess.CalledProcessError as e:
+                    log.error("Command fatally terminated with exit code %d", e.returncode)
+                    ctx.exit(e.returncode)
 
             if 'changed-files' in cmd:
                 changed_files = cmd["changed-files"]
@@ -1518,7 +1526,7 @@ def build(ctx, phase, variant):
                                 echo_cmd(subprocess.check_call, final_cmd, env=new_env, cwd=ctx.obj.code_dir)
                             except subprocess.CalledProcessError as e:
                                 log.error("Command fatally terminated with exit code %d", e.returncode)
-                                sys.exit(e.returncode)
+                                ctx.exit(e.returncode)
                             except FatalSignal as e:
                                 if cidfile and os.path.isfile(cidfile):
                                     # If we're being signalled to shut down ensure the spawned docker container also gets cleaned up.
@@ -1529,7 +1537,7 @@ def build(ctx, phase, variant):
                                         echo_cmd(subprocess.check_call, ('docker', 'stop', cid))
                                     except subprocess.CalledProcessError as e:
                                         log.error('Could not stop Docker container (maybe it was stopped already?), command failed with exit code %d', e.returncode)
-                                sys.exit(128 + e.signal)
+                                ctx.exit(128 + e.signal)
                             for num, old_handler in old_handlers.items():
                                 signal.signal(num, old_handler)
 
