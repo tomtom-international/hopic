@@ -176,7 +176,9 @@ class BitbucketPullRequest extends ChangeRequest {
       steps.println("\033[31m[error] failed to get pull request info from BitBucket for ${source_commit}\033[39m")
       return false
     }
-    if (!cur_cr_info.canMerge) {
+    if (cur_cr_info.canMerge) {
+      steps.println("\033[36m[info] submitting the commits since all merge criteria are met\033[39m")
+    } else {
       steps.println("\033[36m[info] not submitting because the BitBucket merge criteria are not met\033[39m")
       if (cur_cr_info.vetoes) {
         steps.println("\033[36m[info] the following merge condition(s) are not met: \033[39m")

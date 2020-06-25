@@ -4,6 +4,45 @@ Configuration
 The Hopic build configuration is stored in a file in your repository.
 The default location where it will look for this is ``${repo}/hopic-ci-config.yaml``.
 
+Pre-defined Hopic variables
+---------------------------
+
+.. option:: WORKSPACE
+
+Contains the absolute path of the git repository in which Hopic was called.
+
+.. option:: CFGDIR
+
+Contains the absolute path of the directory in which the `hopic-ci-config.yaml` file is located (this can differ from ``WORKSPACE`` if Hopic was called with the ``--config`` option).
+
+.. option:: VERSION
+
+Contains the current version of the workspace. See :option:`version` for configuration and bump settings.
+The format is based on `git describe` and is formatted as:
+
+``TAGGED_VERSION[-COMMIT_DISTANCE][.dirty.TIMESTAMP]+gCOMMIT_ID``
+
+For example:
+
+=========================================== ==================================================
+Version                                     Meaning
+=========================================== ==================================================
+``1.8.1+g3269de8``                          tag **1.8.1**, clean, unmodified, ``HEAD`` is at commit **3269de8**
+``1.8.1-0.dirty.20200609131656+g3269de8``   tag **1.8.1**, with uncommited changes
+``1.8.1-1+gdaffe9c``                        tag **1.8.1**, with one commit on top of it (**-1**)
+``1.8.1-1.dirty.20200609152429+g4dbb6b4``   tag **1.8.1**, with one commit on top of it, as well as uncommitted changes
+=========================================== ==================================================
+
+.. option:: DEBVERSION
+
+Contains a Debian version-compliant representation of the :option:`VERSION` as outlined above.
+Its specification can be found at: https://www.debian.org/doc/debian-policy/ch-controlfields.html#version
+
+Pre-defined environment variables
+---------------------------------
+
+The **VERSION** and **DEBVERSION** variables (documented above) are also available in the environment of any process spawned by Hopic.
+
 Build Phases
 ------------
 
