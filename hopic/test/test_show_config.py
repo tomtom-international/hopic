@@ -1,4 +1,4 @@
-# Copyright (c) 2019 - 2019 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2019 - 2020 TomTom N.V. (https://tomtom.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -239,3 +239,19 @@ volumes:
     cfgdir = output['volumes']['/cfg']['source']
     assert not cfgdir.endswith('hopic-ci-config.yaml')
     assert os.path.relpath(workspace, cfgdir) == '../..'
+
+
+def test_commisery_template(capfd):
+    result = run_with_config('''\
+phases:
+  style:
+    commit-messages: !template "commisery"
+''', ('show-config',))
+
+    assert result.exit_code == 0
+    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
+    expanded = output['phases']['style']['commit-messages']
+    assert expanded[0]['image'] is None
+    commits, head = [e['sh'] for e in expanded]
+    assert 'commisery' in commits
+    assert 'commisery' in head

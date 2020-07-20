@@ -23,13 +23,7 @@ modality-source-preparation:
 
 phases:
   style:
-    commit-messages:
-      - python3 -m virtualenv --clear venv
-      - venv/bin/python -m pip install --upgrade 'commisery>=0,<1'
-      # Require each commit message to adhere to our requirements
-      - foreach: AUTOSQUASHED_COMMIT
-        sh: venv/bin/python venv/bin/commisery-verify-msg ${AUTOSQUASHED_COMMIT}
-      - venv/bin/python venv/bin/commisery-verify-msg HEAD
+    commit-messages: !template "commisery"
 
   test:
     python3.6:
