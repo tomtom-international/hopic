@@ -1,4 +1,4 @@
-# Copyright (c) 2018 - 2019 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2018 - 2020 TomTom N.V. (https://tomtom.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import errno
 import json
 import logging
 import os
+import pkg_resources
 import re
 import shlex
 import subprocess
@@ -188,15 +189,40 @@ class JSONEncoder(json.JSONEncoder):
         return super().default(o)
 
 
+def load_yaml_template(volume_vars, loader, node):
+    if node.id == 'scalar':
+        props = {}
+        name = loader.construct_scalar(node)
+    else:
+        props = loader.construct_mapping(node)
+        name = props.pop('name')
+
+    for ep in pkg_resources.iter_entry_points('hopic.plugins.yaml'):
+        if ep.name == name:
+            break
+    else:
+        # TODO: lazy load here instead to deal with plugins that may be installed during Hopic's flow
+        raise ConfigurationError(f"No YAML template named '{name}' available (props={props})")
+
+    return ep.load()(volume_vars, **props)
+
+
 def ordered_config_loader(volume_vars):
+    def pass_volume_vars(f):
+        return lambda *args: f(volume_vars, *args)
+
     OrderedConfigLoader = type('OrderedConfigLoader', (OrderedLoader,), {})
     OrderedConfigLoader.add_constructor(
         '!image-from-ivy-manifest',
-        lambda *args: IvyManifestImage(volume_vars, *args)
+        pass_volume_vars(IvyManifestImage)
     )
     OrderedConfigLoader.add_constructor(
         '!embed',
-        lambda *args: load_embedded_command(volume_vars, *args)
+        pass_volume_vars(load_embedded_command)
+    )
+    OrderedConfigLoader.add_constructor(
+        '!template',
+        pass_volume_vars(load_yaml_template)
     )
 
     return OrderedConfigLoader
@@ -338,8 +364,16 @@ def read(config, volume_vars):
         if not isinstance(name, (str, IvyManifestImage)):
             raise ConfigurationError(f"`image` member `{variant}` must be a string or `!image-from-ivy-manifest`", file=config)
 
-    # Convert multiple different syntaxes into a single one
+    # Flatten command lists
     for phase in cfg.setdefault('phases', OrderedDict()).values():
+        for variant in phase.values():
+            for i in reversed(range(len(variant))):
+                var = variant[i]
+                if isinstance(var, Sequence) and not isinstance(var, (str, bytes)):
+                    variant[i:i+1] = var
+
+    # Convert multiple different syntaxes into a single one
+    for phase in cfg['phases'].values():
         for variant in phase.values():
             for var in variant:
                 if isinstance(var, str):

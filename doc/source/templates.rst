@@ -1,5 +1,5 @@
 ..
-   Copyright (c) 2019 - 2020 TomTom N.V. (https://tomtom.com)
+   Copyright (c) 2020 - 2020 TomTom N.V. (https://tomtom.com)
    
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -13,32 +13,20 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 
-..
-   Hopic documentation master file, created by
-   sphinx-quickstart on Mon Jan 28 13:57:37 2019.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
+Configuration Templates
+=======================
 
-Hopic
-=====
+In order to reduce the amount of copy-pasted boiler plate configuration, Hopic provides some templates.
 
-.. include:: ../../README.rst
+Commisery
+---------
 
-Contents
-========
+Commisery_ will be executed on each commit in your pull requests by this snippet:
 
-.. toctree::
-   :maxdepth: 2
+.. code-block:: yaml
 
-   usage
-   intro
-   config
-   templates
+  phases:
+    style:
+      commit-messages: !template "commisery"
 
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
-
+.. _Commisery: https://github.com/tomtom-international/commisery

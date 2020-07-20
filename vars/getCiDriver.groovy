@@ -1,4 +1,5 @@
-/* Copyright (c) 2018 - 2020 TomTom N.V. (https://tomtom.com)
+/*
+ * Copyright (c) 2018 - 2020 TomTom N.V. (https://tomtom.com)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -386,9 +387,9 @@ git reset --hard FETCH_HEAD
 cat >> hopic/test/docker-images/python/Dockerfile <<EOF
 # Install Hopic's dependencies in a separate layer to improve reuse between images produced for different Hopic versions.
 ADD setup.py /hopic-reqs/setup.py
-RUN mkdir -p /hopic-reqs/hopic \\
+RUN mkdir -p /hopic-reqs/hopic/yaml \\
  && cd /hopic-reqs \\
- && touch hopic/__init__.py \\
+ && touch hopic/__init__.py hopic/yaml/__init__.py \\
  && sed -i '/setuptools.scm/ d' setup.py \\
  && python setup.py egg_info \\
  && cd / \\
