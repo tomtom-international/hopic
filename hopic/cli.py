@@ -1,4 +1,4 @@
-# Copyright (c) 2018 - 2019 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2018 - 2020 TomTom N.V. (https://tomtom.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -486,20 +486,24 @@ def may_publish(ctx):
     ctx.exit(0 if is_publish_branch(ctx) else 1)
 
 
-def restore_mtime_from_git(repo, files=None):
+def determine_mtime_from_git(repo, files=None, author_time=False):
+    encoding = sys.getfilesystemencoding() or sys.getdefaultencoding()
+
     if files is None:
         files = set(filter(None, repo.git.ls_files('-z', stdout_as_string=False).split(b'\0')))
+    else:
+        files = set((fname.encode(encoding) if isinstance(fname, str) else fname) for fname in files)
+
     log.debug('restoring mtime from git')
 
-    encoding = sys.getfilesystemencoding() or sys.getdefaultencoding()
-    workspace = repo.working_tree_dir.encode(encoding)
-
-    regular_file_type = 0b1000
-    symlink_type      = 0b1010
-    gitlink_type      = 0b1110
+    object_types = {
+            0b1000: 'regular-file',
+            0b1010: 'symlink',
+            0b1110: 'gitlink',
+        }
 
     # Set all files' modification times to their last commit's time
-    whatchanged = repo.git.whatchanged(pretty='format:%ct', as_process=True)
+    whatchanged = repo.git.whatchanged(pretty='format:%at' if author_time else 'format:%ct', as_process=True)
     mtime = 0
     for line in whatchanged.stdout:
         if not files:
@@ -516,6 +520,10 @@ def restore_mtime_from_git(repo, files=None):
             old_mode, new_mode = int(old_mode, 8), int(new_mode, 8)
 
             object_type = (new_mode >> (9 + 3)) & 0b1111
+            try:
+                object_type = object_types[object_type]
+            except KeyError:
+                pass
 
             filenames = filenames.split(b'\t')
             if len(filenames) == 1:
@@ -524,23 +532,28 @@ def restore_mtime_from_git(repo, files=None):
 
             if new_filename in files:
                 files.remove(new_filename)
-                path = os.path.join(workspace, new_filename)
-                if object_type == symlink_type:
-                    # Only attempt to modify symlinks' timestamps when the current system supports it.
-                    # E.g. Python >= 3.3 and Linux kernel >= 2.6.22
-                    if os.utime in getattr(os, 'supports_follow_symlinks', set()):
-                        os.utime(path, (mtime, mtime), follow_symlinks=False)
-                elif object_type == gitlink_type:
-                    # Skip gitlinks: used by submodules, they don't exist as regular files
-                    pass
-                elif object_type == regular_file_type:
-                    os.utime(path, (mtime, mtime))
+                yield new_filename.decode(encoding), object_type, mtime
         else:
             mtime = int(line)
     try:
         whatchanged.terminate()
     except OSError:
         pass
+
+
+def restore_mtime_from_git(repo, files=None):
+    for filename, object_type, mtime in determine_mtime_from_git(repo, files):
+        path = os.path.join(repo.working_tree_dir, filename)
+        if object_type == 'symlink':
+            # Only attempt to modify symlinks' timestamps when the current system supports it.
+            # E.g. Python >= 3.3 and Linux kernel >= 2.6.22
+            if os.utime in getattr(os, 'supports_follow_symlinks', set()):
+                os.utime(path, (mtime, mtime), follow_symlinks=False)
+        elif object_type == 'gitlink':
+            # Skip gitlinks: used by submodules, they don't exist as regular files
+            pass
+        elif object_type == 'regular-file':
+            os.utime(path, (mtime, mtime))
 
 
 def checkout_tree(tree, remote, ref, clean=False, remote_name='origin', allow_submodule_checkout_failure=False, clean_config=[]):
