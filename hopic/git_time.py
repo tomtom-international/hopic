@@ -12,12 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from enum import Enum, unique
 import os
 import logging
 import sys
 
 
 log = logging.getLogger(__name__)
+
+
+@unique
+class GitObjectType(Enum):
+    regular_file = 0b1000
+    symlink = 0b1010
+    gitlink = 0b1110
 
 
 def determine_mtime_from_git(repo, files=None, author_time=False):
@@ -29,12 +37,6 @@ def determine_mtime_from_git(repo, files=None, author_time=False):
         files = set((fname.encode(encoding) if isinstance(fname, str) else fname) for fname in files)
 
     log.debug('restoring mtime from git')
-
-    object_types = {
-            0b1000: 'regular-file',
-            0b1010: 'symlink',
-            0b1110: 'gitlink',
-        }
 
     # Set all files' modification times to their last commit's time
     whatchanged = repo.git.whatchanged(pretty='format:%at' if author_time else 'format:%ct', as_process=True)
@@ -55,8 +57,8 @@ def determine_mtime_from_git(repo, files=None, author_time=False):
 
             object_type = (new_mode >> (9 + 3)) & 0b1111
             try:
-                object_type = object_types[object_type]
-            except KeyError:
+                object_type = GitObjectType(object_type)
+            except ValueError:
                 pass
 
             filenames = filenames.split(b'\t')
@@ -78,13 +80,13 @@ def determine_mtime_from_git(repo, files=None, author_time=False):
 def restore_mtime_from_git(repo, files=None):
     for filename, object_type, mtime in determine_mtime_from_git(repo, files):
         path = os.path.join(repo.working_tree_dir, filename)
-        if object_type == 'symlink':
+        if object_type == GitObjectType.symlink:
             # Only attempt to modify symlinks' timestamps when the current system supports it.
             # E.g. Python >= 3.3 and Linux kernel >= 2.6.22
             if os.utime in getattr(os, 'supports_follow_symlinks', set()):
                 os.utime(path, (mtime, mtime), follow_symlinks=False)
-        elif object_type == 'gitlink':
+        elif object_type == GitObjectType.symlink:
             # Skip gitlinks: used by submodules, they don't exist as regular files
             pass
-        elif object_type == 'regular-file':
+        elif object_type == GitObjectType.regular_file:
             os.utime(path, (mtime, mtime))
