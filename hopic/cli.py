@@ -1282,8 +1282,6 @@ def build(ctx, phase, variant):
 
             volume_vars = ctx.obj.volume_vars.copy()
             # Give commands executing inside a container image a different view than outside
-            if image is not None:
-                volume_vars['WORKSPACE'] = '/code'
             volume_vars['GIT_COMMIT'] = str(submit_commit)
             if submit_ref is not None:
                 volume_vars['GIT_BRANCH'] = submit_ref
@@ -1374,6 +1372,8 @@ def build(ctx, phase, variant):
                             cmd = cmd['sh']
                         except (KeyError, TypeError):
                             continue
+
+                    volume_vars['WORKSPACE'] = '/code' if image is not None else ctx.obj.code_dir
 
                     cmd = shlex.split(cmd)
                     env = (dict(
