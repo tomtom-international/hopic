@@ -1,4 +1,4 @@
-# Copyright (c) 2019 - 2019 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2019 - 2020 TomTom N.V. (https://tomtom.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,11 +15,16 @@
 from ..cli import cli
 
 from click.testing import CliRunner
+from collections import OrderedDict
+from datetime import datetime
+from dateutil.tz import tzutc
 import git
 import os
 import pytest
-from textwrap import dedent
+import re
+import subprocess
 import sys
+from textwrap import dedent
 
 
 _git_time = f"{42 * 365 * 24 * 3600} +0000"
