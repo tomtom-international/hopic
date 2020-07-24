@@ -241,6 +241,25 @@ volumes:
     assert os.path.relpath(workspace, cfgdir) == '../..'
 
 
+def test_disallow_phase_name_reuse(capfd):
+    result = run_with_config('''\
+phases:
+    a: {}
+    b: {}
+    a:
+        x: []
+        y: []
+''', ('show-config',))
+
+    assert result.exit_code == 32
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    assert re.search(r"^Error: configuration error: [Dd]uplicate entry for key .* mapping is not permitted\b", err, re.MULTILINE)
+
+
 def test_commisery_template(capfd):
     result = run_with_config('''\
 phases:
