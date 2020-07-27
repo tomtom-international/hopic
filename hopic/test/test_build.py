@@ -1,4 +1,4 @@
-# Copyright (c) 2019 - 2019 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2019 - 2020 TomTom N.V. (https://tomtom.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -241,6 +241,44 @@ phases:
       - ./deploy-b.sh
     
 ''', ('build',))
+    assert result.exit_code == 0
+    assert not expected
+
+
+def test_image_override_per_step(monkeypatch):
+    """
+    Verify that, when switching between images, and the absence of an image, the WORKSPACE is set properly.
+    """
+    expected = [
+        ('buildpack-deps:18.04', './build-a.sh', '--workspace=/code'),
+        ('./build-b.sh', '--workspace=${PWD}'),
+        ('buildpack-deps:buster', './build-c.sh', '--workspace=/code'),
+        ('./build-d.sh', '--workspace=${PWD}'),
+    ]
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        expectation = [arg.replace('${PWD}', os.getcwd()) for arg in expected.pop(0)]
+        if len(expected) % 2:
+            assert args[0] == 'docker'
+            assert args[-3:] == expectation
+        else:
+            assert args == expectation
+
+    monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+    result = run_with_config(dedent('''\
+            image: buildpack-deps:18.04
+
+            phases:
+              build:
+                a:
+                  - ./build-a.sh --workspace=${WORKSPACE}
+                  - image: null
+                    sh: ./build-b.sh --workspace=${WORKSPACE}
+                  - image: buildpack-deps:buster
+                    sh: ./build-c.sh --workspace=${WORKSPACE}
+                  - image: null
+                    sh: ./build-d.sh --workspace=${WORKSPACE}
+'''), ('build',))
     assert result.exit_code == 0
     assert not expected
 

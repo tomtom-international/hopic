@@ -87,7 +87,12 @@ class OrderedLoader(yaml.SafeLoader):
 
 def __yaml_construct_mapping(loader, node):
     loader.flatten_mapping(node)
-    return OrderedDict(loader.construct_pairs(node))
+    d = OrderedDict()
+    for key, value in loader.construct_pairs(node):
+        if key in d:
+            raise ConfigurationError(f"Duplicate entry for key {key!r} in a mapping is not permitted")
+        d[key] = value
+    return d
 
 
 OrderedLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, __yaml_construct_mapping)
