@@ -228,8 +228,8 @@ class BitbucketPullRequest extends ChangeRequest {
                                 + ' prepare-source-tree'
                                 + ' --author-name=' + shell_quote(cr_author.getOrDefault('name', steps.env.CHANGE_AUTHOR))
                                 + ' --author-email=' + shell_quote(cr_author.getOrDefault('emailAddress', steps.env.CHANGE_AUTHOR_EMAIL))
-                                + ' --author-date=' + shell_quote(sprintf('@%.3f', change_request.author_time))
-                                + ' --commit-date=' + shell_quote(sprintf('@%.3f', change_request.commit_time))
+                                + ' --author-date=' + shell_quote(String.format("@%.3f", change_request.author_time))
+                                + ' --commit-date=' + shell_quote(String.format("@%.3f", change_request.commit_time))
                                 + ' merge-change-request'
                                 + ' --source-remote=' + shell_quote(source_remote)
                                 + ' --source-ref=' + shell_quote(remote_ref)
@@ -264,8 +264,8 @@ class ModalityRequest extends ChangeRequest {
     def commit_time = steps.currentBuild.startTimeInMillis / 1000.0
     def output = line_split(steps.sh(script: cmd
                                 + ' prepare-source-tree'
-                                + ' --author-date=' + shell_quote(sprintf('@%.3f', author_time))
-                                + ' --commit-date=' + shell_quote(sprintf('@%.3f', commit_time))
+                                + ' --author-date=' + shell_quote(String.format("@%.3f", author_time))
+                                + ' --commit-date=' + shell_quote(String.format("@%.3f", commit_time))
                                 + ' apply-modality-change ' + shell_quote(modality),
                           returnStdout: true)).findAll{it.size() > 0}
     if (output.size() <= 0) {
