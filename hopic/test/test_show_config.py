@@ -260,6 +260,40 @@ phases:
     assert re.search(r"^Error: configuration error: [Dd]uplicate entry for key .* mapping is not permitted\b", err, re.MULTILINE)
 
 
+def test_reject_sequence_in_phase(capfd):
+    result = run_with_config('''\
+phases:
+  a:
+    - 'true'
+''', ('show-config',))
+
+    assert result.exit_code == 32
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    assert re.search(r"^Error: configuration error in '.*?\bhopic-ci-config\.yaml': phase `a`.*\bmapping\b", err, re.MULTILINE)
+
+
+def test_reject_mapping_in_variant(capfd):
+    result = run_with_config('''\
+phases:
+  a:
+    x:
+      o:
+        - 'true'
+''', ('show-config',))
+
+    assert result.exit_code == 32
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    assert re.search(r"^Error: configuration error in '.*?\bhopic-ci-config\.yaml': variant `a.x`.*\bsequence\b", err, re.MULTILINE)
+
+
 def test_commisery_template(capfd):
     result = run_with_config('''\
 phases:
