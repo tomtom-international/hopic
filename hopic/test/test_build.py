@@ -92,6 +92,91 @@ phases:
 ''', ('build',))
 
 
+def test_all_phases_and_variants(monkeypatch):
+    expected = [
+        ('build', 'a'),
+        ('build', 'b'),
+        ('test', 'b'),
+        ('test', 'a'),
+    ]
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        assert tuple(args) == expected.pop(0)
+
+    monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+    result = run_with_config(dedent('''\
+phases:
+  build:
+    a:
+      - build a
+    b:
+      - build b
+  test:
+    b:
+      - test b
+    a:
+      - test a
+'''), ('build',))
+    assert result.exit_code == 0
+
+
+def test_filtered_phases(monkeypatch):
+    expected = [
+        ('build', 'a'),
+        ('test', 'a'),
+    ]
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        assert tuple(args) == expected.pop(0)
+
+    monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+    result = run_with_config(dedent('''\
+phases:
+  build:
+    a:
+      - build a
+  test:
+    a:
+      - test a
+  deploy:
+    a:
+      - deploy a
+'''), ('build', '--phase=build', '--phase=test'))
+    assert result.exit_code == 0
+
+
+def test_filtered_variants(monkeypatch):
+    expected = [
+        ('build', 'a'),
+        ('build', 'c'),
+        ('test', 'a'),
+        ('test', 'c'),
+    ]
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        assert tuple(args) == expected.pop(0)
+
+    monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+    result = run_with_config(dedent('''\
+phases:
+  build:
+    a:
+      - build a
+    b:
+      - build b
+    c:
+      - build c
+  test:
+    b:
+      - test b
+    a:
+      - test a
+    c:
+      - test c
+'''), ('build', '--variant=a', '--variant=c'))
+    assert result.exit_code == 0
+
+
 def test_global_image(monkeypatch):
     def mock_check_call(args, *popenargs, **kwargs):
         assert args[0] == 'docker'

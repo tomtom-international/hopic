@@ -1176,8 +1176,8 @@ def apply_modality_change(
 
 
 @cli.command()
-@click.option('--phase'             , metavar='<phase>'  , help='''Build phase''', autocompletion=cli_autocomplete_phase_from_config)
-@click.option('--variant'           , metavar='<variant>', help='''Configuration variant''', autocompletion=cli_autocomplete_variant_from_config)
+@click.option('--phase'             , metavar='<phase>'  , multiple=True, help='''Build phase''', autocompletion=cli_autocomplete_phase_from_config)
+@click.option('--variant'           , metavar='<variant>', multiple=True, help='''Configuration variant''', autocompletion=cli_autocomplete_variant_from_config)
 @click.pass_context
 def getinfo(ctx, phase, variant):
     """
@@ -1191,17 +1191,17 @@ def getinfo(ctx, phase, variant):
 
     info = OrderedDict()
     for phasename, curphase in ctx.obj.config['phases'].items():
-        if phase is not None and phasename != phase:
+        if phase and phasename not in phase:
             continue
         for variantname, curvariant in curphase.items():
-            if variant is not None and variantname != variant:
+            if variant and variantname not in variant:
                 continue
 
-            # Only store phase/variant keys if we're not filtering on them.
+            # Only store phase/variant keys if we're not filtering on a single one of them.
             var_info = info
-            if phase is None:
+            if len(phase) != 1:
                 var_info = var_info.setdefault(phasename, OrderedDict())
-            if variant is None:
+            if len(variant) != 1:
                 var_info = var_info.setdefault(variantname, OrderedDict())
 
             for var in curvariant:
@@ -1223,8 +1223,8 @@ def getinfo(ctx, phase, variant):
 
 
 @cli.command()
-@click.option('--phase'             , metavar='<phase>'  , help='''Build phase to execute''', autocompletion=cli_autocomplete_phase_from_config)
-@click.option('--variant'           , metavar='<variant>', help='''Configuration variant to build''', autocompletion=cli_autocomplete_variant_from_config)
+@click.option('--phase'             , metavar='<phase>'  , multiple=True, help='''Build phase to execute''', autocompletion=cli_autocomplete_phase_from_config)
+@click.option('--variant'           , metavar='<variant>', multiple=True, help='''Configuration variant to build''', autocompletion=cli_autocomplete_variant_from_config)
 @click.pass_context
 def build(ctx, phase, variant):
     """
@@ -1266,10 +1266,10 @@ def build(ctx, phase, variant):
 
     worktree_commits = {}
     for phasename, curphase in cfg['phases'].items():
-        if phase is not None and phasename != phase:
+        if phase and phasename not in phase:
             continue
         for curvariant, cmds in curphase.items():
-            if variant is not None and curvariant != variant:
+            if variant and curvariant not in variant:
                 continue
 
             images = cfg['image']
