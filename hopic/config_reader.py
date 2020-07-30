@@ -370,8 +370,12 @@ def read(config, volume_vars):
             raise ConfigurationError(f"`image` member `{variant}` must be a string or `!image-from-ivy-manifest`", file=config)
 
     # Flatten command lists
-    for phase in cfg.setdefault('phases', OrderedDict()).values():
-        for variant in phase.values():
+    for phasename, phase in cfg.setdefault('phases', OrderedDict()).items():
+        if not isinstance(phase, Mapping):
+            raise ConfigurationError(f"phase `{phasename}` doesn't contain a mapping but a {type(phase)}", file=config)
+        for variantname, variant in phase.items():
+            if not isinstance(variant, Sequence):
+                raise ConfigurationError(f"variant `{phasename}.{variantname}` doesn't contain a sequence but a {type(variant)}", file=config)
             for i in reversed(range(len(variant))):
                 var = variant[i]
                 if isinstance(var, Sequence) and not isinstance(var, (str, bytes)):

@@ -1,4 +1,4 @@
-# Copyright (c) 2019 - 2019 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2019 - 2020 TomTom N.V. (https://tomtom.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -153,7 +153,7 @@ def test_embed_variants_file():
     result = run_with_config(dedent(f'''\
                 phases:
                   build:
-                    a: {{}}
+                    a: []
                     
                   test: !embed
                     cmd: {generate_script_path}
@@ -181,7 +181,7 @@ def test_embed_variants_non_existing_file():
     result = run_with_config(dedent(f'''\
                 phases:
                   build:
-                    a: {{}} 
+                    a: []
                 
                   test: !embed
                     cmd: {generate_script_path}
@@ -202,7 +202,7 @@ def test_embed_variants_error_in_file():
     result = run_with_config(dedent(f'''\
                 phases:
                   build:
-                    a: {{}} 
+                    a: []
                 
                   test: !embed
                     cmd: {generate_script_path}
