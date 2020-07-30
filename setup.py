@@ -44,6 +44,7 @@ setup(
       'click-log',
       'commisery>=0,<1',
       'GitPython>=2.1.3,<3',
+      'importlib_metadata; python_version < "3.8"',
       'python-dateutil',
       'PyYAML',
       'setuptools',

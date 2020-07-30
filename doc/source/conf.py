@@ -1,5 +1,19 @@
 # -*- coding: utf-8 -*-
+
+# Copyright (c) 2019 - 2020 TomTom N.V. (https://tomtom.com)
 #
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 # Hopic driver documentation build configuration file, created by
 # sphinx-quickstart on Mon Jan 28 13:57:37 2019.
 #
@@ -79,8 +93,12 @@ if os.path.isfile(os.path.join(root_dir, pkg_name, 'cli.py')) \
     version = get_version(root='../..', relative_to=__file__)
     sys.path.insert(0, root_dir)
 else:
-    from pkg_resources import get_distribution
-    version = get_distribution(pkg_name).version
+    try:
+        # Python >= 3.8
+        from importlib import metadata
+    except ImportError:
+        import importlib_metadata as metadata
+    version = metadata.version(pkg_name)
 
 # The full version, including alpha/beta/rc tags.
 release = version

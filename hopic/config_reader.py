@@ -21,10 +21,14 @@ from collections.abc import (
     )
 from click import ClickException
 import errno
+try:
+    # Python >= 3.8
+    from importlib import metadata
+except ImportError:
+    import importlib_metadata as metadata
 import json
 import logging
 import os
-import pkg_resources
 import re
 import shlex
 import subprocess
@@ -202,7 +206,7 @@ def load_yaml_template(volume_vars, loader, node):
         props = loader.construct_mapping(node)
         name = props.pop('name')
 
-    for ep in pkg_resources.iter_entry_points('hopic.plugins.yaml'):
+    for ep in metadata.entry_points().get('hopic.plugins.yaml', ()):
         if ep.name == name:
             break
     else:

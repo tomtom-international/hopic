@@ -49,6 +49,17 @@ phases:
       - python -m virtualenv --clear venv3.7
       - venv3.7/bin/python setup.py pytest
 
+    python3.8:
+      - docker build --build-arg=PYTHON_VERSION=3.8 -t hopic-python:3.8-slim-git hopic/test/docker-images/python
+      - junit: junit-test.xml
+        image: hopic-python:3.8-slim-git
+        docker-in-docker: yes
+        volumes:
+          - ${WORKSPACE}/.local:~/.local
+      - python -m pip install --user --upgrade virtualenv
+      - python -m virtualenv --clear venv3.8
+      - venv3.8/bin/python setup.py pytest
+
   build:
     sphinx-doc:
       - rm -rf doc/build/venv

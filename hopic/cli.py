@@ -49,7 +49,11 @@ from itertools import chain
 import json
 import logging
 import os
-import pkg_resources
+try:
+    # Python >= 3.8
+    from importlib import metadata
+except ImportError:
+    import importlib_metadata as metadata
 import re
 import signal
 import shlex
@@ -716,6 +720,18 @@ def process_prepare_source_tree(
         commit_date,
     ):
     with git.Repo(ctx.obj.workspace) as repo:
+        author = git.Actor.author(repo.config_reader())
+        if author_name is not None:
+            author.name = author_name
+        if author_email is not None:
+            author.email = author_email
+
+        committer = git.Actor.author(repo.config_reader())
+        if not committer.name:
+            committer.name = author.name
+        if not committer.email:
+            committer.email = author.email
+
         target_commit = repo.head.commit
 
         with repo.config_writer() as cfg:
@@ -725,7 +741,7 @@ def process_prepare_source_tree(
             code_clean    = cfg.getboolean('hopic.code', 'cfg-clean', fallback=False)
 
         repo.git.submodule(["deinit", "--all", "--force"])  # Remove submodules in case it is changed in change_applicator
-        commit_params = change_applicator(repo)
+        commit_params = change_applicator(repo, author=author, committer=committer)
         if not commit_params:
             return
         source_commit = commit_params.pop('source_commit', None)
@@ -829,11 +845,6 @@ def process_prepare_source_tree(
         else:
             log.info("Skip version bumping due to the configuration or the target branch is not allowed to publish")
 
-        author = git.Actor.author(repo.config_reader())
-        if author_name is not None:
-            author.name = author_name
-        if author_email is not None:
-            author.email = author_email
         commit_params.setdefault('author', author)
         if author_date is not None:
             commit_params['author_date'] = to_git_time(author_date)
@@ -1032,7 +1043,7 @@ def merge_change_request(
         return valid_approvers
 
 
-    def change_applicator(repo):
+    def change_applicator(repo, author, committer):
         try:
             source = repo.remotes.source
         except AttributeError:
@@ -1041,7 +1052,12 @@ def merge_change_request(
             source.set_url(source_remote)
         source_commit = source.fetch(source_ref)[0].commit
 
-        repo.git.merge(source_commit, no_ff=True, no_commit=True)
+        repo.git.merge(source_commit, no_ff=True, no_commit=True, env={
+            'GIT_AUTHOR_NAME': author.name,
+            'GIT_AUTHOR_EMAIL': author.email,
+            'GIT_COMMITTER_NAME': committer.name,
+            'GIT_COMMITTER_EMAIL': committer.email,
+        })
 
         msg = f"Merge #{change_request}"
         if title is not None:
@@ -1052,7 +1068,7 @@ def merge_change_request(
         if approved_by:
             approvers = get_valid_approvers(repo, approved_by, source, source_commit)
             msg += '\n'.join(f"Acked-by: {approver}" for approver in approvers) + u'\n'
-        msg += u'Merged-by: Hopic {pkg.version}\n'.format(pkg=pkg_resources.get_distribution(__package__))
+        msg += u'Merged-by: Hopic {pkg.version}\n'.format(pkg=metadata.distribution(__package__))
         return {
                 'message': msg,
                 'parent_commits': (
@@ -1078,7 +1094,7 @@ def apply_modality_change(
 
     modality_cmds = ctx.obj.config.get('modality-source-preparation', {}).get(modality, ())
 
-    def change_applicator(repo):
+    def change_applicator(repo, author, committer):
         has_changed_files = False
         commit_message = modality
         for cmd in modality_cmds:
@@ -1159,7 +1175,7 @@ def apply_modality_change(
             log.info("No changes introduced by '%s'", commit_message)
             return None
         commit_message = (commit_message.rstrip()
-                + u'\n\nMerged-by: Hopic {pkg.version}\n'.format(pkg=pkg_resources.get_distribution(__package__)))
+                + u'\n\nMerged-by: Hopic {pkg.version}\n'.format(pkg=metadata.distribution(__package__)))
 
         commit_params = {'message': commit_message}
         # If this change was a merge make sure to produce a merge commit for it
@@ -1176,8 +1192,8 @@ def apply_modality_change(
 
 
 @cli.command()
-@click.option('--phase'             , metavar='<phase>'  , help='''Build phase''', autocompletion=cli_autocomplete_phase_from_config)
-@click.option('--variant'           , metavar='<variant>', help='''Configuration variant''', autocompletion=cli_autocomplete_variant_from_config)
+@click.option('--phase'             , metavar='<phase>'  , multiple=True, help='''Build phase''', autocompletion=cli_autocomplete_phase_from_config)
+@click.option('--variant'           , metavar='<variant>', multiple=True, help='''Configuration variant''', autocompletion=cli_autocomplete_variant_from_config)
 @click.pass_context
 def getinfo(ctx, phase, variant):
     """
@@ -1191,17 +1207,17 @@ def getinfo(ctx, phase, variant):
 
     info = OrderedDict()
     for phasename, curphase in ctx.obj.config['phases'].items():
-        if phase is not None and phasename != phase:
+        if phase and phasename not in phase:
             continue
         for variantname, curvariant in curphase.items():
-            if variant is not None and variantname != variant:
+            if variant and variantname not in variant:
                 continue
 
-            # Only store phase/variant keys if we're not filtering on them.
+            # Only store phase/variant keys if we're not filtering on a single one of them.
             var_info = info
-            if phase is None:
+            if len(phase) != 1:
                 var_info = var_info.setdefault(phasename, OrderedDict())
-            if variant is None:
+            if len(variant) != 1:
                 var_info = var_info.setdefault(variantname, OrderedDict())
 
             for var in curvariant:
@@ -1223,8 +1239,8 @@ def getinfo(ctx, phase, variant):
 
 
 @cli.command()
-@click.option('--phase'             , metavar='<phase>'  , help='''Build phase to execute''', autocompletion=cli_autocomplete_phase_from_config)
-@click.option('--variant'           , metavar='<variant>', help='''Configuration variant to build''', autocompletion=cli_autocomplete_variant_from_config)
+@click.option('--phase'             , metavar='<phase>'  , multiple=True, help='''Build phase to execute''', autocompletion=cli_autocomplete_phase_from_config)
+@click.option('--variant'           , metavar='<variant>', multiple=True, help='''Configuration variant to build''', autocompletion=cli_autocomplete_variant_from_config)
 @click.pass_context
 def build(ctx, phase, variant):
     """
@@ -1266,10 +1282,10 @@ def build(ctx, phase, variant):
 
     worktree_commits = {}
     for phasename, curphase in cfg['phases'].items():
-        if phase is not None and phasename != phase:
+        if phase and phasename not in phase:
             continue
         for curvariant, cmds in curphase.items():
-            if variant is not None and curvariant != variant:
+            if variant and curvariant not in variant:
                 continue
 
             images = cfg['image']

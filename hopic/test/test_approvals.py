@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+
 # Copyright (c) 2020 - 2020 TomTom N.V. (https://tomtom.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -115,7 +116,11 @@ def _perform_merge(repo, approvals):
 
 def test_approval_still_valid_on_autosquash(repo_with_fixup, tmp_path):
     presquash_commit_sha = repo_with_fixup.head.commit.hexsha
-    repo_with_fixup.git.rebase('HEAD~~', interactive=True, autosquash=True, env={'GIT_EDITOR': ':'}, kill_after_timeout=5)
+    repo_with_fixup.git.rebase('HEAD~~', interactive=True, autosquash=True, kill_after_timeout=5, env={
+            'GIT_EDITOR': ':',
+            'GIT_COMMITTER_NAME': 'My Name is Nobody',
+            'GIT_COMMITTER_EMAIL': 'nobody@example.com',
+        })
     squashed_commit_sha = repo_with_fixup.head.commit.hexsha
     base_sha = repo_with_fixup.commit('HEAD~').hexsha
 
@@ -131,8 +136,15 @@ def test_approval_still_valid_on_autosquash(repo_with_fixup, tmp_path):
 def test_approval_invalid_on_commit_msg_change(repo_with_fixup, tmp_path):
     presquash_commit_sha = repo_with_fixup.head.commit.hexsha
 
-    repo_with_fixup.git.rebase('HEAD~~', interactive=True, autosquash=True, env={'GIT_EDITOR': ':'}, kill_after_timeout=5)
-    repo_with_fixup.git.commit('--amend', '-m', 'fix: sneakily changed the commit message into something stoopid')
+    repo_with_fixup.git.rebase('HEAD~~', interactive=True, autosquash=True, kill_after_timeout=5, env={
+            'GIT_EDITOR': ':',
+            'GIT_COMMITTER_NAME': 'My Name is Nobody',
+            'GIT_COMMITTER_EMAIL': 'nobody@example.com',
+        })
+    repo_with_fixup.git.commit('--amend', '-m', 'fix: sneakily changed the commit message into something stoopid', env={
+            'GIT_COMMITTER_NAME': 'My Name is Nobody',
+            'GIT_COMMITTER_EMAIL': 'nobody@example.com',
+        })
     squashed_commit_sha = repo_with_fixup.head.commit.hexsha
     base_sha = repo_with_fixup.commit('HEAD~').hexsha
 
@@ -147,8 +159,15 @@ def test_approval_invalid_on_commit_msg_change(repo_with_fixup, tmp_path):
 def test_approval_invalid_on_author_change(repo_with_fixup, tmp_path):
     presquash_commit_sha = repo_with_fixup.head.commit.hexsha
 
-    repo_with_fixup.git.rebase('HEAD~~', interactive=True, autosquash=True, env={'GIT_EDITOR': ':'}, kill_after_timeout=5)
-    repo_with_fixup.git.commit('--amend', '--author', 'Mysterious Stranger <not.who.you.thought@company.biz>', '--no-edit')
+    repo_with_fixup.git.rebase('HEAD~~', interactive=True, autosquash=True, kill_after_timeout=5, env={
+            'GIT_EDITOR': ':',
+            'GIT_COMMITTER_NAME': 'My Name is Nobody',
+            'GIT_COMMITTER_EMAIL': 'nobody@example.com',
+        })
+    repo_with_fixup.git.commit('--amend', '--author', 'Mysterious Stranger <not.who.you.thought@company.biz>', '--no-edit', env={
+            'GIT_COMMITTER_NAME': 'My Name is Nobody',
+            'GIT_COMMITTER_EMAIL': 'nobody@example.com',
+        })
 
     squashed_commit_sha = repo_with_fixup.head.commit.hexsha
     base_sha = repo_with_fixup.commit('HEAD~').hexsha
@@ -165,13 +184,20 @@ def test_approval_invalid_on_author_change(repo_with_fixup, tmp_path):
 def test_approval_invalid_on_content_change(repo_with_fixup, tmp_path):
     presquash_commit_sha = repo_with_fixup.head.commit.hexsha
 
-    repo_with_fixup.git.rebase('HEAD~~', interactive=True, autosquash=True, env={'GIT_EDITOR': ':'}, kill_after_timeout=5)
+    repo_with_fixup.git.rebase('HEAD~~', interactive=True, autosquash=True, kill_after_timeout=5, env={
+            'GIT_EDITOR': ':',
+            'GIT_COMMITTER_NAME': 'My Name is Nobody',
+            'GIT_COMMITTER_EMAIL': 'nobody@example.com',
+        })
 
     # Amend the just-squashed-commit with a random content change
     with open(os.path.join(repo_with_fixup.working_dir, 'some_file.txt'), 'w') as somefile:
         somefile.write('Some random addition')
     repo_with_fixup.git.add('some_file.txt')
-    repo_with_fixup.git.commit('--amend', '--no-edit')
+    repo_with_fixup.git.commit('--amend', '--no-edit', env={
+            'GIT_COMMITTER_NAME': 'My Name is Nobody',
+            'GIT_COMMITTER_EMAIL': 'nobody@example.com',
+        })
     base_sha = repo_with_fixup.commit('HEAD~').hexsha
 
     squashed_commit_sha = repo_with_fixup.head.commit.hexsha
@@ -187,7 +213,11 @@ def test_approval_invalid_on_content_change(repo_with_fixup, tmp_path):
 def test_approval_handle_invalid_shas_gracefully(repo_with_fixup, tmp_path):
     presquash_commit_sha = repo_with_fixup.head.commit.hexsha
 
-    repo_with_fixup.git.rebase('HEAD~~', interactive=True, autosquash=True, env={'GIT_EDITOR': ':'}, kill_after_timeout=5)
+    repo_with_fixup.git.rebase('HEAD~~', interactive=True, autosquash=True, kill_after_timeout=5, env={
+            'GIT_EDITOR': ':',
+            'GIT_COMMITTER_NAME': 'My Name is Nobody',
+            'GIT_COMMITTER_EMAIL': 'nobody@example.com',
+        })
 
     invalid_sha = 'dead00000000000000000000000000000000dead'
 
