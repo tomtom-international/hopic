@@ -93,12 +93,12 @@ if os.path.isfile(os.path.join(root_dir, pkg_name, 'cli.py')) \
     version = get_version(root='../..', relative_to=__file__)
     sys.path.insert(0, root_dir)
 else:
-try:
-    # Python >= 3.8
-    from importlib import metadata
-except ImportError:
-    import importlib_metadata as metadata
-version = metadata.version(pkg_name)
+    try:
+        # Python >= 3.8
+        from importlib import metadata
+    except ImportError:
+        import importlib_metadata as metadata
+    version = metadata.version(pkg_name)
 
 # The full version, including alpha/beta/rc tags.
 release = version
