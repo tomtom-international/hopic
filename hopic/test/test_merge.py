@@ -438,7 +438,7 @@ phases:
     assert not (toprepo / 'moved_subrepo' / 'dummy.txt').is_file()
 
 
-def test_modality_merge_has_all_parents(tmp_path):
+def test_modality_merge_has_all_parents(tmp_path, monkeypatch):
     toprepo = tmp_path / 'repo'
     with git.Repo.init(toprepo, expand_vars=False) as repo:
         with open(toprepo / 'hopic-ci-config.yaml', 'w') as f:
@@ -473,6 +473,8 @@ def test_modality_merge_has_all_parents(tmp_path):
         repo.index.add(('something.txt',))
         merge_commit = repo.index.commit(message='feat: add something useful', **_commitargs)
 
+    monkeypatch.setenv('GIT_COMMITTER_NAME' , 'My Name is Nobody')
+    monkeypatch.setenv('GIT_COMMITTER_EMAIL', 'nobody@example.com')
     result = run(
             ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'),
             ('prepare-source-tree', '--author-name', _author.name, '--author-email', _author.email, '--author-date', f"@{_git_time}", '--commit-date', f"@{_git_time}",
