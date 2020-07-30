@@ -716,6 +716,18 @@ def process_prepare_source_tree(
         commit_date,
     ):
     with git.Repo(ctx.obj.workspace) as repo:
+        author = git.Actor.author(repo.config_reader())
+        if author_name is not None:
+            author.name = author_name
+        if author_email is not None:
+            author.email = author_email
+
+        committer = git.Actor.author(repo.config_reader())
+        if not committer.name:
+            committer.name = author.name
+        if not committer.email:
+            committer.email = author.email
+
         target_commit = repo.head.commit
 
         with repo.config_writer() as cfg:
@@ -725,7 +737,7 @@ def process_prepare_source_tree(
             code_clean    = cfg.getboolean('hopic.code', 'cfg-clean', fallback=False)
 
         repo.git.submodule(["deinit", "--all", "--force"])  # Remove submodules in case it is changed in change_applicator
-        commit_params = change_applicator(repo)
+        commit_params = change_applicator(repo, author=author, committer=committer)
         if not commit_params:
             return
         source_commit = commit_params.pop('source_commit', None)
@@ -829,11 +841,6 @@ def process_prepare_source_tree(
         else:
             log.info("Skip version bumping due to the configuration or the target branch is not allowed to publish")
 
-        author = git.Actor.author(repo.config_reader())
-        if author_name is not None:
-            author.name = author_name
-        if author_email is not None:
-            author.email = author_email
         commit_params.setdefault('author', author)
         if author_date is not None:
             commit_params['author_date'] = to_git_time(author_date)
@@ -1032,7 +1039,7 @@ def merge_change_request(
         return valid_approvers
 
 
-    def change_applicator(repo):
+    def change_applicator(repo, author, committer):
         try:
             source = repo.remotes.source
         except AttributeError:
@@ -1041,7 +1048,12 @@ def merge_change_request(
             source.set_url(source_remote)
         source_commit = source.fetch(source_ref)[0].commit
 
-        repo.git.merge(source_commit, no_ff=True, no_commit=True)
+        repo.git.merge(source_commit, no_ff=True, no_commit=True, env={
+            'GIT_AUTHOR_NAME': author.name,
+            'GIT_AUTHOR_EMAIL': author.email,
+            'GIT_COMMITTER_NAME': committer.name,
+            'GIT_COMMITTER_EMAIL': committer.email,
+        })
 
         msg = f"Merge #{change_request}"
         if title is not None:
@@ -1078,7 +1090,7 @@ def apply_modality_change(
 
     modality_cmds = ctx.obj.config.get('modality-source-preparation', {}).get(modality, ())
 
-    def change_applicator(repo):
+    def change_applicator(repo, author, committer):
         has_changed_files = False
         commit_message = modality
         for cmd in modality_cmds:
