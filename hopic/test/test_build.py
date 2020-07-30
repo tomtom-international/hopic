@@ -405,7 +405,7 @@ def test_empty_variant():
     result = run_with_config(dedent('''\
         phases:
           build:
-            test: {}'''), ('build',))
+            test: []'''), ('build',))
     assert result.exit_code == 0
 
 
