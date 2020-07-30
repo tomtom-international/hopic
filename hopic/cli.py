@@ -49,7 +49,11 @@ from itertools import chain
 import json
 import logging
 import os
-import pkg_resources
+try:
+    # Python >= 3.8
+    from importlib import metadata
+except ImportError:
+    import importlib_metadata as metadata
 import re
 import signal
 import shlex
@@ -1052,7 +1056,7 @@ def merge_change_request(
         if approved_by:
             approvers = get_valid_approvers(repo, approved_by, source, source_commit)
             msg += '\n'.join(f"Acked-by: {approver}" for approver in approvers) + u'\n'
-        msg += u'Merged-by: Hopic {pkg.version}\n'.format(pkg=pkg_resources.get_distribution(__package__))
+        msg += u'Merged-by: Hopic {pkg.version}\n'.format(pkg=metadata.distribution(__package__))
         return {
                 'message': msg,
                 'parent_commits': (
@@ -1159,7 +1163,7 @@ def apply_modality_change(
             log.info("No changes introduced by '%s'", commit_message)
             return None
         commit_message = (commit_message.rstrip()
-                + u'\n\nMerged-by: Hopic {pkg.version}\n'.format(pkg=pkg_resources.get_distribution(__package__)))
+                + u'\n\nMerged-by: Hopic {pkg.version}\n'.format(pkg=metadata.distribution(__package__)))
 
         commit_params = {'message': commit_message}
         # If this change was a merge make sure to produce a merge commit for it
