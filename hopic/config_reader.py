@@ -364,14 +364,15 @@ def read(config, volume_vars):
         if not isinstance(var, str):
             raise ConfigurationError("`pass-through-environment-vars` must be a sequence containing strings only: element {idx} has type {type!r}".format(idx=idx, type=type(idx)), file=config)
 
-    valid_image_types = (Mapping, str, IvyManifestImage)
+    basic_image_types = (str, IvyManifestImage, type(None))
+    valid_image_types = (basic_image_types, Mapping)
     image = cfg.setdefault('image', OrderedDict())
     if not isinstance(image, valid_image_types):
         raise ConfigurationError("`image` must be a string, mapping, or `!image-from-ivy-manifest`", file=config)
     if not isinstance(image, Mapping):
         image = cfg['image'] = OrderedDict((('default', cfg['image']),))
     for variant, name in image.items():
-        if not isinstance(name, valid_image_types):
+        if not isinstance(name, basic_image_types):
             raise ConfigurationError(f"`image` member `{variant}` must be a string or `!image-from-ivy-manifest`", file=config)
 
     # Flatten command lists
@@ -423,7 +424,7 @@ def read(config, volume_vars):
                                 var[var_key] = [var[var_key]]
 
                         if var_key == "image":
-                            if not isinstance(var[var_key], valid_image_types):
+                            if not isinstance(var[var_key], basic_image_types):
                                 raise ConfigurationError(
                                     f"`image` member `{variant}` must be a string or `!image-from-ivy-manifest`",
                                     file=config)
