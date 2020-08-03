@@ -563,8 +563,14 @@ exec ssh -i '''
       params += ' --ignore-initial-submodule-checkout-failure'
     }
 
+    def target_ref = get_branch_name()
+    if (!target_ref) {
+      steps.println('\033[36m[info] target branch is not specified; using GIT_COMMIT.\033[39m')
+      target_ref = steps.env.GIT_COMMIT
+    }
+
     params += ' --target-remote=' + shell_quote(steps.scm.userRemoteConfigs[0].url)
-    params += ' --target-ref='    + shell_quote(get_branch_name())
+    params += ' --target-ref='    + shell_quote(target_ref)
 
     steps.env.GIT_COMMIT = this.with_credentials() {
       this.target_commit = steps.sh(script: cmd
