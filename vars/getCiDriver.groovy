@@ -391,9 +391,10 @@ RUN mkdir -p /hopic-reqs/hopic/yaml \\
  && cd /hopic-reqs \\
  && touch hopic/__init__.py hopic/yaml/__init__.py \\
  && sed -i '/setuptools.scm/ d' setup.py \\
- && python setup.py egg_info \\
+ && python setup.py dist_info \\
+ && sed -n 's/^Requires-Dist: // p' hopic.dist-info/METADATA > hopic.dist-info/requires.txt \\
  && cd / \\
- && pip install --no-cache-dir --upgrade virtualenv --requirement /hopic-reqs/hopic.egg-info/requires.txt \\
+ && pip install --no-cache-dir --upgrade virtualenv --requirement /hopic-reqs/hopic.dist-info/requires.txt \\
  && rm -rf /hopic-reqs
 
 RUN pip install --no-cache-dir --upgrade ${shell_quote(this.repo)}
