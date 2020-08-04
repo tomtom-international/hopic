@@ -223,6 +223,45 @@ phases:
     assert not expected
 
 
+def test_null_image(monkeypatch):
+    expected = [
+        {"docker": True, "cmd": ('buildpack-deps:18.04', './a.sh', '123')},
+        {"docker": False, "cmd": ('./b.sh',)},
+        {"docker": False, "cmd": ('./c.sh',)},
+    ]
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        expected_call = expected.pop(0)
+        if expected_call['docker']:
+            assert args[0] == 'docker'
+        else:
+            assert args[0] != 'docker'
+        
+        cmd = tuple(args[-len(expected_call['cmd']):])
+        assert cmd == expected_call['cmd']
+
+    with monkeypatch.context() as m:
+        m.setattr(subprocess, 'check_call', mock_check_call)
+        result = run_with_config('''\
+image:
+  default: buildpack-deps:18.04
+  b: null
+
+phases:
+  build:
+    a:
+      - ./a.sh 123
+    b:
+      - ./b.sh
+    c:
+      - image: null
+      - ./c.sh
+      
+''', ('build',))
+    assert result.exit_code == 0
+    assert not expected
+
+
 def test_docker_run_arguments(monkeypatch, tmp_path):
     expected_image_command = [
         ('buildpack-deps:18.04', './a.sh'),
