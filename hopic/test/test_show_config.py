@@ -147,6 +147,28 @@ image:
     assert re.search(r"^Error: configuration error in '.*?\bhopic-ci-config\.yaml': .*\bimage\b.*\bexemplare\b.*\bmust be\b.*\bstring\b", err, re.MULTILINE)
 
 
+def test_image_in_variant_type_error(capfd):
+    result = run_with_config('''\
+phases:
+  build:
+    a:
+      - image:
+          exemplare:
+            repository: example.com
+            path: example
+            name: exemplar
+            rev: 3.1.4
+''', ('show-config',))
+
+    assert result.exit_code == 32
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    assert re.search(r"^Error: configuration error in '.*?\bhopic-ci-config\.yaml': .*\bimage\b.*\ba\b.*\bmust be\b.*\bstring\b", err, re.MULTILINE)
+
+
 def test_bad_version_config(capfd):
     result = run_with_config('''\
 version: patch
