@@ -47,6 +47,10 @@ from io import (
     )
 from itertools import chain
 import json
+try:
+    import keyring
+except ImportError:
+    keyring = None
 import logging
 import os
 try:
@@ -1298,6 +1302,8 @@ def build(ctx, phase, variant):
         pass
     has_change = bool(refspecs)
 
+    credentials = {}
+
     worktree_commits = {}
     for phasename, curphase in cfg['phases'].items():
         if phase and phasename not in phase:
@@ -1402,6 +1408,25 @@ def build(ctx, phase, variant):
                             docker_in_docker = cmd['docker-in-docker']
                         except KeyError:
                             pass
+
+                        try:
+                            with_credentials = cmd['with-credentials']
+                        except (KeyError, TypeError):
+                            pass
+                        else:
+                            for creds in with_credentials:
+                                if creds['id'] not in credentials and creds['type'] == 'username-password' and keyring is not None and 'project-name' in cfg:
+                                    kcred = keyring.get_credential(f"{cfg['project-name']}-{creds['id']}", None)
+                                    if kcred is not None:
+                                        credentials[creds['id']] = {
+                                                creds['username-variable']: kcred.username,
+                                                creds['password-variable']: kcred.password,
+                                            }
+                                    volume_vars.update(credentials.get(creds['id'], {}))
+
+                                cred_vars = {name for key, name in creds.items() if key.endswith('-variable')}
+                                if not all(cred_var in volume_vars for cred_var in cred_vars):
+                                    log.error("some of these variables are not available for credential %r: %r", creds['id'], cred_vars)
 
                         try:
                             cmd = cmd['sh']

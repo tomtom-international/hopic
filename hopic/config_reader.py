@@ -393,6 +393,9 @@ def read(config, volume_vars):
         if not isinstance(name, basic_image_types):
             raise ConfigurationError(f"`image` member `{variant}` must be a string or `!image-from-ivy-manifest`", file=config)
 
+    if 'project-name' in cfg and not isinstance(cfg['project-name'], str):
+        raise ConfigurationError('`project-name` setting must be a string', file=config)
+
     # Flatten command lists
     for phasename, phase in cfg.setdefault('phases', OrderedDict()).items():
         if not isinstance(phase, Mapping):

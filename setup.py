@@ -57,6 +57,9 @@ setup(
     tests_require=(
       'pytest',
     ),
+    extras_require={
+        'interactive': ['keyring'],
+    },
     use_scm_version={"relative_to": __file__},
     entry_points='''
       [console_scripts]
