@@ -472,14 +472,12 @@ exec ssh -i '''
     def creds_info = credentials.collect({
       def currentCredential = it
       def credential_id = currentCredential['id']
-      def user_var      = currentCredential.getOrDefault('username-variable', 'USERNAME')
-      def pass_var      = currentCredential.getOrDefault('password-variable', 'PASSWORD')
-      def file_var      = currentCredential.getOrDefault('filename-variable', 'SECRET_FILE')
-      def string_var    = currentCredential.getOrDefault('string-variable',   'SECRET')
-      def type = currentCredential.getOrDefault('type', 'username-password')
+      def type          = currentCredential['type']
 
       final white_listed_var = '--whitelisted-var='
       if (type == 'username-password') {
+        def user_var = currentCredential['username-variable']
+        def pass_var = currentCredential['password-variable']
         return [white_listed_vars: white_listed_var + shell_quote(user_var) + ' ' + white_listed_var + shell_quote(pass_var),
           with_credentials: steps.usernamePassword(
             credentialsId: credential_id,
@@ -487,12 +485,14 @@ exec ssh -i '''
             passwordVariable: pass_var,)
         ]
       } else if (type == 'file') {
+        def file_var = currentCredential['filename-variable']
         return [white_listed_vars: white_listed_var + shell_quote(file_var),
           with_credentials: steps.file(
             credentialsId: credential_id,
             variable: file_var,)
         ]
       } else if (type == 'string') {
+        def string_var = currentCredential['string-variable']
         return [white_listed_vars: white_listed_var + shell_quote(string_var),
           with_credentials: steps.string(
             credentialsId: credential_id,

@@ -440,6 +440,27 @@ def read(config, volume_vars):
                                 var[var_key] = OrderedDict([('id', var[var_key])])
                             if not isinstance(var[var_key], Sequence):
                                 var[var_key] = [var[var_key]]
+                            for cred in var[var_key]:
+                                cred_type = cred.setdefault('type', 'username-password')
+                                if cred_type == 'username-password':
+                                    if not isinstance(cred.setdefault('username-variable', 'USERNAME'), str):
+                                        raise ConfigurationError(
+                                                f"'username-variable' in with-credentials block `{cred['id']}` for "
+                                                f"`{phasename}.{variantname}` is not a string", file=config)
+                                    if not isinstance(cred.setdefault('password-variable', 'PASSWORD'), str):
+                                        raise ConfigurationError(
+                                                f"'password-variable' in with-credentials block `{cred['id']}` for "
+                                                f"`{phasename}.{variantname}` is not a string", file=config)
+                                elif cred_type == 'file':
+                                    if not isinstance(cred.setdefault('filename-variable', 'SECRET_FILE'), str):
+                                        raise ConfigurationError(
+                                                f"'filename-variable' in with-credentials block `{cred['id']}` for "
+                                                f"`{phasename}.{variantname}` is not a string", file=config)
+                                elif cred_type == 'string':
+                                    if not isinstance(cred.setdefault('string-variable'  , 'SECRET'), str):
+                                        raise ConfigurationError(
+                                                f"'string-variable' in with-credentials block `{cred['id']}` for "
+                                                f"`{phasename}.{variantname}` is not a string", file=config)
 
                         if var_key == "image":
                             if not isinstance(var[var_key], basic_image_types):
