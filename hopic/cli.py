@@ -48,6 +48,7 @@ from io import (
 from itertools import chain
 import json
 try:
+    import getpass
     import keyring
 except ImportError:
     keyring = None
@@ -1416,11 +1417,22 @@ def build(ctx, phase, variant):
                         else:
                             for creds in with_credentials:
                                 if creds['id'] not in credentials and creds['type'] == 'username-password' and keyring is not None and 'project-name' in cfg:
-                                    kcred = keyring.get_credential(f"{cfg['project-name']}-{creds['id']}", None)
+                                    cred_name = f"{cfg['project-name']}-{creds['id']}"
+                                    kcred = keyring.get_credential(cred_name, None)
                                     if kcred is not None:
                                         credentials[creds['id']] = {
                                                 creds['username-variable']: kcred.username,
                                                 creds['password-variable']: kcred.password,
+                                            }
+                                    else:
+                                        # TODO: only do this when --whitelisted-var doesn't already provide it
+                                        # TODO: only do this when in an interactive context
+                                        username =           input(f"Username for {cred_name}: ")
+                                        password = getpass.getpass(f"Password for {cred_name}: ")
+                                        keyring.set_password(cred_name, username, password)
+                                        credentials[creds['id']] = {
+                                                creds['username-variable']: username,
+                                                creds['password-variable']: password,
                                             }
                                     volume_vars.update(credentials.get(creds['id'], {}))
 
