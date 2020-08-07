@@ -364,13 +364,15 @@ def read(config, volume_vars):
         if not isinstance(var, str):
             raise ConfigurationError("`pass-through-environment-vars` must be a sequence containing strings only: element {idx} has type {type!r}".format(idx=idx, type=type(idx)), file=config)
 
+    basic_image_types = (str, IvyManifestImage, type(None))
+    valid_image_types = (basic_image_types, Mapping)
     image = cfg.setdefault('image', OrderedDict())
-    if not isinstance(image, (Mapping, str, IvyManifestImage)):
+    if not isinstance(image, valid_image_types):
         raise ConfigurationError("`image` must be a string, mapping, or `!image-from-ivy-manifest`", file=config)
     if not isinstance(image, Mapping):
         image = cfg['image'] = OrderedDict((('default', cfg['image']),))
     for variant, name in image.items():
-        if not isinstance(name, (str, IvyManifestImage)):
+        if not isinstance(name, basic_image_types):
             raise ConfigurationError(f"`image` member `{variant}` must be a string or `!image-from-ivy-manifest`", file=config)
 
     # Flatten command lists
@@ -387,8 +389,8 @@ def read(config, volume_vars):
 
     # Convert multiple different syntaxes into a single one
     for phase in cfg['phases'].values():
-        for variant in phase.values():
-            for var in variant:
+        for variant, items in phase.items():
+            for var in items:
                 if isinstance(var, str):
                     continue
                 if isinstance(var, (OrderedDict, dict)):
@@ -420,6 +422,12 @@ def read(config, volume_vars):
                                 var[var_key] = OrderedDict([('id', var[var_key])])
                             if not isinstance(var[var_key], Sequence):
                                 var[var_key] = [var[var_key]]
+
+                        if var_key == "image":
+                            if not isinstance(var[var_key], basic_image_types):
+                                raise ConfigurationError(
+                                    f"`image` member `{variant}` must be a string or `!image-from-ivy-manifest`",
+                                    file=config)
 
                         if var_key == 'volumes-from':
                             var[var_key] = expand_docker_volumes_from(volume_vars, var[var_key])
