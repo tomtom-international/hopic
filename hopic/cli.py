@@ -476,6 +476,7 @@ def cli(ctx, color, config, workspace, whitelisted_var):
     if ctx.obj.version is not None:
         log.debug("read version: \x1B[34m%s\x1B[39m", ctx.obj.version)
         ctx.obj.volume_vars['VERSION'] = str(ctx.obj.version)
+        ctx.obj.volume_vars['PURE_VERSION'] = ctx.obj.volume_vars['VERSION'].split('+')[0]
         # FIXME: make this conversion work even when not using SemVer as versioning policy
         # Convert SemVer to Debian version: '~' for pre-release instead of '-'
         ctx.obj.volume_vars['DEBVERSION'] = ctx.obj.volume_vars['VERSION'].replace('-', '~', 1).replace('.dirty.', '+dirty', 1)
@@ -1404,6 +1405,7 @@ def build(ctx, phase, variant):
                     for varname in (
                             'SOURCE_DATE_EPOCH',
                             'VERSION',
+                            'PURE_VERSION',
                             'DEBVERSION',
                         ):
                         if varname in ctx.obj.volume_vars:
