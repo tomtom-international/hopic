@@ -855,6 +855,7 @@ def process_prepare_source_tree(
             log.info("Skip version bumping due to the configuration or the target branch is not allowed to publish")
 
         commit_params.setdefault('author', author)
+        commit_params.setdefault('committer', committer)
         if author_date is not None:
             commit_params['author_date'] = to_git_time(author_date)
         if commit_date is not None:
@@ -943,7 +944,7 @@ def process_prepare_source_tree(
             new_index = repo.index.from_tree(repo, submit_commit)
             new_index.add([new_version_blob], write=False)
 
-            del commit_params['author']
+            commit_params['author'] = commit_params['committer']
             if 'author_date' in commit_params and 'commit_date' in commit_params:
                 commit_params['author_date'] = commit_params['commit_date']
             commit_params['message'] = f"[ Release build ] new version commit: {after_submit_version}\n"
