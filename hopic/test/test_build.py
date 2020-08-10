@@ -28,6 +28,14 @@ import subprocess
 import sys
 
 _source_date_epoch = 7 * 24 * 3600
+_git_time = f"{_source_date_epoch} +0000"
+_author = git.Actor('Bob Tester', 'bob@example.net')
+_commitargs = dict(
+        author_date=_git_time,
+        commit_date=_git_time,
+        author=_author,
+        committer=_author,
+    )
 
 
 class MonkeypatchInjector:
@@ -60,8 +68,7 @@ def run_with_config(config, *args, files={}, env=None, monkeypatch_injector=Monk
                     f.write(content)
                 on_file_created_callback()
             repo.index.add(('hopic-ci-config.yaml',) + tuple(files.keys()))
-            git_time = f"{_source_date_epoch} +0000"
-            repo.index.commit(message='Initial commit', author_date=git_time, commit_date=git_time)
+            repo.index.commit(message='Initial commit', **_commitargs)
             repo.create_tag('0.0.0')
         for arg in args:
             with monkeypatch_injector:

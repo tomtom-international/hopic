@@ -25,6 +25,13 @@ import sys
 
 
 _git_time = f"{7 * 24 * 3600} +0000"
+_author = git.Actor('Bob Tester', 'bob@example.net')
+_commitargs = dict(
+        author_date=_git_time,
+        commit_date=_git_time,
+        author=_author,
+        committer=_author,
+    )
 
 
 def run_with_config(config, args, files={}, env=None, cfg_file='hopic-ci-config.yaml'):
@@ -41,7 +48,7 @@ def run_with_config(config, args, files={}, env=None, cfg_file='hopic-ci-config.
                 with open(fname, 'w') as f:
                     f.write(content)
             repo.index.add((cfg_file,) + tuple(files.keys()))
-            repo.index.commit(message='Initial commit', author_date=_git_time, commit_date=_git_time)
+            repo.index.commit(message='Initial commit', **_commitargs)
         if cfg_file != 'hopic-ci-config.yaml':
             args = ('--config', cfg_file) + tuple(args)
         result = runner.invoke(cli, args)
