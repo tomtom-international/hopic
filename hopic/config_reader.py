@@ -251,7 +251,7 @@ def expand_docker_volumes_from(volume_vars, volumes_from_vars):
     return volumes
 
 
-def expand_docker_volume_spec(config_dir, volume_vars, volume_specs):
+def expand_docker_volume_spec(config_dir, volume_vars, volume_specs, add_defaults=True):
     guest_volume_vars = {
         'WORKSPACE': '/code',
     }
@@ -277,7 +277,7 @@ def expand_docker_volume_spec(config_dir, volume_vars, volume_specs):
                 volume['read-only'] = read_only
 
         # Expand source specification resolved on the host side
-        if 'source' in volume:
+        if volume.get('source') is not None:
             source = expand_vars(volume_vars, os.path.expanduser(volume['source']))
 
             # Make relative paths relative to the configuration directory.
@@ -296,21 +296,27 @@ def expand_docker_volume_spec(config_dir, volume_vars, volume_specs):
 
             volume['target'] = target
         volumes[target] = volume
-    if '/code' not in volumes:
-        volumes[guest_volume_vars['WORKSPACE']] = {
-            'source': volume_vars['WORKSPACE'],
-            'target': guest_volume_vars['WORKSPACE'],
-        }
-    volumes.setdefault('/etc/passwd', {
-        'source': '/etc/passwd',
-        'target': '/etc/passwd',
-        'read-only': True,
-    })
-    volumes.setdefault('/etc/group', {
-        'source': '/etc/group',
-        'target': '/etc/group',
-        'read-only': True,
-    })
+
+    if add_defaults:
+        if '/code' not in volumes:
+            volumes[guest_volume_vars['WORKSPACE']] = {
+                'source': volume_vars['WORKSPACE'],
+                'target': guest_volume_vars['WORKSPACE'],
+            }
+        volumes.setdefault('/etc/passwd', {
+            'source': '/etc/passwd',
+            'target': '/etc/passwd',
+            'read-only': True,
+        })
+        volumes.setdefault('/etc/group', {
+            'source': '/etc/group',
+            'target': '/etc/group',
+            'read-only': True,
+        })
+
+    volumes = OrderedDict([(target, volume)
+        for target, volume in volumes.items()
+        if volume['source'] is not None])
 
     return volumes
 

@@ -1370,7 +1370,8 @@ def build(ctx, phase, variant):
 
                         try:
                             scoped_volumes = expand_docker_volume_spec(ctx.obj.volume_vars['CFGDIR'],
-                                                                       ctx.obj.volume_vars, cmd['volumes'])
+                                                                       ctx.obj.volume_vars, cmd['volumes'],
+                                                                       add_defaults=False)
                             volumes.update(scoped_volumes)
                         except KeyError:
                             pass
