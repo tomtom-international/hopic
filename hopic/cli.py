@@ -732,7 +732,10 @@ def process_prepare_source_tree(
         else:
             author = git.Actor(author_name, author_email)
 
-        committer = git.Actor.author(repo.config_reader())
+        try:
+            committer = git.Actor.committer(repo.config_reader())
+        except KeyError:
+            committer = git.Actor(None, None)
         if not committer.name:
             committer.name = author.name
         if not committer.email:
