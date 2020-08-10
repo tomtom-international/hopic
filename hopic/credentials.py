@@ -15,6 +15,42 @@
 try:
     import getpass
     import keyring
+    import secretstorage
+    from contextlib import closing
+
+
+    class KeePassKeyring(keyring.backends.SecretService.Keyring):
+        """
+        A version of the SecretService keyring API that falls back to using the camel case
+        'UserName'. KeePass uses that as its attribute name instead of 'username' like most other
+        implementations.
+        """
+
+        appid = 'Hopic'
+
+        def get_credential(self, service, username):
+            for attr in ('username', 'UserName'):
+                query = {'service': service}
+                if username:
+                    query[attr] = username
+
+                collection = self.get_preferred_collection()
+
+                with closing(collection.connection):
+                    items = collection.search_items(query)
+                    for item in items:
+                        self.unlock(item)
+                        for attr in ('username', 'UserName'):
+                            username = item.get_attributes().get(attr)
+                            if username is not None:
+                                break
+                        return keyring.credentials.SimpleCredential(username, item.get_secret().decode('UTF-8'))
+
+
+        def get_password(self, service, username):
+            cred = self.get_credential(service, username)
+            if cred is not None:
+                return cred.password
 except ImportError:
     keyring = None
 
@@ -28,6 +64,11 @@ def _init_keyring():
         pass
 
     for i, backend in enumerate(backends):
+        # Substitute our own KeePass compatible keyring
+        if isinstance(backend, keyring.backends.SecretService.Keyring):
+            backends[i] = KeePassKeyring()
+            backend = backends
+
         if isinstance(backend, (
                 keyring.backends.kwallet.DBusKeyring,
                 keyring.backends.SecretService.Keyring,
