@@ -1449,8 +1449,6 @@ def build(ctx, phase, variant):
                                               '--cap-add=SYS_PTRACE',
                                               f"--tmpfs={env['HOME']}:uid={uid},gid={gid}",
                                               f"--user={uid}:{gid}",
-                                              '--volume=/etc/passwd:/etc/passwd:ro',
-                                              '--volume=/etc/group:/etc/group:ro',
                                               '--workdir=/code',
                                               ] + [
                                                   f"--env={k}={v}" for k, v in env.items()
