@@ -721,11 +721,16 @@ def process_prepare_source_tree(
         commit_date,
     ):
     with git.Repo(ctx.obj.workspace) as repo:
-        author = git.Actor.author(repo.config_reader())
-        if author_name is not None:
-            author.name = author_name
-        if author_email is not None:
-            author.email = author_email
+        if author_name is None or author_email is None:
+            # This relies on /etc/passwd entries as a fallback, which might contain the info we need
+            # for the current UID. Hence the conditional.
+            author = git.Actor.author(repo.config_reader())
+            if author_name is not None:
+                author.name = author_name
+            if author_email is not None:
+                author.email = author_email
+        else:
+            author = git.Actor(author_name, author_email)
 
         committer = git.Actor.author(repo.config_reader())
         if not committer.name:
