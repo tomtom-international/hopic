@@ -1413,8 +1413,9 @@ def build(ctx, phase, variant):
                         else:
                             for creds in with_credentials:
                                 if creds['id'] not in credentials and 'project-name' in cfg:
-                                    if creds['type'] == 'username-password':
-                                        # TODO: only do this when --whitelisted-var doesn't already provide it
+                                    if creds['type'] == 'username-password' and not (
+                                            creds['username-variable'] in ctx.obj.volume_vars
+                                            and creds['password-variable'] in ctx.obj.volume_vars):
                                         kcred = get_credential_by_id(cfg['project-name'], creds['id'])
                                         if kcred is not None:
                                             username, password = kcred
