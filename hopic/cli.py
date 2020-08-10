@@ -23,6 +23,7 @@ from .config_reader import (
         expand_vars,
         read as read_config,
     )
+from .credentials import get_credential_by_id
 from .execution import echo_cmd
 from .git_time import restore_mtime_from_git
 from .versioning import *
@@ -47,11 +48,6 @@ from io import (
     )
 from itertools import chain
 import json
-try:
-    import getpass
-    import keyring
-except ImportError:
-    keyring = None
 import logging
 import os
 try:
@@ -1416,26 +1412,18 @@ def build(ctx, phase, variant):
                             pass
                         else:
                             for creds in with_credentials:
-                                if creds['id'] not in credentials and creds['type'] == 'username-password' and keyring is not None and 'project-name' in cfg:
-                                    cred_name = f"{cfg['project-name']}-{creds['id']}"
-                                    kcred = keyring.get_credential(cred_name, None)
-                                    if kcred is not None:
-                                        credentials[creds['id']] = {
-                                                creds['username-variable']: kcred.username,
-                                                creds['password-variable']: kcred.password,
-                                            }
-                                    else:
+                                if creds['id'] not in credentials and 'project-name' in cfg:
+                                    if creds['type'] == 'username-password':
                                         # TODO: only do this when --whitelisted-var doesn't already provide it
-                                        # TODO: only do this when in an interactive context
-                                        username =           input(f"Username for {cred_name}: ")
-                                        password = getpass.getpass(f"Password for {cred_name}: ")
-                                        keyring.set_password(cred_name, username, password)
-                                        credentials[creds['id']] = {
-                                                creds['username-variable']: username,
-                                                creds['password-variable']: password,
-                                            }
-                                    volume_vars.update(credentials.get(creds['id'], {}))
+                                        kcred = get_credential_by_id(cfg['project-name'], creds['id'])
+                                        if kcred is not None:
+                                            username, password = kcred
+                                            credentials[creds['id']] = {
+                                                    creds['username-variable']: username,
+                                                    creds['password-variable']: password,
+                                                }
 
+                                volume_vars.update(credentials.get(creds['id'], {}))
                                 cred_vars = {name for key, name in creds.items() if key.endswith('-variable')}
                                 if not all(cred_var in volume_vars for cred_var in cred_vars):
                                     log.error("some of these variables are not available for credential %r: %r", creds['id'], cred_vars)
