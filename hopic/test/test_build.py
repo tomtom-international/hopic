@@ -330,6 +330,44 @@ phases:
     assert not expected_image_command
 
 
+def test_override_default_volume(monkeypatch):
+    global_source = '/somewhere/over/the/rainbow'
+    local_source = '/platform/nine/and/three/quarters'
+
+    expected = [
+            f"--volume={global_source}:/code",
+            f"--volume={local_source}:/code",
+        ]
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        assert expected.pop(0) in args
+
+    def set_monkey_patch_attrs(monkeypatch):
+        monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+        monkeypatch.setattr(os, 'makedirs', lambda _: None)
+
+    result = run_with_config(dedent(f"""\
+            image: buildpack-deps:18.04
+
+            volumes:
+              - source: {global_source}
+                target: /code
+
+            phases:
+              test:
+                regular:
+                  - echo 'Hello World!'
+
+                awesomeness:
+                  - volumes:
+                      - source: {local_source}
+                        target: /code
+                    sh: echo 'Hello World!'
+            """), ('build',), monkeypatch_injector=MonkeypatchInjector(monkeypatch, set_monkey_patch_attrs))
+    assert result.exit_code == 0
+    assert not expected
+
+
 def test_image_override_per_phase(monkeypatch):
     expected = [
         ('buildpack-deps:18.04', './build-a.sh'),

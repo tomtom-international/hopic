@@ -22,6 +22,7 @@ import os
 import pytest
 import re
 import sys
+from textwrap import dedent
 
 
 _git_time = f"{7 * 24 * 3600} +0000"
@@ -268,6 +269,31 @@ volumes:
     cfgdir = output['volumes']['/cfg']['source']
     assert not cfgdir.endswith('hopic-ci-config.yaml')
     assert os.path.relpath(workspace, cfgdir) == '../..'
+
+
+def test_default_volume_mapping_set():
+    result = run_with_config('', ('show-config',))
+    assert result.exit_code == 0
+    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
+    volumes = output['volumes']
+
+    assert set(volumes.keys()) == {'/code', '/etc/passwd', '/etc/group'}
+
+
+def test_delete_volumes_from_default_set():
+    result = run_with_config(dedent('''\
+            volumes:
+              - source: null
+                target: /etc/passwd
+              - source: null
+                target: /etc/group
+            '''), ('show-config',))
+    assert result.exit_code == 0
+    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
+    volumes = output['volumes']
+
+    assert '/etc/passwd' not in volumes
+    assert '/etc/group' not in volumes
 
 
 def test_disallow_phase_name_reuse(capfd):
