@@ -298,11 +298,10 @@ def expand_docker_volume_spec(config_dir, volume_vars, volume_specs, add_default
         volumes[target] = volume
 
     if add_defaults:
-        if '/code' not in volumes:
-            volumes[guest_volume_vars['WORKSPACE']] = {
-                'source': volume_vars['WORKSPACE'],
-                'target': guest_volume_vars['WORKSPACE'],
-            }
+        volumes.setdefault(guest_volume_vars['WORKSPACE'], {
+            'source': volume_vars['WORKSPACE'],
+            'target': guest_volume_vars['WORKSPACE'],
+        })
         volumes.setdefault('/etc/passwd', {
             'source': '/etc/passwd',
             'target': '/etc/passwd',
