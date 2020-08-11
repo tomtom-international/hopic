@@ -1,0 +1,5 @@
+volumes:
+  - source: null
+    target: /etc/passwd
+  - source: null
+    target: /etc/group
