@@ -250,17 +250,23 @@ If ``container-dest`` is not specified, it will take the same value as ``host-sr
 For the ``host-src`` path, ``$HOME`` or ``~`` will be expanded to the home directory of the current user.
 While for the ``container-dest``, ``$HOME`` or ``~`` will be expanded to ``/home/sandbox``.
 
-The following directories are mounted by default:
+The following directories and files are mounted by default:
 
-================== =============== ===============
-host-src           container-dest  <options>
-================== =============== ===============
-/etc/passwd        /etc/passwd     read-only
-/etc/group         /etc/group      read-only
-``WORKSPACE`` [*]_ /code           read-write
-================== =============== ===============
+==================== =============== ===============
+host-src             container-dest  <options>
+==================== =============== ===============
+/etc/passwd [#vdf1]_ /etc/passwd     read-only
+/etc/group [#vdf1]_  /etc/group      read-only
+``WORKSPACE`` [*]_   /code           read-write
+==================== =============== ===============
 
+.. [#vdf1] From version 2.0.0 onwards this will no longer be mounted by default, so specify it explicitly if you rely on it.
 .. [*] ``WORKSPACE/code`` for repositories referring to other repositories for their code.
+
+These defaults can be disabled by specifying a `null` source for them:
+
+.. literalinclude:: ../../examples/disable-etc-volumes.yaml
+   :language: yaml
 
 :option:`volumes` can be declared in every scope and will be used during the specified scopes
 e.g. :option:`volumes` specified in global scope are used with every command. 

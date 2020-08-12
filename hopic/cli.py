@@ -721,13 +721,21 @@ def process_prepare_source_tree(
         commit_date,
     ):
     with git.Repo(ctx.obj.workspace) as repo:
-        author = git.Actor.author(repo.config_reader())
-        if author_name is not None:
-            author.name = author_name
-        if author_email is not None:
-            author.email = author_email
+        if author_name is None or author_email is None:
+            # This relies on /etc/passwd entries as a fallback, which might contain the info we need
+            # for the current UID. Hence the conditional.
+            author = git.Actor.author(repo.config_reader())
+            if author_name is not None:
+                author.name = author_name
+            if author_email is not None:
+                author.email = author_email
+        else:
+            author = git.Actor(author_name, author_email)
 
-        committer = git.Actor.author(repo.config_reader())
+        try:
+            committer = git.Actor.committer(repo.config_reader())
+        except KeyError:
+            committer = git.Actor(None, None)
         if not committer.name:
             committer.name = author.name
         if not committer.email:
@@ -847,6 +855,7 @@ def process_prepare_source_tree(
             log.info("Skip version bumping due to the configuration or the target branch is not allowed to publish")
 
         commit_params.setdefault('author', author)
+        commit_params.setdefault('committer', committer)
         if author_date is not None:
             commit_params['author_date'] = to_git_time(author_date)
         if commit_date is not None:
@@ -935,7 +944,7 @@ def process_prepare_source_tree(
             new_index = repo.index.from_tree(repo, submit_commit)
             new_index.add([new_version_blob], write=False)
 
-            del commit_params['author']
+            commit_params['author'] = commit_params['committer']
             if 'author_date' in commit_params and 'commit_date' in commit_params:
                 commit_params['author_date'] = commit_params['commit_date']
             commit_params['message'] = f"[ Release build ] new version commit: {after_submit_version}\n"
@@ -1370,7 +1379,8 @@ def build(ctx, phase, variant):
 
                         try:
                             scoped_volumes = expand_docker_volume_spec(ctx.obj.volume_vars['CFGDIR'],
-                                                                       ctx.obj.volume_vars, cmd['volumes'])
+                                                                       ctx.obj.volume_vars, cmd['volumes'],
+                                                                       add_defaults=False)
                             volumes.update(scoped_volumes)
                         except KeyError:
                             pass
@@ -1449,8 +1459,6 @@ def build(ctx, phase, variant):
                                               '--cap-add=SYS_PTRACE',
                                               f"--tmpfs={env['HOME']}:uid={uid},gid={gid}",
                                               f"--user={uid}:{gid}",
-                                              '--volume=/etc/passwd:/etc/passwd:ro',
-                                              '--volume=/etc/group:/etc/group:ro',
                                               '--workdir=/code',
                                               ] + [
                                                   f"--env={k}={v}" for k, v in env.items()
