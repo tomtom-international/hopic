@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import getpass
+import sys
+
 try:
-    import getpass
     import keyring
     import secretstorage
     from contextlib import closing
@@ -93,8 +95,7 @@ def get_credential_by_id(project_name, cred_id):
     kcred = _keyring_backend.get_credential(cred_name, None)
     if kcred is not None:
         return kcred.username, kcred.password
-    else:
-        # TODO: only do this when in an interactive context
+    elif hasattr(sys.stdin, 'isatty') and sys.stdin.isatty():
         username =           input(f"Username for {cred_name}: ")
         password = getpass.getpass(f"Password for {cred_name}: ")
         _keyring_backend.set_password(cred_name, username, password)
