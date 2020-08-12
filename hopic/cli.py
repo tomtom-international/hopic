@@ -72,6 +72,17 @@ class VersioningError(click.ClickException):
     exit_code = 33
 
 
+class MissingCredentialVarError(click.ClickException):
+    exit_code = 34
+
+    def __init__(self, credential_id, var_name):
+        self.credential_id = credential_id
+        self.var_name      = var_name
+
+    def format_message(self):
+        return f"credential '{self.credential_id}' not available when trying to expand variable '{self.var_name}'"
+
+
 class FatalSignal(Exception):
     def __init__(self, signum):
         self.signal = signum
@@ -1426,8 +1437,10 @@ def build(ctx, phase, variant):
 
                                 volume_vars.update(credentials.get(creds['id'], {}))
                                 cred_vars = {name for key, name in creds.items() if key.endswith('-variable')}
-                                if not all(cred_var in volume_vars for cred_var in cred_vars):
-                                    log.error("some of these variables are not available for credential %r: %r", creds['id'], cred_vars)
+                                for cred_var in cred_vars:
+                                    if cred_var in volume_vars:
+                                        continue
+                                    volume_vars[cred_var] = MissingCredentialVarError(creds['id'], cred_var)
 
                         try:
                             cmd = cmd['sh']

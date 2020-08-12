@@ -55,6 +55,8 @@ def expand_vars(vars, expr):
         for var in _variable_interpolation_re.finditer(expr):
             name = var.group(1) or var.group(2)
             value = vars[name]
+            if isinstance(value, Exception):
+                raise value
             new_val = new_val + expr[last_idx:var.start()].replace('$$', '$') + value
             last_idx = var.end()
 
