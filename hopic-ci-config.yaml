@@ -22,12 +22,6 @@ modality-source-preparation:
       changed-files: []
       commit-message: "Merge branch 'release/1'"
 
-volumes:
-  - source: null
-    target: /etc/passwd
-  - source: null
-    target: /etc/group
-
 phases:
   style:
     commit-messages: !template "commisery"
