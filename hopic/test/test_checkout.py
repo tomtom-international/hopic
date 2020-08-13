@@ -1,4 +1,4 @@
-# Copyright (c) 2019 - 2019 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2019 - 2020 TomTom N.V. (https://tomtom.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -124,6 +124,19 @@ def test_clean_checkout_in_non_empty_dir(capfd, tmp_path):
     clean_result = run(('--workspace', str(non_empty_dir), 'checkout-source-tree', '--clean', '--target-remote', str(toprepo), '--target-ref', 'master'))
     assert clean_result.exit_code == 0
     assert not garbage_file.exists()
+
+
+def test_checkout_in_newly_initialized_repo(capfd, tmp_path):
+    toprepo = tmp_path / 'repo'
+    with git.Repo.init(str(toprepo), expand_vars=False) as repo:
+        repo.index.commit(message='Initial commit', **_commitargs)
+
+    new_init_repo = tmp_path / 'non-empty-clone'
+    with git.Repo.init(str(new_init_repo), expand_vars=False):
+        pass
+
+    result = run(('--workspace', str(new_init_repo), 'checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'))
+    assert result.exit_code == 0
 
 
 def test_default_clean_checkout_option(capfd, tmp_path):
