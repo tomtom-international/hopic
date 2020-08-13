@@ -1552,7 +1552,9 @@ def build(ctx, phase, variant):
                                 submit_commit = repo.index.commit(
                                         message     = commit_message,
                                         author      = parent.author,
+                                        committer   = parent.committer,
                                         author_date = to_git_time(parent.authored_datetime),
+                                        commit_date = to_git_time(parent.committed_datetime),
                                     )
                             restore_mtime_from_git(repo)
                             worktree_commits[subdir][1] = str(submit_commit)
