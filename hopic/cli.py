@@ -135,7 +135,15 @@ def determine_source_date(workspace):
     """Determine the date of most recent change to the sources in the given workspace"""
     try:
         with git.Repo(workspace) as repo:
-            source_date = repo.head.commit.committed_datetime
+            try:
+                source_date = repo.head.commit.committed_datetime
+            except ValueError:
+                # This happens for a repository that has been initialized but for which a commit hasn't yet been created
+                # or checked out.
+                #     $ git init
+                #     $ git rev-parse HEAD
+                #     fatal: ambiguous argument 'HEAD': unknown revision or path not in the working tree.
+                return None
 
             changes = repo.index.diff(None)
             if changes:
