@@ -22,9 +22,17 @@ import os
 import pytest
 import re
 import sys
+from textwrap import dedent
 
 
 _git_time = f"{7 * 24 * 3600} +0000"
+_author = git.Actor('Bob Tester', 'bob@example.net')
+_commitargs = dict(
+        author_date=_git_time,
+        commit_date=_git_time,
+        author=_author,
+        committer=_author,
+    )
 
 
 def run_with_config(config, args, files={}, env=None, cfg_file='hopic-ci-config.yaml'):
@@ -41,7 +49,7 @@ def run_with_config(config, args, files={}, env=None, cfg_file='hopic-ci-config.
                 with open(fname, 'w') as f:
                     f.write(content)
             repo.index.add((cfg_file,) + tuple(files.keys()))
-            repo.index.commit(message='Initial commit', author_date=_git_time, commit_date=_git_time)
+            repo.index.commit(message='Initial commit', **_commitargs)
         if cfg_file != 'hopic-ci-config.yaml':
             args = ('--config', cfg_file) + tuple(args)
         result = runner.invoke(cli, args)
@@ -261,6 +269,31 @@ volumes:
     cfgdir = output['volumes']['/cfg']['source']
     assert not cfgdir.endswith('hopic-ci-config.yaml')
     assert os.path.relpath(workspace, cfgdir) == '../..'
+
+
+def test_default_volume_mapping_set():
+    result = run_with_config('', ('show-config',))
+    assert result.exit_code == 0
+    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
+    volumes = output['volumes']
+
+    assert set(volumes.keys()) == {'/code', '/etc/passwd', '/etc/group'}
+
+
+def test_delete_volumes_from_default_set():
+    result = run_with_config(dedent('''\
+            volumes:
+              - source: null
+                target: /etc/passwd
+              - source: null
+                target: /etc/group
+            '''), ('show-config',))
+    assert result.exit_code == 0
+    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
+    volumes = output['volumes']
+
+    assert '/etc/passwd' not in volumes
+    assert '/etc/group' not in volumes
 
 
 def test_disallow_phase_name_reuse(capfd):

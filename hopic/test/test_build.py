@@ -28,6 +28,14 @@ import subprocess
 import sys
 
 _source_date_epoch = 7 * 24 * 3600
+_git_time = f"{_source_date_epoch} +0000"
+_author = git.Actor('Bob Tester', 'bob@example.net')
+_commitargs = dict(
+        author_date=_git_time,
+        commit_date=_git_time,
+        author=_author,
+        committer=_author,
+    )
 
 
 class MonkeypatchInjector:
@@ -60,8 +68,7 @@ def run_with_config(config, *args, files={}, env=None, monkeypatch_injector=Monk
                     f.write(content)
                 on_file_created_callback()
             repo.index.add(('hopic-ci-config.yaml',) + tuple(files.keys()))
-            git_time = f"{_source_date_epoch} +0000"
-            repo.index.commit(message='Initial commit', author_date=git_time, commit_date=git_time)
+            repo.index.commit(message='Initial commit', **_commitargs)
             repo.create_tag('0.0.0')
         for arg in args:
             with monkeypatch_injector:
@@ -321,6 +328,44 @@ phases:
 ''', ('build',), monkeypatch_injector=MonkeypatchInjector(monkeypatch, set_monkey_patch_attrs))
     assert result.exit_code == 0
     assert not expected_image_command
+
+
+def test_override_default_volume(monkeypatch):
+    global_source = '/somewhere/over/the/rainbow'
+    local_source = '/platform/nine/and/three/quarters'
+
+    expected = [
+            f"--volume={global_source}:/code",
+            f"--volume={local_source}:/code",
+        ]
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        assert expected.pop(0) in args
+
+    def set_monkey_patch_attrs(monkeypatch):
+        monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+        monkeypatch.setattr(os, 'makedirs', lambda _: None)
+
+    result = run_with_config(dedent(f"""\
+            image: buildpack-deps:18.04
+
+            volumes:
+              - source: {global_source}
+                target: /code
+
+            phases:
+              test:
+                regular:
+                  - echo 'Hello World!'
+
+                awesomeness:
+                  - volumes:
+                      - source: {local_source}
+                        target: /code
+                    sh: echo 'Hello World!'
+            """), ('build',), monkeypatch_injector=MonkeypatchInjector(monkeypatch, set_monkey_patch_attrs))
+    assert result.exit_code == 0
+    assert not expected
 
 
 def test_image_override_per_phase(monkeypatch):
