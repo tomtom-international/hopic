@@ -399,7 +399,8 @@ RUN mkdir -p /hopic-reqs/hopic/yaml \\
 
 RUN pip install --no-cache-dir --upgrade ${shell_quote(this.repo)}
 EOF
-docker build --build-arg=PYTHON_VERSION=3.6 --iidfile=${shell_quote(docker_src)}/id.txt -f hopic/test/docker-images/python/Dockerfile .
+cp -p setup.py hopic/test/docker-images/python/
+docker build --build-arg=PYTHON_VERSION=3.6 --iidfile=${shell_quote(docker_src)}/id.txt hopic/test/docker-images/python
 """)
         final imageId = steps.readFile("${docker_src}/id.txt").trim()
         this.docker_images[steps.env.NODE_NAME] = steps.docker.image(imageId)
