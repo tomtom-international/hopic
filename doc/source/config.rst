@@ -255,17 +255,14 @@ The following directories and files are mounted by default:
 ==================== =============== ===============
 host-src             container-dest  <options>
 ==================== =============== ===============
-/etc/passwd [#vdf1]_ /etc/passwd     read-only
-/etc/group [#vdf1]_  /etc/group      read-only
 ``WORKSPACE`` [*]_   /code           read-write
 ==================== =============== ===============
 
-.. [#vdf1] From version 2.0.0 onwards this will no longer be mounted by default, so specify it explicitly if you rely on it.
 .. [*] ``WORKSPACE/code`` for repositories referring to other repositories for their code.
 
 These defaults can be disabled by specifying a `null` source for them:
 
-.. literalinclude:: ../../examples/disable-etc-volumes.yaml
+.. literalinclude:: ../../examples/disable-default-volumes.yaml
    :language: yaml
 
 :option:`volumes` can be declared in every scope and will be used during the specified scopes

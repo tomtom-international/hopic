@@ -408,11 +408,10 @@ docker build --build-arg=PYTHON_VERSION=3.6 --iidfile=${shell_quote(docker_src)}
     }
 
     return this.docker_images[steps.env.NODE_NAME].inside([
-        '--volume=/etc/passwd:/etc/passwd:ro',
-        '--volume=/etc/group:/etc/group:ro',
-
         // Extra writable directories
         "--volume=${steps.env.HOME}:${steps.env.HOME}:rw",
+
+        "--env=HOME=${steps.env.HOME}",
 
         // Docker in Docker access
         '--volume=/var/run/docker.sock:/var/run/docker.sock',

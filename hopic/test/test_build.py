@@ -282,8 +282,8 @@ def test_docker_run_arguments(monkeypatch, tmp_path):
 
     def mock_check_call(args, *popenargs, **kwargs):
         expected_docker_args = [
-            '--cap-add=SYS_PTRACE', '--rm', '--tty', '--volume=/etc/passwd:/etc/passwd:ro',
-            '--volume=/etc/group:/etc/group:ro', '--workdir=/code',
+            '--cap-add=SYS_PTRACE', '--rm', '--tty',
+            '--workdir=/code',
             f"--volume={os.getcwd()}:/code",
             f"--env=SOURCE_DATE_EPOCH={_source_date_epoch}",
             '--env=HOME=/home/sandbox', '--env=_JAVA_OPTIONS=-Duser.home=/home/sandbox',

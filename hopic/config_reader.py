@@ -302,16 +302,6 @@ def expand_docker_volume_spec(config_dir, volume_vars, volume_specs, add_default
             'source': volume_vars['WORKSPACE'],
             'target': guest_volume_vars['WORKSPACE'],
         })
-        volumes.setdefault('/etc/passwd', {
-            'source': '/etc/passwd',
-            'target': '/etc/passwd',
-            'read-only': True,
-        })
-        volumes.setdefault('/etc/group', {
-            'source': '/etc/group',
-            'target': '/etc/group',
-            'read-only': True,
-        })
 
     volumes = OrderedDict([(target, volume)
         for target, volume in volumes.items()
