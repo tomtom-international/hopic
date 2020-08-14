@@ -43,7 +43,7 @@ pipeline {
 
   triggers {
     // trigger build as AUTO_MERGE each 2 hours, on master and release branches only
-    parameterizedCron(BRANCH_NAME =~ /^master$|^release\/\d+(?:\.\d+)?$/ ? '0 */2 * * * % MODALITY=AUTO_MERGE' : '')
+    parameterizedCron(BRANCH_NAME =~ /^master$|^release\/\d+(?:\.\d+)?$/ ? 'H */2 * * * % MODALITY=AUTO_MERGE' : '')
   }
 
   parameters {
