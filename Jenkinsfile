@@ -1,4 +1,3 @@
-
 /*
  * Copyright (c) 2019 - 2020 TomTom N.V. (https://tomtom.com)
  *
@@ -32,12 +31,12 @@ String transform_ssh_to_https(String url)
 def repo = transform_ssh_to_https(scm.userRemoteConfigs[0].url.split('/')[0..-2].join('/') + '/hopic.git')
 
 library(
-    identifier: "cidriver@${version}",
+    identifier: "hopic@${version}",
     retriever: modernSCM([
         $class: 'GitSCMSource',
         remote: repo
   ]))
-def cidriver = getCiDriver("git+${repo}@${version}")
+def hopic = getCiDriver("git+${repo}@${version}")
 
 pipeline {
   agent none
@@ -72,7 +71,7 @@ pipeline {
     stage("Commit Stage") {
       steps {
         script {
-          cidriver.build(
+          hopic.build(
             clean: params.CLEAN || params.MODALITY != "NORMAL",
           )
         }
