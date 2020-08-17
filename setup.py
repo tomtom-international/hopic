@@ -43,7 +43,7 @@ setup(
       'Click>=7.0,<8.0',
       'click-log',
       'commisery>=0,<1',
-      'GitPython>=2.1.3,<3',
+      'GitPython>=3,<4',
       'importlib_metadata; python_version < "3.8"',
       'python-dateutil',
       'PyYAML',
