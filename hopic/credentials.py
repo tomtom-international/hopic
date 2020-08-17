@@ -59,6 +59,13 @@ except ImportError:
 _keyring_backend = None
 
 def _init_keyring():
+    if keyring is None:
+        return
+
+    global _keyring_backend
+    if _keyring_backend is not None:
+        return _keyring_backend
+
     backends = [keyring.get_keyring()]
     try:
         backends = backends[0].backends
@@ -78,25 +85,23 @@ def _init_keyring():
             backend.appid = 'Hopic'
 
     if len(backends) == 1:
-        return backends[0]
+        _keyring_backend = backends[0]
     else:
-        return keyring.get_keyring()
+        _keyring_backend = keyring.get_keyring()
+    return _keyring_backend
 
 
 def get_credential_by_id(project_name, cred_id):
-    if keyring is None:
+    backend = _init_keyring()
+    if backend is None:
         return None
 
-    global _keyring_backend
-    if _keyring_backend is None:
-        _keyring_backend = _init_keyring()
-
     cred_name = f"{project_name}-{cred_id}"
-    kcred = _keyring_backend.get_credential(cred_name, None)
+    kcred = backend.get_credential(cred_name, None)
     if kcred is not None:
         return kcred.username, kcred.password
     elif hasattr(sys.stdin, 'isatty') and sys.stdin.isatty():
         username =           input(f"Username for {cred_name}: ")
         password = getpass.getpass(f"Password for {cred_name}: ")
-        _keyring_backend.set_password(cred_name, username, password)
+        backend.set_password(cred_name, username, password)
         return username, password
