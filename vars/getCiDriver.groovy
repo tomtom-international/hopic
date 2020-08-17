@@ -469,8 +469,7 @@ exec ssh -i '''
   }
 
   private def subcommand_with_credentials(String cmd, String subcmd, credentials) {
-    def creds_info = credentials.collect({
-      def currentCredential = it
+    def creds_info = credentials.collect({ currentCredential ->
       def credential_id = currentCredential['id']
       def type          = currentCredential['type']
 
