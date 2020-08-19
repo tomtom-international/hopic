@@ -138,6 +138,48 @@ String credential
 .. literalinclude:: ../../examples/with-credentials.yaml
    :language: yaml
 
+Keyring Support
++++++++++++++++
+
+For local, interactive, use Hopic also supports credentials stored in your keyring using the `keyring`_ library.
+Note that ``keyring`` is only an optional dependency of Hopic and will only get installed when the ``interactive`` extra feature is selected.
+
+If you didn't install Hopic with the ``interactive`` feature you can either reinstall it or install the ``keyring`` library yourself.
+
+.. code-block:: console
+
+   pip3 install keyring
+
+This has been tested and confirmed to work with at least these keyring implementations:
+
+* gnome-keyring-daemon: GNOME's builtin keyring
+* KeepassXC 2.6
+
+.. option:: project-name
+
+If properly configured, Hopic will attempt to obtain all ``username-password`` credentials used during execution from your keyring.
+In order to do that, Hopic needs to know a project scope within which to look for your credentials.
+This scope can be configured with the ``project-name`` option.
+We suggest using your projects Jira keyword for this purpose as it's the most likely to be unique enough.
+
+.. literalinclude:: ../../examples/with-keyring-credentials.yaml
+   :language: yaml
+
+This example will cause Hopic to look for a credential with a value for the ``service`` field of ``JIRA_KEY-artifactory-creds``.
+When found, it will use its ``username`` and ``password`` fields for the ``publish`` command.
+
+When Hopic doesn't find the credential in the keyring, its behavior depends on whether it's running in an interactive terminal or not.
+
+When Hopic runs in an interactive terminal, it will prompt the user for the username and password.
+It will store these in your keyring and continue execution with those values.
+
+When Hopic doesn't run in an interactive terminal, like on your CI system, it will attempt to obtain the credentials from your CI system's credential store.
+The :option:`project-name` will not be taken into account when looking in the CI system's credential store.
+That option applies to keyring lookups only.
+If it cannot find them there, it will fail with an error message indicating it couldn't find the specific credential.
+
+.. _keyring: https://pypi.org/project/keyring/
+
 Container Image
 ---------------
 
