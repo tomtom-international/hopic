@@ -1194,8 +1194,10 @@ def apply_modality_change(
                         add_files.remove(code_dir + '/')
 
             for diff in repo.index.diff(None):
-                add_files.add(diff.b_path)
+                if not diff.deleted_file:
+                    add_files.add(diff.b_path)
                 remove_files.add(diff.a_path)
+            remove_files -= add_files
             if remove_files:
                 repo.index.remove(remove_files)
             if add_files:
@@ -1576,8 +1578,10 @@ def build(ctx, phase, variant):
                                 add_files = set(repo.untracked_files)
                                 remove_files = set()
                                 for diff in repo.index.diff(None):
-                                    add_files.add(diff.b_path)
+                                    if not diff.deleted_file:
+                                        add_files.add(diff.b_path)
                                     remove_files.add(diff.a_path)
+                                remove_files -= add_files
                                 if remove_files:
                                     repo.index.remove(remove_files)
                                 if add_files:
