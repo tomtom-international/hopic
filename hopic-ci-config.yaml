@@ -73,5 +73,7 @@ phases:
           doc/build/html:
             commit-message: "Update documentation for ${VERSION}"
         sh: >
-          sh -c 'doc/build/venv/bin/python -m sphinxcontrib.versioning build --override-branch=${GIT_BRANCH}=${GIT_COMMIT} doc/source doc/build/html
-          && find doc/build/html \( -name .doctrees -o -name objects.inv \) -exec rm -r "{}" +'
+          sh -x -c ':
+          && find doc/build/html -maxdepth 1 -not -path doc/build/html -not -name .git\* -exec rm -v -r "{}" +
+          && doc/build/venv/bin/python -m sphinxcontrib.versioning build --override-branch=${GIT_BRANCH}=${GIT_COMMIT} doc/source doc/build/html
+          && find doc/build/html \( -name .doctrees -o -name objects.inv -o -name jquery-\*.js \) -exec rm -v -r "{}" +'
