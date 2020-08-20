@@ -55,6 +55,8 @@ def expand_vars(vars, expr):
         for var in _variable_interpolation_re.finditer(expr):
             name = var.group(1) or var.group(2)
             value = vars[name]
+            if isinstance(value, Exception):
+                raise value
             new_val = new_val + expr[last_idx:var.start()].replace('$$', '$') + value
             last_idx = var.end()
 
@@ -383,6 +385,9 @@ def read(config, volume_vars):
         if not isinstance(name, basic_image_types):
             raise ConfigurationError(f"`image` member `{variant}` must be a string or `!image-from-ivy-manifest`", file=config)
 
+    if 'project-name' in cfg and not isinstance(cfg['project-name'], str):
+        raise ConfigurationError('`project-name` setting must be a string', file=config)
+
     # Flatten command lists
     for phasename, phase in cfg.setdefault('phases', OrderedDict()).items():
         if not isinstance(phase, Mapping):
@@ -430,6 +435,27 @@ def read(config, volume_vars):
                                 var[var_key] = OrderedDict([('id', var[var_key])])
                             if not isinstance(var[var_key], Sequence):
                                 var[var_key] = [var[var_key]]
+                            for cred in var[var_key]:
+                                cred_type = cred.setdefault('type', 'username-password')
+                                if cred_type == 'username-password':
+                                    if not isinstance(cred.setdefault('username-variable', 'USERNAME'), str):
+                                        raise ConfigurationError(
+                                                f"'username-variable' in with-credentials block `{cred['id']}` for "
+                                                f"`{phasename}.{variantname}` is not a string", file=config)
+                                    if not isinstance(cred.setdefault('password-variable', 'PASSWORD'), str):
+                                        raise ConfigurationError(
+                                                f"'password-variable' in with-credentials block `{cred['id']}` for "
+                                                f"`{phasename}.{variantname}` is not a string", file=config)
+                                elif cred_type == 'file':
+                                    if not isinstance(cred.setdefault('filename-variable', 'SECRET_FILE'), str):
+                                        raise ConfigurationError(
+                                                f"'filename-variable' in with-credentials block `{cred['id']}` for "
+                                                f"`{phasename}.{variantname}` is not a string", file=config)
+                                elif cred_type == 'string':
+                                    if not isinstance(cred.setdefault('string-variable'  , 'SECRET'), str):
+                                        raise ConfigurationError(
+                                                f"'string-variable' in with-credentials block `{cred['id']}` for "
+                                                f"`{phasename}.{variantname}` is not a string", file=config)
 
                         if var_key == "image":
                             if not isinstance(var[var_key], basic_image_types):

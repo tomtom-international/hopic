@@ -23,6 +23,7 @@ from .config_reader import (
         expand_vars,
         read as read_config,
     )
+from .credentials import get_credential_by_id
 from .execution import echo_cmd
 from .git_time import restore_mtime_from_git
 from .versioning import *
@@ -69,6 +70,17 @@ log.addHandler(logging.NullHandler())
 
 class VersioningError(click.ClickException):
     exit_code = 33
+
+
+class MissingCredentialVarError(click.ClickException):
+    exit_code = 34
+
+    def __init__(self, credential_id, var_name):
+        self.credential_id = credential_id
+        self.var_name      = var_name
+
+    def format_message(self):
+        return f"credential '{self.credential_id}' not available when trying to expand variable '{self.var_name}'"
 
 
 class FatalSignal(Exception):
@@ -380,7 +392,7 @@ def determine_config_file_name(ctx):
 @click.option('--color', type=click.Choice(('always', 'auto', 'never')), default='auto', show_default=True)
 @click.option('--config', type=click.Path(exists=False, file_okay=True, dir_okay=False, readable=True, resolve_path=True), default=lambda: None, show_default='${WORKSPACE}/hopic-ci-config.yaml')
 @click.option('--workspace', type=click.Path(exists=False, file_okay=False, dir_okay=True), default=lambda: None, show_default='git work tree of config file or current working directory')
-@click.option('--whitelisted-var', multiple=True, default=['CT_DEVENV_HOME'], show_default=True)
+@click.option('--whitelisted-var', multiple=True, default=['CT_DEVENV_HOME'], hidden=True)
 @click_log.simple_verbosity_option(__package__,              envvar='HOPIC_VERBOSITY', autocompletion=cli_autocomplete_click_log_verbosity)
 @click_log.simple_verbosity_option('git', '--git-verbosity', envvar='GIT_VERBOSITY'  , autocompletion=cli_autocomplete_click_log_verbosity)
 @click.pass_context
@@ -1298,6 +1310,8 @@ def build(ctx, phase, variant):
         pass
     has_change = bool(refspecs)
 
+    credentials = {}
+
     worktree_commits = {}
     for phasename, curphase in cfg['phases'].items():
         if phase and phasename not in phase:
@@ -1402,6 +1416,31 @@ def build(ctx, phase, variant):
                             docker_in_docker = cmd['docker-in-docker']
                         except KeyError:
                             pass
+
+                        try:
+                            with_credentials = cmd['with-credentials']
+                        except (KeyError, TypeError):
+                            pass
+                        else:
+                            for creds in with_credentials:
+                                if creds['id'] not in credentials and 'project-name' in cfg:
+                                    if creds['type'] == 'username-password' and not (
+                                            creds['username-variable'] in ctx.obj.volume_vars
+                                            and creds['password-variable'] in ctx.obj.volume_vars):
+                                        kcred = get_credential_by_id(cfg['project-name'], creds['id'])
+                                        if kcred is not None:
+                                            username, password = kcred
+                                            credentials[creds['id']] = {
+                                                    creds['username-variable']: username,
+                                                    creds['password-variable']: password,
+                                                }
+
+                                volume_vars.update(credentials.get(creds['id'], {}))
+                                cred_vars = {name for key, name in creds.items() if key.endswith('-variable')}
+                                for cred_var in cred_vars:
+                                    if cred_var in volume_vars:
+                                        continue
+                                    volume_vars[cred_var] = MissingCredentialVarError(creds['id'], cred_var)
 
                         try:
                             cmd = cmd['sh']
