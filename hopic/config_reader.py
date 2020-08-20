@@ -205,7 +205,7 @@ def load_yaml_template(volume_vars, loader, node):
         props = {}
         name = loader.construct_scalar(node)
     else:
-        props = loader.construct_mapping(node)
+        props = loader.construct_mapping(node, deep=True)
         name = props.pop('name')
 
     for ep in metadata.entry_points().get('hopic.plugins.yaml', ()):
