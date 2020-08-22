@@ -16,7 +16,7 @@ Using Hopic locally
 
 .. code-block:: console
 
-   pip3 install --user 'git+https://github.com/tomtom-international/hopic.git@master[interactive]'
+   pip3 install --user 'git+https://github.com/tomtom-international/hopic.git@master#egg=hopic[interactive]'
 
 .. _BashComplete: https://click.palletsprojects.com/en/7.x/bashcomplete/#activation
 
