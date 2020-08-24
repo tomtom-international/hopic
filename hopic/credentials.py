@@ -17,7 +17,6 @@ import sys
 
 try:
     import keyring
-    import secretstorage
     from contextlib import closing
 
 
