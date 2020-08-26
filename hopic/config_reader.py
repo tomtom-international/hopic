@@ -406,16 +406,17 @@ def read(config, volume_vars):
             if not isinstance(variant, Sequence):
                 raise ConfigurationError(f"variant `{phasename}.{variantname}` doesn't contain a sequence but a {type(variant)}", file=config)
             for i in reversed(range(len(variant))):
-                var = variant[i]
-                if isinstance(var, Sequence) and not isinstance(var, (str, bytes)):
-                    variant[i:i+1] = var
+                cmd = variant[i]
+                if isinstance(cmd, str):
+                    variant[i] = cmd = OrderedDict((('sh', cmd),))
+                if isinstance(cmd, Sequence) and not isinstance(cmd, (str, bytes)):
+                    variant[i:i+1] = cmd
 
     # Convert multiple different syntaxes into a single one
     for phase in cfg['phases'].values():
         for variant, items in phase.items():
             for var in items:
-                if isinstance(var, str):
-                    continue
+                assert not isinstance(var, str), "string commands should have been converted to 'sh' dictionary format"
                 if isinstance(var, (OrderedDict, dict)):
                     for var_key in var:
                         if var_key in ('archive', 'fingerprint') and isinstance(var[var_key], (OrderedDict, dict)) and 'artifacts' in var[var_key]:
