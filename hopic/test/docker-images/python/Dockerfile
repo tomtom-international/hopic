@@ -28,6 +28,8 @@ RUN apt-get update \
  && curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKERVERSION}.tgz | tar -C /usr/local/bin --strip-components=1 -xzv docker/docker \
  && echo '82c7ae1ce6e314b697ec8a59074cf56b81b256b4a5f8c2f8614b57dd1709169c */usr/local/bin/docker' | sha256sum -c
 
+RUN pip install --no-cache-dir 'tox>=3.19,<4'
+
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["python"]
 

@@ -50,12 +50,8 @@ setup(
       'setuptools',
     ),
     setup_requires=(
-      'pytest-runner',
       'setuptools_scm',
       'setuptools_scm_git_archive',
-    ),
-    tests_require=(
-      'pytest',
     ),
     extras_require={
         'interactive': ['keyring'],

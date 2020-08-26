@@ -37,30 +37,21 @@ phases:
       - junit: junit-test.xml
         image: hopic-python:3.6-slim-git
         docker-in-docker: yes
-        volumes:
-          - ${WORKSPACE}/.local:~/.local
-      - python3.6 -m venv --clear venv3.6
-      - venv3.6/bin/python setup.py pytest
+        sh: tox -e py36
 
     python3.7:
       - docker build --build-arg=PYTHON_VERSION=3.7 -t hopic-python:3.7-slim-git hopic/test/docker-images/python
       - junit: junit-test.xml
         image: hopic-python:3.7-slim-git
         docker-in-docker: yes
-        volumes:
-          - ${WORKSPACE}/.local:~/.local
-      - python3.7 -m venv --clear venv3.7
-      - venv3.7/bin/python setup.py pytest
+        sh: tox -e py37
 
     python3.8:
       - docker build --build-arg=PYTHON_VERSION=3.8 -t hopic-python:3.8-slim-git hopic/test/docker-images/python
       - junit: junit-test.xml
         image: hopic-python:3.8-slim-git
         docker-in-docker: yes
-        volumes:
-          - ${WORKSPACE}/.local:~/.local
-      - python3.8 -m venv --clear venv3.8
-      - venv3.8/bin/python setup.py pytest
+        sh: tox -e py38
 
   build:
     sphinx-doc:

@@ -1,4 +1,5 @@
 *.egg-info
 *.eggs
 *.py[co]
+/.tox/
 /junit-test.xml
