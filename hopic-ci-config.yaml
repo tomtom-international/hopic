@@ -30,6 +30,12 @@ volumes:
 phases:
   style:
     commit-messages: !template "commisery"
+    flake8:
+      - docker build --build-arg=PYTHON_VERSION=3.8 -t hopic-python:3.8-slim-git hopic/test/docker-images/python
+      - junit: flake8.xml
+        image: hopic-python:3.8-slim-git
+        docker-in-docker: yes
+        sh: tox -e flake8
 
   test:
     python3.6:
