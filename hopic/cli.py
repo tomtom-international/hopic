@@ -1345,113 +1345,114 @@ def build(ctx, phase, variant):
                 for cmd in cmds:
                     worktrees = {}
                     foreach = None
-                    if not isinstance(cmd, str):
-                        try:
-                            run_on_change = cmd['run-on-change']
-                        except (KeyError, TypeError):
+
+                    assert isinstance(cmd, Mapping)
+
+                    try:
+                        run_on_change = cmd['run-on-change']
+                    except (KeyError, TypeError):
+                        pass
+                    else:
+                        if run_on_change == 'always':
                             pass
+                        elif run_on_change == 'only' and not (has_change and is_publish_allowed):
+                            break
+                    try:
+                        desc = cmd['description']
+                    except (KeyError, TypeError):
+                        pass
+                    else:
+                        log.info('Performing: %s', click.style(desc, fg='cyan'))
+
+                    try:
+                        cmd_volumes_from = cmd['volumes-from']
+                    except (KeyError, TypeError):
+                        pass
+                    else:
+                        if image:
+                            for volume in cmd_volumes_from:
+                                volumes_from.add(volume['image'])
                         else:
-                            if run_on_change == 'always':
-                                pass
-                            elif run_on_change == 'only' and not (has_change and is_publish_allowed):
-                                break
+                            log.warning('`volumes-from` has no effect if no Docker image is configured')
+
+                    for artifact_key in (
+                            'archive',
+                            'fingerprint',
+                        ):
                         try:
-                            desc = cmd['description']
+                            artifacts.extend(expand_vars(volume_vars, (
+                                artifact['pattern'] for artifact in cmd[artifact_key]['artifacts'] if 'pattern' in artifact)))
                         except (KeyError, TypeError):
                             pass
-                        else:
-                            log.info('Performing: %s', click.style(desc, fg='cyan'))
 
-                        try:
-                            cmd_volumes_from = cmd['volumes-from']
-                        except (KeyError, TypeError):
-                            pass
-                        else:
-                            if image:
-                                for volume in cmd_volumes_from:
-                                    volumes_from.add(volume['image'])
-                            else:
-                                log.warning('`volumes-from` has no effect if no Docker image is configured')
+                    try:
+                        worktrees = cmd['worktrees']
 
-                        for artifact_key in (
-                                'archive',
-                                'fingerprint',
-                            ):
-                            try:
-                                artifacts.extend(expand_vars(volume_vars, (
-                                    artifact['pattern'] for artifact in cmd[artifact_key]['artifacts'] if 'pattern' in artifact)))
-                            except (KeyError, TypeError):
-                                pass
+                        # Force clean builds when we don't know how to discover changed files
+                        for subdir, worktree in worktrees.items():
+                            if 'changed-files' not in worktree:
+                                with git.Repo(os.path.join(ctx.obj.workspace, subdir)) as repo:
+                                    clean_output = repo.git.clean('-xd', subdir, force=True)
+                                    if clean_output:
+                                        log.info('%s', clean_output)
+                    except KeyError:
+                        pass
 
-                        try:
-                            worktrees = cmd['worktrees']
+                    try:
+                        foreach = cmd['foreach']
+                    except KeyError:
+                        pass
 
-                            # Force clean builds when we don't know how to discover changed files
-                            for subdir, worktree in worktrees.items():
-                                if 'changed-files' not in worktree:
-                                    with git.Repo(os.path.join(ctx.obj.workspace, subdir)) as repo:
-                                        clean_output = repo.git.clean('-xd', subdir, force=True)
-                                        if clean_output:
-                                            log.info('%s', clean_output)
-                        except KeyError:
-                            pass
+                    try:
+                        scoped_volumes = expand_docker_volume_spec(ctx.obj.volume_vars['CFGDIR'],
+                                                                   ctx.obj.volume_vars, cmd['volumes'],
+                                                                   add_defaults=False)
+                        volumes.update(scoped_volumes)
+                    except KeyError:
+                        pass
 
-                        try:
-                            foreach = cmd['foreach']
-                        except KeyError:
-                            pass
+                    try:
+                        image = cmd['image']
+                    except KeyError:
+                        pass
 
-                        try:
-                            scoped_volumes = expand_docker_volume_spec(ctx.obj.volume_vars['CFGDIR'],
-                                                                       ctx.obj.volume_vars, cmd['volumes'],
-                                                                       add_defaults=False)
-                            volumes.update(scoped_volumes)
-                        except KeyError:
-                            pass
+                    try:
+                        docker_in_docker = cmd['docker-in-docker']
+                    except KeyError:
+                        pass
 
-                        try:
-                            image = cmd['image']
-                        except KeyError:
-                            pass
+                    try:
+                        with_credentials = cmd['with-credentials']
+                    except (KeyError, TypeError):
+                        pass
+                    else:
+                        for creds in with_credentials:
+                            if creds['id'] not in credentials and 'project-name' in cfg:
+                                if creds['type'] == 'username-password' and not (
+                                        creds['username-variable'] in ctx.obj.volume_vars
+                                        and creds['password-variable'] in ctx.obj.volume_vars):
+                                    kcred = get_credential_by_id(cfg['project-name'], creds['id'])
+                                    if kcred is not None:
+                                        username, password = kcred
+                                        credentials[creds['id']] = {
+                                                creds['username-variable']: username,
+                                                creds['password-variable']: password,
+                                            }
 
-                        try:
-                            docker_in_docker = cmd['docker-in-docker']
-                        except KeyError:
-                            pass
+                            volume_vars.update(credentials.get(creds['id'], {}))
+                            cred_vars = {name for key, name in creds.items() if key.endswith('-variable')}
+                            for cred_var in cred_vars:
+                                if cred_var in volume_vars:
+                                    continue
+                                volume_vars[cred_var] = MissingCredentialVarError(creds['id'], cred_var)
 
-                        try:
-                            with_credentials = cmd['with-credentials']
-                        except (KeyError, TypeError):
-                            pass
-                        else:
-                            for creds in with_credentials:
-                                if creds['id'] not in credentials and 'project-name' in cfg:
-                                    if creds['type'] == 'username-password' and not (
-                                            creds['username-variable'] in ctx.obj.volume_vars
-                                            and creds['password-variable'] in ctx.obj.volume_vars):
-                                        kcred = get_credential_by_id(cfg['project-name'], creds['id'])
-                                        if kcred is not None:
-                                            username, password = kcred
-                                            credentials[creds['id']] = {
-                                                    creds['username-variable']: username,
-                                                    creds['password-variable']: password,
-                                                }
-
-                                volume_vars.update(credentials.get(creds['id'], {}))
-                                cred_vars = {name for key, name in creds.items() if key.endswith('-variable')}
-                                for cred_var in cred_vars:
-                                    if cred_var in volume_vars:
-                                        continue
-                                    volume_vars[cred_var] = MissingCredentialVarError(creds['id'], cred_var)
-
-                        try:
-                            cmd = cmd['sh']
-                        except (KeyError, TypeError):
-                            continue
+                    try:
+                        cmd = cmd['sh']
+                    except KeyError:
+                        continue
 
                     volume_vars['WORKSPACE'] = '/code' if image is not None else ctx.obj.code_dir
 
-                    cmd = shlex.split(cmd)
                     env = (dict(
                         HOME            = '/home/sandbox',
                         _JAVA_OPTIONS   = '-Duser.home=/home/sandbox',
