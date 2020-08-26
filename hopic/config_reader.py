@@ -419,6 +419,13 @@ def read(config, volume_vars):
                 assert not isinstance(var, str), "string commands should have been converted to 'sh' dictionary format"
                 if isinstance(var, (OrderedDict, dict)):
                     for var_key in var:
+                        if var_key == 'sh':
+                            if isinstance(var[var_key], str):
+                                var[var_key] = shlex.split(var[var_key])
+                            if not isinstance(var[var_key], Sequence) or not all(isinstance(x, str) for x in var[var_key]):
+                                raise ConfigurationError(
+                                        f"'sh' member is not a command string, nor a list of argument strings",
+                                        file=config)
                         if var_key in ('archive', 'fingerprint') and isinstance(var[var_key], (OrderedDict, dict)) and 'artifacts' in var[var_key]:
                             artifacts = var[var_key]['artifacts']
 

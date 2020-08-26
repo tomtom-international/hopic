@@ -1453,7 +1453,6 @@ def build(ctx, phase, variant):
 
                     volume_vars['WORKSPACE'] = '/code' if image is not None else ctx.obj.code_dir
 
-                    cmd = shlex.split(cmd)
                     env = (dict(
                         HOME            = '/home/sandbox',
                         _JAVA_OPTIONS   = '-Duser.home=/home/sandbox',

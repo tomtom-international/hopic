@@ -638,6 +638,7 @@ def test_embed_variants_syntax_error(capfd):
     sys.stderr.write(err)
     assert 'An error occurred when parsing the hopic configuration file' in out
 
+
 def test_version_variables_content(capfd):
     result = run_with_config(dedent('''\
                 version:
@@ -661,3 +662,19 @@ def test_version_variables_content(capfd):
     assert out.splitlines()[0] == out.splitlines()[1]
     assert out.splitlines()[2] == '0.0.0'
     assert out.splitlines()[2] == out.splitlines()[3]
+
+
+def test_execute_list(monkeypatch):
+    def mock_check_call(args, *popenargs, **kwargs):
+        assert tuple(args) == ('echo', "an argument, with spaces and ' quotes", 'and-another-without')
+
+    with monkeypatch.context() as m:
+        m.setattr(subprocess, 'check_call', mock_check_call)
+        result = run_with_config(dedent(f'''\
+                    phases:
+                      build:
+                        a: 
+                          - sh: ['echo', "an argument, with spaces and ' quotes", 'and-another-without']
+                    '''),
+                    ('build',))
+    assert result.exit_code == 0
