@@ -382,7 +382,7 @@ def read(config, volume_vars):
         raise ConfigurationError('`pass-through-environment-vars` must be a sequence of strings', file=config)
     for idx, var in enumerate(env_vars):
         if not isinstance(var, str):
-            raise ConfigurationError("`pass-through-environment-vars` must be a sequence containing strings only: element {idx} has type {type!r}".format(idx=idx, type=type(idx)), file=config)
+            raise ConfigurationError("`pass-through-environment-vars` must be a sequence containing strings only: element {idx} has type {type!r}".format(idx=idx, type=type(var)), file=config)
 
     basic_image_types = (str, IvyManifestImage, type(None))
     valid_image_types = (basic_image_types, Mapping)
@@ -406,18 +406,26 @@ def read(config, volume_vars):
             if not isinstance(variant, Sequence):
                 raise ConfigurationError(f"variant `{phasename}.{variantname}` doesn't contain a sequence but a {type(variant)}", file=config)
             for i in reversed(range(len(variant))):
-                var = variant[i]
-                if isinstance(var, Sequence) and not isinstance(var, (str, bytes)):
-                    variant[i:i+1] = var
+                cmd = variant[i]
+                if isinstance(cmd, str):
+                    variant[i] = cmd = OrderedDict((('sh', cmd),))
+                if isinstance(cmd, Sequence) and not isinstance(cmd, (str, bytes)):
+                    variant[i:i+1] = cmd
 
     # Convert multiple different syntaxes into a single one
     for phase in cfg['phases'].values():
         for variant, items in phase.items():
             for var in items:
-                if isinstance(var, str):
-                    continue
+                assert not isinstance(var, str), "string commands should have been converted to 'sh' dictionary format"
                 if isinstance(var, (OrderedDict, dict)):
                     for var_key in var:
+                        if var_key == 'sh':
+                            if isinstance(var[var_key], str):
+                                var[var_key] = shlex.split(var[var_key])
+                            if not isinstance(var[var_key], Sequence) or not all(isinstance(x, str) for x in var[var_key]):
+                                raise ConfigurationError(
+                                        f"'sh' member is not a command string, nor a list of argument strings",
+                                        file=config)
                         if var_key in ('archive', 'fingerprint') and isinstance(var[var_key], (OrderedDict, dict)) and 'artifacts' in var[var_key]:
                             artifacts = var[var_key]['artifacts']
 
