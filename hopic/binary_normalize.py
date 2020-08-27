@@ -17,35 +17,7 @@ from gzip import GzipFile
 import os
 import shutil
 import tarfile
-import sys
-
-if sys.version_info < (3, 5, 2):
-    class TarInfoWithoutGreedyNameSplitting(tarfile.TarInfo):
-        """Variant of tarfile.TarInfo that helps to ensure reproducible builds."""
-
-        def _posix_split_name(self, name, *_):
-            """Split a path into a prefix and a name part.
-
-            This is a non-greedy variant of this function for Python versions older than 3.5.2.
-
-            This ensures that archives before and after that version are equal at the byte level.
-            This change is necessary due to the fix for https://bugs.python.org/issue24838
-            """
-            prefix = name[:-tarfile.LENGTH_NAME]
-            while prefix and prefix[-1] != "/" and len(prefix) < len(name):
-                prefix = name[:len(prefix) + 1]
-
-            name = name[len(prefix):]
-            prefix = prefix[:-1]
-
-            if len(name) > tarfile.LENGTH_NAME:
-                raise ValueError("path is too long")
-            return prefix, name
-
-    class TarFile(tarfile.TarFile):
-        tarinfo = TarInfoWithoutGreedyNameSplitting
-else:
-    TarFile = tarfile.TarFile
+from tarfile import TarFile
 
 
 class ArInfo(object):
