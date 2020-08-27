@@ -1337,8 +1337,6 @@ def build(ctx, phase, variant):
         pass
     has_change = bool(refspecs)
 
-    credentials = {}
-
     worktree_commits = {}
     for phasename, curphase in cfg['phases'].items():
         if phase and phasename not in phase:
