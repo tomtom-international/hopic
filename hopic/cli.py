@@ -845,7 +845,7 @@ def process_prepare_source_tree(
         if is_publish_allowed and bump['policy'] != 'disabled' and bump['on-every-change']:
             if ctx.obj.version is None:
                 if 'file' in version_info:
-                    raise VersioningError(f"Failed to read the current version (from {version[file]}) while attempting to bump the version")
+                    raise VersioningError(f"Failed to read the current version (from {version_info['file']}) while attempting to bump the version")
                 else:
                     msg = "Failed to determine the current version while attempting to bump the version"
                     log.error(msg)

@@ -132,7 +132,7 @@ class ArInfo(object):
     @classmethod
     def frombuf(cls, fileobj, buf, data_offset):
         if len(buf) != cls.HEADER_SIZE:
-            raise IOError(f"Too short a header for ar file: {len(buf)} instead of {HEADER_SIZE}")
+            raise IOError(f"Too short a header for ar file: {len(buf)} instead of {cls.HEADER_SIZE}")
         member_name, mtime, uid, gid, perm, size, _ = (
             buf[ 0:16],  # noqa: E201
             buf[16:28],
