@@ -1,4 +1,4 @@
-# Copyright (c) 2018 - 2019 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2018 - 2020 TomTom N.V. (https://tomtom.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ import shutil
 import tarfile
 import sys
 
-if sys.version_info < (3,5,2):
+if sys.version_info < (3, 5, 2):
     class TarInfoWithoutGreedyNameSplitting(tarfile.TarInfo):
         """Variant of tarfile.TarInfo that helps to ensure reproducible builds."""
 
@@ -133,8 +133,8 @@ class ArInfo(object):
     def frombuf(cls, fileobj, buf, data_offset):
         if len(buf) != cls.HEADER_SIZE:
             raise IOError(f"Too short a header for ar file: {len(buf)} instead of {HEADER_SIZE}")
-        member_name, mtime, uid, gid, perm, size, ending = (
-            buf[ 0:16],
+        member_name, mtime, uid, gid, perm, size, _ = (
+            buf[ 0:16],  # noqa: E201
             buf[16:28],
             buf[28:34],
             buf[34:40],

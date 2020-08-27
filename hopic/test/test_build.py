@@ -13,7 +13,9 @@
 # limitations under the License.
 
 from ..cli import cli
-from .markers import *
+from .markers import (
+        docker,
+    )
 
 from click.testing import CliRunner
 from textwrap import dedent
@@ -90,7 +92,7 @@ def run_with_config(config, *args, files={}, env=None, monkeypatch_injector=Monk
 
 def test_missing_manifest():
     with pytest.raises(FileNotFoundError, match=r'(?:i).*\bivy manifest\b.*/dependency_manifest.xml\b'):
-        result = run_with_config('''\
+        run_with_config('''\
 image: !image-from-ivy-manifest {}
 
 phases:
@@ -244,7 +246,7 @@ def test_null_image(monkeypatch):
             assert args[0] == 'docker'
         else:
             assert args[0] != 'docker'
-        
+
         cmd = tuple(args[-len(expected_call['cmd']):])
         assert cmd == expected_call['cmd']
 
@@ -264,7 +266,6 @@ phases:
     c:
       - image: null
       - ./c.sh
-      
 ''', ('build',))
     assert result.exit_code == 0
     assert not expected
@@ -276,6 +277,7 @@ def test_docker_run_arguments(monkeypatch, tmp_path):
     ]
     uid = 42
     gid = 4242
+
     class MockDockerSockStat:
         st_gid = 2323
         st_mode = stat.S_IFSOCK | 0o0660
@@ -384,33 +386,35 @@ def test_image_override_per_phase(monkeypatch):
 
     with monkeypatch.context() as m:
         m.setattr(subprocess, 'check_call', mock_check_call)
-        result = run_with_config('''\
-image:
-  default: buildpack-deps:18.04
-  b: buildpack-deps:buster
+        result = run_with_config(
+            dedent('''\
+                image:
+                  default: buildpack-deps:18.04
+                  b: buildpack-deps:buster
 
-phases:
-  build:
-    a:
-      - ./build-a.sh
-    b:
-      - ./build-b.sh
-      
-  test:
-    a:
-      - image: test-image-a:latest
-      - ./test-a.sh
-    b: 
-      - image: test-image-b:bleeding-edge
-      - ./test-b.sh
-      
-  deploy:
-    a:
-      - ./deploy-a.sh
-    b: 
-      - ./deploy-b.sh
-    
-''', ('build',))
+                phases:
+                  build:
+                    a:
+                      - ./build-a.sh
+                    b:
+                      - ./build-b.sh
+
+                  test:
+                    a:
+                      - image: test-image-a:latest
+                      - ./test-a.sh
+                    b:
+                      - image: test-image-b:bleeding-edge
+                      - ./test-b.sh
+
+                  deploy:
+                    a:
+                      - ./deploy-a.sh
+                    b:
+                      - ./deploy-b.sh
+
+                '''),
+            ('build',))
     assert result.exit_code == 0
     assert not expected
 
@@ -504,36 +508,39 @@ def test_docker_terminated(monkeypatch, signum):
 
 @docker
 def test_container_with_env_var():
-    result = run_with_config('''\
-image: buildpack-deps:18.04
+    result = run_with_config(
+        dedent('''\
+            image: buildpack-deps:18.04
 
-pass-through-environment-vars:
-  - THE_ENVIRONMENT
+            pass-through-environment-vars:
+              - THE_ENVIRONMENT
 
-phases:
-  build:
-    test:
-      - docker-in-docker: yes
-      - printenv THE_ENVIRONMENT
-''', ('build',),
-    env={'THE_ENVIRONMENT': 'The Real Environment!'})
+            phases:
+              build:
+                test:
+                  - docker-in-docker: yes
+                  - printenv THE_ENVIRONMENT
+            '''), ('build',),
+        env={'THE_ENVIRONMENT': 'The Real Environment!'})
     assert result.exit_code == 0
 
 
 @docker
 def test_container_without_env_var():
-    result = run_with_config('''\
-image: buildpack-deps:18.04
+    result = run_with_config(
+        dedent('''\
+            image: buildpack-deps:18.04
 
-pass-through-environment-vars:
-  - THE_ENVIRONMENT
+            pass-through-environment-vars:
+              - THE_ENVIRONMENT
 
-phases:
-  build:
-    test:
-      - printenv THE_ENVIRONMENT
-''', ('build',),
-    env={'THE_ENVIRONMENT': None})
+            phases:
+              build:
+                test:
+                  - printenv THE_ENVIRONMENT
+            '''),
+        ('build',),
+        env={'THE_ENVIRONMENT': None})
     assert result.exit_code != 0
 
 
@@ -550,12 +557,13 @@ phases:
 
 
 def test_command_with_branch_and_commit(capfd):
-    result = run_with_config('''\
-phases:
-  build:
-    test:
-      - echo ${GIT_BRANCH}=${GIT_COMMIT}
-''',
+    result = run_with_config(
+        dedent('''\
+            phases:
+              build:
+                test:
+                  - echo ${GIT_BRANCH}=${GIT_COMMIT}
+            '''),
         ('checkout-source-tree', '--clean', '--target-remote', '.', '--target-ref', 'master'),
         ('build',),
     )
@@ -593,24 +601,26 @@ def test_embed_variants(monkeypatch):
 
     with monkeypatch.context() as m:
         m.setattr(subprocess, 'check_call', mock_check_call)
-        result = run_with_config(dedent(f'''\
+        result = run_with_config(
+            dedent(f'''\
                     phases:
                       build:
-                        a: 
+                        a:
                           - ./a.sh test_argument
                         b:
-                          - ./b.sh 
-                        
+                          - ./b.sh
+
                       test: !embed
                         cmd: {generate_script_path}'''),
-                    ('build',),
-                    files={generate_script_path: (dedent('''\
+            ('build',),
+            files={generate_script_path: (
+                dedent('''\
                     #!/usr/bin/env python3
                     print(\'\'\'a:
                       - ./test-a.sh
                     b:
                       - ./test-b.sh \'\'\')'''),
-                    lambda: os.chmod(generate_script_path, os.stat(generate_script_path).st_mode | stat.S_IEXEC))})
+                lambda: os.chmod(generate_script_path, os.stat(generate_script_path).st_mode | stat.S_IEXEC))})
     assert result.exit_code == 0
     assert not expected
 
@@ -618,13 +628,14 @@ def test_embed_variants(monkeypatch):
 def test_embed_variants_syntax_error(capfd):
     generate_script_path = "generate-variants.py"
 
-    result = run_with_config(dedent(f'''\
+    result = run_with_config(
+        dedent(f'''\
                 phases:
                   test: !embed
                     cmd: {generate_script_path}
                 '''),
-                ('build',),
-                files={generate_script_path: (dedent('''\
+        ('build',),
+        files={generate_script_path: (dedent('''\
                 #!/usr/bin/env python3
                 print(\'\'\'a:
                   - ./a-test.sh
@@ -654,6 +665,7 @@ def test_version_variables_content(capfd):
                       - echo ${PURE_VERSION}
                       - sh -c 'echo $${PURE_VERSION}'
                 '''), ('build',))
+    assert result.exit_code == 0
     out, err = capfd.readouterr()
     sys.stdout.write(out)
     sys.stderr.write(err)
@@ -670,11 +682,12 @@ def test_execute_list(monkeypatch):
 
     with monkeypatch.context() as m:
         m.setattr(subprocess, 'check_call', mock_check_call)
-        result = run_with_config(dedent(f'''\
+        result = run_with_config(
+            dedent('''\
                     phases:
                       build:
-                        a: 
+                        a:
                           - sh: ['echo', "an argument, with spaces and ' quotes", 'and-another-without']
                     '''),
-                    ('build',))
+            ('build',))
     assert result.exit_code == 0
