@@ -89,7 +89,7 @@ class ArInfo(object):
         self.fileobj.seek(self.offset - self.HEADER_SIZE)
         self.fileobj.write(self.tobuf())
         self.arfile.offset = self.offset + self.padded_size
-        self.mode == 'rb'
+        self.mode = 'rb'
 
     def __enter__(self):
         return self
