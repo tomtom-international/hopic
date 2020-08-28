@@ -347,19 +347,3 @@ phases:
     sys.stderr.write(err)
 
     assert re.search(r"^Error: configuration error in '.*?\bhopic-ci-config\.yaml': variant `a.x`.*\bsequence\b", err, re.MULTILINE)
-
-
-def test_commisery_template(capfd):
-    result = run_with_config('''\
-phases:
-  style:
-    commit-messages: !template "commisery"
-''', ('show-config',))
-
-    assert result.exit_code == 0
-    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
-    expanded = output['phases']['style']['commit-messages']
-    assert expanded[0]['image'] is None
-    commits, head = [e['sh'] for e in expanded]
-    assert 'commisery.checking' in commits
-    assert head[-2:] == ['commisery.checking', 'HEAD']
