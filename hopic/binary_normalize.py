@@ -1,4 +1,4 @@
-# Copyright (c) 2018 - 2019 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2018 - 2020 TomTom N.V. (https://tomtom.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,35 +17,7 @@ from gzip import GzipFile
 import os
 import shutil
 import tarfile
-import sys
-
-if sys.version_info < (3,5,2):
-    class TarInfoWithoutGreedyNameSplitting(tarfile.TarInfo):
-        """Variant of tarfile.TarInfo that helps to ensure reproducible builds."""
-
-        def _posix_split_name(self, name, *_):
-            """Split a path into a prefix and a name part.
-
-            This is a non-greedy variant of this function for Python versions older than 3.5.2.
-
-            This ensures that archives before and after that version are equal at the byte level.
-            This change is necessary due to the fix for https://bugs.python.org/issue24838
-            """
-            prefix = name[:-tarfile.LENGTH_NAME]
-            while prefix and prefix[-1] != "/" and len(prefix) < len(name):
-                prefix = name[:len(prefix) + 1]
-
-            name = name[len(prefix):]
-            prefix = prefix[:-1]
-
-            if len(name) > tarfile.LENGTH_NAME:
-                raise ValueError("path is too long")
-            return prefix, name
-
-    class TarFile(tarfile.TarFile):
-        tarinfo = TarInfoWithoutGreedyNameSplitting
-else:
-    TarFile = tarfile.TarFile
+from tarfile import TarFile
 
 
 class ArInfo(object):
@@ -117,7 +89,7 @@ class ArInfo(object):
         self.fileobj.seek(self.offset - self.HEADER_SIZE)
         self.fileobj.write(self.tobuf())
         self.arfile.offset = self.offset + self.padded_size
-        self.mode == 'rb'
+        self.mode = 'rb'
 
     def __enter__(self):
         return self
@@ -132,9 +104,9 @@ class ArInfo(object):
     @classmethod
     def frombuf(cls, fileobj, buf, data_offset):
         if len(buf) != cls.HEADER_SIZE:
-            raise IOError(f"Too short a header for ar file: {len(buf)} instead of {HEADER_SIZE}")
-        member_name, mtime, uid, gid, perm, size, ending = (
-            buf[ 0:16],
+            raise IOError(f"Too short a header for ar file: {len(buf)} instead of {cls.HEADER_SIZE}")
+        member_name, mtime, uid, gid, perm, size, _ = (
+            buf[ 0:16],  # noqa: E201
             buf[16:28],
             buf[28:34],
             buf[34:40],

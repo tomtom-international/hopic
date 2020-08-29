@@ -19,7 +19,6 @@ from collections import OrderedDict
 import git
 import json
 import os
-import pytest
 import re
 import sys
 from textwrap import dedent
@@ -71,8 +70,8 @@ image: !image-from-ivy-manifest
   repository: example.com
   path: example
 ''', ('show-config',),
-    files={
-        'dependency_manifest.xml': '''\
+        files={
+            'dependency_manifest.xml': '''\
 <?xml version="1.0" encoding="UTF-8"?>
 <ivy-module version="2.0">
   <dependencies>
@@ -95,9 +94,9 @@ image: !image-from-ivy-manifest
   repository: example.com
   path: example
 ''', ('show-config',),
-    cfg_file='.ci/some-special-config/hopic-ci-config.yaml',
-    files={
-        '.ci/dependency_manifest.xml': '''\
+        cfg_file='.ci/some-special-config/hopic-ci-config.yaml',
+        files={
+            '.ci/dependency_manifest.xml': '''\
 <?xml version="1.0" encoding="UTF-8"?>
 <ivy-module version="2.0">
   <dependencies>
@@ -237,20 +236,20 @@ version:
     assert result.exit_code == 0
     output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
     assert output['version']['bump']['policy'] == 'conventional-commits'
-    assert output['version']['bump']['strict'] == False
+    assert output['version']['bump']['strict'] is False
 
     reject_breaking_changes_on = re.compile(output['version']['bump']['reject-breaking-changes-on'])
     reject_new_features_on = re.compile(output['version']['bump']['reject-new-features-on'])
     for major_branch in (
-            'release/42',
-            'rel-42',
-        ):
+                'release/42',
+                'rel-42',
+            ):
         assert reject_breaking_changes_on.match(major_branch)
         assert not reject_new_features_on.match(major_branch)
     for minor_branch in (
-            'release/42.21',
-            'rel-42.21',
-        ):
+                'release/42.21',
+                'rel-42.21',
+            ):
         assert reject_breaking_changes_on.match(minor_branch)
         assert reject_new_features_on.match(minor_branch)
 

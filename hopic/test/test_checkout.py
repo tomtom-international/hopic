@@ -17,7 +17,6 @@ from ..cli import cli
 from click.testing import CliRunner
 import git
 import os
-from pathlib import Path
 import pytest
 import sys
 
@@ -45,7 +44,7 @@ def run(*args, env=None):
 
             if result.exception is not None and not isinstance(result.exception, SystemExit):
                 raise result.exception
-            
+
             if result.exit_code != 0:
                 return result
 
@@ -117,7 +116,7 @@ def test_clean_checkout_in_non_empty_dir(capfd, tmp_path):
 
     # Verify first that a checkout without --clean fails
     with pytest.raises(git.GitCommandError, match=r'(?is).*\bfatal:\s+destination\s+path\b.*\bexists\b.*\bnot\b.*\bempty\s+directory\b'):
-        regular_result = run(('--workspace', str(non_empty_dir), 'checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'))
+        run(('--workspace', str(non_empty_dir), 'checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'))
     assert garbage_file.exists()
 
     # Now notice the difference and expect it to succeed with --clean

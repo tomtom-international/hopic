@@ -30,6 +30,7 @@ _BASE_APPROVER = 'Joe Approver1 <joe.approver1@nerds-r-us.eu>'
 _PRESQUASH_APPROVER = 'Bob Approvér2 <bob.approver2@acme.net>'
 _POSTSQUASH_APPROVER = '"Hank: The Approver 3" <hank.approver3@business.ie>'
 
+
 def run(*args, env=None):
     runner = CliRunner(mix_stderr=False, env=env)
     with runner.isolated_filesystem():
@@ -48,6 +49,7 @@ def run(*args, env=None):
                 return result
 
     return result
+
 
 @pytest.fixture
 def repo_with_fixup(tmp_path):
@@ -106,7 +108,7 @@ def _perform_merge(repo, approvals):
                 '--title=feat: something interesting',
 
                 *('--approved-by={}:{}'.format(*approval) for approval in approvals),
-            ),
+             ),
             ('submit',),
         )
     assert result.exit_code == 0
@@ -130,7 +132,7 @@ def test_approval_still_valid_on_autosquash(repo_with_fixup, tmp_path):
             (_POSTSQUASH_APPROVER, squashed_commit_sha),
         ))
 
-    assert set(commit.footers['Acked-By']) == { _PRESQUASH_APPROVER, _POSTSQUASH_APPROVER }
+    assert set(commit.footers['Acked-By']) == {_PRESQUASH_APPROVER, _POSTSQUASH_APPROVER}
 
 
 def test_approval_invalid_on_commit_msg_change(repo_with_fixup, tmp_path):
@@ -153,7 +155,7 @@ def test_approval_invalid_on_commit_msg_change(repo_with_fixup, tmp_path):
             (_PRESQUASH_APPROVER, presquash_commit_sha),
             (_POSTSQUASH_APPROVER, squashed_commit_sha),
         ))
-    assert set(commit.footers['Acked-By']) == { _POSTSQUASH_APPROVER } 
+    assert set(commit.footers['Acked-By']) == {_POSTSQUASH_APPROVER}
 
 
 def test_approval_invalid_on_author_change(repo_with_fixup, tmp_path):
@@ -178,7 +180,7 @@ def test_approval_invalid_on_author_change(repo_with_fixup, tmp_path):
             (_POSTSQUASH_APPROVER, squashed_commit_sha),
         ))
 
-    assert set(commit.footers['Acked-By']) == { _POSTSQUASH_APPROVER } 
+    assert set(commit.footers['Acked-By']) == {_POSTSQUASH_APPROVER}
 
 
 def test_approval_invalid_on_content_change(repo_with_fixup, tmp_path):
@@ -207,7 +209,7 @@ def test_approval_invalid_on_content_change(repo_with_fixup, tmp_path):
             (_POSTSQUASH_APPROVER, squashed_commit_sha),
         ))
 
-    assert set(commit.footers['Acked-By']) == { _POSTSQUASH_APPROVER } 
+    assert set(commit.footers['Acked-By']) == {_POSTSQUASH_APPROVER}
 
 
 def test_approval_handle_invalid_shas_gracefully(repo_with_fixup, tmp_path):
@@ -226,4 +228,4 @@ def test_approval_handle_invalid_shas_gracefully(repo_with_fixup, tmp_path):
             (_PRESQUASH_APPROVER, presquash_commit_sha),
             (_POSTSQUASH_APPROVER, invalid_sha),
         ))
-    assert set(commit.footers['Acked-By']) == { _PRESQUASH_APPROVER } 
+    assert set(commit.footers['Acked-By']) == {_PRESQUASH_APPROVER}
