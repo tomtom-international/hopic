@@ -274,7 +274,11 @@ version:
     # Successful checkout and build
     return run(
             ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', target),
-            ('prepare-source-tree', '--author-date', f"@{_git_time}", '--commit-date', f"@{_git_time}", '--author-name', _author.name, '--author-email', _author.email,
+            ('prepare-source-tree',
+                '--author-date', f"@{_git_time}",
+                '--commit-date', f"@{_git_time}",
+                '--author-name', _author.name,
+                '--author-email', _author.email,
                 'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful'),
         )
 
@@ -398,7 +402,7 @@ def test_move_submodule(capfd, tmp_path):
         with (toprepo / 'hopic-ci-config.yaml').open('w') as f:
             f.write('''\
 version:
-  bump: no            
+  bump: no
 
 phases:
   build:
@@ -477,7 +481,11 @@ def test_modality_merge_has_all_parents(tmp_path, monkeypatch):
     monkeypatch.setenv('GIT_COMMITTER_EMAIL', 'nobody@example.com')
     result = run(
             ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'),
-            ('prepare-source-tree', '--author-name', _author.name, '--author-email', _author.email, '--author-date', f"@{_git_time}", '--commit-date', f"@{_git_time}",
+            ('prepare-source-tree',
+                '--author-name', _author.name,
+                '--author-email', _author.email,
+                '--author-date', f"@{_git_time}",
+                '--commit-date', f"@{_git_time}",
                 'apply-modality-change', 'AUTO_MERGE'),
             ('submit',),
         )
@@ -511,7 +519,11 @@ def test_separate_modality_change(tmp_path):
 
     result = run(
             ('--workspace', str(toprepo),
-                'prepare-source-tree', '--author-name', _author.name, '--author-email', _author.email, '--author-date', f"@{_git_time}", '--commit-date', f"@{_git_time}",
+                'prepare-source-tree',
+                '--author-name', _author.name,
+                '--author-email', _author.email,
+                '--author-date', f"@{_git_time}",
+                '--commit-date', f"@{_git_time}",
                 'apply-modality-change', 'CHANGE'),
         )
     assert result.exit_code == 0

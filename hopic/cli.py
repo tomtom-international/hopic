@@ -26,7 +26,11 @@ from .config_reader import (
 from .credentials import get_credential_by_id
 from .execution import echo_cmd
 from .git_time import restore_mtime_from_git
-from .versioning import *
+from .versioning import (
+        parse_git_describe_version,
+        read_version,
+        replace_version,
+    )
 from collections import OrderedDict
 from collections.abc import (
         Mapping,
@@ -46,7 +50,6 @@ from io import (
         BytesIO,
         StringIO,
     )
-from itertools import chain
 import json
 import logging
 import os
@@ -63,6 +66,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+from textwrap import dedent
 
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
@@ -120,6 +124,7 @@ class DateTime(click.ParamType):
             return dt
         except ValueError as e:
             self.fail('Could not parse datetime string "{value}": {e}'.format(value=value, e=' '.join(e.args)), param, ctx)
+
 
 def is_publish_branch(ctx):
     """
@@ -229,6 +234,7 @@ class DockerContainers(object):
 
         self.containers.add(container_id)
 
+
 class OptionContext(object):
     def __init__(self):
         super().__init__()
@@ -336,12 +342,12 @@ def cli_autocomplete_modality_from_config(ctx, args, incomplete):
 
 def cli_autocomplete_click_log_verbosity(ctx, args, incomplete):
     for level in (
-            'DEBUG',
-            'INFO',
-            'WARNING',
-            'ERROR',
-            'CRITICAL',
-        ):
+                'DEBUG',
+                'INFO',
+                'WARNING',
+                'ERROR',
+                'CRITICAL',
+            ):
         if incomplete in level:
             yield level
 
@@ -380,8 +386,8 @@ def determine_config_file_name(ctx):
         return ctx.obj.config_file
     except (click.BadParameter, AttributeError):
         for fname in (
-                'hopic-ci-config.yaml',
-            ):
+                    'hopic-ci-config.yaml',
+                ):
             fname = os.path.join(ctx.obj.workspace, fname)
             if os.path.isfile(fname):
                 return fname
@@ -389,11 +395,11 @@ def determine_config_file_name(ctx):
 
 
 @click.group(context_settings=dict(help_option_names=('-h', '--help')))
-@click.option('--color', type=click.Choice(('always', 'auto', 'never')), default='auto', show_default=True)
-@click.option('--config', type=click.Path(exists=False, file_okay=True, dir_okay=False, readable=True, resolve_path=True), default=lambda: None, show_default='${WORKSPACE}/hopic-ci-config.yaml')
-@click.option('--workspace', type=click.Path(exists=False, file_okay=False, dir_okay=True), default=lambda: None, show_default='git work tree of config file or current working directory')
-@click.option('--whitelisted-var', multiple=True, default=['CT_DEVENV_HOME'], hidden=True)
-@click_log.simple_verbosity_option(__package__,              envvar='HOPIC_VERBOSITY', autocompletion=cli_autocomplete_click_log_verbosity)
+@click.option('--color'          , type=click.Choice(('always', 'auto', 'never'))                                                  , default='auto'      , show_default=True)  # noqa: E501
+@click.option('--config'         , type=click.Path(exists=False, file_okay=True , dir_okay=False, readable=True, resolve_path=True), default=lambda: None, show_default='${WORKSPACE}/hopic-ci-config.yaml')  # noqa: E501
+@click.option('--workspace'      , type=click.Path(exists=False, file_okay=False, dir_okay=True)                                   , default=lambda: None, show_default='git work tree of config file or current working directory')  # noqa: E501
+@click.option('--whitelisted-var', multiple=True                                                                                   , default=['CT_DEVENV_HOME'], hidden=True)  # noqa: E501
+@click_log.simple_verbosity_option(__package__             , envvar='HOPIC_VERBOSITY', autocompletion=cli_autocomplete_click_log_verbosity)
 @click_log.simple_verbosity_option('git', '--git-verbosity', envvar='GIT_VERBOSITY'  , autocompletion=cli_autocomplete_click_log_verbosity)
 @click.pass_context
 def cli(ctx, color, config, workspace, whitelisted_var):
@@ -520,7 +526,8 @@ def checkout_tree(tree, remote, ref, clean=False, remote_name='origin', allow_su
         repo.git.submodule(["deinit", "--all", "--force"])
         modules_dir = "%s/modules" % repo.git_dir
         if os.path.isdir(modules_dir):
-            shutil.rmtree(modules_dir) # Hacky way to restore git repo to clean state
+            # Hacky way to restore git repo to clean state
+            shutil.rmtree(modules_dir)
     except (git.InvalidGitRepositoryError, git.NoSuchPathError):
         if clean and os.path.exists(tree):
             # Wipe the directory to allow 'git clone' to succeed.
@@ -558,13 +565,16 @@ def checkout_tree(tree, remote, ref, clean=False, remote_name='origin', allow_su
         commit = origin.fetch(ref, tags=True)[0].commit
         repo.head.reference = commit
         repo.head.reset(index=True, working_tree=True)
-        repo.git.submodule(["deinit", "--all", "--force"]) # Remove potential moved submodules
+        # Remove potentially moved submodules
+        repo.git.submodule(["deinit", "--all", "--force"])
 
         try:
             update_submodules(repo, clean)
         except git.GitCommandError as e:
-            log.error('Failed to checkout submodule for ref \'%s\'\n'
-                        'error:\n%s' % (ref, e))
+            log.error(dedent("""\
+                    Failed to checkout submodule for ref '%s'
+                    error:
+                    %s"""), ref, e)
             if not allow_submodule_checkout_failure:
                 raise
 
@@ -618,7 +628,7 @@ def clean_repo(repo, clean_config=[]):
 def to_git_time(date):
     """
     Converts a datetime object to a string with Git's internal time format.
-    
+
     This is necessary because GitPython, wrongly, interprets an ISO-8601 formatted time string as
     UTC time to be converted to the specified timezone.
 
@@ -733,13 +743,13 @@ def prepare_source_tree(*args, **kwargs):
 @prepare_source_tree.resultcallback()
 @click.pass_context
 def process_prepare_source_tree(
-        ctx,
-        change_applicator,
-        author_name,
-        author_email,
-        author_date,
-        commit_date,
-    ):
+            ctx,
+            change_applicator,
+            author_name,
+            author_email,
+            author_date,
+            commit_date,
+        ):
     with git.Repo(ctx.obj.workspace) as repo:
         if author_name is None or author_email is None:
             # This relies on /etc/passwd entries as a fallback, which might contain the info we need
@@ -801,7 +811,7 @@ def process_prepare_source_tree(
 
         # Re-read version to ensure that the version policy in the reloaded configuration is used for it
         ctx.obj.version = determine_version(version_info, ctx.obj.config_dir, ctx.obj.code_dir)
-        
+
         # If the branch is not allowed to publish, skip version bump step
         is_publish_allowed = is_publish_branch(ctx)
 
@@ -809,9 +819,11 @@ def process_prepare_source_tree(
             relative_version_file = os.path.relpath(os.path.join(os.path.relpath(ctx.obj.config_dir, repo.working_dir), version_info['file']))
 
         bump = version_info['bump']
-        source_commits = (() if source_commit is None
-                else [parse_commit_message(commit, policy=bump['policy'], strict=bump.get('strict', False))
-                        for commit in git.Commit.list_items(
+        source_commits = (
+                () if source_commit is None
+                else [
+                    parse_commit_message(commit, policy=bump['policy'], strict=bump.get('strict', False))
+                    for commit in git.Commit.list_items(
                         repo,
                         f"{target_commit}..{source_commit}",
                         first_parent=True,
@@ -822,17 +834,18 @@ def process_prepare_source_tree(
             if bump['reject-breaking-changes-on'].match(target_ref):
                 for commit in source_commits:
                     if commit.has_breaking_change():
-                        raise VersioningError(f"Breaking changes are not allowed on '{target_ref}', but commit '{commit.hexsha}' contains one:\n{commit.message}")
+                        raise VersioningError(
+                                f"Breaking changes are not allowed on '{target_ref}', but commit '{commit.hexsha}' contains one:\n{commit.message}")
             if bump['reject-new-features-on'].match(target_ref):
                 for commit in source_commits:
                     if commit.has_new_feature():
                         raise VersioningError(f"New features are not allowed on '{target_ref}', but commit '{commit.hexsha}' contains one:\n{commit.message}")
-        
+
         version_bumped = False
         if is_publish_allowed and bump['policy'] != 'disabled' and bump['on-every-change']:
             if ctx.obj.version is None:
                 if 'file' in version_info:
-                    raise VersioningError(f"Failed to read the current version (from {version[file]}) while attempting to bump the version")
+                    raise VersioningError(f"Failed to read the current version (from {version_info['file']}) while attempting to bump the version")
                 else:
                     msg = "Failed to determine the current version while attempting to bump the version"
                     log.error(msg)
@@ -884,7 +897,8 @@ def process_prepare_source_tree(
         submit_commit = repo.index.commit(**commit_params)
         click.echo(submit_commit)
 
-        autosquash_commits = [commit
+        autosquash_commits = [
+                commit
                 for commit in source_commits
                 if commit.needs_autosquash()
             ]
@@ -930,8 +944,8 @@ def process_prepare_source_tree(
             if version_tag and not isinstance(version_tag, str):
                 version_tag = ctx.obj.version.default_tag_name
             tagname = version_tag.format(
-                    version        = ctx.obj.version,
-                    build_sep      = ('+' if getattr(ctx.obj.version, 'build', None) else ''),
+                    version        = ctx.obj.version,                                           # noqa: E251 "unexpected spaces around '='"
+                    build_sep      = ('+' if getattr(ctx.obj.version, 'build', None) else ''),  # noqa: E251 "unexpected spaces around '='"
                 )
             repo.create_tag(tagname, submit_commit, force=True)
 
@@ -941,7 +955,9 @@ def process_prepare_source_tree(
         log.info('%s', repo.git.show(submit_commit, format='fuller', stat=True))
 
         push_commit = submit_commit
-        if ctx.obj.version is not None and 'file' in version_info and 'bump' in version_info.get('after-submit', {}) and is_publish_allowed and bump['on-every-change']:
+        if (ctx.obj.version is not None
+                and 'file' in version_info and 'bump' in version_info.get('after-submit', {})
+                and is_publish_allowed and bump['on-every-change']):
             params = {'bump': version_info['after-submit']['bump']}
             try:
                 params['prerelease_seed'] = version_info['after-submit']['prerelease-seed']
@@ -1006,13 +1022,13 @@ def process_prepare_source_tree(
 @click.option('--description'   , metavar='<description>'          , help='''Change request description to incorporate in merge commit message's body''')
 @click.option('--approved-by'   , metavar='<approver>'             , help='''Name of approving reviewer (can be provided multiple times).''', multiple=True)
 def merge_change_request(
-        source_remote,
-        source_ref,
-        change_request,
-        title,
-        description,
-        approved_by,
-    ):
+            source_remote,
+            source_ref,
+            change_request,
+            title,
+            description,
+            approved_by,
+        ):
     """
     Merges the change request from the specified branch.
     """
@@ -1048,30 +1064,36 @@ def merge_change_request(
                 valid_approvers.append(approver)
                 continue
             if last_reviewed_commit.diff(source_commit):
-                log.warning("Approval for '%s' is not valid anymore due to content changes compared to last reviewed commit '%s'", approver, last_reviewed_commit_hash)
+                log.warning(
+                        "Approval for '%s' is not valid anymore due to content changes compared to last reviewed commit '%s'",
+                        approver, last_reviewed_commit_hash)
                 continue
 
             # Source has a different hash, but no content diffs.
             # Now 'squash' and compare metadata (author, date, commit message).
             merge_base = repo.merge_base(repo.head.commit, source_commit)
 
-            source_commits = [(commit.author, commit.authored_date, commit.message.rstrip()) for commit in
-                git.Commit.list_items(repo, merge_base[0].hexsha + '..' + source_commit.hexsha, first_parent=True, no_merges=True)]
+            source_commits = [
+                    (commit.author, commit.authored_date, commit.message.rstrip()) for commit in
+                    git.Commit.list_items(repo, merge_base[0].hexsha + '..' + source_commit.hexsha, first_parent=True, no_merges=True)]
 
-            autosquashed_reviewed_commits = [(commit.author, commit.authored_date, commit.message.rstrip()) for commit in
-                git.Commit.list_items(repo, merge_base[0].hexsha + '..' + last_reviewed_commit.hexsha, first_parent=True, no_merges=True)
-                if not autosquash_re.match(commit.message)]
+            autosquashed_reviewed_commits = [
+                    (commit.author, commit.authored_date, commit.message.rstrip()) for commit in
+                    git.Commit.list_items(repo, merge_base[0].hexsha + '..' + last_reviewed_commit.hexsha, first_parent=True, no_merges=True)
+                    if not autosquash_re.match(commit.message)]
 
-            log.debug("For approver '%s', checking source commits:\n%s\n.. against squashed reviewed commits:\n%s",
+            log.debug(
+                    "For approver '%s', checking source commits:\n%s\n.. against squashed reviewed commits:\n%s",
                     approver, source_commits, autosquashed_reviewed_commits)
 
             if autosquashed_reviewed_commits == source_commits:
                 log.debug("Approval for '%s' is still valid", approver)
                 valid_approvers.append(approver)
             else:
-                log.warning("Approval for '%s' is not valid anymore due to metadata changes compared to last reviewed commit '%s'", approver, last_reviewed_commit_hash)
+                log.warning(
+                        "Approval for '%s' is not valid anymore due to metadata changes compared to last reviewed commit '%s'",
+                        approver, last_reviewed_commit_hash)
         return valid_approvers
-
 
     def change_applicator(repo, author, committer):
         try:
@@ -1111,13 +1133,13 @@ def merge_change_request(
 
 
 _env_var_re = re.compile(r'^(?P<var>[A-Za-z_][0-9A-Za-z_]*)=(?P<val>.*)$')
-@prepare_source_tree.command()
+@prepare_source_tree.command()  # noqa: E302 'expected 2 blank lines'
 @click.argument('modality', autocompletion=cli_autocomplete_modality_from_config)
 @click.pass_context
 def apply_modality_change(
-        ctx,
-        modality,
-    ):
+            ctx,
+            modality,
+        ):
     """
     Applies the changes specific to the specified modality.
     """
@@ -1206,8 +1228,11 @@ def apply_modality_change(
         if not repo.index.diff(repo.head.commit):
             log.info("No changes introduced by '%s'", commit_message)
             return None
-        commit_message = (commit_message.rstrip()
-                + u'\n\nMerged-by: Hopic {pkg.version}\n'.format(pkg=metadata.distribution(__package__)))
+        commit_message = dedent(f"""\
+            {commit_message.rstrip()}
+
+            Merged-by: Hopic {metadata.distribution(__package__).version}
+            """)
 
         commit_params = {'message': commit_message}
         # If this change was a merge make sure to produce a merge commit for it
@@ -1271,8 +1296,8 @@ def getinfo(ctx, phase, variant):
 
 
 @cli.command()
-@click.option('--phase'             , metavar='<phase>'  , multiple=True, help='''Build phase to execute''', autocompletion=cli_autocomplete_phase_from_config)
-@click.option('--variant'           , metavar='<variant>', multiple=True, help='''Configuration variant to build''', autocompletion=cli_autocomplete_variant_from_config)
+@click.option('--phase'  , metavar='<phase>'  , multiple=True, help='''Build phase to execute''', autocompletion=cli_autocomplete_phase_from_config)
+@click.option('--variant', metavar='<variant>', multiple=True, help='''Configuration variant to build''', autocompletion=cli_autocomplete_variant_from_config)
 @click.pass_context
 def build(ctx, phase, variant):
     """
@@ -1338,8 +1363,8 @@ def build(ctx, phase, variant):
 
             artifacts = []
             with DockerContainers() as volumes_from:
-                # If the branch is not allowed to publish, skip the publish phase. If run_on_change is set to 'always', phase will be run anyway regardless of this condition
-                # For build phase, run_on_change is set to 'always' by default, so build will always happen
+                # If the branch is not allowed to publish, skip the publish phase. If run_on_change is set to 'always', phase will be run anyway regardless of
+                # this condition. For build phase, run_on_change is set to 'always' by default, so build will always happen.
                 is_publish_allowed = is_publish_branch(ctx)
                 volumes = cfg['volumes'].copy()
                 for cmd in cmds:
@@ -1376,9 +1401,9 @@ def build(ctx, phase, variant):
                             log.warning('`volumes-from` has no effect if no Docker image is configured')
 
                     for artifact_key in (
-                            'archive',
-                            'fingerprint',
-                        ):
+                                'archive',
+                                'fingerprint',
+                            ):
                         try:
                             artifacts.extend(expand_vars(volume_vars, (
                                 artifact['pattern'] for artifact in cmd[artifact_key]['artifacts'] if 'pattern' in artifact)))
@@ -1454,8 +1479,8 @@ def build(ctx, phase, variant):
                     volume_vars['WORKSPACE'] = '/code' if image is not None else ctx.obj.code_dir
 
                     env = (dict(
-                        HOME            = '/home/sandbox',
-                        _JAVA_OPTIONS   = '-Duser.home=/home/sandbox',
+                        HOME            = '/home/sandbox',              # noqa: E251 "unexpected spaces around '='"
+                        _JAVA_OPTIONS   = '-Duser.home=/home/sandbox',  # noqa: E251 "unexpected spaces around '='"
                     ) if image is not None else {})
 
                     for varname in cfg['pass-through-environment-vars']:
@@ -1463,11 +1488,11 @@ def build(ctx, phase, variant):
                             env.setdefault(varname, os.environ[varname])
 
                     for varname in (
-                            'SOURCE_DATE_EPOCH',
-                            'VERSION',
-                            'PURE_VERSION',
-                            'DEBVERSION',
-                        ):
+                                'SOURCE_DATE_EPOCH',
+                                'VERSION',
+                                'PURE_VERSION',
+                                'DEBVERSION',
+                            ):
                         if varname in ctx.obj.volume_vars:
                             env[varname] = ctx.obj.volume_vars[varname]
 
@@ -1480,9 +1505,9 @@ def build(ctx, phase, variant):
                     for foreach_item in foreach_items:
                         cfg_vars = volume_vars.copy()
                         if foreach in (
-                                'SOURCE_COMMIT',
-                                'AUTOSQUASHED_COMMIT',
-                            ):
+                                    'SOURCE_COMMIT',
+                                    'AUTOSQUASHED_COMMIT',
+                                ):
                             cfg_vars[foreach] = str(foreach_item)
 
                         # Strip off prefixed environment variables from this command-line and apply them
@@ -1538,9 +1563,11 @@ def build(ctx, phase, variant):
                             new_env = os.environ.copy()
                             if image is None:
                                 new_env.update(env)
+
                             def signal_handler(signum, frame):
                                 log.warning('Received fatal signal %d', signum)
                                 raise FatalSignal(signum)
+
                             old_handlers = dict((num, signal.signal(num, signal_handler)) for num in (signal.SIGINT, signal.SIGTERM))
                             try:
                                 echo_cmd(subprocess.check_call, final_cmd, env=new_env, cwd=ctx.obj.code_dir)
@@ -1556,7 +1583,9 @@ def build(ctx, phase, variant):
                                         # Will also remove the container due to the '--rm' it was started with.
                                         echo_cmd(subprocess.check_call, ('docker', 'stop', cid))
                                     except subprocess.CalledProcessError as e:
-                                        log.error('Could not stop Docker container (maybe it was stopped already?), command failed with exit code %d', e.returncode)
+                                        log.error(
+                                                'Could not stop Docker container (maybe it was stopped already?), command failed with exit code %d',
+                                                e.returncode)
                                 ctx.exit(128 + e.signal)
                             for num, old_handler in old_handlers.items():
                                 signal.signal(num, old_handler)
@@ -1594,11 +1623,11 @@ def build(ctx, phase, variant):
                             with git.Repo(ctx.obj.workspace) as parent_repo:
                                 parent = parent_repo.head.commit
                                 submit_commit = repo.index.commit(
-                                        message     = commit_message,
-                                        author      = parent.author,
-                                        committer   = parent.committer,
-                                        author_date = to_git_time(parent.authored_datetime),
-                                        commit_date = to_git_time(parent.committed_datetime),
+                                        message     = commit_message,                          # noqa: E251 "unexpected spaces around '='"
+                                        author      = parent.author,                           # noqa: E251 "unexpected spaces around '='"
+                                        committer   = parent.committer,                        # noqa: E251 "unexpected spaces around '='"
+                                        author_date = to_git_time(parent.authored_datetime),   # noqa: E251 "unexpected spaces around '='"
+                                        commit_date = to_git_time(parent.committed_datetime),  # noqa: E251 "unexpected spaces around '='"
                                     )
                             restore_mtime_from_git(repo)
                             worktree_commits[subdir][1] = str(submit_commit)
@@ -1643,7 +1672,7 @@ def unbundle_worktrees(ctx, bundle):
                 refspecs = []
 
         head_path = 'refs/heads/'
-        worktrees = dict((v,k) for k,v in ctx.obj.config['scm']['git']['worktrees'].items())
+        worktrees = dict((v, k) for k, v in ctx.obj.config['scm']['git']['worktrees'].items())
         for headline in repo.git.bundle('list-heads', bundle).splitlines():
             commit, ref = headline.split(' ', 1)
             if not ref.startswith(head_path):
@@ -1670,6 +1699,7 @@ def unbundle_worktrees(ctx, bundle):
 
         with repo.config_writer() as cfg:
             cfg.set_value(section, 'refspecs', ' '.join(shlex.quote(refspec) for refspec in refspecs))
+
 
 @cli.command()
 @click.option('--target-remote', metavar='<url>', help='''The remote to push to, if not specified this will default to the checkout remote.''')

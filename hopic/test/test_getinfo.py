@@ -57,6 +57,7 @@ def run_with_config(config, args, resource=()):
 
     return result
 
+
 def test_order():
     """
     The order of phase/variant combinations must be the same in the output JSON as in the config.
@@ -83,9 +84,10 @@ phases:
     output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
 
     assert tuple(output.keys()) == ('build', 'test', 'upload')
-    assert tuple(output['build' ].keys()) == ('a', 'b')
-    assert tuple(output['test'  ].keys()) == ('a',)
+    assert tuple(output['build' ].keys()) == ('a', 'b')         # noqa: E202
+    assert tuple(output['test'  ].keys()) == ('a',)             # noqa: E202
     assert tuple(output['upload'].keys()) == ('a', 'b')
+
 
 def test_variants_without_metadata():
     """
@@ -112,9 +114,9 @@ phases:
     assert result.exit_code == 0
     output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
 
-    assert 'build'  in output
-    assert 'test'   in output
-    assert 'upload' in output
+    assert 'build'  in output  # noqa: E272
+    assert 'test'   in output  # noqa: E272
+    assert 'upload' in output  # noqa: E272
 
     assert 'a' in output['build']
     assert 'b' in output['build']
@@ -150,22 +152,23 @@ def test_with_credentials_format():
 
 def test_embed_variants_file():
     generate_script_path = "generate-variants.py"
-    result = run_with_config(dedent(f'''\
-                phases:
-                  build:
-                    a: []
-                    
-                  test: !embed
-                    cmd: {generate_script_path}
-                '''),
-                ('getinfo',),
-                (generate_script_path, dedent(f'''\
-                    #!/usr/bin/env python3
-    
-                    print(\'\'\'test-variant:
-                      - echo Bob the builder\'\'\')
-                    '''))
-                )
+    result = run_with_config(
+        dedent(f'''\
+            phases:
+              build:
+                a: []
+
+              test: !embed
+                cmd: {generate_script_path}
+            '''),
+        ('getinfo',),
+        (generate_script_path, dedent('''\
+            #!/usr/bin/env python3
+
+            print(\'\'\'test-variant:
+              - echo Bob the builder\'\'\')
+            '''))
+        )
 
     assert result.exit_code == 0
     output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
@@ -178,15 +181,16 @@ def test_embed_variants_file():
 
 def test_embed_variants_non_existing_file():
     generate_script_path = "generate-variants.py"
-    result = run_with_config(dedent(f'''\
-                phases:
-                  build:
-                    a: []
-                
-                  test: !embed
-                    cmd: {generate_script_path}
-                '''),
-                ('getinfo',))
+    result = run_with_config(
+        dedent(f'''\
+            phases:
+              build:
+                a: []
+
+              test: !embed
+                cmd: {generate_script_path}
+            '''),
+        ('getinfo',))
 
     assert result.exit_code == 0
     output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
@@ -199,21 +203,21 @@ def test_embed_variants_non_existing_file():
 
 def test_embed_variants_error_in_file():
     generate_script_path = "generate-variants.py"
-    result = run_with_config(dedent(f'''\
-                phases:
-                  build:
-                    a: []
-                
-                  test: !embed
-                    cmd: {generate_script_path}
-                '''),
-                ('getinfo',),
-                (generate_script_path, dedent('''\
-                    #!/usr/bin/env python3
-                    print(\'\'\'test-variant:
-                    error\'\'\')
-                    ''')
-                ))
+    result = run_with_config(
+        dedent(f'''\
+            phases:
+              build:
+                a: []
+
+              test: !embed
+                cmd: {generate_script_path}
+            '''),
+        ('getinfo',),
+        (generate_script_path, dedent('''\
+            #!/usr/bin/env python3
+            print(\'\'\'test-variant:
+            error\'\'\')
+            ''')))
 
     assert result.exit_code == 0
     output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
@@ -227,20 +231,21 @@ def test_embed_variants_error_in_file():
 def test_embed_variants_script_with_arguments():
     generate_script_path = "generate-variants.py"
     generate_script_args = 'argument-variant'
-    result = run_with_config(dedent(f'''\
-                phases:
-                  test: !embed
-                    cmd: '{generate_script_path} {generate_script_args}' 
-                '''),
-                ('getinfo',),
-                (generate_script_path, dedent(f'''\
-                    #!/usr/bin/env python3
-                    import sys
-                    
-                    print(\'\'\'test-%s:
-                      - echo Bob the builder\'\'\' % sys.argv[1])
-                    ''')
-                 ))
+    result = run_with_config(
+        dedent(f'''\
+            phases:
+              test: !embed
+                cmd: '{generate_script_path} {generate_script_args}'
+            '''),
+        ('getinfo',),
+        (generate_script_path, dedent('''\
+            #!/usr/bin/env python3
+            import sys
+
+            print(\'\'\'test-%s:
+              - echo Bob the builder\'\'\' % sys.argv[1])
+            ''')
+         ))
 
     assert result.exit_code == 0
     output = json.loads(result.stdout, object_pairs_hook=OrderedDict)

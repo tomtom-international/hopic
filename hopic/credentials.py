@@ -19,7 +19,6 @@ try:
     import keyring
     from contextlib import closing
 
-
     class KeePassKeyring(keyring.backends.SecretService.Keyring):
         """
         A version of the SecretService keyring API that falls back to using the camel case
@@ -47,7 +46,6 @@ try:
                                 break
                         return keyring.credentials.SimpleCredential(username, item.get_secret().decode('UTF-8'))
 
-
         def get_password(self, service, username):
             cred = self.get_credential(service, username)
             if cred is not None:
@@ -56,6 +54,7 @@ except ImportError:
     keyring = None
 
 _keyring_backend = None
+
 
 def _init_keyring():
     if keyring is None:
@@ -100,7 +99,7 @@ def get_credential_by_id(project_name, cred_id):
     if kcred is not None:
         return kcred.username, kcred.password
     elif hasattr(sys.stdin, 'isatty') and sys.stdin.isatty():
-        username =           input(f"Username for {cred_name}: ")
+        username =           input(f"Username for {cred_name}: ")  # noqa: E222
         password = getpass.getpass(f"Password for {cred_name}: ")
         backend.set_password(cred_name, username, password)
         return username, password

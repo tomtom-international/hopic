@@ -47,7 +47,7 @@ Pattern = type(re.compile(''))
 
 
 _variable_interpolation_re = re.compile(r'(?<!\$)\$(?:(\w+)|\{([^}]+)\})')
-def expand_vars(vars, expr):
+def expand_vars(vars, expr):  # noqa: E302 'expected 2 blank lines'
     if isinstance(expr, str):
         # Expand variables from our "virtual" environment
         last_idx = 0
@@ -164,6 +164,7 @@ def get_default_error_variant(error_msg):
     error_str = 'An error occurred when parsing the hopic configuration file\n'
     return OrderedDict({'error-variant': [f'echo -e {shlex.quote("{}{}".format(error_str, error_msg))}', 'sh -c \'exit 42\'']})
 
+
 # Non failure function in order to always be able to load hopic file, use default (error) variant in case of error
 def load_embedded_command(volume_vars, loader, node):
     try:
@@ -257,7 +258,7 @@ def expand_docker_volume_spec(config_dir, volume_vars, volume_specs, add_default
     guest_volume_vars = {
         'WORKSPACE': '/code',
     }
-    volumes = OrderedDict({});
+    volumes = OrderedDict()
     for volume in volume_specs:
         # Expand string format to dictionary format
         if isinstance(volume, str):
@@ -305,9 +306,11 @@ def expand_docker_volume_spec(config_dir, volume_vars, volume_specs, add_default
             'target': guest_volume_vars['WORKSPACE'],
         })
 
-    volumes = OrderedDict([(target, volume)
+    volumes = OrderedDict([
+        (target, volume)
         for target, volume in volumes.items()
-        if volume['source'] is not None])
+        if volume['source'] is not None
+    ])
 
     return volumes
 
@@ -325,7 +328,7 @@ def read_version_info(config, version_info):
                 ('field', bump),
             ))
     elif isinstance(bump, bool):
-        assert bump == False
+        assert bump is False
         bump = version_info['bump'] = OrderedDict((
                 ('policy', 'disabled'),
             ))
@@ -335,7 +338,8 @@ def read_version_info(config, version_info):
     if not isinstance(bump['on-every-change'], bool):
         raise ConfigurationError("`version.bump.on-every-change` must be a boolean", file=config)
     if bump['policy'] == 'constant' and not isinstance(bump.get('field'), (str, type(None))):
-        raise ConfigurationError("`version.bump.field`, if it exists, must be a string identifying a version field to bump for the `constant` policy", file=config)
+        raise ConfigurationError(
+                "`version.bump.field`, if it exists, must be a string identifying a version field to bump for the `constant` policy", file=config)
     if bump['policy'] == 'conventional-commits':
         bump.setdefault('strict', False)
         if not isinstance(version_info['bump']['strict'], bool):
@@ -343,9 +347,11 @@ def read_version_info(config, version_info):
         bump.setdefault('reject-breaking-changes-on', re.compile(r'^(?:release/|rel-).*$'))
         bump.setdefault('reject-new-features-on', re.compile(r'^(?:release/|rel-)\d+\..*$'))
         if not isinstance(bump['reject-breaking-changes-on'], (str, Pattern)):
-            raise ConfigurationError("`version.bump.reject-breaking-changes-on` field for the `conventional-commits` policy must be a regex or boolean", file=config)
+            raise ConfigurationError(
+                    "`version.bump.reject-breaking-changes-on` field for the `conventional-commits` policy must be a regex or boolean", file=config)
         if not isinstance(bump['reject-new-features-on'], (str, Pattern)):
-            raise ConfigurationError("`version.bump.reject-new-features-on` field for the `conventional-commits` policy must be a regex or boolean", file=config)
+            raise ConfigurationError(
+                    "`version.bump.reject-new-features-on` field for the `conventional-commits` policy must be a regex or boolean", file=config)
 
     return version_info
 
@@ -372,7 +378,8 @@ def read(config, volume_vars):
         raise ConfigurationError('`pass-through-environment-vars` must be a sequence of strings', file=config)
     for idx, var in enumerate(env_vars):
         if not isinstance(var, str):
-            raise ConfigurationError("`pass-through-environment-vars` must be a sequence containing strings only: element {idx} has type {type!r}".format(idx=idx, type=type(var)), file=config)
+            raise ConfigurationError(
+                    f"`pass-through-environment-vars` must be a sequence containing strings only: element {idx} has type {type(var).__name__}", file=config)
 
     basic_image_types = (str, IvyManifestImage, type(None))
     valid_image_types = (basic_image_types, Mapping)
@@ -400,7 +407,7 @@ def read(config, volume_vars):
                 if isinstance(cmd, str):
                     variant[i] = cmd = OrderedDict((('sh', cmd),))
                 if isinstance(cmd, Sequence) and not isinstance(cmd, (str, bytes)):
-                    variant[i:i+1] = cmd
+                    variant[i:i + 1] = cmd
 
     # Convert multiple different syntaxes into a single one
     for phase in cfg['phases'].values():
@@ -414,7 +421,7 @@ def read(config, volume_vars):
                                 var[var_key] = shlex.split(var[var_key])
                             if not isinstance(var[var_key], Sequence) or not all(isinstance(x, str) for x in var[var_key]):
                                 raise ConfigurationError(
-                                        f"'sh' member is not a command string, nor a list of argument strings",
+                                        "'sh' member is not a command string, nor a list of argument strings",
                                         file=config)
                         if var_key in ('archive', 'fingerprint') and isinstance(var[var_key], (OrderedDict, dict)) and 'artifacts' in var[var_key]:
                             artifacts = var[var_key]['artifacts']
@@ -460,7 +467,7 @@ def read(config, volume_vars):
                                                 f"'filename-variable' in with-credentials block `{cred['id']}` for "
                                                 f"`{phasename}.{variantname}` is not a string", file=config)
                                 elif cred_type == 'string':
-                                    if not isinstance(cred.setdefault('string-variable'  , 'SECRET'), str):
+                                    if not isinstance(cred.setdefault('string-variable'  , 'SECRET'), str):  # noqa: E203
                                         raise ConfigurationError(
                                                 f"'string-variable' in with-credentials block `{cred['id']}` for "
                                                 f"`{phasename}.{variantname}` is not a string", file=config)

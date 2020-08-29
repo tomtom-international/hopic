@@ -19,8 +19,8 @@ from typing import NamedTuple
 
 
 class UserPassCredential(NamedTuple):
-    username : str
-    password : str
+    username: str
+    password: str
 
 
 def test_obtain_named_credential(monkeypatch):
