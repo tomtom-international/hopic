@@ -540,6 +540,9 @@ def test_separate_modality_change(tmp_path):
     ('never'           , 'feat: something', '0.1.0'  , False),
     ('always'          , None             , '0.0.0'  , True ),
     ('always'          , 'feat: something', '0.1.0'  , True ),
+    ('new-version-only', None             , '0.0.0'  , False),
+    ('new-version-only', 'docs: something', '0.0.1-2', False),
+    ('new-version-only', 'feat: something', '0.1.0'  , True ),
 ))
 def test_run_on_change(monkeypatch, tmp_path, run_on_change, commit_message, expected_version, expect_publish):
     expected = [

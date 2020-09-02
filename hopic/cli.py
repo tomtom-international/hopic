@@ -1378,7 +1378,12 @@ def build(ctx, phase, variant):
                     elif run_on_change == RunOnChange.never:
                         if has_change:
                             break
-                    elif run_on_change == RunOnChange.only and not (has_change and is_publish_allowed):
+                    elif run_on_change in (RunOnChange.only, RunOnChange.new_version_only):
+                        if not has_change:
+                            break
+                        if not is_publish_allowed:
+                            break
+                        if run_on_change == RunOnChange.new_version_only and ctx.obj.version.prerelease:
                             break
                     try:
                         desc = cmd['description']

@@ -59,6 +59,8 @@ class RunOnChange(str, Enum):
     """The steps will never be performed for a change."""
     only             = 'only'
     """The steps will only be performed when the change is to be submitted in the current execution."""
+    new_version_only = 'new-version-only'
+    """The steps will only be performed when the change is on a new version and is to be submitted in the current execution."""
 
     default = always
 
