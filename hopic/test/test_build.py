@@ -16,6 +16,7 @@ from ..cli import cli
 from .markers import (
         docker,
     )
+from .. import credentials
 
 from click.testing import CliRunner
 from textwrap import dedent
@@ -690,4 +691,42 @@ def test_execute_list(monkeypatch):
                           - sh: ['echo', "an argument, with spaces and ' quotes", 'and-another-without']
                     '''),
             ('build',))
+    assert result.exit_code == 0
+
+
+def test_with_credentials_keyring_variable_names(monkeypatch, capfd):
+    username = 'test_username'
+    password = 'super_secret'
+    credential_id = 'test_credentialId'
+    project_name = 'test_project'
+
+    def get_credential_id(project_name_arg, cred_id):
+        assert credential_id == cred_id
+        assert project_name == project_name_arg
+        return username, password
+
+    monkeypatch.setattr(credentials, 'get_credential_by_id', get_credential_id)
+
+    result = run_with_config(dedent(f'''\
+                project-name: {project_name}
+                phases:
+                  build_and_test:
+                    clang-tidy:
+                      - with-credentials:
+                        - id: {credential_id}
+                          type: username-password
+                      - sh -c "echo $USERNAME $PASSWORD"
+                    coverage:
+                      - with-credentials:
+                        - id: {credential_id}
+                          type: username-password
+                          username-variable: 'TEST_USER'
+                          password-variable: 'TEST_PASSWORD'
+                      - sh -c "echo $TEST_USER $TEST_PASSWORD"
+                '''), ('build',))
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+    assert out.splitlines()[0] == f'{username} {password}'
+    assert out.splitlines()[1] == f'{username} {password}'
     assert result.exit_code == 0
