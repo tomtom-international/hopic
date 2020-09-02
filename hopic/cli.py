@@ -23,7 +23,7 @@ from .config_reader import (
         expand_vars,
         read as read_config,
     )
-from .credentials import get_credential_by_id
+from . import credentials
 from .execution import echo_cmd
 from .git_time import restore_mtime_from_git
 from .versioning import (
@@ -1337,8 +1337,6 @@ def build(ctx, phase, variant):
         pass
     has_change = bool(refspecs)
 
-    credentials = {}
-
     worktree_commits = {}
     for phasename, curphase in cfg['phases'].items():
         if phase and phasename not in phase:
@@ -1452,19 +1450,17 @@ def build(ctx, phase, variant):
                         pass
                     else:
                         for creds in with_credentials:
-                            if creds['id'] not in credentials and 'project-name' in cfg:
-                                if creds['type'] == 'username-password' and not (
-                                        creds['username-variable'] in ctx.obj.volume_vars
-                                        and creds['password-variable'] in ctx.obj.volume_vars):
-                                    kcred = get_credential_by_id(cfg['project-name'], creds['id'])
-                                    if kcred is not None:
-                                        username, password = kcred
-                                        credentials[creds['id']] = {
-                                                creds['username-variable']: username,
-                                                creds['password-variable']: password,
-                                            }
+                            if 'project-name' in cfg and creds['type'] == 'username-password' and not (
+                                    creds['username-variable'] in ctx.obj.volume_vars
+                                    and creds['password-variable'] in ctx.obj.volume_vars):
+                                kcred = credentials.get_credential_by_id(cfg['project-name'], creds['id'])
+                                if kcred is not None:
+                                    username, password = kcred
+                                    volume_vars.update({
+                                        creds['username-variable']: username,
+                                        creds['password-variable']: password,
+                                    })
 
-                            volume_vars.update(credentials.get(creds['id'], {}))
                             cred_vars = {name for key, name in creds.items() if key.endswith('-variable')}
                             for cred_var in cred_vars:
                                 if cred_var in volume_vars:
