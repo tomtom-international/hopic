@@ -20,6 +20,7 @@ from collections.abc import (
         Sequence,
     )
 from click import ClickException
+from enum import Enum
 import errno
 try:
     # Python >= 3.8
@@ -36,6 +37,7 @@ import xml.etree.ElementTree as ET
 import yaml
 
 __all__ = (
+    'RunOnChange',
     'expand_vars',
     'read',
     'expand_docker_volume_spec',
@@ -44,6 +46,12 @@ __all__ = (
 log = logging.getLogger(__name__)
 
 Pattern = type(re.compile(''))
+
+
+class RunOnChange(str, Enum):
+    always           = 'always'
+    never            = 'never'
+    only             = 'only'
 
 
 _variable_interpolation_re = re.compile(r'(?<!\$)\$(?:(\w+)|\{([^}]+)\})')

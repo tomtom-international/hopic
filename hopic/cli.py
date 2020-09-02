@@ -18,6 +18,7 @@ import click_log
 from . import binary_normalize
 from commisery.commit import parse_commit_message
 from .config_reader import (
+        RunOnChange,
         JSONEncoder,
         expand_docker_volume_spec,
         expand_vars,
@@ -1376,9 +1377,9 @@ def build(ctx, phase, variant):
                     except (KeyError, TypeError):
                         pass
                     else:
-                        if run_on_change == 'always':
+                        if run_on_change == RunOnChange.always:
                             pass
-                        elif run_on_change == 'only' and not (has_change and is_publish_allowed):
+                        elif run_on_change == RunOnChange.only and not (has_change and is_publish_allowed):
                             break
                     try:
                         desc = cmd['description']
