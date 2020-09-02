@@ -49,9 +49,16 @@ Pattern = type(re.compile(''))
 
 
 class RunOnChange(str, Enum):
+    """
+    The :option:`run-on-change` option allows you to specify when a step needs to be executed.
+    The value of this option can be one of:
+    """
     always           = 'always'
+    """The steps will always be performed. (Default if not specified)."""
     never            = 'never'
+    """The steps will never be performed."""
     only             = 'only'
+    """The steps will only be performed when the change is to be submitted in the current execution."""
 
     default = always
 
