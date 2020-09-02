@@ -1372,14 +1372,10 @@ def build(ctx, phase, variant):
 
                     assert isinstance(cmd, Mapping)
 
-                    try:
-                        run_on_change = cmd['run-on-change']
-                    except (KeyError, TypeError):
+                    run_on_change = cmd.get('run-on-change', RunOnChange.default)
+                    if run_on_change == RunOnChange.always:
                         pass
-                    else:
-                        if run_on_change == RunOnChange.always:
-                            pass
-                        elif run_on_change == RunOnChange.only and not (has_change and is_publish_allowed):
+                    elif run_on_change == RunOnChange.only and not (has_change and is_publish_allowed):
                             break
                     try:
                         desc = cmd['description']

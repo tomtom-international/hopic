@@ -53,6 +53,8 @@ class RunOnChange(str, Enum):
     never            = 'never'
     only             = 'only'
 
+    default = always
+
 
 _variable_interpolation_re = re.compile(r'(?<!\$)\$(?:(\w+)|\{([^}]+)\})')
 def expand_vars(vars, expr):  # noqa: E302 'expected 2 blank lines'
@@ -441,6 +443,13 @@ def read(config, volume_vars):
                                 raise ConfigurationError(
                                         "'sh' member is not a command string, nor a list of argument strings",
                                         file=config)
+                        if var_key == 'run-on-change':
+                            try:
+                                var['run-on-change'] = RunOnChange(var['run-on-change'])
+                            except ValueError as exc:
+                                raise ConfigurationError(
+                                        f"'run-on-change' member's value of {var['run-on-change']!r} is not among the valid options ({', '.join(RunOnChange)})",
+                                        file=config) from exc
                         if var_key in ('archive', 'fingerprint') and isinstance(var[var_key], (OrderedDict, dict)) and 'artifacts' in var[var_key]:
                             artifacts = var[var_key]['artifacts']
 
