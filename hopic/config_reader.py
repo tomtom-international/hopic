@@ -56,7 +56,7 @@ class RunOnChange(str, Enum):
     always           = 'always'
     """The steps will always be performed. (Default if not specified)."""
     never            = 'never'
-    """The steps will never be performed."""
+    """The steps will never be performed for a change."""
     only             = 'only'
     """The steps will only be performed when the change is to be submitted in the current execution."""
 

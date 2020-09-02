@@ -1375,6 +1375,9 @@ def build(ctx, phase, variant):
                     run_on_change = cmd.get('run-on-change', RunOnChange.default)
                     if run_on_change == RunOnChange.always:
                         pass
+                    elif run_on_change == RunOnChange.never:
+                        if has_change:
+                            break
                     elif run_on_change == RunOnChange.only and not (has_change and is_publish_allowed):
                             break
                     try:
