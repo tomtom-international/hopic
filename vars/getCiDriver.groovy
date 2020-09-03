@@ -862,12 +862,20 @@ exec ssh -i '''
               return true
             } else if (run_on_change == 'never') {
               return !this.has_change()
-            } else if (run_on_change == 'only') {
+            } else if (run_on_change == 'only' || run_on_change == 'new-version-only') {
               if (is_build_successful) {
                 if (this.source_commit == null
                  || this.target_commit == null) {
                   // Don't have enough information to determine whether this is a submittable change: assume it is
                   return true
+                }
+                if (run_on_change == 'new-version-only') {
+                  def version = this.get_submit_version()
+                  if (version != null
+                   && version ==~ /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:[-0-9a-zA-Z]+(?:\.[-0-9a-zA-Z])*))(?:\+(?:[-0-9a-zA-Z]+(?:\.[-0-9a-zA-Z])*))?$/) {
+                    // Pre-release versions are not new versions, skip
+                    return false
+                  }
                 }
                 return is_publishable_change
               } else {
