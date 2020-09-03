@@ -531,3 +531,84 @@ def test_separate_modality_change(tmp_path):
     with git.Repo(toprepo, expand_vars=False) as repo:
         assert repo.head.commit != base_commit
         assert repo.head.commit.parents == (base_commit,)
+
+
+@pytest.mark.parametrize('run_on_change, commit_message, expected_version, expect_publish', (
+    ('only'            , None             , '0.0.0'  , False),
+    ('only'            , 'feat: something', '0.1.0'  , True ),
+    ('never'           , None             , '0.0.0'  , True ),
+    ('never'           , 'feat: something', '0.1.0'  , False),
+    ('always'          , None             , '0.0.0'  , True ),
+    ('always'          , 'feat: something', '0.1.0'  , True ),
+))
+def test_run_on_change(monkeypatch, tmp_path, run_on_change, commit_message, expected_version, expect_publish):
+    expected = [
+        ('echo', 'build-a', expected_version),
+    ]
+    if expect_publish:
+        expected.append(('echo', 'publish-a', expected_version))
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        assert tuple(args) == expected.pop(0)
+
+    monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+
+    toprepo = tmp_path / 'repo'
+    with git.Repo.init(str(toprepo), expand_vars=False) as repo:
+        cfg_file = 'hopic-ci-config.yaml'
+
+        with (toprepo / cfg_file).open('w') as f:
+            f.write(dedent(f"""\
+                    version:
+                      format: semver
+                      tag:    true
+                      bump:
+                        policy: conventional-commits
+
+                    phases:
+                      build:
+                        a:
+                          - echo build-a ${{PURE_VERSION}}
+
+                      publish:
+                        a:
+                          - run-on-change: {run_on_change}
+                          - echo publish-a ${{PURE_VERSION}}
+                    """))
+        with (toprepo / 'deleted.txt').open('w') as f:
+            f.write('A')
+
+        repo.index.add((cfg_file, 'deleted.txt'))
+        base_commit = repo.index.commit(message='Initial commit', **_commitargs)
+        repo.git.branch('master', move=True)
+        repo.create_tag('0.0.0')
+
+        # PR branch
+        repo.head.reference = repo.create_head('something-useful', base_commit)
+        assert not repo.head.is_detached
+        repo.head.reset(index=True, working_tree=True)
+
+        # Some change
+        if commit_message is not None:
+            with (toprepo / 'something.txt').open('w') as f:
+                f.write('usable')
+            repo.index.add(('something.txt',))
+            repo.index.commit(message=commit_message, **_commitargs)
+
+    # Successful checkout and build
+    cmds = (
+            ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'),
+        ) + ((
+            ('prepare-source-tree',
+                '--author-date', f"@{_git_time}",
+                '--commit-date', f"@{_git_time}",
+                '--author-name', _author.name,
+                '--author-email', _author.email,
+                'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful'),
+        ) if commit_message is not None else ()) + (
+            ('build',),
+        )
+    result = run(*cmds)
+
+    assert result.exit_code == 0
+    assert not expected
