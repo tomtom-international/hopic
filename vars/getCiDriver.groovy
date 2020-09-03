@@ -362,7 +362,9 @@ class CiDriver {
 
         // Use the exact same Hopic version on every build node
         if (this.repo !=~ /.*@[0-9a-fA-F]{40}/) {
-          def (remote, ref) = this.repo[4..-1].split('@', 2)
+          // Split on the last '@' only
+          def split = this.repo[4..-1].split('@')
+          def (remote, ref) = [split[0..-2].join('@'), split[-1]]
           def commit = line_split(steps.sh(script: "git ls-remote ${shell_quote(remote)}", returnStdout: true)).find { line ->
             def (hash, remote_ref) = line.split('\t')
             return (remote_ref == ref || remote_ref == "refs/heads/${ref}" || remote_ref == "refs/tags/${ref}")
