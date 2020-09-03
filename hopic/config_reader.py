@@ -20,6 +20,7 @@ from collections.abc import (
         Sequence,
     )
 from click import ClickException
+from enum import Enum
 import errno
 try:
     # Python >= 3.8
@@ -36,6 +37,7 @@ import xml.etree.ElementTree as ET
 import yaml
 
 __all__ = (
+    'RunOnChange',
     'expand_vars',
     'read',
     'expand_docker_volume_spec',
@@ -44,6 +46,23 @@ __all__ = (
 log = logging.getLogger(__name__)
 
 Pattern = type(re.compile(''))
+
+
+class RunOnChange(str, Enum):
+    """
+    The :option:`run-on-change` option allows you to specify when a step needs to be executed.
+    The value of this option can be one of:
+    """
+    always           = 'always'
+    """The steps will always be performed. (Default if not specified)."""
+    never            = 'never'
+    """The steps will never be performed for a change."""
+    only             = 'only'
+    """The steps will only be performed when the change is to be submitted in the current execution."""
+    new_version_only = 'new-version-only'
+    """The steps will only be performed when the change is on a new version and is to be submitted in the current execution."""
+
+    default = always
 
 
 _variable_interpolation_re = re.compile(r'(?<!\$)\$(?:(\w+)|\{([^}]+)\})')
@@ -423,6 +442,13 @@ def read(config, volume_vars):
                                 raise ConfigurationError(
                                         "'sh' member is not a command string, nor a list of argument strings",
                                         file=config)
+                        if var_key == 'run-on-change':
+                            try:
+                                var['run-on-change'] = RunOnChange(var['run-on-change'])
+                            except ValueError as exc:
+                                raise ConfigurationError(
+                                        f"'run-on-change' member's value of {var['run-on-change']!r} is not among the valid options ({', '.join(RunOnChange)})",
+                                        file=config) from exc
                         if var_key in ('archive', 'fingerprint') and isinstance(var[var_key], (OrderedDict, dict)) and 'artifacts' in var[var_key]:
                             artifacts = var[var_key]['artifacts']
 

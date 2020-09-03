@@ -517,15 +517,8 @@ Restricting Steps to Changes or Not
 
 .. option:: run-on-change
 
-The option ``run-on-change`` allows you to specify when a step needs to be executed.
-The value of the ``run-on-change`` option can be:
-
-``always``
-    The steps will always be performed. (Default if not specified).
-``never``
-    The steps will never be performed.
-``only``
-    The steps will only be performed when the change is to be submitted in the current execution.
+.. autoclass:: hopic.config_reader.RunOnChange
+   :members:
 
 **example:**
 

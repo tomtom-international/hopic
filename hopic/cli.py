@@ -18,6 +18,7 @@ import click_log
 from . import binary_normalize
 from commisery.commit import parse_commit_message
 from .config_reader import (
+        RunOnChange,
         JSONEncoder,
         expand_docker_volume_spec,
         expand_vars,
@@ -1371,14 +1372,18 @@ def build(ctx, phase, variant):
 
                     assert isinstance(cmd, Mapping)
 
-                    try:
-                        run_on_change = cmd['run-on-change']
-                    except (KeyError, TypeError):
+                    run_on_change = cmd.get('run-on-change', RunOnChange.default)
+                    if run_on_change == RunOnChange.always:
                         pass
-                    else:
-                        if run_on_change == 'always':
-                            pass
-                        elif run_on_change == 'only' and not (has_change and is_publish_allowed):
+                    elif run_on_change == RunOnChange.never:
+                        if has_change:
+                            break
+                    elif run_on_change in (RunOnChange.only, RunOnChange.new_version_only):
+                        if not has_change:
+                            break
+                        if not is_publish_allowed:
+                            break
+                        if run_on_change == RunOnChange.new_version_only and ctx.obj.version.prerelease:
                             break
                     try:
                         desc = cmd['description']
