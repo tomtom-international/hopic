@@ -28,7 +28,7 @@ from . import credentials
 from .execution import echo_cmd
 from .git_time import restore_mtime_from_git
 from .versioning import (
-        parse_git_describe_version,
+        GitVersion,
         read_version,
         replace_version,
     )
@@ -376,7 +376,11 @@ def determine_version(version_info, config_dir, code_dir=None):
             params = {}
             if 'format' in version_info:
                 params['format'] = version_info['format']
-            return parse_git_describe_version(describe_out, dirty_date=determine_source_date(code_dir), **params)
+            gitversion = GitVersion.from_description(describe_out)
+            if gitversion.dirty:
+                return gitversion.to_version(dirty_date=determine_source_date(code_dir), **params)
+            else:
+                return gitversion.to_version(**params)
 
 
 def determine_config_file_name(ctx):
