@@ -797,6 +797,8 @@ def process_prepare_source_tree(
         if not commit_params:
             return
         source_commit = commit_params.pop('source_commit', None)
+        target_commit = commit_params.pop('target_commit', target_commit)
+        bump_message = commit_params.pop('bump_message', None)
 
         # Re-read config to ensure any changes introduced by 'change_applicator' are taken into account
         try:
@@ -831,7 +833,8 @@ def process_prepare_source_tree(
         if 'file' in version_info:
             relative_version_file = os.path.relpath(os.path.join(os.path.relpath(ctx.obj.config_dir, repo.working_dir), version_info['file']))
 
-        bump = version_info['bump']
+        bump = version_info['bump'].copy()
+        bump.update(commit_params.pop('bump-override', {}))
         source_commits = (
                 () if source_commit is None
                 else [
@@ -839,8 +842,8 @@ def process_prepare_source_tree(
                     for commit in git.Commit.list_items(
                         repo,
                         f"{target_commit}..{source_commit}",
-                        first_parent=True,
-                        no_merges=True,
+                        first_parent=bump.get('first-parent', True),
+                        no_merges=bump.get('no-merges', True),
                     )])
 
         if bump['policy'] == 'conventional-commits' and target_ref is not None:
@@ -897,6 +900,8 @@ def process_prepare_source_tree(
                 if 'file' in version_info:
                     replace_version(os.path.join(ctx.obj.config_dir, version_info['file']), ctx.obj.version)
                     repo.index.add((relative_version_file,))
+                    if bump_message is not None:
+                        commit_params.setdefault('message', bump_message)
         else:
             log.info("Skip version bumping due to the configuration or the target branch is not allowed to publish")
 
@@ -907,7 +912,10 @@ def process_prepare_source_tree(
         if commit_date is not None:
             commit_params['commit_date'] = to_git_time(commit_date)
 
-        submit_commit = repo.index.commit(**commit_params)
+        if 'message' in commit_params:
+            submit_commit = repo.index.commit(**commit_params)
+        else:
+            submit_commit = repo.head.commit
         click.echo(submit_commit)
 
         autosquash_commits = [
@@ -1264,6 +1272,35 @@ def apply_modality_change(
         except git.BadName:
             pass
         return commit_params
+
+    return change_applicator
+
+
+@prepare_source_tree.command()
+@click.pass_context
+def bump_version(ctx):
+    """
+    Bump the version based on the configuration.
+    """
+
+    def change_applicator(repo, author, committer):
+        gitversion = determine_git_version(repo)
+        tag = repo.tags[gitversion.tag_name]
+        return {
+            'bump_message': dedent(f"""\
+                    New version released
+
+                    Bumped-by: Hopic {metadata.distribution(__package__).version}
+                    """),
+            'target_commit': tag.commit,
+            'source_commit': repo.head.commit,
+            'bump-override': {
+                'on-every-change': True,
+                'strict': False,
+                'first-parent': False,
+                'no-merges': False,
+            },
+        }
 
     return change_applicator
 
