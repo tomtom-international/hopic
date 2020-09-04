@@ -1290,7 +1290,7 @@ def bump_version(ctx):
         tag = repo.tags[gitversion.tag_name]
         return {
             'bump_message': dedent(f"""\
-                    New version released
+                    chore: release new version
 
                     Bumped-by: Hopic {metadata.distribution(__package__).version}
                     """),
