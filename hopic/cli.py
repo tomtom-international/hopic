@@ -952,7 +952,14 @@ def process_prepare_source_tree(
                     version        = ctx.obj.version,                                           # noqa: E251 "unexpected spaces around '='"
                     build_sep      = ('+' if getattr(ctx.obj.version, 'build', None) else ''),  # noqa: E251 "unexpected spaces around '='"
                 )
-            repo.create_tag(tagname, submit_commit, force=True)
+            repo.create_tag(
+                    tagname, submit_commit, force=True,
+                    message=f"Tagged-by: Hopic {metadata.distribution(__package__).version}",
+                    env={
+                        'GIT_COMMITTER_NAME': committer.name,
+                        'GIT_COMMITTER_EMAIL': committer.email,
+                    },
+                )
 
         # Re-read version to ensure that the newly created tag is taken into account
         ctx.obj.version = determine_version(version_info, ctx.obj.config_dir, ctx.obj.code_dir)
