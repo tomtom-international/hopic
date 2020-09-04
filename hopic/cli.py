@@ -353,6 +353,15 @@ def cli_autocomplete_click_log_verbosity(ctx, args, incomplete):
             yield level
 
 
+def determine_git_version(repo):
+    """
+    Determines the current version of a git repository based on its tags.
+    """
+
+    return GitVersion.from_description(
+            repo.git.describe(tags=True, long=True, dirty=True, always=True))
+
+
 def determine_version(version_info, config_dir, code_dir=None):
     """
     Determines the current version for the given version configuration snippet.
@@ -369,14 +378,13 @@ def determine_version(version_info, config_dir, code_dir=None):
     if version_info.get('tag', False) and code_dir is not None:
         try:
             with git.Repo(code_dir) as repo:
-                describe_out = repo.git.describe(tags=True, long=True, dirty=True, always=True)
+                gitversion = determine_git_version(repo)
         except (git.InvalidGitRepositoryError, git.NoSuchPathError):
             pass
         else:
             params = {}
             if 'format' in version_info:
                 params['format'] = version_info['format']
-            gitversion = GitVersion.from_description(describe_out)
             if gitversion.dirty:
                 return gitversion.to_version(dirty_date=determine_source_date(code_dir), **params)
             else:
