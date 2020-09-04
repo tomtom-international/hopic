@@ -797,7 +797,7 @@ def process_prepare_source_tree(
         if not commit_params:
             return
         source_commit = commit_params.pop('source_commit', None)
-        target_commit = commit_params.pop('target_commit', target_commit)
+        base_commit = commit_params.pop('base_commit', None)
         bump_message = commit_params.pop('bump_message', None)
 
         # Re-read config to ensure any changes introduced by 'change_applicator' are taken into account
@@ -836,12 +836,14 @@ def process_prepare_source_tree(
         bump = version_info['bump'].copy()
         bump.update(commit_params.pop('bump-override', {}))
         source_commits = (
-                () if source_commit is None
+                () if source_commit is None and base_commit is None
                 else [
                     parse_commit_message(commit, policy=bump['policy'], strict=bump.get('strict', False))
                     for commit in git.Commit.list_items(
                         repo,
-                        f"{target_commit}..{source_commit}",
+                        (f"{base_commit}..{target_commit}"
+                            if base_commit is not None
+                            else f"{target_commit}..{source_commit}"),
                         first_parent=bump.get('first-parent', True),
                         no_merges=bump.get('no-merges', True),
                     )])
@@ -1292,8 +1294,7 @@ def bump_version(ctx):
 
                     Bumped-by: Hopic {metadata.distribution(__package__).version}
                     """),
-            'target_commit': tag.commit,
-            'source_commit': repo.head.commit,
+            'base_commit': tag.commit,
             'bump-override': {
                 'on-every-change': True,
                 'strict': False,
