@@ -70,6 +70,10 @@ def test_conventional_bump(monkeypatch, tmp_path, version_file):
                         strict: yes
                         on-every-change: no
                     {('  file: ' + version_file) if version_file else ''}
+
+                    phases:
+                      style:
+                        commit-messages: !template "commisery"
                     """))
         if version_file:
             with (toprepo / version_file).open('w') as fp:
@@ -109,6 +113,7 @@ def test_conventional_bump(monkeypatch, tmp_path, version_file):
                 '--author-name', _author.name,
                 '--author-email', _author.email,
                 'bump-version'),
+            ('build',),
             ('submit',),
         )
 
