@@ -914,6 +914,10 @@ def process_prepare_source_tree(
         if commit_date is not None:
             commit_params['commit_date'] = to_git_time(commit_date)
 
+        if bump_message is not None and not version_bumped:
+            log.error("Version bumping requested, but the version policy '%s' decided not to bump from '%s'", bump['policy'], ctx.obj.version)
+            return
+
         if 'message' in commit_params:
             submit_commit = repo.index.commit(**commit_params)
         else:
