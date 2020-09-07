@@ -127,3 +127,43 @@ def test_conventional_bump(monkeypatch, tmp_path, version_file):
         if version_file:
             with (toprepo / version_file).open('r') as fp:
                 assert fp.read() == 'version=0.1.0\n'
+
+
+def test_bump_skipped_when_no_new_commits(monkeypatch, tmp_path):
+    toprepo = tmp_path / 'repo'
+    with git.Repo.init(str(toprepo), expand_vars=False) as repo:
+        cfg_file = 'hopic-ci-config.yaml'
+
+        with (toprepo / cfg_file).open('w') as fp:
+            fp.write(dedent("""\
+                    version:
+                      tag: yes
+                      format: semver
+                      bump:
+                        policy: conventional-commits
+                        strict: yes
+                        on-every-change: no
+
+                    phases:
+                      style:
+                        commit-messages: !template "commisery"
+                    """))
+        repo.index.add((cfg_file,))
+        repo.index.commit(message='Initial commit', **_commitargs)
+        repo.git.branch('master', move=True)
+        repo.create_tag('0.0.0')
+
+    # Successful checkout and bump
+    result = run(
+            ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'),
+            ('prepare-source-tree',
+                '--author-date', f"@{_git_time}",
+                '--commit-date', f"@{_git_time}",
+                '--author-name', _author.name,
+                '--author-email', _author.email,
+                'bump-version'),
+        )
+
+    assert result.exit_code == 0
+    assert result.stdout == ''
+    assert "Not bumping because no new commits are present since the last tag '0.0.0'" in result.stderr.splitlines()

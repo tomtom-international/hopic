@@ -1287,6 +1287,9 @@ def bump_version(ctx):
 
     def change_applicator(repo, author, committer):
         gitversion = determine_git_version(repo)
+        if gitversion.exact:
+            log.info("Not bumping because no new commits are present since the last tag '%s'", gitversion.tag_name)
+            return None
         tag = repo.tags[gitversion.tag_name]
         return {
             'bump_message': dedent(f"""\
