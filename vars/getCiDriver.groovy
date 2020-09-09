@@ -35,6 +35,9 @@ class ChangeRequest {
   protected def maySubmitImpl(target_commit, source_commit, allow_cache = true) {
     return !line_split(steps.sh(script: 'LC_ALL=C.UTF-8 git log ' + shell_quote(target_commit) + '..' + shell_quote(source_commit) + " --pretty='%H:%s' --reverse", returnStdout: true)
       .trim()).find { line ->
+        if (!line) {
+          return false
+        }
         def (commit, subject) = line.split(':', 2)
         if (subject.startsWith('fixup!') || subject.startsWith('squash!')) {
           steps.println("\033[36m[info] not submitting because commit ${commit} is marked with 'fixup!' or 'squash!': ${subject}\033[39m")
@@ -262,11 +265,16 @@ class ModalityRequest extends ChangeRequest {
   public def apply(cmd, source_remote) {
     def author_time = steps.currentBuild.timeInMillis / 1000.0
     def commit_time = steps.currentBuild.startTimeInMillis / 1000.0
-    def output = line_split(steps.sh(script: cmd
-                                + ' prepare-source-tree'
-                                + ' --author-date=' + shell_quote(String.format("@%.3f", author_time))
-                                + ' --commit-date=' + shell_quote(String.format("@%.3f", commit_time))
-                                + ' apply-modality-change ' + shell_quote(modality),
+    def prepare_cmd = (cmd
+      + ' prepare-source-tree'
+      + ' --author-date=' + shell_quote(String.format("@%.3f", author_time))
+      + ' --commit-date=' + shell_quote(String.format("@%.3f", commit_time))
+    )
+    def full_cmd = "${prepare_cmd} apply-modality-change ${shell_quote(modality)}"
+    if (modality == 'BUMP_VERSION') {
+      full_cmd = "${prepare_cmd} bump-version"
+    }
+    def output = line_split(steps.sh(script: full_cmd,
                           returnStdout: true)).findAll{it.size() > 0}
     if (output.size() <= 0) {
       return null

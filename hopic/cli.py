@@ -28,7 +28,7 @@ from . import credentials
 from .execution import echo_cmd
 from .git_time import restore_mtime_from_git
 from .versioning import (
-        parse_git_describe_version,
+        GitVersion,
         read_version,
         replace_version,
     )
@@ -353,6 +353,15 @@ def cli_autocomplete_click_log_verbosity(ctx, args, incomplete):
             yield level
 
 
+def determine_git_version(repo):
+    """
+    Determines the current version of a git repository based on its tags.
+    """
+
+    return GitVersion.from_description(
+            repo.git.describe(tags=True, long=True, dirty=True, always=True))
+
+
 def determine_version(version_info, config_dir, code_dir=None):
     """
     Determines the current version for the given version configuration snippet.
@@ -369,14 +378,17 @@ def determine_version(version_info, config_dir, code_dir=None):
     if version_info.get('tag', False) and code_dir is not None:
         try:
             with git.Repo(code_dir) as repo:
-                describe_out = repo.git.describe(tags=True, long=True, dirty=True, always=True)
+                gitversion = determine_git_version(repo)
         except (git.InvalidGitRepositoryError, git.NoSuchPathError):
             pass
         else:
             params = {}
             if 'format' in version_info:
                 params['format'] = version_info['format']
-            return parse_git_describe_version(describe_out, dirty_date=determine_source_date(code_dir), **params)
+            if gitversion.dirty:
+                return gitversion.to_version(dirty_date=determine_source_date(code_dir), **params)
+            else:
+                return gitversion.to_version(**params)
 
 
 def determine_config_file_name(ctx):
@@ -785,6 +797,8 @@ def process_prepare_source_tree(
         if not commit_params:
             return
         source_commit = commit_params.pop('source_commit', None)
+        base_commit = commit_params.pop('base_commit', None)
+        bump_message = commit_params.pop('bump_message', None)
 
         # Re-read config to ensure any changes introduced by 'change_applicator' are taken into account
         try:
@@ -819,16 +833,19 @@ def process_prepare_source_tree(
         if 'file' in version_info:
             relative_version_file = os.path.relpath(os.path.join(os.path.relpath(ctx.obj.config_dir, repo.working_dir), version_info['file']))
 
-        bump = version_info['bump']
+        bump = version_info['bump'].copy()
+        bump.update(commit_params.pop('bump-override', {}))
         source_commits = (
-                () if source_commit is None
+                () if source_commit is None and base_commit is None
                 else [
                     parse_commit_message(commit, policy=bump['policy'], strict=bump.get('strict', False))
                     for commit in git.Commit.list_items(
                         repo,
-                        f"{target_commit}..{source_commit}",
-                        first_parent=True,
-                        no_merges=True,
+                        (f"{base_commit}..{target_commit}"
+                            if base_commit is not None
+                            else f"{target_commit}..{source_commit}"),
+                        first_parent=bump.get('first-parent', True),
+                        no_merges=bump.get('no-merges', True),
                     )])
 
         if bump['policy'] == 'conventional-commits' and target_ref is not None:
@@ -885,6 +902,8 @@ def process_prepare_source_tree(
                 if 'file' in version_info:
                     replace_version(os.path.join(ctx.obj.config_dir, version_info['file']), ctx.obj.version)
                     repo.index.add((relative_version_file,))
+                    if bump_message is not None:
+                        commit_params.setdefault('message', bump_message)
         else:
             log.info("Skip version bumping due to the configuration or the target branch is not allowed to publish")
 
@@ -895,7 +914,14 @@ def process_prepare_source_tree(
         if commit_date is not None:
             commit_params['commit_date'] = to_git_time(commit_date)
 
-        submit_commit = repo.index.commit(**commit_params)
+        if bump_message is not None and not version_bumped:
+            log.error("Version bumping requested, but the version policy '%s' decided not to bump from '%s'", bump['policy'], ctx.obj.version)
+            return
+
+        if 'message' in commit_params:
+            submit_commit = repo.index.commit(**commit_params)
+        else:
+            submit_commit = repo.head.commit
         click.echo(submit_commit)
 
         autosquash_commits = [
@@ -948,7 +974,14 @@ def process_prepare_source_tree(
                     version        = ctx.obj.version,                                           # noqa: E251 "unexpected spaces around '='"
                     build_sep      = ('+' if getattr(ctx.obj.version, 'build', None) else ''),  # noqa: E251 "unexpected spaces around '='"
                 )
-            repo.create_tag(tagname, submit_commit, force=True)
+            repo.create_tag(
+                    tagname, submit_commit, force=True,
+                    message=f"Tagged-by: Hopic {metadata.distribution(__package__).version}",
+                    env={
+                        'GIT_COMMITTER_NAME': committer.name,
+                        'GIT_COMMITTER_EMAIL': committer.email,
+                    },
+                )
 
         # Re-read version to ensure that the newly created tag is taken into account
         ctx.obj.version = determine_version(version_info, ctx.obj.config_dir, ctx.obj.code_dir)
@@ -1245,6 +1278,37 @@ def apply_modality_change(
         except git.BadName:
             pass
         return commit_params
+
+    return change_applicator
+
+
+@prepare_source_tree.command()
+@click.pass_context
+def bump_version(ctx):
+    """
+    Bump the version based on the configuration.
+    """
+
+    def change_applicator(repo, author, committer):
+        gitversion = determine_git_version(repo)
+        if gitversion.exact:
+            log.info("Not bumping because no new commits are present since the last tag '%s'", gitversion.tag_name)
+            return None
+        tag = repo.tags[gitversion.tag_name]
+        return {
+            'bump_message': dedent(f"""\
+                    chore: release new version
+
+                    Bumped-by: Hopic {metadata.distribution(__package__).version}
+                    """),
+            'base_commit': tag.commit,
+            'bump-override': {
+                'on-every-change': True,
+                'strict': False,
+                'first-parent': False,
+                'no-merges': False,
+            },
+        }
 
     return change_applicator
 
