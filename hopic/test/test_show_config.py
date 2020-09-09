@@ -38,16 +38,17 @@ def run_with_config(config, args, files={}, env=None, cfg_file='hopic-ci-config.
     runner = CliRunner(mix_stderr=False, env=env)
     with runner.isolated_filesystem():
         with git.Repo.init() as repo:
-            if '/' in cfg_file and not os.path.exists(os.path.dirname(cfg_file)):
-                os.makedirs(os.path.dirname(cfg_file))
-            with open(cfg_file, 'w') as f:
-                f.write(config)
-            for fname, content in files.items():
-                if '/' in fname and not os.path.exists(os.path.dirname(fname)):
-                    os.makedirs(os.path.dirname(fname))
-                with open(fname, 'w') as f:
-                    f.write(content)
-            repo.index.add((cfg_file,) + tuple(files.keys()))
+            if not os.path.isabs(cfg_file) and cfg_file != os.devnull:
+                if '/' in cfg_file and not os.path.exists(os.path.dirname(cfg_file)):
+                    os.makedirs(os.path.dirname(cfg_file))
+                with open(cfg_file, 'w') as f:
+                    f.write(config)
+                for fname, content in files.items():
+                    if '/' in fname and not os.path.exists(os.path.dirname(fname)):
+                        os.makedirs(os.path.dirname(fname))
+                    with open(fname, 'w') as f:
+                        f.write(content)
+                repo.index.add((cfg_file,) + tuple(files.keys()))
             repo.index.commit(message='Initial commit', **_commitargs)
         if cfg_file != 'hopic-ci-config.yaml':
             args = ('--config', cfg_file) + tuple(args)
@@ -346,3 +347,10 @@ phases:
     sys.stderr.write(err)
 
     assert re.search(r"^Error: configuration error in '.*?\bhopic-ci-config\.yaml': variant `a.x`.*\bsequence\b", err, re.MULTILINE)
+
+
+def test_devnull_config():
+    result = run_with_config(None, ('show-config',), cfg_file=os.devnull)
+    assert result.exit_code == 0
+    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
+    assert output
