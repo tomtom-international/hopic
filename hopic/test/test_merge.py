@@ -578,10 +578,8 @@ def test_run_on_change(monkeypatch, tmp_path, run_on_change, commit_message, exp
                           - run-on-change: {run_on_change}
                           - echo publish-a ${{PURE_VERSION}}
                     """))
-        with (toprepo / 'deleted.txt').open('w') as f:
-            f.write('A')
 
-        repo.index.add((cfg_file, 'deleted.txt'))
+        repo.index.add((cfg_file,))
         base_commit = repo.index.commit(message='Initial commit', **_commitargs)
         repo.git.branch('master', move=True)
         repo.create_tag('0.0.0')
