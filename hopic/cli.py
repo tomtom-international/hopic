@@ -439,7 +439,11 @@ def cli(ctx, color, config, workspace, whitelisted_var):
                     )
         elif param.human_readable_name == 'config' and config is not None:
             # Require the config file to exist everywhere that it's used
-            if not os.path.isfile(config):
+            try:
+                # Try to open the file instead of os.path.isfile because we want to be able to use /dev/null too
+                with open(config, 'rb'):
+                    pass
+            except IOError:
                 def exception_raiser(ctx, param):
                     raise click.BadParameter(
                         f"File '{config}' does not exist.",
@@ -449,7 +453,7 @@ def cli(ctx, color, config, workspace, whitelisted_var):
 
     if workspace is None:
         # workspace default
-        if config is not None:
+        if config is not None and config != os.devnull:
             try:
                 with git.Repo(os.path.dirname(config), search_parent_directories=True) as repo:
                     # Default to containing repository of config file, ...
@@ -497,14 +501,21 @@ def cli(ctx, color, config, workspace, whitelisted_var):
 
     cfg = {}
     if config is not None:
-        if not os.path.isabs(config):
+        if not os.path.isabs(config) and config != os.devnull:
             config = os.path.join(os.getcwd(), config)
         ctx.obj.volume_vars['CFGDIR'] = ctx.obj.config_dir = os.path.dirname(config)
         # Prevent reading the config file _before_ performing a checkout. This prevents a pre-existing file at the same
         # location from being read as the config file. This may cause problems if that pre-checkout file has syntax
         # errors for example.
-        if ctx.invoked_subcommand != 'checkout-source-tree' and os.path.isfile(config):
-            cfg = ctx.obj.config = read_config(config, ctx.obj.volume_vars)
+        if ctx.invoked_subcommand != 'checkout-source-tree':
+            try:
+                # Try to open the file instead of os.path.isfile because we want to be able to use /dev/null too
+                with open(config, 'rb'):
+                    pass
+            except IOError:
+                pass
+            else:
+                cfg = ctx.obj.config = read_config(config, ctx.obj.volume_vars)
     ctx.obj.register_dependent_attribute('config_dir', 'config')
 
     ctx.obj.version = determine_version(
