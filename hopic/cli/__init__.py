@@ -15,19 +15,19 @@
 import click
 import click_log
 
-from . import binary_normalize
+from .. import binary_normalize
 from commisery.commit import parse_commit_message
-from .config_reader import (
+from ..config_reader import (
         RunOnChange,
         JSONEncoder,
         expand_docker_volume_spec,
         expand_vars,
         read as read_config,
     )
-from . import credentials
-from .execution import echo_cmd
-from .git_time import restore_mtime_from_git
-from .versioning import (
+from .. import credentials
+from ..execution import echo_cmd
+from ..git_time import restore_mtime_from_git
+from ..versioning import (
         GitVersion,
         read_version,
         replace_version,
@@ -67,7 +67,10 @@ import stat
 import subprocess
 import sys
 import tempfile
+from typing import Final
 from textwrap import dedent
+
+PACKAGE : Final[str] = __package__.split('.')[0]
 
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
@@ -412,7 +415,7 @@ def determine_config_file_name(ctx):
 @click.option('--config'         , type=click.Path(exists=False, file_okay=True , dir_okay=False, readable=True, resolve_path=True), default=lambda: None, show_default='${WORKSPACE}/hopic-ci-config.yaml')  # noqa: E501
 @click.option('--workspace'      , type=click.Path(exists=False, file_okay=False, dir_okay=True)                                   , default=lambda: None, show_default='git work tree of config file or current working directory')  # noqa: E501
 @click.option('--whitelisted-var', multiple=True                                                                                   , default=['CT_DEVENV_HOME'], hidden=True)  # noqa: E501
-@click_log.simple_verbosity_option(__package__             , envvar='HOPIC_VERBOSITY', autocompletion=cli_autocomplete_click_log_verbosity)
+@click_log.simple_verbosity_option(PACKAGE                 , envvar='HOPIC_VERBOSITY', autocompletion=cli_autocomplete_click_log_verbosity)
 @click_log.simple_verbosity_option('git', '--git-verbosity', envvar='GIT_VERBOSITY'  , autocompletion=cli_autocomplete_click_log_verbosity)
 @click.pass_context
 def cli(ctx, color, config, workspace, whitelisted_var):
@@ -987,7 +990,7 @@ def process_prepare_source_tree(
                 )
             repo.create_tag(
                     tagname, submit_commit, force=True,
-                    message=f"Tagged-by: Hopic {metadata.distribution(__package__).version}",
+                    message=f"Tagged-by: Hopic {metadata.distribution(PACKAGE).version}",
                     env={
                         'GIT_COMMITTER_NAME': committer.name,
                         'GIT_COMMITTER_EMAIL': committer.email,
@@ -1165,7 +1168,7 @@ def merge_change_request(
         if approved_by:
             approvers = get_valid_approvers(repo, approved_by, source, source_commit)
             msg += '\n'.join(f"Acked-by: {approver}" for approver in approvers) + u'\n'
-        msg += u'Merged-by: Hopic {pkg.version}\n'.format(pkg=metadata.distribution(__package__))
+        msg += u'Merged-by: Hopic {pkg.version}\n'.format(pkg=metadata.distribution(PACKAGE))
         return {
                 'message': msg,
                 'parent_commits': (
@@ -1276,7 +1279,7 @@ def apply_modality_change(
         commit_message = dedent(f"""\
             {commit_message.rstrip()}
 
-            Merged-by: Hopic {metadata.distribution(__package__).version}
+            Merged-by: Hopic {metadata.distribution(PACKAGE).version}
             """)
 
         commit_params = {'message': commit_message}
@@ -1310,7 +1313,7 @@ def bump_version(ctx):
             'bump_message': dedent(f"""\
                     chore: release new version
 
-                    Bumped-by: Hopic {metadata.distribution(__package__).version}
+                    Bumped-by: Hopic {metadata.distribution(PACKAGE).version}
                     """),
             'base_commit': tag.commit,
             'bump-override': {
