@@ -438,6 +438,24 @@ def read(config, volume_vars):
                 if isinstance(cmd, Sequence) and not isinstance(cmd, (str, bytes)):
                     variant[i:i + 1] = cmd
 
+    pip = cfg.setdefault('pip', OrderedDict())
+    if not isinstance(pip, Mapping):
+        raise ConfigurationError(f"`pip` doesn't contain a mapping but a {type(pip).__name__}", file=config)
+    packages = pip.setdefault('packages', ())
+    if not (isinstance(packages, Sequence) and not isinstance(packages, str)):
+        raise ConfigurationError(f"`pip.packages` doesn't contain a sequence of strings but a {type(packages).__name__}", file=config)
+    for idx, val in enumerate(packages):
+        if not isinstance(val, str):
+            raise ConfigurationError(
+                    f"`pip.packages` must be a sequence containing strings only: element {idx} has type {type(val).__name__}", file=config)
+    extra_index = pip.setdefault('extra-index', ())
+    if not (isinstance(extra_index, Sequence) and not isinstance(extra_index, str)):
+        raise ConfigurationError(f"`pip.extra-index` doesn't contain a sequence of strings but a {type(extra_index).__name__}", file=config)
+    for idx, val in enumerate(extra_index):
+        if not isinstance(val, str):
+            raise ConfigurationError(
+                    f"`pip.extra-index` must be a sequence containing strings only: element {idx} has type {type(val).__name__}", file=config)
+
     # Convert multiple different syntaxes into a single one
     for phase in cfg['phases'].values():
         for variant, items in phase.items():

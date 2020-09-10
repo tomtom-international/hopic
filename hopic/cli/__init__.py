@@ -14,7 +14,10 @@
 
 import click
 
-from . import autocomplete
+from . import (
+        autocomplete,
+        extensions,
+    )
 from .utils import (
         determine_config_file_name,
         is_publish_branch,
@@ -82,6 +85,18 @@ PACKAGE : Final[str] = __package__.split('.')[0]
 
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
+
+
+for submodule in (
+    extensions,
+):
+    for subcmd in dir(submodule):
+        if subcmd.startswith('_'):
+            continue
+        cmd = getattr(submodule, subcmd)
+        if not isinstance(cmd, click.Command):
+            continue
+        main.add_command(cmd)
 
 
 class VersioningError(click.ClickException):
