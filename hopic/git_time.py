@@ -40,39 +40,47 @@ def determine_source_date(workspace):
     """
 
     try:
-        with git.Repo(workspace) as repo:
-            try:
-                source_date = repo.head.commit.committed_datetime
-            except ValueError:
-                # This happens for a repository that has been initialized but for which a commit hasn't yet been created
-                # or checked out.
-                #     $ git init
-                #     $ git rev-parse HEAD
-                #     fatal: ambiguous argument 'HEAD': unknown revision or path not in the working tree.
-                return None
-
-            changes = repo.index.diff(None)
-            if changes:
-                # Ensure that, no matter what happens, the source date is more recent than the check-in date
-                source_date = source_date + timedelta(seconds=1)
-
-            # Ensure a more accurate source date is used if there have been any changes to the tracked sources
-            for diff in changes:
-                if diff.deleted_file:
-                    continue
-
-                try:
-                    st = os.lstat(os.path.join(repo.working_dir, diff.b_path))
-                except OSError:
-                    pass
-                else:
-                    file_date = datetime.utcfromtimestamp(st.st_mtime).replace(tzinfo=tzlocal())
-                    source_date = max(source_date, file_date)
-
-            log.debug("Date of last modification to source: %s", source_date)
-            return source_date
+        if not isinstance(workspace, git.Repo):
+            repo = git.Repo(workspace)
+        else:
+            repo = workspace
     except (git.InvalidGitRepositoryError, git.NoSuchPathError):
         return None
+
+    try:
+        try:
+            source_date = repo.head.commit.committed_datetime
+        except ValueError:
+            # This happens for a repository that has been initialized but for which a commit hasn't yet been created
+            # or checked out.
+            #     $ git init
+            #     $ git rev-parse HEAD
+            #     fatal: ambiguous argument 'HEAD': unknown revision or path not in the working tree.
+            return None
+
+        changes = repo.index.diff(None)
+        if changes:
+            # Ensure that, no matter what happens, the source date is more recent than the check-in date
+            source_date = source_date + timedelta(seconds=1)
+
+        # Ensure a more accurate source date is used if there have been any changes to the tracked sources
+        for diff in changes:
+            if diff.deleted_file:
+                continue
+
+            try:
+                st = os.lstat(os.path.join(repo.working_dir, diff.b_path))
+            except OSError:
+                pass
+            else:
+                file_date = datetime.utcfromtimestamp(st.st_mtime).replace(tzinfo=tzlocal())
+                source_date = max(source_date, file_date)
+
+        log.debug("Date of last modification to source: %s", source_date)
+        return source_date
+    finally:
+        if not isinstance(workspace, git.Repo):
+            repo.close()
 
 
 def determine_git_version(repo):
@@ -101,16 +109,16 @@ def determine_version(version_info, config_dir, code_dir=None):
         try:
             with git.Repo(code_dir) as repo:
                 gitversion = determine_git_version(repo)
+
+                params = {}
+                if 'format' in version_info:
+                    params['format'] = version_info['format']
+                if gitversion.dirty:
+                    params['dirty_date'] = determine_source_date(repo)
+
+                return gitversion.to_version(**params)
         except (git.InvalidGitRepositoryError, git.NoSuchPathError):
             pass
-        else:
-            params = {}
-            if 'format' in version_info:
-                params['format'] = version_info['format']
-            if gitversion.dirty:
-                return gitversion.to_version(dirty_date=determine_source_date(code_dir), **params)
-            else:
-                return gitversion.to_version(**params)
 
 
 @unique
