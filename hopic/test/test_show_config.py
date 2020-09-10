@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..cli import cli
+from . import hopic_cli
 
 from click.testing import CliRunner
 from collections import OrderedDict
@@ -52,7 +52,7 @@ def run_with_config(config, args, files={}, env=None, cfg_file='hopic-ci-config.
             repo.index.commit(message='Initial commit', **_commitargs)
         if cfg_file != 'hopic-ci-config.yaml':
             args = ('--config', cfg_file) + tuple(args)
-        result = runner.invoke(cli, args)
+        result = runner.invoke(hopic_cli, args)
 
     if result.stdout_bytes:
         print(result.stdout, end='')
