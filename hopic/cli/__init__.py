@@ -15,6 +15,7 @@
 import click
 import click_log
 
+from . import autocomplete
 from .. import binary_normalize
 from commisery.commit import parse_commit_message
 from ..config_reader import (
@@ -288,74 +289,6 @@ class OptionContext(object):
         self._missing_parameters[name] = self._missing_parameters[dependency]
 
 
-def cli_autocomplete_get_option_from_args(args, option):
-    try:
-        return args[args.index(option) + 1]
-    except Exception:
-        for arg in args:
-            if arg.startswith(option + '='):
-                return arg[len(option + '='):]
-
-
-def cli_autocomplet_get_config_from_args(args):
-    config = os.path.expanduser(
-        expand_vars(
-            os.environ,
-            cli_autocomplete_get_option_from_args(args, '--config'),
-        ))
-    return read_config(config, {})
-
-
-def cli_autocomplete_phase_from_config(ctx, args, incomplete):
-    try:
-        cfg = cli_autocomplet_get_config_from_args(args)
-        for phase in cfg['phases']:
-            if incomplete in phase:
-                yield phase
-    except Exception:
-        pass
-
-
-def cli_autocomplete_variant_from_config(ctx, args, incomplete):
-    try:
-        cfg = cli_autocomplet_get_config_from_args(args)
-        phase = cli_autocomplete_get_option_from_args(args, '--phase')
-
-        seen_variants = set()
-        for phasename, curphase in cfg['phases'].items():
-            if phase is not None and phasename != phase:
-                continue
-            for variant in curphase:
-                if variant in seen_variants:
-                    continue
-                seen_variants.add(variant)
-                yield variant
-    except Exception:
-        pass
-
-
-def cli_autocomplete_modality_from_config(ctx, args, incomplete):
-    try:
-        cfg = cli_autocomplet_get_config_from_args(args)
-        for modality in cfg['modality-source-preparation']:
-            if incomplete in modality:
-                yield modality
-    except Exception:
-        pass
-
-
-def cli_autocomplete_click_log_verbosity(ctx, args, incomplete):
-    for level in (
-                'DEBUG',
-                'INFO',
-                'WARNING',
-                'ERROR',
-                'CRITICAL',
-            ):
-        if incomplete in level:
-            yield level
-
-
 def determine_git_version(repo):
     """
     Determines the current version of a git repository based on its tags.
@@ -415,8 +348,8 @@ def determine_config_file_name(ctx):
 @click.option('--config'         , type=click.Path(exists=False, file_okay=True , dir_okay=False, readable=True, resolve_path=True), default=lambda: None, show_default='${WORKSPACE}/hopic-ci-config.yaml')  # noqa: E501
 @click.option('--workspace'      , type=click.Path(exists=False, file_okay=False, dir_okay=True)                                   , default=lambda: None, show_default='git work tree of config file or current working directory')  # noqa: E501
 @click.option('--whitelisted-var', multiple=True                                                                                   , default=['CT_DEVENV_HOME'], hidden=True)  # noqa: E501
-@click_log.simple_verbosity_option(PACKAGE                 , envvar='HOPIC_VERBOSITY', autocompletion=cli_autocomplete_click_log_verbosity)
-@click_log.simple_verbosity_option('git', '--git-verbosity', envvar='GIT_VERBOSITY'  , autocompletion=cli_autocomplete_click_log_verbosity)
+@click_log.simple_verbosity_option(PACKAGE                 , envvar='HOPIC_VERBOSITY', autocompletion=autocomplete.click_log_verbosity)
+@click_log.simple_verbosity_option('git', '--git-verbosity', envvar='GIT_VERBOSITY'  , autocompletion=autocomplete.click_log_verbosity)
 @click.pass_context
 def cli(ctx, color, config, workspace, whitelisted_var):
     if color == 'always':
@@ -1182,7 +1115,7 @@ def merge_change_request(
 
 _env_var_re = re.compile(r'^(?P<var>[A-Za-z_][0-9A-Za-z_]*)=(?P<val>.*)$')
 @prepare_source_tree.command()  # noqa: E302 'expected 2 blank lines'
-@click.argument('modality', autocompletion=cli_autocomplete_modality_from_config)
+@click.argument('modality', autocompletion=autocomplete.modality_from_config)
 @click.pass_context
 def apply_modality_change(
             ctx,
@@ -1328,8 +1261,8 @@ def bump_version(ctx):
 
 
 @cli.command()
-@click.option('--phase'             , metavar='<phase>'  , multiple=True, help='''Build phase''', autocompletion=cli_autocomplete_phase_from_config)
-@click.option('--variant'           , metavar='<variant>', multiple=True, help='''Configuration variant''', autocompletion=cli_autocomplete_variant_from_config)
+@click.option('--phase'             , metavar='<phase>'  , multiple=True, help='''Build phase''', autocompletion=autocomplete.phase_from_config)
+@click.option('--variant'           , metavar='<variant>', multiple=True, help='''Configuration variant''', autocompletion=autocomplete.variant_from_config)
 @click.pass_context
 def getinfo(ctx, phase, variant):
     """
@@ -1375,8 +1308,8 @@ def getinfo(ctx, phase, variant):
 
 
 @cli.command()
-@click.option('--phase'  , metavar='<phase>'  , multiple=True, help='''Build phase to execute''', autocompletion=cli_autocomplete_phase_from_config)
-@click.option('--variant', metavar='<variant>', multiple=True, help='''Configuration variant to build''', autocompletion=cli_autocomplete_variant_from_config)
+@click.option('--phase'  , metavar='<phase>'  , multiple=True, help='''Build phase to execute''', autocompletion=autocomplete.phase_from_config)
+@click.option('--variant', metavar='<variant>', multiple=True, help='''Configuration variant to build''', autocompletion=autocomplete.variant_from_config)
 @click.pass_context
 def build(ctx, phase, variant):
     """
