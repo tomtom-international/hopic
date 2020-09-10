@@ -16,6 +16,10 @@ import click
 import click_log
 
 from . import autocomplete
+from .utils import (
+        determine_config_file_name,
+        is_publish_branch,
+    )
 from .. import binary_normalize
 from commisery.commit import parse_commit_message
 from ..config_reader import (
@@ -134,28 +138,6 @@ class DateTime(click.ParamType):
             self.fail('Could not parse datetime string "{value}": {e}'.format(value=value, e=' '.join(e.args)), param, ctx)
 
 
-def is_publish_branch(ctx):
-    """
-    Check if the branch name is allowed to publish, if publish-from-branch is not defined in the config file, all the branches should be allowed to publish
-    """
-
-    try:
-        with git.Repo(ctx.obj.workspace) as repo:
-            target_commit = repo.head.commit
-            with repo.config_reader() as cfg:
-                target_ref = cfg.get_value(f"hopic.{target_commit}", 'ref')
-    except (NoOptionError, NoSectionError):
-        return False
-
-    try:
-        publish_from_branch = ctx.obj.config['publish-from-branch']
-    except KeyError:
-        return True
-
-    publish_branch_pattern = re.compile(f"(?:{publish_from_branch})$")
-    return publish_branch_pattern.match(target_ref)
-
-
 def volume_spec_to_docker_param(volume):
     if not os.path.exists(volume['source']):
         os.makedirs(volume['source'])
@@ -252,22 +234,6 @@ class OptionContext(object):
 
     def register_dependent_attribute(self, name, dependency):
         self._missing_parameters[name] = self._missing_parameters[dependency]
-
-
-def determine_config_file_name(ctx):
-    """
-    Determines the location of the config file, possibly falling back to a default.
-    """
-    try:
-        return ctx.obj.config_file
-    except (click.BadParameter, AttributeError):
-        for fname in (
-                    'hopic-ci-config.yaml',
-                ):
-            fname = os.path.join(ctx.obj.workspace, fname)
-            if os.path.isfile(fname):
-                return fname
-        raise
 
 
 @click.group(context_settings=dict(help_option_names=('-h', '--help')))
