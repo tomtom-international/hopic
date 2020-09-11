@@ -447,7 +447,7 @@ def read(config, volume_vars):
         raise ConfigurationError(f"`pip` doesn't contain a sequence but a {type(pip).__name__}", file=config)
     for idx, spec in enumerate(pip):
         if isinstance(spec, str):
-            pip[idx] = spec = OrderedDict((('packages', spec),))
+            pip[idx] = spec = OrderedDict((('packages', (spec,)),))
         if not isinstance(spec, Mapping):
             raise ConfigurationError(f"`pip[{idx}]` doesn't contain a mapping but a {type(spec).__name__}", file=config)
         if 'packages' not in spec:
