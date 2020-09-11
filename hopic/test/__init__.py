@@ -12,14 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Final
-
 try:
     # Python >= 3.8
     from importlib import metadata
 except ImportError:
     import importlib_metadata as metadata
 
-PACKAGE : Final[str] = __package__.split('.')[0]
+PACKAGE : str = __package__.split('.')[0]
 
 hopic_cli = [ep for ep in metadata.entry_points()['console_scripts'] if ep.name == PACKAGE][0].load()

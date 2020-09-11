@@ -19,7 +19,6 @@ from configparser import (
 from datetime import datetime
 import logging
 import os
-from typing import Final
 
 import click
 import click_log
@@ -40,7 +39,7 @@ from ..git_time import (
         determine_version,
     )
 
-PACKAGE : Final[str] = __package__.split('.')[0]
+PACKAGE : str = __package__.split('.')[0]
 
 log = logging.getLogger(__name__)
 
