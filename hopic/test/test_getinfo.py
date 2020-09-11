@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..cli import cli
+from . import hopic_cli
 
 from click.testing import CliRunner
 from collections import OrderedDict
@@ -48,7 +48,7 @@ def run_with_config(config, args, resource=()):
         if resource:
             with ExecutableFile(resource[0]) as f:
                 f.write(resource[1])
-        result = runner.invoke(cli, args)
+        result = runner.invoke(hopic_cli, args)
 
     if result.stdout_bytes:
         print(result.stdout, end='')

@@ -59,7 +59,7 @@ setup(
     use_scm_version={"relative_to": __file__},
     entry_points='''
       [console_scripts]
-      hopic=hopic.cli:cli
+      hopic=hopic.cli:main
       [hopic.plugins.yaml]
       commisery = hopic.yaml.commisery:commisery
     ''',
