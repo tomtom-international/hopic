@@ -232,8 +232,12 @@ def load_yaml_template(volume_vars, loader, node):
         if ep.name == name:
             break
     else:
-        # TODO: lazy load here instead to deal with plugins that may be installed during Hopic's flow
-        raise ConfigurationError(f"No YAML template named '{name}' available (props={props})")
+        return (
+                OrderedDict((
+                    ('description', f"No YAML template named '{name}' available (props={props})"),
+                    ('sh'         , ('false',))
+                )),
+            )
 
     return ep.load()(volume_vars, **props)
 
