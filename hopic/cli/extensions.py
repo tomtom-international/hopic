@@ -17,7 +17,6 @@ import os
 import subprocess
 import sys
 import tempfile
-from typing import Final
 
 try:
     # Python >= 3.8
@@ -30,7 +29,7 @@ import click
 from ..execution import echo_cmd
 
 
-PACKAGE : Final[str] = __package__.split('.')[0]
+PACKAGE : str = __package__.split('.')[0]
 
 
 @click.command()

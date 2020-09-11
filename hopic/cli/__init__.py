@@ -76,12 +76,11 @@ import stat
 import subprocess
 import sys
 import tempfile
-from typing import Final
 from textwrap import dedent
 
 from .main import main
 
-PACKAGE : Final[str] = __package__.split('.')[0]
+PACKAGE : str = __package__.split('.')[0]
 
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
