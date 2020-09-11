@@ -41,8 +41,7 @@ def install_extensions(ctx):
     """
 
     pip_cfg = ctx.obj.config['pip']
-    packages = pip_cfg['packages']
-    if not packages:
+    if not pip_cfg:
         return
 
     if hasattr(sys, 'real_prefix') or getattr(sys, 'base_prefix', None) != sys.prefix:
@@ -54,21 +53,27 @@ def install_extensions(ctx):
         with open(constraints_file, 'w', encoding='UTF-8') as cf:
             cf.write(f"{PACKAGE}=={metadata.distribution(PACKAGE).version}\n")
 
-        cmd = [
+        base_cmd = [
                 sys.executable, '-m', 'pip', 'install',
                 '-c', constraints_file,
             ]
 
         plog = logging.getLogger(PACKAGE)
         if plog.isEnabledFor(logging.DEBUG):
-            cmd.append('--verbose')
-
-        for index in pip_cfg['extra-index']:
-            cmd.extend(['--extra-index-url', index])
+            base_cmd.append('--verbose')
 
         if not is_venv:
-            cmd.append('--user')
+            base_cmd.append('--user')
 
-        cmd.extend(packages)
+        for spec in pip_cfg:
+            cmd = base_cmd.copy()
 
-        echo_cmd(subprocess.check_call, cmd)
+            from_index = spec.get('from-index')
+            if from_index is not None:
+                cmd.extend(['--index-url', spec['from-index']])
+            for index in spec['with-extra-index']:
+                cmd.extend(['--extra-index-url', index])
+
+            cmd.extend(spec['packages'])
+
+            echo_cmd(subprocess.check_call, cmd)
