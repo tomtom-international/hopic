@@ -232,8 +232,12 @@ def load_yaml_template(volume_vars, loader, node):
         if ep.name == name:
             break
     else:
-        # TODO: lazy load here instead to deal with plugins that may be installed during Hopic's flow
-        raise ConfigurationError(f"No YAML template named '{name}' available (props={props})")
+        return (
+                OrderedDict((
+                    ('description', f"No YAML template named '{name}' available (props={props})"),
+                    ('sh'         , ('false',))
+                )),
+            )
 
     return ep.load()(volume_vars, **props)
 
@@ -427,16 +431,46 @@ def read(config, volume_vars):
     # Flatten command lists
     for phasename, phase in cfg.setdefault('phases', OrderedDict()).items():
         if not isinstance(phase, Mapping):
-            raise ConfigurationError(f"phase `{phasename}` doesn't contain a mapping but a {type(phase)}", file=config)
+            raise ConfigurationError(f"phase `{phasename}` doesn't contain a mapping but a {type(phase).__name__}", file=config)
         for variantname, variant in phase.items():
             if not isinstance(variant, Sequence):
-                raise ConfigurationError(f"variant `{phasename}.{variantname}` doesn't contain a sequence but a {type(variant)}", file=config)
+                raise ConfigurationError(f"variant `{phasename}.{variantname}` doesn't contain a sequence but a {type(variant).__name__}", file=config)
             for i in reversed(range(len(variant))):
                 cmd = variant[i]
                 if isinstance(cmd, str):
                     variant[i] = cmd = OrderedDict((('sh', cmd),))
                 if isinstance(cmd, Sequence) and not isinstance(cmd, (str, bytes)):
                     variant[i:i + 1] = cmd
+
+    pip = cfg.setdefault('pip', ())
+    if not isinstance(pip, Sequence):
+        raise ConfigurationError(f"`pip` doesn't contain a sequence but a {type(pip).__name__}", file=config)
+    for idx, spec in enumerate(pip):
+        if isinstance(spec, str):
+            pip[idx] = spec = OrderedDict((('packages', (spec,)),))
+        if not isinstance(spec, Mapping):
+            raise ConfigurationError(f"`pip[{idx}]` doesn't contain a mapping but a {type(spec).__name__}", file=config)
+        if 'packages' not in spec:
+            raise ConfigurationError(f"`pip[{idx}].packages` doesn't exist, so pip[{idx}] is useless", file=config)
+        packages = spec['packages']
+        if not (isinstance(packages, Sequence) and not isinstance(packages, str)):
+            raise ConfigurationError(f"`pip[{idx}].packages` is not a sequence of package specification strings but a {type(packages).__name__}", file=config)
+        if not packages:
+            raise ConfigurationError(f"`pip[{idx}].packages` is empty, so pip[{idx}] is useless", file=config)
+        from_idx = spec.get('from-index')
+        if from_idx is not None and not isinstance(from_idx, str):
+            raise ConfigurationError(f"`pip[{idx}].from-index` doesn't contain an URL string but a {type(from_idx).__name__}", file=config)
+        with_extra_index = spec.setdefault('with-extra-index', ())
+        if isinstance(with_extra_index, str):
+            spec['with-extra-index'] = (spec,)
+        if not isinstance(with_extra_index, Sequence):
+            raise ConfigurationError(
+                    f"`pip[{idx}].with-extra-index` doesn't contain a sequence of URL strings but a {type(with_extra_index).__name__}", file=config)
+        for eidx, extra in enumerate(with_extra_index):
+            if not isinstance(extra, str):
+                raise ConfigurationError(
+                        f"`pip[{idx}].with-extra-index[{eidx}]` doesn't contain an URL string but a {type(extra).__name__}",
+                        file=config)
 
     # Convert multiple different syntaxes into a single one
     for phase in cfg['phases'].values():

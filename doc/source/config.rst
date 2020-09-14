@@ -503,6 +503,36 @@ Note that this is, above all, a remnant of the previous generation pipeline; it 
         commit-message: Update of dependency manifest
 
 
+Extension Installation
+----------------------
+
+.. option:: pip
+
+Hopic can be extended with extra Python packages.
+For this purpose it provides the ability to install packages, with pip, before building.
+
+The ``pip`` option contains a list of requirement strings or package installation specifications.
+Each of those specifications may contain these options:
+
+``packages``
+   This option is mandatory.
+
+   It contains a list of pip requirement strings.
+   E.g. ``click>=7,<8`` or ``python-keyring``.
+
+``from-index``
+   This must be a single URL string.
+
+   When specified this causes pip to install from this package index instead of the default one.
+
+``with-extra-index``
+   This must be a single URL string or a list of URL strings.
+
+   When specified this causes pip to look in this index when the primary one doesn't contain the specified packages.
+
+.. literalinclude:: ../../examples/pip.yaml
+    :language: yaml
+
 Restricting Variants to Specific Build Nodes
 --------------------------------------------
 

@@ -14,7 +14,10 @@
 
 import click
 
-from . import autocomplete
+from . import (
+        autocomplete,
+        extensions,
+    )
 from .utils import (
         determine_config_file_name,
         is_publish_branch,
@@ -81,6 +84,18 @@ PACKAGE : str = __package__.split('.')[0]
 
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
+
+
+for submodule in (
+    extensions,
+):
+    for subcmd in dir(submodule):
+        if subcmd.startswith('_'):
+            continue
+        cmd = getattr(submodule, subcmd)
+        if not isinstance(cmd, click.Command):
+            continue
+        main.add_command(cmd)
 
 
 class VersioningError(click.ClickException):
@@ -1066,6 +1081,10 @@ def build(ctx, phase, variant):
     except NoSectionError:
         pass
     has_change = bool(refspecs)
+
+    # Ensure any required extensions are available
+    extensions.install_extensions.callback()
+    ctx.obj.config = read_config(determine_config_file_name(ctx), ctx.obj.volume_vars)
 
     worktree_commits = {}
     for phasename, curphase in cfg['phases'].items():
