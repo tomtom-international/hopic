@@ -526,7 +526,7 @@ Each of those specifications may contain these options:
    When specified this causes pip to install from this package index instead of the default one.
 
 ``with-extra-index``
-   This must be a list of URL strings.
+   This must be a single URL string or a list of URL strings.
 
    When specified this causes pip to look in this index when the primary one doesn't contain the specified packages.
 
