@@ -43,8 +43,7 @@ def install_extensions(ctx):
     if not pip_cfg:
         return
 
-    if hasattr(sys, 'real_prefix') or getattr(sys, 'base_prefix', None) != sys.prefix:
-        is_venv = True
+    is_venv = (hasattr(sys, 'real_prefix') or getattr(sys, 'base_prefix', None) != sys.prefix)
 
     with tempfile.TemporaryDirectory() as td:
         # Prevent changing the Hopic version
