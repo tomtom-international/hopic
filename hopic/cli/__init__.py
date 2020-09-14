@@ -13,23 +13,29 @@
 # limitations under the License.
 
 import click
-import click_log
 
-from . import binary_normalize
+from . import autocomplete
+from .utils import (
+        determine_config_file_name,
+        is_publish_branch,
+    )
+from .. import binary_normalize
 from commisery.commit import parse_commit_message
-from .config_reader import (
+from ..config_reader import (
         RunOnChange,
         JSONEncoder,
         expand_docker_volume_spec,
         expand_vars,
         read as read_config,
     )
-from . import credentials
-from .execution import echo_cmd
-from .git_time import restore_mtime_from_git
-from .versioning import (
-        GitVersion,
-        read_version,
+from .. import credentials
+from ..execution import echo_cmd
+from ..git_time import (
+        determine_git_version,
+        determine_version,
+        restore_mtime_from_git,
+    )
+from ..versioning import (
         replace_version,
     )
 from collections import OrderedDict
@@ -42,7 +48,7 @@ from configparser import (
         NoSectionError,
     )
 from copy import copy
-from datetime import (datetime, timedelta)
+from datetime import datetime
 from dateutil.parser import parse as date_parse
 from dateutil.tz import (tzoffset, tzlocal, tzutc)
 import git
@@ -68,6 +74,10 @@ import subprocess
 import sys
 import tempfile
 from textwrap import dedent
+
+from .main import main
+
+PACKAGE : str = __package__.split('.')[0]
 
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
@@ -127,66 +137,6 @@ class DateTime(click.ParamType):
             self.fail('Could not parse datetime string "{value}": {e}'.format(value=value, e=' '.join(e.args)), param, ctx)
 
 
-def is_publish_branch(ctx):
-    """
-    Check if the branch name is allowed to publish, if publish-from-branch is not defined in the config file, all the branches should be allowed to publish
-    """
-
-    try:
-        with git.Repo(ctx.obj.workspace) as repo:
-            target_commit = repo.head.commit
-            with repo.config_reader() as cfg:
-                target_ref = cfg.get_value(f"hopic.{target_commit}", 'ref')
-    except (NoOptionError, NoSectionError):
-        return False
-
-    try:
-        publish_from_branch = ctx.obj.config['publish-from-branch']
-    except KeyError:
-        return True
-
-    publish_branch_pattern = re.compile(f"(?:{publish_from_branch})$")
-    return publish_branch_pattern.match(target_ref)
-
-
-def determine_source_date(workspace):
-    """Determine the date of most recent change to the sources in the given workspace"""
-    try:
-        with git.Repo(workspace) as repo:
-            try:
-                source_date = repo.head.commit.committed_datetime
-            except ValueError:
-                # This happens for a repository that has been initialized but for which a commit hasn't yet been created
-                # or checked out.
-                #     $ git init
-                #     $ git rev-parse HEAD
-                #     fatal: ambiguous argument 'HEAD': unknown revision or path not in the working tree.
-                return None
-
-            changes = repo.index.diff(None)
-            if changes:
-                # Ensure that, no matter what happens, the source date is more recent than the check-in date
-                source_date = source_date + timedelta(seconds=1)
-
-            # Ensure a more accurate source date is used if there have been any changes to the tracked sources
-            for diff in changes:
-                if diff.deleted_file:
-                    continue
-
-                try:
-                    st = os.lstat(os.path.join(repo.working_dir, diff.b_path))
-                except OSError:
-                    pass
-                else:
-                    file_date = datetime.utcfromtimestamp(st.st_mtime).replace(tzinfo=tzlocal())
-                    source_date = max(source_date, file_date)
-
-            log.debug("Date of last modification to source: %s", source_date)
-            return source_date
-    except (git.InvalidGitRepositoryError, git.NoSuchPathError):
-        return None
-
-
 def volume_spec_to_docker_param(volume):
     if not os.path.exists(volume['source']):
         os.makedirs(volume['source'])
@@ -236,303 +186,7 @@ class DockerContainers(object):
         self.containers.add(container_id)
 
 
-class OptionContext(object):
-    def __init__(self):
-        super().__init__()
-        self._opts = {}
-        self._missing_parameters = {}
-
-    def __getattr__(self, name):
-        if name in frozenset({'_opts', '_missing_parameters'}):
-            return super().__getattr__(name)
-
-        try:
-            return self._opts[name]
-        except KeyError:
-            pass
-        try:
-            missing_param = self._missing_parameters[name].copy()
-        except KeyError:
-            raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'.")
-        else:
-            exception_raiser = missing_param.pop('exception_raiser')
-            exception_raiser(**missing_param)
-
-    def __setattr__(self, name, value):
-        if name in frozenset({'_opts', '_missing_parameters'}):
-            return super().__setattr__(name, value)
-
-        self._opts[name] = value
-
-    def __delattr__(self, name):
-        del self._opts[name]
-
-    def register_parameter(self, ctx, param, name=None, exception_raiser=None):
-        if name is None:
-            name = param.human_readable_name
-
-        if exception_raiser is None:
-            def exception_raiser(**kwargs):
-                raise click.MissingParameter(**kwargs)
-
-        self._missing_parameters[name] = dict(
-            ctx=ctx,
-            param=param,
-            exception_raiser=exception_raiser,
-        )
-
-    def register_dependent_attribute(self, name, dependency):
-        self._missing_parameters[name] = self._missing_parameters[dependency]
-
-
-def cli_autocomplete_get_option_from_args(args, option):
-    try:
-        return args[args.index(option) + 1]
-    except Exception:
-        for arg in args:
-            if arg.startswith(option + '='):
-                return arg[len(option + '='):]
-
-
-def cli_autocomplet_get_config_from_args(args):
-    config = os.path.expanduser(
-        expand_vars(
-            os.environ,
-            cli_autocomplete_get_option_from_args(args, '--config'),
-        ))
-    return read_config(config, {})
-
-
-def cli_autocomplete_phase_from_config(ctx, args, incomplete):
-    try:
-        cfg = cli_autocomplet_get_config_from_args(args)
-        for phase in cfg['phases']:
-            if incomplete in phase:
-                yield phase
-    except Exception:
-        pass
-
-
-def cli_autocomplete_variant_from_config(ctx, args, incomplete):
-    try:
-        cfg = cli_autocomplet_get_config_from_args(args)
-        phase = cli_autocomplete_get_option_from_args(args, '--phase')
-
-        seen_variants = set()
-        for phasename, curphase in cfg['phases'].items():
-            if phase is not None and phasename != phase:
-                continue
-            for variant in curphase:
-                if variant in seen_variants:
-                    continue
-                seen_variants.add(variant)
-                yield variant
-    except Exception:
-        pass
-
-
-def cli_autocomplete_modality_from_config(ctx, args, incomplete):
-    try:
-        cfg = cli_autocomplet_get_config_from_args(args)
-        for modality in cfg['modality-source-preparation']:
-            if incomplete in modality:
-                yield modality
-    except Exception:
-        pass
-
-
-def cli_autocomplete_click_log_verbosity(ctx, args, incomplete):
-    for level in (
-                'DEBUG',
-                'INFO',
-                'WARNING',
-                'ERROR',
-                'CRITICAL',
-            ):
-        if incomplete in level:
-            yield level
-
-
-def determine_git_version(repo):
-    """
-    Determines the current version of a git repository based on its tags.
-    """
-
-    return GitVersion.from_description(
-            repo.git.describe(tags=True, long=True, dirty=True, always=True))
-
-
-def determine_version(version_info, config_dir, code_dir=None):
-    """
-    Determines the current version for the given version configuration snippet.
-    """
-
-    if 'file' in version_info:
-        params = {}
-        if 'format' in version_info:
-            params['format'] = version_info['format']
-        fname = os.path.join(config_dir, version_info['file'])
-        if os.path.isfile(fname):
-            return read_version(fname, **params)
-
-    if version_info.get('tag', False) and code_dir is not None:
-        try:
-            with git.Repo(code_dir) as repo:
-                gitversion = determine_git_version(repo)
-        except (git.InvalidGitRepositoryError, git.NoSuchPathError):
-            pass
-        else:
-            params = {}
-            if 'format' in version_info:
-                params['format'] = version_info['format']
-            if gitversion.dirty:
-                return gitversion.to_version(dirty_date=determine_source_date(code_dir), **params)
-            else:
-                return gitversion.to_version(**params)
-
-
-def determine_config_file_name(ctx):
-    """
-    Determines the location of the config file, possibly falling back to a default.
-    """
-    try:
-        return ctx.obj.config_file
-    except (click.BadParameter, AttributeError):
-        for fname in (
-                    'hopic-ci-config.yaml',
-                ):
-            fname = os.path.join(ctx.obj.workspace, fname)
-            if os.path.isfile(fname):
-                return fname
-        raise
-
-
-@click.group(context_settings=dict(help_option_names=('-h', '--help')))
-@click.option('--color'          , type=click.Choice(('always', 'auto', 'never'))                                                  , default='auto'      , show_default=True)  # noqa: E501
-@click.option('--config'         , type=click.Path(exists=False, file_okay=True , dir_okay=False, readable=True, resolve_path=True), default=lambda: None, show_default='${WORKSPACE}/hopic-ci-config.yaml')  # noqa: E501
-@click.option('--workspace'      , type=click.Path(exists=False, file_okay=False, dir_okay=True)                                   , default=lambda: None, show_default='git work tree of config file or current working directory')  # noqa: E501
-@click.option('--whitelisted-var', multiple=True                                                                                   , default=['CT_DEVENV_HOME'], hidden=True)  # noqa: E501
-@click_log.simple_verbosity_option(__package__             , envvar='HOPIC_VERBOSITY', autocompletion=cli_autocomplete_click_log_verbosity)
-@click_log.simple_verbosity_option('git', '--git-verbosity', envvar='GIT_VERBOSITY'  , autocompletion=cli_autocomplete_click_log_verbosity)
-@click.pass_context
-def cli(ctx, color, config, workspace, whitelisted_var):
-    if color == 'always':
-        ctx.color = True
-    elif color == 'never':
-        ctx.color = False
-    else:
-        # leave as is: 'auto' is the default for Click
-        pass
-
-    click_log.basic_config()
-
-    ctx.obj = OptionContext()
-    for param in ctx.command.params:
-        ctx.obj.register_parameter(ctx=ctx, param=param)
-        if param.human_readable_name == 'workspace' and workspace is not None:
-            if ctx.invoked_subcommand != 'checkout-source-tree':
-                # Require the workspace directory to exist for anything but the checkout command
-                if not os.path.isdir(workspace):
-                    raise click.BadParameter(
-                        f"Directory '{workspace}' does not exist.",
-                        ctx=ctx, param=param
-                    )
-        elif param.human_readable_name == 'config' and config is not None:
-            # Require the config file to exist everywhere that it's used
-            try:
-                # Try to open the file instead of os.path.isfile because we want to be able to use /dev/null too
-                with open(config, 'rb'):
-                    pass
-            except IOError:
-                def exception_raiser(ctx, param):
-                    raise click.BadParameter(
-                        f"File '{config}' does not exist.",
-                        ctx=ctx, param=param
-                    )
-                ctx.obj.register_parameter(ctx=ctx, param=param, exception_raiser=exception_raiser)
-
-    if workspace is None:
-        # workspace default
-        if config is not None and config != os.devnull:
-            try:
-                with git.Repo(os.path.dirname(config), search_parent_directories=True) as repo:
-                    # Default to containing repository of config file, ...
-                    workspace = repo.working_dir
-            except (git.InvalidGitRepositoryError, git.NoSuchPathError):
-                # ... but fall back to containing directory of config file.
-                workspace = os.path.dirname(config)
-        else:
-            workspace = os.getcwd()
-    workspace = os.path.join(os.getcwd(), workspace)
-    ctx.obj.workspace = workspace
-
-    ctx.obj.volume_vars = {}
-    try:
-        with git.Repo(workspace) as repo, repo.config_reader() as cfg:
-            code_dir = os.path.join(workspace, cfg.get_value('hopic.code', 'dir'))
-    except (git.InvalidGitRepositoryError, git.NoSuchPathError, NoOptionError, NoSectionError):
-        code_dir = workspace
-
-    ctx.obj.code_dir = ctx.obj.volume_vars['WORKSPACE'] = code_dir
-    source_date = determine_source_date(code_dir)
-    if source_date is not None:
-        ctx.obj.source_date = source_date
-        ctx.obj.source_date_epoch = int((
-            source_date - datetime.utcfromtimestamp(0).replace(tzinfo=tzutc())
-        ).total_seconds())
-        ctx.obj.volume_vars['SOURCE_DATE_EPOCH'] = str(ctx.obj.source_date_epoch)
-    ctx.obj.register_dependent_attribute('code_dir', 'workspace')
-    ctx.obj.register_dependent_attribute('source_date', 'workspace')
-    ctx.obj.register_dependent_attribute('source_date_epoch', 'workspace')
-
-    for var in whitelisted_var:
-        try:
-            ctx.obj.volume_vars[var] = os.environ[var]
-        except KeyError:
-            pass
-
-    if config is not None:
-        ctx.obj.config_file = config
-    ctx.obj.register_dependent_attribute('config_file', 'config')
-    try:
-        config = determine_config_file_name(ctx)
-    except click.BadParameter:
-        config = None
-
-    cfg = {}
-    if config is not None:
-        if not os.path.isabs(config) and config != os.devnull:
-            config = os.path.join(os.getcwd(), config)
-        ctx.obj.volume_vars['CFGDIR'] = ctx.obj.config_dir = os.path.dirname(config)
-        # Prevent reading the config file _before_ performing a checkout. This prevents a pre-existing file at the same
-        # location from being read as the config file. This may cause problems if that pre-checkout file has syntax
-        # errors for example.
-        if ctx.invoked_subcommand != 'checkout-source-tree':
-            try:
-                # Try to open the file instead of os.path.isfile because we want to be able to use /dev/null too
-                with open(config, 'rb'):
-                    pass
-            except IOError:
-                pass
-            else:
-                cfg = ctx.obj.config = read_config(config, ctx.obj.volume_vars)
-    ctx.obj.register_dependent_attribute('config_dir', 'config')
-
-    ctx.obj.version = determine_version(
-            cfg.get('version', {}),
-            config_dir=(config and ctx.obj.config_dir),
-            code_dir=ctx.obj.code_dir,
-        )
-    if ctx.obj.version is not None:
-        log.debug("read version: \x1B[34m%s\x1B[39m", ctx.obj.version)
-        ctx.obj.volume_vars['VERSION'] = str(ctx.obj.version)
-        ctx.obj.volume_vars['PURE_VERSION'] = ctx.obj.volume_vars['VERSION'].split('+')[0]
-        # FIXME: make this conversion work even when not using SemVer as versioning policy
-        # Convert SemVer to Debian version: '~' for pre-release instead of '-'
-        ctx.obj.volume_vars['DEBVERSION'] = ctx.obj.volume_vars['VERSION'].replace('-', '~', 1).replace('.dirty.', '+dirty', 1)
-
-
-@cli.command()
+@main.command()
 @click.pass_context
 def may_publish(ctx):
     """
@@ -666,7 +320,7 @@ def to_git_time(date):
     return f"{utctime} {date:%z}"
 
 
-@cli.command()
+@main.command()
 @click.option('--target-remote'     , metavar='<url>')
 @click.option('--target-ref'        , metavar='<ref>')
 @click.option('--clean/--no-clean'  , default=False, help='''Clean workspace of non-tracked files''')
@@ -750,7 +404,7 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean, ignore_initial_s
                   clean, clean_config=ctx.obj.config['clean'])
 
 
-@cli.group()
+@main.group()
 # git
 @click.option('--author-name'               , metavar='<name>'                 , help='''Name of change-request's author''')
 @click.option('--author-email'              , metavar='<email>'                , help='''E-mail address of change-request's author''')
@@ -987,7 +641,7 @@ def process_prepare_source_tree(
                 )
             repo.create_tag(
                     tagname, submit_commit, force=True,
-                    message=f"Tagged-by: Hopic {metadata.distribution(__package__).version}",
+                    message=f"Tagged-by: Hopic {metadata.distribution(PACKAGE).version}",
                     env={
                         'GIT_COMMITTER_NAME': committer.name,
                         'GIT_COMMITTER_EMAIL': committer.email,
@@ -1165,7 +819,7 @@ def merge_change_request(
         if approved_by:
             approvers = get_valid_approvers(repo, approved_by, source, source_commit)
             msg += '\n'.join(f"Acked-by: {approver}" for approver in approvers) + u'\n'
-        msg += u'Merged-by: Hopic {pkg.version}\n'.format(pkg=metadata.distribution(__package__))
+        msg += u'Merged-by: Hopic {pkg.version}\n'.format(pkg=metadata.distribution(PACKAGE))
         return {
                 'message': msg,
                 'parent_commits': (
@@ -1179,7 +833,7 @@ def merge_change_request(
 
 _env_var_re = re.compile(r'^(?P<var>[A-Za-z_][0-9A-Za-z_]*)=(?P<val>.*)$')
 @prepare_source_tree.command()  # noqa: E302 'expected 2 blank lines'
-@click.argument('modality', autocompletion=cli_autocomplete_modality_from_config)
+@click.argument('modality', autocompletion=autocomplete.modality_from_config)
 @click.pass_context
 def apply_modality_change(
             ctx,
@@ -1276,7 +930,7 @@ def apply_modality_change(
         commit_message = dedent(f"""\
             {commit_message.rstrip()}
 
-            Merged-by: Hopic {metadata.distribution(__package__).version}
+            Merged-by: Hopic {metadata.distribution(PACKAGE).version}
             """)
 
         commit_params = {'message': commit_message}
@@ -1310,7 +964,7 @@ def bump_version(ctx):
             'bump_message': dedent(f"""\
                     chore: release new version
 
-                    Bumped-by: Hopic {metadata.distribution(__package__).version}
+                    Bumped-by: Hopic {metadata.distribution(PACKAGE).version}
                     """),
             'base_commit': tag.commit,
             'bump-override': {
@@ -1324,9 +978,9 @@ def bump_version(ctx):
     return change_applicator
 
 
-@cli.command()
-@click.option('--phase'             , metavar='<phase>'  , multiple=True, help='''Build phase''', autocompletion=cli_autocomplete_phase_from_config)
-@click.option('--variant'           , metavar='<variant>', multiple=True, help='''Configuration variant''', autocompletion=cli_autocomplete_variant_from_config)
+@main.command()
+@click.option('--phase'             , metavar='<phase>'  , multiple=True, help='''Build phase''', autocompletion=autocomplete.phase_from_config)
+@click.option('--variant'           , metavar='<variant>', multiple=True, help='''Configuration variant''', autocompletion=autocomplete.variant_from_config)
 @click.pass_context
 def getinfo(ctx, phase, variant):
     """
@@ -1371,9 +1025,9 @@ def getinfo(ctx, phase, variant):
     click.echo(json.dumps(info, indent=4, separators=(',', ': '), cls=JSONEncoder))
 
 
-@cli.command()
-@click.option('--phase'  , metavar='<phase>'  , multiple=True, help='''Build phase to execute''', autocompletion=cli_autocomplete_phase_from_config)
-@click.option('--variant', metavar='<variant>', multiple=True, help='''Configuration variant to build''', autocompletion=cli_autocomplete_variant_from_config)
+@main.command()
+@click.option('--phase'  , metavar='<phase>'  , multiple=True, help='''Build phase to execute''', autocompletion=autocomplete.phase_from_config)
+@click.option('--variant', metavar='<variant>', multiple=True, help='''Configuration variant to build''', autocompletion=autocomplete.variant_from_config)
 @click.pass_context
 def build(ctx, phase, variant):
     """
@@ -1730,7 +1384,7 @@ def build(ctx, phase, variant):
                     binary_normalize.normalize(os.path.join(ctx.obj.code_dir, artifact), source_date_epoch=ctx.obj.source_date_epoch)
 
 
-@cli.command()
+@main.command()
 @click.option('--bundle', metavar='<file>', help='Git bundle to use', type=click.Path(file_okay=True, dir_okay=False, readable=True, resolve_path=True))
 @click.pass_context
 def unbundle_worktrees(ctx, bundle):
@@ -1777,7 +1431,7 @@ def unbundle_worktrees(ctx, bundle):
             cfg.set_value(section, 'refspecs', ' '.join(shlex.quote(refspec) for refspec in refspecs))
 
 
-@cli.command()
+@main.command()
 @click.option('--target-remote', metavar='<url>', help='''The remote to push to, if not specified this will default to the checkout remote.''')
 @click.pass_context
 def submit(ctx, target_remote):
@@ -1798,7 +1452,7 @@ def submit(ctx, target_remote):
             cfg.remove_section(section)
 
 
-@cli.command()
+@main.command()
 @click.pass_context
 def show_config(ctx):
     """
@@ -1808,7 +1462,7 @@ def show_config(ctx):
     click.echo(json.dumps(ctx.obj.config, indent=4, separators=(',', ': '), cls=JSONEncoder))
 
 
-@cli.command()
+@main.command()
 @click.pass_context
 def show_env(ctx):
     """

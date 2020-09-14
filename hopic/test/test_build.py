@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..cli import cli
+from . import hopic_cli
 from .markers import (
         docker,
     )
@@ -75,7 +75,7 @@ def run_with_config(config, *args, files={}, env=None, monkeypatch_injector=Monk
             repo.create_tag('0.0.0')
         for arg in args:
             with monkeypatch_injector:
-                result = runner.invoke(cli, arg)
+                result = runner.invoke(hopic_cli, arg)
 
             if result.stdout_bytes:
                 print(result.stdout, end='')
