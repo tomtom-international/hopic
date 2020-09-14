@@ -71,6 +71,7 @@ def test_install_extensions_from_multiple_indices(monkeypatch):
             args.remove('--user')
         if '--verbose' in args:
             args.remove('--verbose')
+        # del ['-c', constraints_file]
         del args[4:6]
 
         assert [*args] == [sys.executable, '-m', 'pip', 'install', *pkg]
