@@ -1,0 +1,9 @@
+pip:
+  - with-extra-index:
+      - https://test.pypi.org/simple/
+    packages:
+      - commisery>=0.2,<1
+
+phases:
+  style:
+    commit-messages: !template "commisery"
