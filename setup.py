@@ -36,6 +36,7 @@ setup(
     long_description_content_type='text/x-rst',
     packages=(
         'hopic',
+        'hopic.cli',
         'hopic.yaml',
     ),
     python_requires='>=3.6.5',
@@ -59,7 +60,7 @@ setup(
     use_scm_version={"relative_to": __file__},
     entry_points='''
       [console_scripts]
-      hopic=hopic.cli:main
+      hopic=hopic.cli.main:main
       [hopic.plugins.yaml]
       commisery = hopic.yaml.commisery:commisery
     ''',
