@@ -180,9 +180,7 @@ class BitbucketPullRequest extends ChangeRequest {
       steps.println("\033[31m[error] failed to get pull request info from BitBucket for ${source_commit}\033[39m")
       return false
     }
-    if (cur_cr_info.canMerge) {
-      steps.println("\033[36m[info] submitting the commits since all merge criteria are met\033[39m")
-    } else {
+    if (!cur_cr_info.canMerge) {
       steps.println("\033[36m[info] not submitting because the BitBucket merge criteria are not met\033[39m")
       if (cur_cr_info.vetoes) {
         steps.println("\033[36m[info] the following merge condition(s) are not met: \033[39m")
@@ -610,6 +608,9 @@ exec ssh -i '''
 
       assert !this.has_change() || (this.target_commit != null && this.source_commit != null)
       this.may_submit_result = this.has_change() && this.get_change().maySubmit(target_commit, source_commit, /* allow_cache =*/ false) && !this.is_build_a_replay()
+      if (this.may_submit_result) {
+        steps.println("\033[36m[info] submitting the commits since all merge criteria are met\033[39m")
+      }
     }
     this.may_submit_result = this.may_submit_result && steps.currentBuild.currentResult == 'SUCCESS'
     return this.may_submit_result
