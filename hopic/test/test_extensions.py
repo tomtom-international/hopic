@@ -102,3 +102,31 @@ def test_install_extensions_from_multiple_indices(monkeypatch, expected_args):
         ('install-extensions',))
 
     assert result.exit_code == 0
+
+
+def test_with_single_extra_index(monkeypatch):
+    extra_index = 'https://test.pypi.org/simple/'
+    pkg = 'hopic>=1.19<2'
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        if '--user' in args:
+            args.remove('--user')
+        if '--verbose' in args:
+            args.remove('--verbose')
+        # del ['-c', constraints_file]
+        del args[4:6]
+
+        assert [*args] == [sys.executable, '-m', 'pip', 'install', '--extra-index-url', extra_index, pkg]
+
+    monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+
+    result, = run_with_config(
+        dedent(f"""\
+                pip:
+                  - with-extra-index: {extra_index}
+                    packages:
+                      - {pkg}
+                """),
+        ('install-extensions',))
+
+    assert result.exit_code == 0
