@@ -16,6 +16,8 @@ from . import hopic_cli
 
 from click.testing import CliRunner
 import git
+import json
+import pytest
 import subprocess
 import sys
 from textwrap import dedent
@@ -57,16 +59,13 @@ def run_with_config(config, *args, env=None):
                 return
 
 
-def test_install_extensions_from_multiple_indices(monkeypatch):
-    expected_pkgs = [
-            ('--extra-index-url', 'https://test.pypi.org/simple/', 'hopic>=1.19<2'    ,),
-            ('--index-url'      , 'https://test.pypi.org/simple/', 'commisery>=0.2,<1',),
-            (                                                      'flake8'           ,),  # noqa: E201
-        ]
-
+@pytest.mark.parametrize('expected_args', (
+    ('--extra-index-url', 'https://test.pypi.org/simple/', 'hopic>=1.19<2'    ,),
+    ('--index-url'      , 'https://test.pypi.org/simple/', 'commisery>=0.2,<1',),
+    (                                                      'flake8'           ,),  # noqa: E201
+))
+def test_install_extensions_from_multiple_indices(monkeypatch, expected_args):
     def mock_check_call(args, *popenargs, **kwargs):
-        pkg = expected_pkgs.pop(0)
-
         if '--user' in args:
             args.remove('--user')
         if '--verbose' in args:
@@ -74,23 +73,60 @@ def test_install_extensions_from_multiple_indices(monkeypatch):
         # del ['-c', constraints_file]
         del args[4:6]
 
-        assert [*args] == [sys.executable, '-m', 'pip', 'install', *pkg]
+        assert [*args] == [sys.executable, '-m', 'pip', 'install', *expected_args]
+
+    monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+
+    if expected_args[0] == '--extra-index-url':
+        config = dedent(f"""\
+                pip:
+                  - with-extra-index:
+                      - {expected_args[1]}
+                    packages:
+                      - {expected_args[-1]}
+                """)
+    elif expected_args[0] == '--index-url':
+        config = dedent(f"""\
+                pip:
+                  - from-index: {expected_args[1]}
+                    packages:
+                      - {expected_args[-1]}
+                """)
+    else:
+        assert not expected_args[0].startswith('-')
+        config = dedent(f"""\
+                pip: {json.dumps(expected_args)}
+                """)
+    result, = run_with_config(
+        config,
+        ('install-extensions',))
+
+    assert result.exit_code == 0
+
+
+def test_with_single_extra_index(monkeypatch):
+    extra_index = 'https://test.pypi.org/simple/'
+    pkg = 'hopic>=1.19<2'
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        if '--user' in args:
+            args.remove('--user')
+        if '--verbose' in args:
+            args.remove('--verbose')
+        # del ['-c', constraints_file]
+        del args[4:6]
+
+        assert [*args] == [sys.executable, '-m', 'pip', 'install', '--extra-index-url', extra_index, pkg]
 
     monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
 
     result, = run_with_config(
         dedent(f"""\
                 pip:
-                  - with-extra-index:
-                      - {expected_pkgs[0][1]}
+                  - with-extra-index: {extra_index}
                     packages:
-                      - {expected_pkgs[0][2]}
-                  - from-index: {expected_pkgs[1][1]}
-                    packages:
-                      - {expected_pkgs[1][2]}
-                  - {expected_pkgs[2][0]}
+                      - {pkg}
                 """),
         ('install-extensions',))
 
     assert result.exit_code == 0
-    assert not expected_pkgs

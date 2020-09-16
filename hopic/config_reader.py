@@ -452,7 +452,7 @@ def read(config, volume_vars):
             raise ConfigurationError(f"`pip[{idx}].from-index` doesn't contain an URL string but a {type(from_idx).__name__}", file=config)
         with_extra_index = spec.setdefault('with-extra-index', ())
         if isinstance(with_extra_index, str):
-            spec['with-extra-index'] = (spec,)
+            spec['with-extra-index'] = with_extra_index = (with_extra_index,)
         if not isinstance(with_extra_index, Sequence):
             raise ConfigurationError(
                     f"`pip[{idx}].with-extra-index` doesn't contain a sequence of URL strings but a {type(with_extra_index).__name__}", file=config)
