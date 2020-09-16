@@ -53,17 +53,32 @@ class ChangeRequest {
   public def apply(cmd, source_remote) {
     assert false : "Change request instance does not override apply()"
   }
+
+  public def notify_build_result(String job_name, String branch, String commit, String result) {
+    // Default NOP
+  }
 }
 
 class BitbucketPullRequest extends ChangeRequest {
   private url
   private info = null
   private credentialsId
+  private restUrl = null
+  private baseRestUrl = null
+  private keyIds = [:]
 
   BitbucketPullRequest(steps, url, credentialsId) {
     super(steps)
     this.url = url
     this.credentialsId = credentialsId
+
+    if (this.url != null) {
+      this.restUrl = url
+        .replaceFirst(/(\/projects\/)/, '/rest/api/1.0$1')
+        .replaceFirst(/\/overview$/, '')
+      this.baseRestUrl = this.restUrl
+        .replaceFirst(/(\/rest)\/.*/, '$1')
+    }
   }
 
   @NonCPS
@@ -96,9 +111,6 @@ class BitbucketPullRequest extends ChangeRequest {
      || !url.contains('/pull-requests/')) {
      return null
     }
-    def restUrl = url
-      .replaceFirst(/(\/projects\/)/, '/rest/api/1.0$1')
-      .replaceFirst(/\/overview$/, '')
     def info = steps.readJSON(text: steps.httpRequest(
         url: restUrl,
         httpMode: 'GET',
@@ -128,10 +140,8 @@ class BitbucketPullRequest extends ChangeRequest {
       user_replacements.each { repl ->
         def (username, start, end) = repl
         if (!users.containsKey(username)) {
-          def baseRestUrl = url
-            .replaceFirst(/\/projects\/.*/, '/rest/api/1.0')
           def response = steps.httpRequest(
-              url: "${baseRestUrl}/users/${username}",
+              url: "${baseRestUrl}/api/1.0/users/${username}",
               httpMode: 'GET',
               authentication: credentialsId,
               validResponseCodes: '200,404',
@@ -250,6 +260,54 @@ class BitbucketPullRequest extends ChangeRequest {
     return rv
   }
 
+  public def notify_build_result(String job_name, String branch, String commit, String result) {
+    def state = (result == 'STARTING'
+        ? 'INPROGRESS'
+        : (result == 'SUCCESS' ? 'SUCCESSFUL' : 'FAILED')
+        )
+
+    def description = steps.currentBuild.description
+    if (!description) {
+      if        (result == 'STARTING') {
+        description = 'The build is in progress...'
+      } else if (result == 'SUCCESS') {
+        description = 'This change request looks good.'
+      } else if (result == 'UNSTABLE') {
+        description = 'This change request has test failures.'
+      } else if (result == 'FAILURE') {
+        description = 'There was a failure building this change request.'
+      } else if (result == 'ABORTED') {
+        description = 'The build of this change request was aborted.'
+      } else {
+        description = 'Something is wrong with the build of this change request.'
+      }
+    }
+
+    // Derive 'key' compatible with the BitBucket branch source plugin
+    def key = "${job_name}/${branch}"
+    if (!this.keyIds[key]) {
+      // We could use java.security.MessageDigest instead of relying on a node. But that requires extra script approvals.
+      assert steps.env.NODE_NAME != null, "notify_build_result must be executed on a node the first time"
+      this.keyIds[key] = steps.sh(script: "echo -n ${shell_quote(key)} | md5sum", returnStdout: true).substring(0, 32)
+    }
+    def keyid = this.keyIds[key]
+
+    def build_status = JsonOutput.toJson([
+        state: state,
+        key: keyid,
+        url: steps.env.BUILD_URL,
+        name: steps.currentBuild.fullDisplayName,
+        description: description,
+      ])
+    steps.httpRequest(
+        url: "${baseRestUrl}/build-status/1.0/commits/${commit}",
+        httpMode: 'POST',
+        contentType: 'APPLICATION_JSON',
+        requestBody: build_status,
+        authentication: credentialsId,
+        validResponseCodes: '204',
+      )
+  }
 }
 
 class ModalityRequest extends ChangeRequest {
@@ -674,17 +732,23 @@ exec ssh -i '''
   }
 
   /**
+   * @return name of job that we're building
+   */
+  public String get_job_name() {
+    def last_item_in_project_name = steps.currentBuild.projectName
+    def project_name = steps.currentBuild.fullProjectName
+    return project_name.take(project_name.lastIndexOf(last_item_in_project_name)
+                                         .with { it < 2 ? project_name.size() : it - 1 })
+  }
+
+  /**
    * @return a tuple of build name and build identifier
    *
    * The build identifier is just the stringified build number for builds on branches.
    * For builds on pull requests it's the PR number plus build number on this PR.
    */
   public Tuple get_build_id() {
-    def last_item_in_project_name = steps.currentBuild.projectName
-    def project_name = steps.currentBuild.fullProjectName
-    def job_name = project_name.take(project_name.lastIndexOf(last_item_in_project_name)
-                                                 .with { it < 2 ? project_name.size() : it - 1 })
-
+    def job_name = get_job_name()
     def branch = get_branch_name()
     String build_name = "${job_name}/${branch}".replaceAll(/\/|%2F/, ' :: ')
 
@@ -842,6 +906,13 @@ exec ssh -i '''
             this.checkouts.remove(steps.env.NODE_NAME)
           }
 
+          // Report start of build. _Must_ come after having determined whether this build is submittable and
+          // publishable, because it may affect the result of the submittability check.
+          if (this.change != null) {
+            this.change.notify_build_result(get_job_name(), steps.env.CHANGE_BRANCH, this.source_commit, 'STARTING')
+            this.change.notify_build_result(get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, 'STARTING')
+          }
+
           return [phases, is_publishable]
         }
       }
@@ -859,191 +930,206 @@ exec ssh -i '''
 
       def artifactoryBuildInfo = [:]
 
-      lock_if_necessary {
-        phases.each {
-          def phase    = it.phase
-          def is_build_successful = steps.currentBuild.currentResult == 'SUCCESS'
-          // Make sure steps exclusive to changes, or not intended to execute for changes, are skipped when appropriate
-          def variants = it.variants.findAll { variant ->
-            def run_on_change = variant.run_on_change
+      try {
+        lock_if_necessary {
+          phases.each {
+            def phase    = it.phase
+            def is_build_successful = steps.currentBuild.currentResult == 'SUCCESS'
+            // Make sure steps exclusive to changes, or not intended to execute for changes, are skipped when appropriate
+            def variants = it.variants.findAll { variant ->
+              def run_on_change = variant.run_on_change
 
-            if (run_on_change == 'always') {
-              return true
-            } else if (run_on_change == 'never') {
-              return !this.has_change()
-            } else if (run_on_change == 'only' || run_on_change == 'new-version-only') {
-              if (is_build_successful) {
-                if (this.source_commit == null
-                 || this.target_commit == null) {
-                  // Don't have enough information to determine whether this is a submittable change: assume it is
-                  return true
-                }
-                if (run_on_change == 'new-version-only') {
-                  def version = this.get_submit_version()
-                  if (version != null
-                   && version ==~ /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:[-0-9a-zA-Z]+(?:\.[-0-9a-zA-Z])*))(?:\+(?:[-0-9a-zA-Z]+(?:\.[-0-9a-zA-Z])*))?$/) {
-                    // Pre-release versions are not new versions, skip
-                    return false
+              if (run_on_change == 'always') {
+                return true
+              } else if (run_on_change == 'never') {
+                return !this.has_change()
+              } else if (run_on_change == 'only' || run_on_change == 'new-version-only') {
+                if (is_build_successful) {
+                  if (this.source_commit == null
+                   || this.target_commit == null) {
+                    // Don't have enough information to determine whether this is a submittable change: assume it is
+                    return true
                   }
+                  if (run_on_change == 'new-version-only') {
+                    def version = this.get_submit_version()
+                    if (version != null
+                     && version ==~ /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:[-0-9a-zA-Z]+(?:\.[-0-9a-zA-Z])*))(?:\+(?:[-0-9a-zA-Z]+(?:\.[-0-9a-zA-Z])*))?$/) {
+                      // Pre-release versions are not new versions, skip
+                      return false
+                    }
+                  }
+                  return is_publishable_change
+                } else {
+                  steps.println("Skipping variant ${variant.variant} in ${phase} because build is not successful")
+                  return false
                 }
-                return is_publishable_change
-              } else {
-                steps.println("Skipping variant ${variant.variant} in ${phase} because build is not successful")
-                return false
               }
+              assert false : "Unknown 'run-on-change' option: ${run_on_change}"
             }
-            assert false : "Unknown 'run-on-change' option: ${run_on_change}"
-          }
-          if (variants.size() == 0) {
-            return
-          }
+            if (variants.size() == 0) {
+              return
+            }
 
-          steps.stage(phase) {
-            def stepsForBuilding = variants.collectEntries {
-              def variant = it.variant
-              def label   = it.label
-              [ "${phase}-${variant}": {
-                if (this.nodes.containsKey(variant)) {
-                  label = this.nodes[variant]
-                }
-                steps.node(label) {
-                  steps.stage("${phase}-${variant}") {
-                    this.with_hopic { cmd ->
-                      final workspace = this.ensure_checkout(cmd, clean)
-                      this.pin_variant_to_current_node(variant)
+            steps.stage(phase) {
+              def stepsForBuilding = variants.collectEntries {
+                def variant = it.variant
+                def label   = it.label
+                [ "${phase}-${variant}": {
+                  if (this.nodes.containsKey(variant)) {
+                    label = this.nodes[variant]
+                  }
+                  steps.node(label) {
+                    steps.stage("${phase}-${variant}") {
+                      this.with_hopic { cmd ->
+                        final workspace = this.ensure_checkout(cmd, clean)
+                        this.pin_variant_to_current_node(variant)
 
-                      this.ensure_unstashed()
+                        this.ensure_unstashed()
 
-                      // Meta-data retrieval needs to take place on the executing node to ensure environment variable expansion happens properly
-                      def meta = steps.readJSON(text: steps.sh(
-                          script: "${cmd} getinfo --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant),
-                          returnStdout: true,
-                        ))
+                        // Meta-data retrieval needs to take place on the executing node to ensure environment variable expansion happens properly
+                        def meta = steps.readJSON(text: steps.sh(
+                            script: "${cmd} getinfo --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant),
+                            returnStdout: true,
+                          ))
 
-                      def error_occurred = false
-                      try {
-                        this.subcommand_with_credentials(
-                            cmd,
-                            'build'
-                          + ' --phase=' + shell_quote(phase)
-                          + ' --variant=' + shell_quote(variant)
-                          , meta.getOrDefault('with-credentials', []))
-                      } catch(Exception e) {
-                        error_occurred = true // Jenkins only sets its currentResult to Failure after all user code is executed
-                        throw e
-                      } finally {
-                        if (meta.containsKey('junit')) {
-                          def results = meta.junit
-                          steps.dir(workspace) {
-                            meta.junit.each { result ->
-                              steps.junit(result)
+                        def error_occurred = false
+                        try {
+                          this.subcommand_with_credentials(
+                              cmd,
+                              'build'
+                            + ' --phase=' + shell_quote(phase)
+                            + ' --variant=' + shell_quote(variant)
+                            , meta.getOrDefault('with-credentials', []))
+                        } catch(Exception e) {
+                          error_occurred = true // Jenkins only sets its currentResult to Failure after all user code is executed
+                          throw e
+                        } finally {
+                          if (meta.containsKey('junit')) {
+                            def results = meta.junit
+                            steps.dir(workspace) {
+                              meta.junit.each { result ->
+                                steps.junit(result)
+                              }
                             }
                           }
+                          this.archive_artifacts_if_enabled(meta, workspace, error_occurred, { server_id ->
+                            if (!artifactoryBuildInfo.containsKey(server_id)) {
+                              def newBuildInfo = steps.Artifactory.newBuildInfo()
+                              def (build_name, build_identifier) = get_build_id()
+                              newBuildInfo.name = build_name
+                              newBuildInfo.number = build_identifier
+                              artifactoryBuildInfo[server_id] = newBuildInfo
+                            }
+                            return artifactoryBuildInfo[server_id]
+                          })
                         }
-                        this.archive_artifacts_if_enabled(meta, workspace, error_occurred, { server_id ->
-                          if (!artifactoryBuildInfo.containsKey(server_id)) {
-                            def newBuildInfo = steps.Artifactory.newBuildInfo()
-                            def (build_name, build_identifier) = get_build_id()
-                            newBuildInfo.name = build_name
-                            newBuildInfo.number = build_identifier
-                            artifactoryBuildInfo[server_id] = newBuildInfo
-                          }
-                          return artifactoryBuildInfo[server_id]
-                        })
-                      }
 
-                      // FIXME: re-evaluate if we can and need to get rid of special casing for stashing
-                      if (meta.containsKey('stash')) {
-                        def name  = "${phase}-${variant}"
-                        def params = [
-                            name: name,
-                          ]
-                        if (meta.stash.containsKey('includes')) {
-                          params['includes'] = meta.stash.includes
-                        }
-                        def stash_dir = workspace
-                        if (meta.stash.containsKey('dir')) {
-                          if (meta.stash.dir.startsWith('/')) {
-                            stash_dir = meta.stash.dir
-                          } else {
-                            stash_dir = "${workspace}/${meta.stash.dir}"
+                        // FIXME: re-evaluate if we can and need to get rid of special casing for stashing
+                        if (meta.containsKey('stash')) {
+                          def name  = "${phase}-${variant}"
+                          def params = [
+                              name: name,
+                            ]
+                          if (meta.stash.containsKey('includes')) {
+                            params['includes'] = meta.stash.includes
                           }
-                        }
-                        // Make stash locations node-independent by making them relative to the Jenkins workspace
-                        if (stash_dir.startsWith('/')) {
-                          def cwd = steps.pwd()
-                          // This check, unlike relativize() below, doesn't depend on File() and thus doesn't require script approval
-                          if (stash_dir == cwd) {
-                            stash_dir = '.'
-                          } else {
-                            cwd = new File(cwd).toPath()
-                            stash_dir = cwd.relativize(new File(stash_dir).toPath()) as String
+                          def stash_dir = workspace
+                          if (meta.stash.containsKey('dir')) {
+                            if (meta.stash.dir.startsWith('/')) {
+                              stash_dir = meta.stash.dir
+                            } else {
+                              stash_dir = "${workspace}/${meta.stash.dir}"
+                            }
                           }
-                          if (stash_dir == '') {
-                            stash_dir = '.'
+                          // Make stash locations node-independent by making them relative to the Jenkins workspace
+                          if (stash_dir.startsWith('/')) {
+                            def cwd = steps.pwd()
+                            // This check, unlike relativize() below, doesn't depend on File() and thus doesn't require script approval
+                            if (stash_dir == cwd) {
+                              stash_dir = '.'
+                            } else {
+                              cwd = new File(cwd).toPath()
+                              stash_dir = cwd.relativize(new File(stash_dir).toPath()) as String
+                            }
+                            if (stash_dir == '') {
+                              stash_dir = '.'
+                            }
                           }
+                          steps.dir(stash_dir) {
+                            steps.stash(params)
+                          }
+                          this.stashes[name] = [dir: stash_dir, nodes: [(steps.env.NODE_NAME): true]]
                         }
-                        steps.dir(stash_dir) {
-                          steps.stash(params)
+                        if (meta.containsKey('worktrees')) {
+                          def name = "${phase}-${variant}-worktree-transfer.bundle"
+                          steps.stash(
+                              name: name,
+                              includes: 'worktree-transfer.bundle',
+                            )
+                          this.worktree_bundles[name] = [nodes: [(steps.env.NODE_NAME): true]]
                         }
-                        this.stashes[name] = [dir: stash_dir, nodes: [(steps.env.NODE_NAME): true]]
-                      }
-                      if (meta.containsKey('worktrees')) {
-                        def name = "${phase}-${variant}-worktree-transfer.bundle"
-                        steps.stash(
-                            name: name,
-                            includes: 'worktree-transfer.bundle',
-                          )
-                        this.worktree_bundles[name] = [nodes: [(steps.env.NODE_NAME): true]]
                       }
                     }
                   }
-                }
-              }]
+                }]
+              }
+              steps.parallel stepsForBuilding
             }
-            steps.parallel stepsForBuilding
           }
-        }
 
-        if (this.may_submit_result != false) {
-          this.on_build_node { cmd ->
-            if (this.has_submittable_change()) {
-              steps.stage('submit') {
-                this.with_credentials() {
-                  // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
-                  steps.sh(script: "${cmd} submit")
+          if (this.may_submit_result != false) {
+            this.on_build_node { cmd ->
+              if (this.has_submittable_change()) {
+                steps.stage('submit') {
+                  this.with_credentials() {
+                    // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
+                    steps.sh(script: "${cmd} submit")
+                  }
                 }
               }
             }
           }
         }
-      }
 
-      if (artifactoryBuildInfo) {
-        assert this.nodes : "When we have artifactory build info we expect to have execution nodes that it got produced on"
-        this.on_build_node { cmd ->
-          def config = steps.readJSON(text: steps.sh(
-              script: "${cmd} show-config",
-              returnStdout: true,
-            ))
+        if (artifactoryBuildInfo) {
+          assert this.nodes : "When we have artifactory build info we expect to have execution nodes that it got produced on"
+          this.on_build_node { cmd ->
+            def config = steps.readJSON(text: steps.sh(
+                script: "${cmd} show-config",
+                returnStdout: true,
+              ))
 
-          artifactoryBuildInfo.each { server_id, buildInfo ->
-            def promotion_config = config.getOrDefault('artifactory', [:]).getOrDefault('promotion', [:]).getOrDefault(server_id, [:])
+            artifactoryBuildInfo.each { server_id, buildInfo ->
+              def promotion_config = config.getOrDefault('artifactory', [:]).getOrDefault('promotion', [:]).getOrDefault(server_id, [:])
 
-            def server = steps.Artifactory.server server_id
-            server.publishBuildInfo(buildInfo)
-            if (promotion_config.containsKey('target-repo')
-             && this.has_publishable_change()) {
-              server.promote(
-                  targetRepo:  promotion_config['target-repo'],
-                  buildName:   buildInfo.name,
-                  buildNumber: buildInfo.number,
-                )
+              def server = steps.Artifactory.server server_id
+              server.publishBuildInfo(buildInfo)
+              if (promotion_config.containsKey('target-repo')
+               && this.has_publishable_change()) {
+                server.promote(
+                    targetRepo:  promotion_config['target-repo'],
+                    buildName:   buildInfo.name,
+                    buildNumber: buildInfo.number,
+                  )
+              }
+              // Work around Artifactory Groovy bug
+              server = null
             }
-            // Work around Artifactory Groovy bug
-            server = null
           }
         }
+      } catch(Exception e) {
+        if (this.change != null) {
+          this.change.notify_build_result(
+              get_job_name(), steps.env.CHANGE_BRANCH, this.source_commit, e.properties.getOrDefault('result', 'FAILURE') as String)
+          this.change.notify_build_result(
+              get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, e.properties.getOrDefault('result', 'FAILURE') as String)
+        }
+        throw e
+      }
+
+      if (this.change != null) {
+        this.change.notify_build_result(get_job_name(), steps.env.CHANGE_BRANCH, this.source_commit, steps.currentBuild.result ?: 'SUCCESS')
+        this.change.notify_build_result(get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, steps.currentBuild.result ?: 'SUCCESS')
       }
     }
   }
