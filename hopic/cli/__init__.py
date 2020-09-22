@@ -1084,7 +1084,7 @@ def build(ctx, phase, variant):
 
     # Ensure any required extensions are available
     extensions.install_extensions.callback()
-    ctx.obj.config = read_config(determine_config_file_name(ctx), ctx.obj.volume_vars)
+    cfg = ctx.obj.config = read_config(determine_config_file_name(ctx), ctx.obj.volume_vars)
 
     worktree_commits = {}
     for phasename, curphase in cfg['phases'].items():
