@@ -37,13 +37,12 @@ setup(
     packages=(
         'hopic',
         'hopic.cli',
-        'hopic.yaml',
     ),
     python_requires='>=3.6.5',
     install_requires=(
       'Click>=7.0,<8.0',
       'click-log',
-      'commisery>=0,<1',
+      'commisery>=0.3,<1',
       'GitPython>=3,<4',
       'importlib_metadata; python_version < "3.8"',
       'python-dateutil',
@@ -61,8 +60,6 @@ setup(
     entry_points='''
       [console_scripts]
       hopic=hopic.cli.main:main
-      [hopic.plugins.yaml]
-      commisery = hopic.yaml.commisery:commisery
     ''',
     url='https://github.com/tomtom-international/hopic',
     project_urls={
