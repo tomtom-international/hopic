@@ -33,7 +33,6 @@ Contents
    usage
    intro
    config
-   templates
 
 Indices and tables
 ==================

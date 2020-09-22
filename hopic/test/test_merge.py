@@ -15,13 +15,9 @@
 from . import hopic_cli
 
 from click.testing import CliRunner
-from collections import OrderedDict
-from datetime import datetime
-from dateutil.tz import tzutc
 import git
 import os
 import pytest
-import re
 import subprocess
 import sys
 from textwrap import dedent
