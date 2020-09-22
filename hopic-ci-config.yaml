@@ -27,6 +27,9 @@ volumes:
   - source: null
     target: /etc/group
 
+pip:
+  - commisery>=0.3,<1
+
 phases:
   style:
     commit-messages: !template "commisery"
