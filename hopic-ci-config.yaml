@@ -6,6 +6,8 @@ version:
     on-every-change: no
     strict: yes
 
+project-name: PIPE
+
 scm:
   git:
     worktrees:
@@ -70,4 +72,16 @@ phases:
           sh -x -c ':
           && find doc/build/html -maxdepth 1 -not -path doc/build/html -not -name .git\* -exec rm -v -r "{}" +
           && doc/build/venv/bin/python -m sphinxcontrib.versioning build --override-branch=${GIT_BRANCH}=${GIT_COMMIT} doc/source doc/build/html
-          && find doc/build/html \( -name .doctrees -o -name objects.inv -o -name jquery-\*.js \) -exec rm -v -r "{}" +'
+          && find doc/build/html \( -name .doctrees -o -name objects.inv -o -name jquery-\*.js \) -exec rm -v -r "{}" +
+          && touch doc/build/html/.nojekyll'
+
+  publish:
+    python:
+      - run-on-change: new-version-only
+        with-credentials:
+          id: hopic-pypi
+          type: username-password
+      - python3 -m venv venv3
+      - venv3/bin/python -m pip install --upgrade twine wheel
+      - venv3/bin/python setup.py sdist bdist_wheel
+      - venv3/bin/python venv3/bin/twine upload -u ${USERNAME} -p ${PASSWORD} --repository pypi dist/*
