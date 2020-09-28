@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 - 2020 TomTom N.V. (https://tomtom.com)
+ * Copyright (c) 2018 - 2020 TomTom N.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ String transform_ssh_to_https(String url)
 {
   // Rewrite SSH URLs to HTTP URLs, assuming that we don't need authentication
   def m = url =~ /^ssh:\/\/(?:\w+@)?(\w+(?:\.\w+)*\.?)(?::\d+)?\/(.+)$/
-  if (!m) {
+  if (!m && !(url =~ /^\w+:\/\/.*/)) {
     m = url =~ /^(?:\w+@)?(\w+(?:\.\w+)*\.?):(.+)$/
   }
   m.each { match ->
