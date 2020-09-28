@@ -5,6 +5,8 @@ version:
     policy: conventional-commits
     strict: yes
 
+project-name: PIPE
+
 scm:
   git:
     worktrees:
@@ -42,3 +44,14 @@ phases:
           doc/build/html:
             commit-message: "Update documentation for ${VERSION}"
         sh: sh -c 'doc/build/venv/bin/python -m sphinxcontrib.versioning build --override-branch=${GIT_BRANCH}=${GIT_COMMIT} doc/source doc/build/html && find doc/build/html -name .doctrees -exec rm -r "{}" +'
+
+  publish:
+    python:
+      - run-on-change: new-version-only
+        with-credentials:
+          id: hopic-pypi
+          type: username-password
+      - python3 -m venv venv3
+      - venv3/bin/python -m pip install --upgrade twine wheel
+      - venv3/bin/python setup.py sdist bdist_wheel
+      - venv3/bin/python venv3/bin/twine upload -u ${USERNAME} -p ${PASSWORD} --repository pypi dist/*
