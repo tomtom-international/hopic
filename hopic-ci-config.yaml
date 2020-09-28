@@ -25,6 +25,7 @@ phases:
   test:
     python2:
       - python2 -m virtualenv --clear venv2
+      - venv2/bin/python -m pip install pathlib2 pytest<5 zipp<2
       - junit: junit-test.xml
         sh: sh -c 'ulimit -n 1024 && exec venv2/bin/python setup.py pytest'
 
