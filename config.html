@@ -1,0 +1,1238 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>Configuration &#8212; Hopic 1.21.2.dev73+g9d88565 documentation</title>
+    <link rel="stylesheet" href="_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" type="text/css" href="_static/banner.css" />
+    
+    <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="_static/language_data.js"></script>
+    
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="Introduction" href="intro.html" /> 
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="intro.html" title="Introduction"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.21.2.dev73+g9d88565 documentation</a> &#187;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="configuration">
+<h1>Configuration<a class="headerlink" href="#configuration" title="Permalink to this headline">¶</a></h1>
+<p>The Hopic build configuration is stored in a file in your repository.
+The default location where it will look for this is <code class="docutils literal notranslate"><span class="pre">${repo}/hopic-ci-config.yaml</span></code>.</p>
+<div class="section" id="pre-defined-hopic-variables">
+<h2>Pre-defined Hopic variables<a class="headerlink" href="#pre-defined-hopic-variables" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="cmdoption-arg-workspace">
+<code class="descname">WORKSPACE</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-workspace" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>Contains the absolute path of the git repository in which Hopic was called.</p>
+<dl class="option">
+<dt id="cmdoption-arg-cfgdir">
+<code class="descname">CFGDIR</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-cfgdir" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>Contains the absolute path of the directory in which the <cite>hopic-ci-config.yaml</cite> file is located (this can differ from <code class="docutils literal notranslate"><span class="pre">WORKSPACE</span></code> if Hopic was called with the <code class="docutils literal notranslate"><span class="pre">--config</span></code> option).</p>
+<dl class="option">
+<dt id="cmdoption-arg-version">
+<code class="descname">VERSION</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-version" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>Contains the current version of the workspace. See <a class="reference internal" href="#id3"><code class="xref std std-option docutils literal notranslate"><span class="pre">version</span></code></a> for configuration and bump settings.
+The format is based on <cite>git describe</cite> and is formatted as:</p>
+<p><code class="docutils literal notranslate"><span class="pre">TAGGED_VERSION[-COMMIT_DISTANCE][.dirty.TIMESTAMP]+gCOMMIT_ID</span></code></p>
+<p>For example:</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="36%" />
+<col width="64%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">Version</th>
+<th class="head">Meaning</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">1.8.1+g3269de8</span></code></td>
+<td>tag <strong>1.8.1</strong>, clean, unmodified, <code class="docutils literal notranslate"><span class="pre">HEAD</span></code> is at commit <strong>3269de8</strong></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">1.8.1-0.dirty.20200609131656+g3269de8</span></code></td>
+<td>tag <strong>1.8.1</strong>, with uncommited changes</td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">1.8.1-1+gdaffe9c</span></code></td>
+<td>tag <strong>1.8.1</strong>, with one commit on top of it (<strong>-1</strong>)</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">1.8.1-1.dirty.20200609152429+g4dbb6b4</span></code></td>
+<td>tag <strong>1.8.1</strong>, with one commit on top of it, as well as uncommitted changes</td>
+</tr>
+</tbody>
+</table>
+<dl class="option">
+<dt id="cmdoption-arg-pure-version">
+<code class="descname">PURE_VERSION</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-pure-version" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>Contains the <a class="reference internal" href="#cmdoption-arg-version"><code class="xref std std-option docutils literal notranslate"><span class="pre">VERSION</span></code></a> (see above), but without <code class="docutils literal notranslate"><span class="pre">+gCOMMIT_ID</span></code>.</p>
+<p>For example:</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="36%" />
+<col width="64%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">Version</th>
+<th class="head">Meaning</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">1.8.1</span></code></td>
+<td>tag <strong>1.8.1</strong>, clean, unmodified</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">1.8.1-0.dirty.20200609131656</span></code></td>
+<td>tag <strong>1.8.1</strong>, with uncommited changes</td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">1.8.1-1</span></code></td>
+<td>tag <strong>1.8.1</strong>, with one commit on top of it</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">1.8.1-1.dirty.20200609152429</span></code></td>
+<td>tag <strong>1.8.1</strong>, with one commit on top of it, as well as uncommitted changes</td>
+</tr>
+</tbody>
+</table>
+<dl class="option">
+<dt id="cmdoption-arg-debversion">
+<code class="descname">DEBVERSION</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-debversion" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>Contains a Debian version-compliant representation of the <a class="reference internal" href="#cmdoption-arg-version"><code class="xref std std-option docutils literal notranslate"><span class="pre">VERSION</span></code></a> as outlined above.
+Its specification can be found at: <a class="reference external" href="https://www.debian.org/doc/debian-policy/ch-controlfields.html#version">https://www.debian.org/doc/debian-policy/ch-controlfields.html#version</a></p>
+<p>For example:</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="36%" />
+<col width="64%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">Version</th>
+<th class="head">Meaning</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">1.8.1+g3269de8</span></code></td>
+<td>tag <strong>1.8.1</strong>, clean, unmodified, <code class="docutils literal notranslate"><span class="pre">HEAD</span></code> is at commit <strong>3269de8</strong></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">1.8.1~0+dirty20200609131656+g3269de8</span></code></td>
+<td>tag <strong>1.8.1</strong>, with uncommited changes</td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">1.8.1~1+gdaffe9c</span></code></td>
+<td>tag <strong>1.8.1</strong>, with one commit on top of it (<strong>~1</strong>)</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">1.8.1~1+dirty20200609152429+g4dbb6b4</span></code></td>
+<td>tag <strong>1.8.1</strong>, with one commit on top of it, as well as uncommitted changes</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="pre-defined-environment-variables">
+<h2>Pre-defined environment variables<a class="headerlink" href="#pre-defined-environment-variables" title="Permalink to this headline">¶</a></h2>
+<p>The <strong>VERSION</strong>, <strong>PURE_VERSION</strong> and <strong>DEBVERSION</strong> variables (documented above) are also available in the environment of any process spawned by Hopic.</p>
+</div>
+<div class="section" id="build-phases">
+<h2>Build Phases<a class="headerlink" href="#build-phases" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="cmdoption-arg-phases">
+<code class="descname">phases</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-phases" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>Hopic’s build flow is divided in <code class="docutils literal notranslate"><span class="pre">phases</span></code>, during which a set of commands can be executed for different <code class="docutils literal notranslate"><span class="pre">variants</span></code>.
+The <a class="reference internal" href="#cmdoption-arg-phases"><code class="xref std std-option docutils literal notranslate"><span class="pre">phases</span></code></a> option is a dictionary of dictionaries.
+It’s top-level key specifies the name of each phase.
+The keys within each phase specify the names of variants to be executed within that phase.</p>
+<p>Phases are executed in the order in which they appear in the configuration.
+Within a phase each variant may be executed in parallel, possibly on different executors.
+Every next phase only starts executing when each variant within the previous phase finished successfully.
+I.e. the execution flow “forks” to each variant at the start of a phase and “joins” at the end.</p>
+<p>A variant, identified by its name, may appear in multiple phases.
+Variants appearing in multiple phases are guaranteed to run on the same executor within each phase.
+This provides a stable environment (workspace) to work in and allows incremental steps, such as building in phase A and running built tests in phase B.</p>
+<p>For example, the configuration example listed results in an execution flow as shown after that.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span>
+  <span class="nt">style</span><span class="p">:</span>
+    <span class="nt">commit-message-checker</span><span class="p">:</span>
+      <span class="c1"># Require each commit message to adhere to our requirements</span>
+      <span class="p p-Indicator">-</span> <span class="nt">foreach</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">AUTOSQUASHED_COMMIT</span>
+        <span class="nt">sh</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">.ci/verify-commit-message.py ${AUTOSQUASHED_COMMIT}</span>
+    <span class="nt">clang-format</span><span class="p">:</span>
+      <span class="c1"># Show all changes necessary to have each commit formatted properly</span>
+      <span class="p p-Indicator">-</span> <span class="nt">foreach</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">AUTOSQUASHED_COMMIT</span>
+        <span class="nt">sh</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">GIT_PAGER=&quot;tee ${AUTOSQUASHED_COMMIT}.format.diff&quot; git clang-format --style=file --diff ${AUTOSQUASHED_COMMIT}~1 ${AUTOSQUASHED_COMMIT}</span>
+      <span class="c1"># Assert that no changes were necessary</span>
+      <span class="p p-Indicator">-</span> <span class="nt">foreach</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">AUTOSQUASHED_COMMIT</span>
+        <span class="nt">sh</span><span class="p">:</span> <span class="s">&#39;test</span><span class="nv"> </span><span class="s">!</span><span class="nv"> </span><span class="s">-s</span><span class="nv"> </span><span class="s">${AUTOSQUASHED_COMMIT}.format.diff&#39;</span>
+
+  <span class="nt">build</span><span class="p">:</span>
+    <span class="nt">x64-release</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">cmake -B build-x64-release -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-release</span>
+    <span class="nt">x64-debug</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">cmake -B build-x64-debug -S . -DCMAKE_BUILD_TYPE=Debug</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-debug</span>
+    <span class="nt">arm64-release</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">cmake -B build-arm64-release -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_TOOLCHAIN_FILE:PATH=${CMAKE_AGL_AARCH64_TOOLCHAIN_FILE}</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">cmake --build build-arm64-release</span>
+    <span class="nt">arm64-debug</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">cmake -B build-arm64-debug -S . -DCMAKE_BUILD_TYPE=Debug -DCMAKE_TOOLCHAIN_FILE:PATH=${CMAKE_AGL_AARCH64_TOOLCHAIN_FILE}</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">cmake --build build-arm64-debug</span>
+
+  <span class="nt">test</span><span class="p">:</span>
+    <span class="nt">x64-debug</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">junit</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">build-x64-debug/test-unit.xml</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-debug --target test</span>
+
+  <span class="nt">package</span><span class="p">:</span>
+    <span class="nt">x64-release</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">fingerprint</span><span class="p">:</span>
+          <span class="nt">artifacts</span><span class="p">:</span>
+            <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">build-x64-release/TomTom-Stacktrace-${VERSION}-Linux-x86_64.tar.gz</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-release --target package</span>
+    <span class="nt">x64-debug</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">fingerprint</span><span class="p">:</span>
+          <span class="nt">artifacts</span><span class="p">:</span>
+            <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">build-x64-debug/TomTom-Stacktrace-${VERSION}-Linux-x86_64.tar.gz</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-debug --target package</span>
+    <span class="nt">arm64-release</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">fingerprint</span><span class="p">:</span>
+          <span class="nt">artifacts</span><span class="p">:</span>
+            <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">build-arm64-release/TomTom-Stacktrace-${VERSION}-Linux-aarch64.tar.gz</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">cmake --build build-arm64-release --target package</span>
+    <span class="nt">arm64-debug</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">fingerprint</span><span class="p">:</span>
+          <span class="nt">artifacts</span><span class="p">:</span>
+            <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">build-arm64-debug/TomTom-Stacktrace-${VERSION}-Linux-aarch64.tar.gz</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">cmake --build build-arm64-debug --target package</span>
+
+  <span class="nt">upload</span><span class="p">:</span>
+    <span class="nt">x64-release</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">run-on-change</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">only</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">build-x64-release/do-upload.sh</span>
+    <span class="nt">x64-debug</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">run-on-change</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">only</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">build-x64-debug/do-upload.sh</span>
+    <span class="nt">arm64-release</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">run-on-change</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">only</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">build-arm64-release/do-upload.sh</span>
+    <span class="nt">arm64-debug</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">run-on-change</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">only</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">build-arm64-debug/do-upload.sh</span>
+</pre></div>
+</div>
+<div class="figure" id="id4">
+<img alt="_images/parallel-phases.svg" src="_images/parallel-phases.svg" /><p class="caption"><span class="caption-text">Example execution flow of a Hopic build configuration.</span></p>
+</div>
+</div>
+<div class="section" id="clean">
+<h2>Clean<a class="headerlink" href="#clean" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="cmdoption-arg-clean">
+<code class="descname">clean</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-clean" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>Hopic provides built-in clean check-out functionality by executing <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">clean</span> <span class="pre">-fxd</span></code> on the <code class="docutils literal notranslate"><span class="pre">${WORKSPACE}</span></code>.
+It is possible to add a list of commands that is executed before the <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">clean</span> <span class="pre">-fxd</span></code> is executed.
+Within the list of commands <code class="docutils literal notranslate"><span class="pre">$HOME</span></code> and <code class="docutils literal notranslate"><span class="pre">~</span></code> will be expanded to the home directory of the current user.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">clean</span><span class="p">:</span>
+  <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">rm -rf ~/.cache</span>
+  <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">rm -rf ${HOME}/.other_cache</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="credentials">
+<h2>Credentials<a class="headerlink" href="#credentials" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="cmdoption-arg-with-credentials">
+<code class="descname">with-credentials</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-with-credentials" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>Sometimes it’s necessary to execute commands with privileged access.
+For that purpose the <a class="reference internal" href="#cmdoption-arg-with-credentials"><code class="xref std std-option docutils literal notranslate"><span class="pre">with-credentials</span></code></a> configuration option can be used for a variant within a phase.
+You need to specify an identifier (<code class="docutils literal notranslate"><span class="pre">id</span></code>), used for looking up the credential and its type (<code class="docutils literal notranslate"><span class="pre">type</span></code>).
+In addition to that you can specify the name of the config and environment variable that should be set to contain them.
+<a class="reference internal" href="#cmdoption-arg-with-credentials"><code class="xref std std-option docutils literal notranslate"><span class="pre">with-credentials</span></code></a> value can be specified as a list to have multiple credentials for a variant within a phase.</p>
+<p>The supported types of credential are:</p>
+<dl class="docutils">
+<dt>Username/password credential</dt>
+<dd><ul class="first last simple">
+<li><code class="docutils literal notranslate"><span class="pre">type</span></code>: <code class="docutils literal notranslate"><span class="pre">username-password</span></code></li>
+<li><code class="docutils literal notranslate"><span class="pre">username-variable</span></code> default: <code class="docutils literal notranslate"><span class="pre">USERNAME</span></code></li>
+<li><code class="docutils literal notranslate"><span class="pre">password-variable</span></code> default: <code class="docutils literal notranslate"><span class="pre">PASSWORD</span></code></li>
+</ul>
+</dd>
+<dt>File credential</dt>
+<dd><ul class="first last simple">
+<li><code class="docutils literal notranslate"><span class="pre">type</span></code>: <code class="docutils literal notranslate"><span class="pre">file</span></code></li>
+<li><code class="docutils literal notranslate"><span class="pre">filename-variable</span></code> default: <code class="docutils literal notranslate"><span class="pre">SECRET_FILE</span></code></li>
+</ul>
+</dd>
+<dt>String credential</dt>
+<dd><ul class="first last simple">
+<li><code class="docutils literal notranslate"><span class="pre">type</span></code>: <code class="docutils literal notranslate"><span class="pre">string</span></code></li>
+<li><code class="docutils literal notranslate"><span class="pre">string-variable</span></code> default: <code class="docutils literal notranslate"><span class="pre">SECRET</span></code></li>
+</ul>
+</dd>
+</dl>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span>
+  <span class="nt">download</span><span class="p">:</span>
+    <span class="nt">toolchain</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">with-credentials</span><span class="p">:</span>
+          <span class="nt">id</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">access_key</span>
+          <span class="nt">type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">string</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">download --api-key=${SECRET}</span>
+
+  <span class="nt">build</span><span class="p">:</span>
+    <span class="nt">toolchain</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">with-credentials</span><span class="p">:</span>
+          <span class="nt">id</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">license_file</span>
+          <span class="nt">type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">file</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">build --license-key=${SECRET_FILE}</span>
+
+  <span class="nt">test</span><span class="p">:</span>
+    <span class="nt">toolchain</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">with-credentials</span><span class="p">:</span>
+          <span class="p p-Indicator">-</span> <span class="nt">id</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">squish_cred</span>
+            <span class="nt">type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">username_password</span>
+            <span class="nt">username-variable</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">SQUISH_USERNAME</span>
+            <span class="nt">password-variable</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">SQUISH_PASSWORD</span>
+          <span class="p p-Indicator">-</span> <span class="nt">id</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">artifactory_creds</span>
+            <span class="nt">type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">username-password</span>
+            <span class="nt">username-variable</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">ARTIFACTORY_USERNAME</span>
+            <span class="nt">password-variable</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">ARTIFACTORY_PASSWORD</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">download test-certificate --username=${ARTIFACTORY_USERNAME} --password=${ARTIFACTORY_PASSWORD}</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">test --username=${SQUISH_USERNAME} --password=${SQUISH_PASSWORD}</span>
+
+  <span class="nt">deploy</span><span class="p">:</span>
+    <span class="nt">toolchain</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">run-on-change</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">only</span>
+        <span class="nt">with-credentials</span><span class="p">:</span>
+          <span class="nt">id</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">artifactory_creds</span>
+          <span class="nt">type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">username-password</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">publish --user=${USERNAME} --password=${PASSWORD}</span>
+</pre></div>
+</div>
+<div class="section" id="keyring-support">
+<h3>Keyring Support<a class="headerlink" href="#keyring-support" title="Permalink to this headline">¶</a></h3>
+<p>For local, interactive, use Hopic also supports credentials stored in your keyring using the <a class="reference external" href="https://pypi.org/project/keyring/">keyring</a> library.
+Note that <code class="docutils literal notranslate"><span class="pre">keyring</span></code> is only an optional dependency of Hopic and will only get installed when the <code class="docutils literal notranslate"><span class="pre">interactive</span></code> extra feature is selected.</p>
+<p>If you didn’t install Hopic with the <code class="docutils literal notranslate"><span class="pre">interactive</span></code> feature you can either reinstall it or install the <code class="docutils literal notranslate"><span class="pre">keyring</span></code> library yourself.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">pip3 install keyring</span>
+</pre></div>
+</div>
+<p>This has been tested and confirmed to work with at least these keyring implementations:</p>
+<ul class="simple">
+<li>gnome-keyring-daemon: GNOME’s builtin keyring</li>
+<li>KeepassXC 2.6</li>
+</ul>
+<dl class="option">
+<dt id="cmdoption-arg-project-name">
+<code class="descname">project-name</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-project-name" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>If properly configured, Hopic will attempt to obtain all <code class="docutils literal notranslate"><span class="pre">username-password</span></code> credentials used during execution from your keyring.
+In order to do that, Hopic needs to know a project scope within which to look for your credentials.
+This scope can be configured with the <code class="docutils literal notranslate"><span class="pre">project-name</span></code> option.
+We suggest using your projects Jira keyword for this purpose as it’s the most likely to be unique enough.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">project-name</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">JIRA_KEY</span>
+
+<span class="nt">phases</span><span class="p">:</span>
+  <span class="nt">deploy</span><span class="p">:</span>
+    <span class="nt">toolchain</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">run-on-change</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">only</span>
+        <span class="nt">with-credentials</span><span class="p">:</span>
+          <span class="nt">id</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">artifactory-creds</span>
+          <span class="nt">type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">username-password</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">publish --user=${USERNAME} --password=${PASSWORD}</span>
+</pre></div>
+</div>
+<p>This example will cause Hopic to look for a credential with a value for the <code class="docutils literal notranslate"><span class="pre">service</span></code> field of <code class="docutils literal notranslate"><span class="pre">JIRA_KEY-artifactory-creds</span></code>.
+When found, it will use its <code class="docutils literal notranslate"><span class="pre">username</span></code> and <code class="docutils literal notranslate"><span class="pre">password</span></code> fields for the <code class="docutils literal notranslate"><span class="pre">publish</span></code> command.</p>
+<p>When Hopic doesn’t find the credential in the keyring, its behavior depends on whether it’s running in an interactive terminal or not.</p>
+<p>When Hopic runs in an interactive terminal, it will prompt the user for the username and password.
+It will store these in your keyring and continue execution with those values.</p>
+<p>When Hopic doesn’t run in an interactive terminal, like on your CI system, it will attempt to obtain the credentials from your CI system’s credential store.
+The <a class="reference internal" href="#cmdoption-arg-project-name"><code class="xref std std-option docutils literal notranslate"><span class="pre">project-name</span></code></a> will not be taken into account when looking in the CI system’s credential store.
+That option applies to keyring lookups only.
+If it cannot find them there, it will fail with an error message indicating it couldn’t find the specific credential.</p>
+</div>
+</div>
+<div class="section" id="container-image">
+<h2>Container Image<a class="headerlink" href="#container-image" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="cmdoption-arg-image">
+<code class="descname">image</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-image" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>In order to execute commands within a Docker container Hopic needs to be told what image to use for creating a container.
+This option can either contain a string in which case every variant will execute in a container constructed from that image.
+Alternatively it can contain a mapping where the keys and values are the names of the variant and the image to execute those in respectively.
+If using the mapping form, the <code class="docutils literal notranslate"><span class="pre">default</span></code> key will be used for variants that don’t have an image specified explicitly.
+The image can also be specified within a phase for a variant, this will override the global specified image for the specific variant for only the phase where it is specified.</p>
+<p>An example of the mapping style where two different variants are executed in containers based on different images:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">image</span><span class="p">:</span>
+  <span class="nt">default</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">buildpack-deps:testing</span>
+  <span class="nt">whoami</span><span class="p">:</span>  <span class="l l-Scalar l-Scalar-Plain">buildpack-deps:testing-curl</span>
+
+<span class="nt">phases</span><span class="p">:</span>
+  <span class="nt">prepare</span><span class="p">:</span>
+    <span class="nt">hello</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">cc -o hello hello.c</span>
+    <span class="nt">whoami</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">curl --output ip-address.txt https://api.ipify.org</span>
+
+  <span class="nt">run</span><span class="p">:</span>
+    <span class="nt">hello</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">image</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">busybox:latest</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">./hello</span>
+</pre></div>
+</div>
+<p>For the purpose of using an image (name and version) specified in an Ivy dependency manifest file the <cite>!image-from-ivy-manifest</cite> type constructor exists.
+When used its contents are a mapping with these keys:</p>
+<dl class="docutils">
+<dt><code class="docutils literal notranslate"><span class="pre">manifest</span></code></dt>
+<dd><p class="first">Path to the Ivy manifest file.
+Relative paths are interpreted relative to the first of the ${CFGDIR} or ${WORKSPACE} directories that exists.
+This defaults to the first of these to exist:</p>
+<ul class="last simple">
+<li><code class="docutils literal notranslate"><span class="pre">${WORKSPACE}/dependency_manifest.xml</span></code></li>
+<li><code class="docutils literal notranslate"><span class="pre">${CFGDIR}/dependency_manifest.xml</span></code></li>
+</ul>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">repository</span></code></dt>
+<dd>Docker repository to fetch the image from.</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">path</span></code></dt>
+<dd>Directory within the repository to fetch from.</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">name</span></code></dt>
+<dd>Name of the image to fetch.
+This defaults to the content of the <code class="docutils literal notranslate"><span class="pre">name</span></code> attribute in the Ivy manifest.</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">rev</span></code></dt>
+<dd>Version of the image to fetch.
+This defaults to the content of the <code class="docutils literal notranslate"><span class="pre">rev</span></code> attribute in the ivy manifest.</dd>
+</dl>
+<p>When used this will get treated as if the expansion of <code class="docutils literal notranslate"><span class="pre">{repository}/{path}/{name}:{rev}</span></code> was specified as a string value of this field.
+This allows using Ivy as a mechanism for automatically keeping the Docker image up to date.</p>
+<p>For example, when using this dependency manifest in <code class="docutils literal notranslate"><span class="pre">${WORKSPACE}/dependency_manifest.xml</span></code>:</p>
+<div class="highlight-xml notranslate"><div class="highlight"><pre><span></span><span class="nt">&lt;ivy-module</span> <span class="na">version=</span><span class="s">&quot;2.0&quot;</span><span class="nt">&gt;</span>
+  <span class="nt">&lt;info</span> <span class="na">module=</span><span class="s">&quot;p1cms&quot;</span> <span class="na">organisation=</span><span class="s">&quot;com.tomtom&quot;</span> <span class="na">revision=</span><span class="s">&quot;dont-care&quot;</span> <span class="nt">/&gt;</span>
+  <span class="nt">&lt;dependencies&gt;</span>
+    <span class="nt">&lt;dependency</span> <span class="na">name=</span><span class="s">&quot;python&quot;</span> <span class="na">org=</span><span class="s">&quot;com.tomtom.toolchains&quot;</span> <span class="na">rev=</span><span class="s">&quot;3.6.5&quot;</span> <span class="na">revConstraint=</span><span class="s">&quot;[3.5,4.0[&quot;</span><span class="nt">&gt;</span>
+      <span class="c">&lt;!-- identify this as the dependency specifying the Docker image for Hopic --&gt;</span>
+      <span class="nt">&lt;conf</span> <span class="na">mapped=</span><span class="s">&quot;toolchain&quot;</span> <span class="na">name=</span><span class="s">&quot;default&quot;</span> <span class="nt">/&gt;</span>
+    <span class="nt">&lt;/dependency&gt;</span>
+  <span class="nt">&lt;/dependencies&gt;</span>
+<span class="nt">&lt;/ivy-module&gt;</span>
+</pre></div>
+</div>
+<p>And this Hopic config file:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">image</span><span class="p">:</span>
+  <span class="nt">default</span><span class="p">:</span> <span class="kt">!image-from-ivy-manifest</span>
+    <span class="nt">repository</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">hub.docker.com</span>
+    <span class="nt">path</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">tomtom</span>
+  <span class="nt">Linux_AGL-aarch64</span><span class="p">:</span> <span class="kt">!image-from-ivy-manifest</span>
+    <span class="nt">repository</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">hub.docker.com</span>
+    <span class="nt">path</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">tomtom</span>
+    <span class="nt">name</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">agl-build-aarch64-toolchain</span>
+</pre></div>
+</div>
+<p>The result will be to use the <code class="docutils literal notranslate"><span class="pre">hub.docker.com/tomtom/python:3.6.5</span></code> image by default.
+The <code class="docutils literal notranslate"><span class="pre">PyPy</span></code> build will instead use the <code class="docutils literal notranslate"><span class="pre">hub.docker.com/tomtom/pypy:3.6.5</span></code> image.
+I.e. for that build the image name is overridden from that used in the Ivy manifest, while still using the version from it.</p>
+</div>
+<div class="section" id="docker-in-docker">
+<h2>Docker in Docker<a class="headerlink" href="#docker-in-docker" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="cmdoption-arg-docker-in-docker">
+<code class="descname">docker-in-docker</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-docker-in-docker" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>Sometimes it may be necessary to perform operations on the Docker daemon from within a Docker container.
+E.g. trying to use some tool that resides in a different Docker container from within a build running in a container.
+If that happens this option can be used to make the required Docker socket available within the first container.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">image</span><span class="p">:</span>
+  <span class="nt">default</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">buildpack-deps:testing</span>
+
+<span class="nt">phases</span><span class="p">:</span>
+  <span class="nt">prepare</span><span class="p">:</span>
+    <span class="nt">whoami</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">image</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">buildpack-deps:testing-curl</span>
+        <span class="nt">docker-in-docker</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">yes</span>
+        <span class="nt">volumes</span><span class="p">:</span>
+          <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">/usr/bin/docker:/usr/bin/docker:ro</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">docker pull buildpack-deps:testing-curl</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="volumes">
+<h2>Volumes<a class="headerlink" href="#volumes" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="cmdoption-arg-volumes">
+<code class="descname">volumes</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-volumes" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>In order to execute commands within Docker it is often required to mount directories or a file to the docker container.
+This can be done by specifying <a class="reference internal" href="#cmdoption-arg-volumes"><code class="xref std std-option docutils literal notranslate"><span class="pre">volumes</span></code></a>.
+<a class="reference internal" href="#cmdoption-arg-volumes"><code class="xref std std-option docutils literal notranslate"><span class="pre">volumes</span></code></a> doesn’t have any effect when there is no <a class="reference internal" href="#cmdoption-arg-image"><code class="xref std std-option docutils literal notranslate"><span class="pre">image</span></code></a> specified.</p>
+<p>There are two formats how a volume can be specified:</p>
+<p><strong>Format 1</strong></p>
+<p>The volume can be specified as <code class="docutils literal notranslate"><span class="pre">host-src</span></code>[:<code class="docutils literal notranslate"><span class="pre">container-dest</span></code>][:<code class="docutils literal notranslate"><span class="pre">&lt;options&gt;</span></code>].
+The <code class="docutils literal notranslate"><span class="pre">options</span></code> are [rw|ro]
+The <code class="docutils literal notranslate"><span class="pre">host-src</span></code> is an absolute path or a name value.</p>
+<p><strong>Format 2</strong></p>
+<dl class="docutils">
+<dt>The volume can be specified using a dictionary with the following keys:</dt>
+<dd><ul class="first last simple">
+<li><code class="docutils literal notranslate"><span class="pre">source</span></code></li>
+<li>[<code class="docutils literal notranslate"><span class="pre">target</span></code>]</li>
+<li>[<code class="docutils literal notranslate"><span class="pre">read-only</span></code>]</li>
+</ul>
+</dd>
+</dl>
+<p>Where <code class="docutils literal notranslate"><span class="pre">source</span></code> is equal to <code class="docutils literal notranslate"><span class="pre">host-src</span></code>, <code class="docutils literal notranslate"><span class="pre">target</span></code> is equal to <code class="docutils literal notranslate"><span class="pre">container-dest</span></code> and <code class="docutils literal notranslate"><span class="pre">read-only</span></code> reflects the possible <code class="docutils literal notranslate"><span class="pre">options</span></code> with a boolean value.</p>
+<p>By default the <code class="docutils literal notranslate"><span class="pre">host-src</span></code> is mounted rw.</p>
+<p>When the given <code class="docutils literal notranslate"><span class="pre">host-src</span></code> doesn’t exist it will be created as a directory.
+If <code class="docutils literal notranslate"><span class="pre">container-dest</span></code> is not specified, it will take the same value as <code class="docutils literal notranslate"><span class="pre">host-src</span></code>.
+For the <code class="docutils literal notranslate"><span class="pre">host-src</span></code> path, <code class="docutils literal notranslate"><span class="pre">$HOME</span></code> or <code class="docutils literal notranslate"><span class="pre">~</span></code> will be expanded to the home directory of the current user.
+While for the <code class="docutils literal notranslate"><span class="pre">container-dest</span></code>, <code class="docutils literal notranslate"><span class="pre">$HOME</span></code> or <code class="docutils literal notranslate"><span class="pre">~</span></code> will be expanded to <code class="docutils literal notranslate"><span class="pre">/home/sandbox</span></code>.</p>
+<p>The following directories and files are mounted by default:</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="40%" />
+<col width="30%" />
+<col width="30%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">host-src</th>
+<th class="head">container-dest</th>
+<th class="head">&lt;options&gt;</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">WORKSPACE</span></code> <a class="footnote-reference" href="#id2" id="id1">[*]</a></td>
+<td>/code</td>
+<td>read-write</td>
+</tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="id2" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id1">[*]</a></td><td><code class="docutils literal notranslate"><span class="pre">WORKSPACE/code</span></code> for repositories referring to other repositories for their code.</td></tr>
+</tbody>
+</table>
+<p>These defaults can be disabled by specifying a <cite>null</cite> source for them:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">volumes</span><span class="p">:</span>
+  <span class="p p-Indicator">-</span> <span class="nt">source</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">null</span>
+    <span class="nt">target</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">/code</span>
+</pre></div>
+</div>
+<p><a class="reference internal" href="#cmdoption-arg-volumes"><code class="xref std std-option docutils literal notranslate"><span class="pre">volumes</span></code></a> can be declared in every scope and will be used during the specified scopes
+e.g. <a class="reference internal" href="#cmdoption-arg-volumes"><code class="xref std std-option docutils literal notranslate"><span class="pre">volumes</span></code></a> specified in global scope are used with every command.
+In case an inherited bind mount needs to be overridden, that can be accomplished by adding a volume with the same <code class="docutils literal notranslate"><span class="pre">target_location</span></code>.
+Consider the following example where <cite>/tmp/downloads</cite> is overridden:</p>
+<p><strong>example:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">image</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">buildpack-deps:testing-curl</span>
+
+<span class="nt">volumes</span><span class="p">:</span>
+  <span class="p p-Indicator">-</span> <span class="nt">source</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">~/</span>
+    <span class="nt">target</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">/tools/devenv</span>
+    <span class="nt">read-only</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">yes</span>
+  <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">/tmp</span>
+  <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">/tmp/Music:/home/sandbox/temp</span>
+
+<span class="nt">phases</span><span class="p">:</span>
+  <span class="nt">list</span><span class="p">:</span>
+    <span class="nt">jira</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">with-credentials</span><span class="p">:</span>
+          <span class="nt">id</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">netrc</span>
+          <span class="nt">type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">file</span>
+        <span class="nt">volumes</span><span class="p">:</span>
+          <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">${SECRET_FILE}:~/.netrc:ro</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">curl -v --netrc --silent &quot;https://jira.atlassian.com/rest/api/2/search?maxResults=100&amp;fields=key,summary,assignee&amp;jql=resolution+%3D+unresolved+AND+%28project+%3D+BSERV+OR+assignee+%3D+currentUser()%29+ORDER+BY+priority+DESC%2C+created+ASC&quot;</span>
+    <span class="nt">print</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">echo &quot;only global volumes will be mounted&quot;</span>
+  <span class="nt">mounts</span><span class="p">:</span>
+    <span class="nt">print</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">sh</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">echo &quot;/tmp/Music will be overridden with /tmp/Downloads&quot;</span>
+        <span class="nt">volumes</span><span class="p">:</span>
+          <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">/tmp/Downloads:/home/sandbox/temp</span>
+      <span class="p p-Indicator">-</span> <span class="nt">volumes</span><span class="p">:</span> 
+        <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">/tmp/Pictures:/home/sandbox/temp</span>
+        <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">/tmp/Desktop</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">echo &quot;override /tmp/Downloads with /tmp/Pictures and /tmp/Desktop is added&quot;</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="environment-variables">
+<h2>Environment Variables<a class="headerlink" href="#environment-variables" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="cmdoption-arg-pass-through-environment-vars">
+<code class="descname">pass-through-environment-vars</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-pass-through-environment-vars" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>This option allows passing environment variables of the host environment through into containers.
+This is a list of strings.
+Each string is the name of an environment variable.
+If the named environment variable exists in the host environment, it will be set to the same value inside the container.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">image</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">build-image:4.2.1</span>
+
+<span class="nt">pass-through-environment-vars</span><span class="p">:</span>
+  <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">JENKINS_TEST_INSTANCE</span>
+
+<span class="nt">phases</span><span class="p">:</span>
+  <span class="nt">x86</span><span class="p">:</span>
+    <span class="nt">build</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">./build.sh</span>
+
+  <span class="nt">x86</span><span class="p">:</span>
+    <span class="nt">upload</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">./upload-from-non-test-only.sh</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="mounting-volumes-from-other-containers">
+<h2>Mounting Volumes From Other Containers<a class="headerlink" href="#mounting-volumes-from-other-containers" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="cmdoption-arg-volumes-from">
+<code class="descname">volumes-from</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-volumes-from" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>The option <code class="docutils literal notranslate"><span class="pre">volumes-from</span></code> allows you to mount volumes that are defined in an external <em>Docker image</em>.
+The behavior translates directly to a <code class="docutils literal notranslate"><span class="pre">--volumes-from</span></code> Docker-run option; the volumes are mapped to the path as originally specified in the external image.</p>
+<p>Note that this option does nothing if you haven’t specified a Docker image (see the <a class="reference internal" href="#cmdoption-arg-image"><code class="xref std std-option docutils literal notranslate"><span class="pre">image</span></code></a> option).</p>
+<p>The option requires two keys to be specified:</p>
+<dl class="docutils">
+<dt><code class="docutils literal notranslate"><span class="pre">image-name</span></code></dt>
+<dd>The full name of the Docker image.</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">image-version</span></code></dt>
+<dd>The targeted version of the Docker image.</dd>
+</dl>
+<p>The combination of <code class="docutils literal notranslate"><span class="pre">&lt;image-name&gt;:&lt;image-version&gt;</span></code> should result in a correct, downloadable Docker image.</p>
+<p><strong>example:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span>
+  <span class="nt">coverity</span><span class="p">:</span>
+    <span class="nt">x64</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">description</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">Coverity run</span>
+      <span class="p p-Indicator">-</span> <span class="nt">volumes-from</span><span class="p">:</span>
+        <span class="p p-Indicator">-</span> <span class="nt">image-name</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">hub.docker.com/tomtom/coverity</span>
+          <span class="nt">image-version</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">2.4.7</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">sh -c &#39;cd build/x64-rel;</span>
+          <span class="l l-Scalar l-Scalar-Plain">/opt/coverity/bin/cov-configure --template --compiler c++ --comptype gcc --version 7.3 --config my_config.conf;</span>
+          <span class="l l-Scalar l-Scalar-Plain">/opt/coverity/bin/cov-build --config my_config.conf --dir cov-int ninja;</span>
+          <span class="l l-Scalar l-Scalar-Plain">echo etc.&#39;</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="publish-from-branch">
+<h2>Publish From Branch<a class="headerlink" href="#publish-from-branch" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="cmdoption-arg-publish-from-branch">
+<code class="descname">publish-from-branch</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-publish-from-branch" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>The <code class="docutils literal notranslate"><span class="pre">publish-from-branch</span></code> option, when provided, specifies a regular expression matching the names of branches from which to allow publication.
+Publication includes version bumping (see <a class="reference internal" href="#id3"><code class="xref std std-option docutils literal notranslate"><span class="pre">version</span></code></a>) and the execution of any steps marked with <a class="reference internal" href="#cmdoption-arg-run-on-change"><code class="xref std std-option docutils literal notranslate"><span class="pre">run-on-change</span></code></a> as <code class="docutils literal notranslate"><span class="pre">only</span></code>.</p>
+<p>If this option is omitted, Hopic allows publication from any branch.</p>
+<p>The example below configures Hopic to only publish from the <code class="docutils literal notranslate"><span class="pre">master</span></code> branch or any branch starting with <code class="docutils literal notranslate"><span class="pre">release/</span></code> or <code class="docutils literal notranslate"><span class="pre">rel-</span></code>.</p>
+<p><strong>example:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">publish-from-branch</span><span class="p">:</span> <span class="s">&#39;^master$|^release/.*|^rel-.*&#39;</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="versioning">
+<h2>Versioning<a class="headerlink" href="#versioning" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="id3">
+<code class="descname">version</code><code class="descclassname"></code><a class="headerlink" href="#id3" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>Hopic provides some support for determining and bumping of the currently checked out version.</p>
+<p>It currently supports the syntax, sorting and bumping strategies of these versioning policies.
+The policy to use can be specified in the <code class="docutils literal notranslate"><span class="pre">format</span></code> option of the <code class="docutils literal notranslate"><span class="pre">version</span></code> option section.</p>
+<dl class="docutils">
+<dt><code class="docutils literal notranslate"><span class="pre">semver</span></code></dt>
+<dd><p class="first"><a class="reference external" href="https://semver.org/">Semantic Versioning</a>. This is the default when no policy is explicitly specified.</p>
+<p>The default tag format is <code class="docutils literal notranslate"><span class="pre">{version.major}.{version.minor}.{version.patch}</span></code>.</p>
+<p class="last">The default component to bump is the pre-release label.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">carver</span></code></dt>
+<dd><p class="first">Caruso variation on Semantic Version for branching</p>
+<p>The default tag format is <code class="docutils literal notranslate"><span class="pre">{version.major}{version.minor}{version.patch}+PI{version.increment}.{version.fix}</span></code>.</p>
+<p class="last">The default component to bump is the pre-release label.</p>
+</dd>
+</dl>
+<p>The version can be read from and stored in two locations:</p>
+<dl class="docutils">
+<dt><code class="docutils literal notranslate"><span class="pre">version.file</span></code></dt>
+<dd>When this option is specified Hopic will always use this as the primary source for reading and storing the version.
+The first line to contain only a syntactically valid version, optionally prefixed with <code class="docutils literal notranslate"><span class="pre">version=</span></code>, is assumed to be the version.
+When reading the version it’ll use this verbatim.
+When storing a (likely bumped) version it’ll only modify the version portion of that file.</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">version.tag</span></code></dt>
+<dd><p class="first">When this option is set to <code class="docutils literal notranslate"><span class="pre">true</span></code> or a non-empty string Hopic will, when storing, create a tag every time it creates a new version.
+When this option is set to a string it will be interpreted according to <a class="reference external" href="https://docs.python.org/3/library/string.html#formatspec">Python Format Specification</a> with the named variable <code class="docutils literal notranslate"><span class="pre">version</span></code> containing the version.
+When this option is set and <code class="docutils literal notranslate"><span class="pre">file</span></code> is not set it will use <a class="reference external" href="https://git-scm.com/docs/git-describe">git describe</a> to read the current version from tags.
+When used for reading, it will mark commits that don’t have a tag a virtual prerelease of the predicted next version.</p>
+<p class="last">Setting this option to a string can, for example, be used to add a prefix like <code class="docutils literal notranslate"><span class="pre">v</span></code> to tags, e.g. by using <code class="docutils literal notranslate"><span class="pre">v{version}</span></code>.
+Having it set to <code class="docutils literal notranslate"><span class="pre">true</span></code> instead uses the version policy’s default formatting.</p>
+</dd>
+</dl>
+<p>When and what to bump can be controlled by the <code class="docutils literal notranslate"><span class="pre">version.bump</span></code> option.
+When set to <code class="docutils literal notranslate"><span class="pre">false</span></code> it disables automated bumping completely.
+Otherwise it describes a version bumping policy in its <code class="docutils literal notranslate"><span class="pre">version.bump.policy</span></code> member.</p>
+<p>There are currently two version bumping policies available:</p>
+<dl class="docutils">
+<dt><code class="docutils literal notranslate"><span class="pre">constant</span></code></dt>
+<dd><blockquote class="first">
+<div>Its <code class="docutils literal notranslate"><span class="pre">version.bump.field</span></code> property specifies what field to bump.
+It will always bump that field and no other.
+When not specified it defaults to bumping the default-to-bump part of the used version policy.</div></blockquote>
+<div class="last highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">version</span><span class="p">:</span>
+  <span class="nt">format</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">semver</span>
+  <span class="nt">tag</span><span class="p">:</span> <span class="s">&#39;v.{version.major}.{version.minor}.{version.patch}&#39;</span>
+  <span class="nt">bump</span><span class="p">:</span>
+    <span class="nt">policy</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">constant</span>
+    <span class="nt">field</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">patch</span>
+</pre></div>
+</div>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">conventional-commits</span></code></dt>
+<dd><p class="first">When used this policy determines the version field to bump based on commit messages formatted according to <a class="reference external" href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>.
+It searches all to-merge commits for breaking changes, new features and fixes.
+If any of those are present it will bump, in order of precedence, the major, minor or patch number.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">version.bump.strict</span></code> option of this policy controls whether each commit message is required to parse as a valid Conventional Commit.
+If set to <code class="docutils literal notranslate"><span class="pre">false</span></code> invalidly formatted messages are just ignored and not taken into account to determine what to bump.
+Otherwise the merge will fail when encountering invalidly formatted messages.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">version.bump.reject-breaking-changes-on</span></code> and <code class="docutils literal notranslate"><span class="pre">version.bump.reject-new-features-on</span></code> options specify regular expressions matching branch names.
+Merges into these branches will be rejected if, respectively, they contain breaking changes or new features.
+The purpose of this is to prevent accidental inclusion of these kinds of changes into release branches.</p>
+<div class="last highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">version</span><span class="p">:</span>
+  <span class="nt">format</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">semver</span>
+  <span class="nt">tag</span><span class="p">:</span> <span class="s">&#39;v.{version.major}.{version.minor}.{version.patch}&#39;</span>
+  <span class="nt">bump</span><span class="p">:</span>
+    <span class="nt">policy</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">conventional-commits</span>
+    <span class="nt">strict</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">no</span> <span class="c1"># default</span>
+    <span class="nt">reject-breaking-changes-on</span><span class="p">:</span> <span class="s">&#39;release/.*|rel-.*&#39;</span> <span class="c1"># default</span>
+    <span class="nt">reject-new-features-on</span><span class="p">:</span> <span class="s">&#39;release/\d+\..*|rel-\d+\..*&#39;</span> <span class="c1"># default</span>
+</pre></div>
+</div>
+</dd>
+</dl>
+<p>In order to configure a version bumping policy without automatically bumping for every change the <code class="docutils literal notranslate"><span class="pre">version.bump.on-every-change</span></code> option can be set to <code class="docutils literal notranslate"><span class="pre">false</span></code> (defaults to <code class="docutils literal notranslate"><span class="pre">true</span></code>).</p>
+<p>When bumping is enabled, Hopic bumps each time that it applies a change.
+Usually this means when it’s merging a pull request.
+Another option is when it’s performing a modality change (currently only <code class="docutils literal notranslate"><span class="pre">UPDATE_DEPENDENCY_MANIFEST</span></code>).</p>
+<div class="admonition-todo admonition" id="index-0">
+<p class="first admonition-title">Todo</p>
+<p class="last">Describe <code class="docutils literal notranslate"><span class="pre">after-submit</span></code>. Maybe?</p>
+</div>
+</div>
+<div class="section" id="modality-changes">
+<h2>Modality Changes<a class="headerlink" href="#modality-changes" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="cmdoption-arg-modality-source-preparation">
+<code class="descname">modality-source-preparation</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-modality-source-preparation" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>The <code class="docutils literal notranslate"><span class="pre">modality-source-preparation</span></code> option allows for influencing the build according to the <code class="docutils literal notranslate"><span class="pre">MODALITY</span></code> parameter.
+If Hopic is called with a <code class="docutils literal notranslate"><span class="pre">MODALITY</span></code> that is present in the configuration file, then the commands as specified in that section are executed before the other phases.</p>
+<p>See the description of the <code class="docutils literal notranslate"><span class="pre">apply-modality-change</span></code> parameter on the <cite>Usage</cite> page for the calling syntax.</p>
+<p>Note that this is, above all, a remnant of the previous generation pipeline; it is currently only used to perform <code class="docutils literal notranslate"><span class="pre">UPDATE_DEPENDENCY_MANIFEST</span></code> builds.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">Defining new functionality using this option is discouraged.</p>
+</div>
+<dl class="docutils">
+<dt><code class="docutils literal notranslate"><span class="pre">description</span></code></dt>
+<dd>An optional description for the command, which will be printed in the logs.</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">sh</span></code></dt>
+<dd>The actual command to be run. Variables will be expanded, similar to commands defined in the <a class="reference internal" href="#cmdoption-arg-phases"><code class="xref std std-option docutils literal notranslate"><span class="pre">phases</span></code></a>.</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">changed-files</span></code></dt>
+<dd><p class="first">Specifies the files that are changed by the command, which are to be added to the commit.</p>
+<p class="last">If omitted, Hopic forces a clean repository before running the command specified by <code class="docutils literal notranslate"><span class="pre">sh</span></code>.
+Upon completion of the command, all files that are changed, removed and/or previously untracked are added to the commit.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">commit-message</span></code></dt>
+<dd><p class="first">The message that will be used to commit the changes when this modality is run.</p>
+<p class="last">If omitted, the value of the <code class="docutils literal notranslate"><span class="pre">MODALITY</span></code> parameter is used as the commit message.</p>
+</dd>
+</dl>
+<p><strong>example:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">modality-source-preparation</span><span class="p">:</span>
+  <span class="nt">UPDATE_DEPENDENCY_MANIFEST</span><span class="p">:</span>
+    <span class="p p-Indicator">-</span> <span class="nt">sh</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">update_dependency_manifest.py ${CFGDIR}/dependency_manifest.xml ${CFGDIR}/ivysettings.xml</span>
+      <span class="nt">changed-files</span><span class="p">:</span>
+        <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">${CFGDIR}/dependency_manifest.xml</span>
+      <span class="nt">commit-message</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">Update of dependency manifest</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="extension-installation">
+<h2>Extension Installation<a class="headerlink" href="#extension-installation" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="cmdoption-arg-pip">
+<code class="descname">pip</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-pip" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>Hopic can be extended with extra Python packages.
+For this purpose it provides the ability to install packages, with pip, before building.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">pip</span></code> option contains a list of requirement strings or package installation specifications.
+Each of those specifications may contain these options:</p>
+<dl class="docutils">
+<dt><code class="docutils literal notranslate"><span class="pre">packages</span></code></dt>
+<dd><p class="first">This option is mandatory.</p>
+<p class="last">It contains a list of pip requirement strings.
+E.g. <code class="docutils literal notranslate"><span class="pre">click&gt;=7,&lt;8</span></code> or <code class="docutils literal notranslate"><span class="pre">python-keyring</span></code>.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">from-index</span></code></dt>
+<dd><p class="first">This must be a single URL string.</p>
+<p class="last">When specified this causes pip to install from this package index instead of the default one.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">with-extra-index</span></code></dt>
+<dd><p class="first">This must be a single URL string or a list of URL strings.</p>
+<p class="last">When specified this causes pip to look in this index when the primary one doesn’t contain the specified packages.</p>
+</dd>
+</dl>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">pip</span><span class="p">:</span>
+  <span class="p p-Indicator">-</span> <span class="nt">with-extra-index</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">https://test.pypi.org/simple/</span>
+    <span class="nt">packages</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">commisery&gt;=0.2,&lt;1</span>
+
+<span class="nt">phases</span><span class="p">:</span>
+  <span class="nt">style</span><span class="p">:</span>
+    <span class="nt">commit-messages</span><span class="p">:</span> <span class="kt">!template</span> <span class="s">&quot;commisery&quot;</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="restricting-variants-to-specific-build-nodes">
+<h2>Restricting Variants to Specific Build Nodes<a class="headerlink" href="#restricting-variants-to-specific-build-nodes" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="cmdoption-arg-node-label">
+<code class="descname">node-label</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-node-label" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>The option <code class="docutils literal notranslate"><span class="pre">node-label</span></code> executes the specified steps on an agent available in the Jenkins environment with the provided label(s).</p>
+<p><strong>example:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span>
+  <span class="nt">build</span><span class="p">:</span>
+    <span class="nt">Linux-x86_64-Release</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">node-label</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">Linux &amp;&amp; Docker &amp;&amp; Release</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">Build/build.py -f Build/Linux-x86_64.yaml -m Release</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="restricting-steps-to-changes-or-not">
+<h2>Restricting Steps to Changes or Not<a class="headerlink" href="#restricting-steps-to-changes-or-not" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="cmdoption-arg-run-on-change">
+<code class="descname">run-on-change</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-run-on-change" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="class">
+<dt id="hopic.config_reader.RunOnChange">
+<em class="property">class </em><code class="descclassname">hopic.config_reader.</code><code class="descname">RunOnChange</code><a class="headerlink" href="#hopic.config_reader.RunOnChange" title="Permalink to this definition">¶</a></dt>
+<dd><p>The <a class="reference internal" href="#cmdoption-arg-run-on-change"><code class="xref std std-option docutils literal notranslate"><span class="pre">run-on-change</span></code></a> option allows you to specify when a step needs to be executed.
+The value of this option can be one of:</p>
+<dl class="attribute">
+<dt id="hopic.config_reader.RunOnChange.always">
+<code class="descname">always</code><em class="property"> = 'always'</em><a class="headerlink" href="#hopic.config_reader.RunOnChange.always" title="Permalink to this definition">¶</a></dt>
+<dd><p>The steps will always be performed. (Default if not specified).</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="hopic.config_reader.RunOnChange.never">
+<code class="descname">never</code><em class="property"> = 'never'</em><a class="headerlink" href="#hopic.config_reader.RunOnChange.never" title="Permalink to this definition">¶</a></dt>
+<dd><p>The steps will never be performed for a change.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="hopic.config_reader.RunOnChange.new_version_only">
+<code class="descname">new_version_only</code><em class="property"> = 'new-version-only'</em><a class="headerlink" href="#hopic.config_reader.RunOnChange.new_version_only" title="Permalink to this definition">¶</a></dt>
+<dd><p>The steps will only be performed when the change is on a new version and is to be submitted in the current execution.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="hopic.config_reader.RunOnChange.only">
+<code class="descname">only</code><em class="property"> = 'only'</em><a class="headerlink" href="#hopic.config_reader.RunOnChange.only" title="Permalink to this definition">¶</a></dt>
+<dd><p>The steps will only be performed when the change is to be submitted in the current execution.</p>
+</dd></dl>
+
+</dd></dl>
+
+<p><strong>example:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span>
+  <span class="nt">build</span><span class="p">:</span>
+    <span class="nt">x64-release</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-release</span>
+    <span class="nt">x64-debug</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-debug</span>
+
+  <span class="nt">upload</span><span class="p">:</span>
+    <span class="nt">x64-release</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">run-on-change</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">only</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">build-x64-release/do-upload.sh</span>
+    <span class="nt">x64-debug</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">run-on-change</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">only</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">build-x64-debug/do-upload.sh</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="sharing-output-data-between-variants">
+<h2>Sharing Output Data Between Variants<a class="headerlink" href="#sharing-output-data-between-variants" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="cmdoption-arg-stash">
+<code class="descname">stash</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-stash" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>The option <code class="docutils literal notranslate"><span class="pre">stash</span></code> will save files to be used in another Hopic phase.
+The stashed files are available for every executor/node in every phase and workspace after the current one.</p>
+<p>Use the option <code class="docutils literal notranslate"><span class="pre">includes</span></code> to identify the files to be stashed.
+Use Wildcards like <cite>module/dist/**/*.zip</cite>.
+A <cite>*</cite> expands only to a single directory entry, where <cite>**</cite> expands to multiple directory levels deep.</p>
+<p><strong>example:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span>
+  <span class="nt">upload</span><span class="p">:</span>
+    <span class="nt">Linux-x86_64-Release</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">run-on-change</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">only</span>
+        <span class="nt">stash</span><span class="p">:</span>
+          <span class="nt">includes</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">Build/Output/x86_64-Linux-clang/Release/ivy-repo/published_artifacts.yaml</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">Build/build.py -f Build/Linux-x86_64.yaml Publish.ALL -m Release</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="customizing-step-description">
+<h2>Customizing Step Description<a class="headerlink" href="#customizing-step-description" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="cmdoption-arg-description">
+<code class="descname">description</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-description" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>The option <code class="docutils literal notranslate"><span class="pre">description</span></code> adds a description to the step which will be printed in the logs.</p>
+<p><strong>example:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span>
+  <span class="nt">quality</span><span class="p">:</span>
+    <span class="nt">Coverity</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">description</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">Coverity run</span>
+      <span class="p p-Indicator">-</span> <span class="nt">volumes-from</span><span class="p">:</span>
+        <span class="p p-Indicator">-</span> <span class="nt">image-name</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">hub.docker.com/tomtom/coverity</span>
+          <span class="nt">image-version</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">2.4.6</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">echo -e &quot;Run Coverity here, eg.:\n  cov-configure --template --compiler gcc --comptype gcc\n  cov-configure -co /tools/devenv/Linux/Linux/gcc-4.8.2/bin/c++ -- -msse -mfpmath=sse\netc..&quot;</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="branches-in-subdirectory-worktrees">
+<h2>Branches in Subdirectory Worktrees<a class="headerlink" href="#branches-in-subdirectory-worktrees" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="cmdoption-arg-worktrees">
+<code class="descname">worktrees</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-worktrees" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<div class="admonition-todo admonition" id="index-1">
+<p class="first admonition-title">Todo</p>
+<p class="last">Document <a class="reference internal" href="#cmdoption-arg-worktrees"><code class="xref std std-option docutils literal notranslate"><span class="pre">worktrees</span></code></a> option.</p>
+</div>
+</div>
+<div class="section" id="repeating-steps-for-commits">
+<h2>Repeating Steps for Commits<a class="headerlink" href="#repeating-steps-for-commits" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="cmdoption-arg-foreach">
+<code class="descname">foreach</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-foreach" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<div class="admonition-todo admonition" id="index-2">
+<p class="first admonition-title">Todo</p>
+<p class="last">Document <a class="reference internal" href="#cmdoption-arg-foreach"><code class="xref std std-option docutils literal notranslate"><span class="pre">foreach</span></code></a> option.</p>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">SOURCE_COMMIT</span></code></p>
+<p><code class="docutils literal notranslate"><span class="pre">AUTOSQUASHED_COMMIT</span></code></p>
+</div>
+<div class="section" id="sub-scm">
+<h2>Sub SCM<a class="headerlink" href="#sub-scm" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="cmdoption-arg-scm">
+<code class="descname">scm</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-scm" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<div class="admonition-todo admonition" id="index-3">
+<p class="first admonition-title">Todo</p>
+<p class="last">Document <a class="reference internal" href="#cmdoption-arg-scm"><code class="xref std std-option docutils literal notranslate"><span class="pre">scm</span></code></a> option.</p>
+</div>
+</div>
+<div class="section" id="junit-test-results">
+<h2>JUnit Test Results<a class="headerlink" href="#junit-test-results" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="cmdoption-arg-junit">
+<code class="descname">junit</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-junit" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>The option <code class="docutils literal notranslate"><span class="pre">junit</span></code> triggers Jenkins Unit Testing.
+For more information about this feature see: <a class="reference external" href="https://www.tutorialspoint.com/jenkins/jenkins_unit_testing.htm">https://www.tutorialspoint.com/jenkins/jenkins_unit_testing.htm</a></p>
+<p><strong>example:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span>
+  <span class="nt">build</span><span class="p">:</span>
+    <span class="nt">x64-release</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-release</span>
+
+  <span class="nt">test</span><span class="p">:</span>
+    <span class="nt">x64-debug</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">junit</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">build-x64-debug/test-unit.xml</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-debug --target test</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="artifact-archiving">
+<h2>Artifact Archiving<a class="headerlink" href="#artifact-archiving" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="cmdoption-arg-archive">
+<code class="descname">archive</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-archive" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>The option <code class="docutils literal notranslate"><span class="pre">archive</span></code> allows you to archive build artifacts.
+The artifacts can be stored on Jenkins and/or archived to Artifactory.</p>
+<p>The base directory is the workspace.
+Artifacts specified are discovered relative to the workspace.</p>
+<p>Use Wildcards like <cite>module/dist/**/*.zip</cite>.
+A <cite>*</cite> expands only to a single directory entry, where <cite>**</cite> expands to multiple directory levels deep.</p>
+<p>Use the <code class="docutils literal notranslate"><span class="pre">pattern</span></code> option to identify and upload a specific artifact.
+The specific artifact can then be uploaded to artifactory with the option <code class="docutils literal notranslate"><span class="pre">target</span></code>.</p>
+<p><strong>example:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span>
+  <span class="nt">build</span><span class="p">:</span>
+    <span class="nt">x64-release</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">cmake -B build-x64-release -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo</span>
+
+  <span class="nt">upload</span><span class="p">:</span>
+    <span class="nt">x64-release</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-release --target package</span>
+      <span class="p p-Indicator">-</span> <span class="nt">archive</span><span class="p">:</span>
+          <span class="nt">artifacts</span><span class="p">:</span>
+            <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">Build/Output/x64/release/**</span>
+            <span class="p p-Indicator">-</span> <span class="nt">pattern</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">Build/Output/x64/release/TomTom-Package-${VERSION}-x64.tar.gz</span>
+              <span class="nt">target</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">cs-snapshot/com.tomtom.package/Package/x64/release/${VERSION}/TomTom-Package-x64-release-${VERSION}.tar.gz</span>
+        <span class="nt">run-on-change</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">only</span>
+</pre></div>
+</div>
+<dl class="option">
+<dt id="cmdoption-arg-upload-artifactory">
+<code class="descname">upload-artifactory</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-upload-artifactory" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>The option <code class="docutils literal notranslate"><span class="pre">upload-artifactory</span></code> allows you to archive build artifacts to Artifactory.
+The option <code class="docutils literal notranslate"><span class="pre">id</span></code> is the named identifier referring to a preconfigured Artifactory server from Jenkins’ global configuration.
+The artifacts to be uploaded are specified with the <code class="docutils literal notranslate"><span class="pre">artifacts</span></code> option.</p>
+<p><strong>example:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span>
+  <span class="nt">upload</span><span class="p">:</span>
+    <span class="nt">Linux-x86_64</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">archive</span><span class="p">:</span>
+          <span class="nt">artifacts</span><span class="p">:</span>
+            <span class="p p-Indicator">-</span> <span class="nt">pattern</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">build-x86/TomTom-Stacktrace-${VERSION}-Linux-x86_64.tar.gz</span>
+              <span class="nt">target</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">cs-psa-p1cms-snapshot/com.tomtom.stacktrace/Stacktrace/linux/x86_64/release/${VERSION}/Stacktrace-linux-x86_64-release-custom-${VERSION}.tar.gz</span>
+            <span class="p p-Indicator">-</span> <span class="nt">pattern</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">build-x86/TomTom-Stacktrace-${VERSION}-Linux-x86_64.tar.gz</span>
+              <span class="nt">target</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">cs-psa-p1cms-snapshot/com.tomtom.stacktrace/Stacktrace/linux/x86_64/debug/${VERSION}/Stacktrace-linux-x86_64-release-custom-${VERSION}.tar.gz</span>
+          <span class="nt">upload-artifactory</span><span class="p">:</span>
+            <span class="nt">id</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">artifactory-navkit</span>
+        <span class="nt">run-on-change</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">only</span>
+</pre></div>
+</div>
+<dl class="option">
+<dt id="cmdoption-arg-artifactory">
+<code class="descname">artifactory</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-artifactory" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>The option <code class="docutils literal notranslate"><span class="pre">artifactory</span></code> lets the user create promotion definitions for specific Artifactory repositories.
+The option <code class="docutils literal notranslate"><span class="pre">promotion</span></code> is used to promote build artifacts. After this option the Artifactory server ID is specified.
+The option <code class="docutils literal notranslate"><span class="pre">target-repo</span></code> specifies the Artifactory target repository.</p>
+<p>Only build artifacts that were uploaded with the option <code class="docutils literal notranslate"><span class="pre">upload-artifactory</span></code> will be promoted.</p>
+<p><strong>example:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">artifactory</span><span class="p">:</span>
+  <span class="nt">promotion</span><span class="p">:</span>
+    <span class="nt">artifactory-navkit</span><span class="p">:</span>
+      <span class="nt">target-repo</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">cs-psa-p1cms-release</span>
+
+<span class="nt">phases</span><span class="p">:</span>
+  <span class="nt">build</span><span class="p">:</span>
+    <span class="nt">Linux-x86_64</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">cmake --build build-x86</span>
+    <span class="nt">Linux_AGL-aarch64</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">cmake --build build-agl-aarch64</span>
+
+  <span class="nt">package</span><span class="p">:</span>
+    <span class="nt">Linux-x86_64</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">fingerprint</span><span class="p">:</span>
+          <span class="nt">artifacts</span><span class="p">:</span>
+            <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">build-x86/TomTom-Stacktrace-${VERSION}-Linux-x86_64.tar.gz</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">cmake --build build-x86 --target package</span>
+
+  <span class="nt">upload</span><span class="p">:</span>
+    <span class="nt">Linux-x86_64</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">archive</span><span class="p">:</span>
+          <span class="nt">artifacts</span><span class="p">:</span>
+            <span class="p p-Indicator">-</span> <span class="nt">pattern</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">build-x86/TomTom-Stacktrace-${VERSION}-Linux-x86_64.tar.gz</span>
+              <span class="nt">target</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">cs-psa-p1cms-snapshot/com.tomtom.stacktrace/Stacktrace/linux/x86_64/release/${VERSION}/Stacktrace-linux-x86_64-release-custom-${VERSION}.tar.gz</span>
+          <span class="nt">upload-artifactory</span><span class="p">:</span>
+            <span class="nt">id</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">artifactory-navkit</span>
+        <span class="nt">run-on-change</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">only</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="artifact-fingerprint">
+<h2>Artifact Fingerprint<a class="headerlink" href="#artifact-fingerprint" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="cmdoption-arg-fingerprint">
+<code class="descname">fingerprint</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-fingerprint" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>The option <code class="docutils literal notranslate"><span class="pre">fingerprint</span></code> triggers fingerprinting of build artifacts on Jenkins.
+Use the option <code class="docutils literal notranslate"><span class="pre">artifacts</span></code> to identify the artifacts to be fingerprinted.</p>
+<p>With the <code class="docutils literal notranslate"><span class="pre">fingerprint</span></code> option, the Jenkins “fingerprint” feature is invoked.
+For more information about this feature see: <a class="reference external" href="https://jenkins.io/doc/pipeline/steps/core/#fingerprint-record-fingerprints-of-files-to-track-usage">https://jenkins.io/doc/pipeline/steps/core/#fingerprint-record-fingerprints-of-files-to-track-usage</a></p>
+<p><strong>example:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span>
+  <span class="nt">build</span><span class="p">:</span>
+    <span class="nt">x64-release</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-release</span>
+
+  <span class="nt">package</span><span class="p">:</span>
+    <span class="nt">x64-release</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">fingerprint</span><span class="p">:</span>
+          <span class="nt">artifacts</span><span class="p">:</span>
+            <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">build-x64-release/TomTom-Stacktrace-${VERSION}-Linux-x86_64.tar.gz</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-release --target package</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="artifact-upload-on-fail">
+<h2>Artifact upload-on-fail<a class="headerlink" href="#artifact-upload-on-fail" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="cmdoption-arg-upload-on-failure">
+<code class="descname">upload-on-failure</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-upload-on-failure" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>The option <code class="docutils literal notranslate"><span class="pre">upload-on-failure</span></code> allows artifacts to be uploaded regardless of the build status.
+By default option is disabled (set to <code class="docutils literal notranslate"><span class="pre">false</span></code>), which means that artifacts are not published when build is not marked as success.
+Set this value to <code class="docutils literal notranslate"><span class="pre">true</span></code> to enable this option.</p>
+<p><strong>example:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">version</span><span class="p">:</span>
+  <span class="nt">bump</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">false</span>
+
+<span class="nt">phases</span><span class="p">:</span>
+  <span class="nt">build</span><span class="p">:</span>
+    <span class="nt">example</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">archive</span><span class="p">:</span>
+          <span class="nt">artifacts</span><span class="p">:</span>
+            <span class="l l-Scalar l-Scalar-Plain">produce_output.txt</span>
+          <span class="nt">upload-on-failure</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">yes</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">touch produce_output.txt</span>
+      <span class="p p-Indicator">-</span> <span class="s">&quot;false&quot;</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="embed-scripts">
+<h2>Embed scripts<a class="headerlink" href="#embed-scripts" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="cmdoption-arg-embed">
+<code class="descname">!embed</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-embed" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>The option <code class="docutils literal notranslate"><span class="pre">!embed</span></code> allows Hopic to embed a part of the configuration file from an external source.
+This can be via a command line script (sed, cat, etc), or by evaluating a script.
+The <code class="docutils literal notranslate"><span class="pre">!embed</span></code> option requires to have a <code class="docutils literal notranslate"><span class="pre">cmd</span></code> argument which is the command to execute.
+The command should output the part of the configuration file to standard output.</p>
+<p>The location of a script should be specified either from the workspace directory or the configuration file directory.</p>
+<p><strong>example:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span>
+  <span class="nt">build</span><span class="p">:</span> 
+    <span class="nt">x86_64</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">echo &quot;building...&quot;</span>
+
+  <span class="nt">generate</span><span class="p">:</span> <span class="kt">!embed</span>
+    <span class="nt">cmd</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">yaml-generation.py variant</span>
+</pre></div>
+</div>
+<p>With yaml-generation.py:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="ch">#!/usr/bin/env python3</span>
+
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">from</span> <span class="nn">textwrap</span> <span class="kn">import</span> <span class="n">dedent</span>
+
+
+<span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">argv</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">dedent</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span><span class="se">\</span>
+<span class="s2">    test-</span><span class="si">{</span><span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">:</span>
+<span class="s2">      - echo generated test variant</span>
+<span class="s2">    &quot;&quot;&quot;</span><span class="p">),</span> <span class="n">end</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">)</span>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">main</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+</pre></div>
+</div>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h3>Versions</h3>
+<ul>
+    <li><a href="master/config.html">master</a></li>
+    <li><a href="release_0/config.html">release/0</a></li>
+    <li><a href="release_1/config.html">release/1</a></li>
+</ul>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="intro.html" title="Introduction"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.21.2.dev73+g9d88565 documentation</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2018 - 2020, TomTom N.V..
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.8.5.
+    </div>
+  </body>
+</html>

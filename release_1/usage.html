@@ -1,0 +1,390 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>Usage &#8212; Hopic 1.21.2.dev73+g9d88565 documentation</title>
+    <link rel="stylesheet" href="_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" type="text/css" href="_static/banner.css" />
+    
+    <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="_static/language_data.js"></script>
+    
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Introduction" href="intro.html" />
+    <link rel="prev" title="Hopic" href="index.html" /> 
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="intro.html" title="Introduction"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="Hopic"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.21.2.dev73+g9d88565 documentation</a> &#187;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="usage">
+<h1>Usage<a class="headerlink" href="#usage" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="hopic">
+<h2>hopic<a class="headerlink" href="#hopic" title="Permalink to this headline">¶</a></h2>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic <span class="o">[</span>OPTIONS<span class="o">]</span> COMMAND <span class="o">[</span>ARGS<span class="o">]</span>...
+</pre></div>
+</div>
+<p class="rubric">Options</p>
+<dl class="option">
+<dt id="cmdoption-hopic-color">
+<code class="descname">--color</code><code class="descclassname"> &lt;color&gt;</code><a class="headerlink" href="#cmdoption-hopic-color" title="Permalink to this definition">¶</a></dt>
+<dd><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Default:</th><td class="field-body">auto</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Options:</th><td class="field-body">always|auto|never</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-hopic-config">
+<code class="descname">--config</code><code class="descclassname"> &lt;config&gt;</code><a class="headerlink" href="#cmdoption-hopic-config" title="Permalink to this definition">¶</a></dt>
+<dd><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Default:</th><td class="field-body">${WORKSPACE}/hopic-ci-config.yaml</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-hopic-workspace">
+<code class="descname">--workspace</code><code class="descclassname"> &lt;workspace&gt;</code><a class="headerlink" href="#cmdoption-hopic-workspace" title="Permalink to this definition">¶</a></dt>
+<dd><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Default:</th><td class="field-body">git work tree of config file or current working directory</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-hopic-v">
+<code class="descname">-v</code><code class="descclassname"></code><code class="descclassname">, </code><code class="descname">--verbosity</code><code class="descclassname"> &lt;LVL&gt;</code><a class="headerlink" href="#cmdoption-hopic-v" title="Permalink to this definition">¶</a></dt>
+<dd><p>Either CRITICAL, ERROR, WARNING, INFO or DEBUG</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-hopic-git-verbosity">
+<code class="descname">--git-verbosity</code><code class="descclassname"> &lt;LVL&gt;</code><a class="headerlink" href="#cmdoption-hopic-git-verbosity" title="Permalink to this definition">¶</a></dt>
+<dd><p>Either CRITICAL, ERROR, WARNING, INFO or DEBUG</p>
+</dd></dl>
+
+<p class="rubric">Environment variables</p>
+<span class="target" id="hopic-verbosity-hopic-verbosity"></span><dl class="envvar">
+<dt>
+<code class="descname">HOPIC_VERBOSITY</code></dt>
+<dd><blockquote>
+<div>Provide a default for <a class="reference internal" href="#cmdoption-hopic-v"><code class="xref std std-option docutils literal notranslate"><span class="pre">--verbosity</span></code></a></div></blockquote>
+</dd></dl>
+
+<span class="target" id="hopic-git-verbosity-git-verbosity"></span><dl class="envvar">
+<dt>
+<code class="descname">GIT_VERBOSITY</code></dt>
+<dd><blockquote>
+<div>Provide a default for <a class="reference internal" href="#cmdoption-hopic-git-verbosity"><code class="xref std std-option docutils literal notranslate"><span class="pre">--git-verbosity</span></code></a></div></blockquote>
+</dd></dl>
+
+<div class="section" id="hopic-build">
+<h3>build<a class="headerlink" href="#hopic-build" title="Permalink to this headline">¶</a></h3>
+<p>Build for the specified commit.</p>
+<p>This defaults to building all variants for all phases.
+It’s possible to limit building to either all variants for a single phase, all phases for a single variant or a
+single variant for a single phase.</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic build <span class="o">[</span>OPTIONS<span class="o">]</span>
+</pre></div>
+</div>
+<p class="rubric">Options</p>
+<dl class="option">
+<dt id="cmdoption-hopic-build-phase">
+<code class="descname">--phase</code><code class="descclassname"> &lt;phase&gt;</code><a class="headerlink" href="#cmdoption-hopic-build-phase" title="Permalink to this definition">¶</a></dt>
+<dd><p>Build phase to execute</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-hopic-build-variant">
+<code class="descname">--variant</code><code class="descclassname"> &lt;variant&gt;</code><a class="headerlink" href="#cmdoption-hopic-build-variant" title="Permalink to this definition">¶</a></dt>
+<dd><p>Configuration variant to build</p>
+</dd></dl>
+
+</div>
+<div class="section" id="hopic-checkout-source-tree">
+<h3>checkout-source-tree<a class="headerlink" href="#hopic-checkout-source-tree" title="Permalink to this headline">¶</a></h3>
+<p>Checks out a source tree of the specified remote’s ref to the workspace.</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic checkout-source-tree <span class="o">[</span>OPTIONS<span class="o">]</span>
+</pre></div>
+</div>
+<p class="rubric">Options</p>
+<dl class="option">
+<dt id="cmdoption-hopic-checkout-source-tree-target-remote">
+<code class="descname">--target-remote</code><code class="descclassname"> &lt;url&gt;</code><a class="headerlink" href="#cmdoption-hopic-checkout-source-tree-target-remote" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-hopic-checkout-source-tree-target-ref">
+<code class="descname">--target-ref</code><code class="descclassname"> &lt;ref&gt;</code><a class="headerlink" href="#cmdoption-hopic-checkout-source-tree-target-ref" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-hopic-checkout-source-tree-clean">
+<code class="descname">--clean</code><code class="descclassname"></code><code class="descclassname">, </code><code class="descname">--no-clean</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-hopic-checkout-source-tree-clean" title="Permalink to this definition">¶</a></dt>
+<dd><p>Clean workspace of non-tracked files</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-hopic-checkout-source-tree-ignore-initial-submodule-checkout-failure">
+<code class="descname">--ignore-initial-submodule-checkout-failure</code><code class="descclassname"></code><code class="descclassname">, </code><code class="descname">--no-ignore-initial-submodule-checkout-failure</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-hopic-checkout-source-tree-ignore-initial-submodule-checkout-failure" title="Permalink to this definition">¶</a></dt>
+<dd><p>Ignore git submodule errors during initial checkout</p>
+</dd></dl>
+
+</div>
+<div class="section" id="hopic-getinfo">
+<h3>getinfo<a class="headerlink" href="#hopic-getinfo" title="Permalink to this headline">¶</a></h3>
+<p>Display meta-data associated with each (or the specified) variant in each (or the specified) phase.</p>
+<p>The output is JSON encoded.</p>
+<p>If a phase or variant filter is specified the name of that will not be present in the output.
+Otherwise this is a nested dictionary of phases and variants.</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic getinfo <span class="o">[</span>OPTIONS<span class="o">]</span>
+</pre></div>
+</div>
+<p class="rubric">Options</p>
+<dl class="option">
+<dt id="cmdoption-hopic-getinfo-phase">
+<code class="descname">--phase</code><code class="descclassname"> &lt;phase&gt;</code><a class="headerlink" href="#cmdoption-hopic-getinfo-phase" title="Permalink to this definition">¶</a></dt>
+<dd><p>Build phase</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-hopic-getinfo-variant">
+<code class="descname">--variant</code><code class="descclassname"> &lt;variant&gt;</code><a class="headerlink" href="#cmdoption-hopic-getinfo-variant" title="Permalink to this definition">¶</a></dt>
+<dd><p>Configuration variant</p>
+</dd></dl>
+
+</div>
+<div class="section" id="hopic-install-extensions">
+<h3>install-extensions<a class="headerlink" href="#hopic-install-extensions" title="Permalink to this headline">¶</a></h3>
+<p>Install all extensions required during build execution.</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic install-extensions <span class="o">[</span>OPTIONS<span class="o">]</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="hopic-may-publish">
+<h3>may-publish<a class="headerlink" href="#hopic-may-publish" title="Permalink to this headline">¶</a></h3>
+<p>Check if the target branch name is allowed to be published, according to publish-from-branch in the config file.</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic may-publish <span class="o">[</span>OPTIONS<span class="o">]</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="hopic-prepare-source-tree">
+<h3>prepare-source-tree<a class="headerlink" href="#hopic-prepare-source-tree" title="Permalink to this headline">¶</a></h3>
+<p>Prepares the source tree for building a change performed by a subcommand.</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic prepare-source-tree <span class="o">[</span>OPTIONS<span class="o">]</span> COMMAND <span class="o">[</span>ARGS<span class="o">]</span>...
+</pre></div>
+</div>
+<p class="rubric">Options</p>
+<dl class="option">
+<dt id="cmdoption-hopic-prepare-source-tree-author-name">
+<code class="descname">--author-name</code><code class="descclassname"> &lt;name&gt;</code><a class="headerlink" href="#cmdoption-hopic-prepare-source-tree-author-name" title="Permalink to this definition">¶</a></dt>
+<dd><p>Name of change-request’s author</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-hopic-prepare-source-tree-author-email">
+<code class="descname">--author-email</code><code class="descclassname"> &lt;email&gt;</code><a class="headerlink" href="#cmdoption-hopic-prepare-source-tree-author-email" title="Permalink to this definition">¶</a></dt>
+<dd><p>E-mail address of change-request’s author</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-hopic-prepare-source-tree-author-date">
+<code class="descname">--author-date</code><code class="descclassname"> &lt;date&gt;</code><a class="headerlink" href="#cmdoption-hopic-prepare-source-tree-author-date" title="Permalink to this definition">¶</a></dt>
+<dd><p>Time of last update to the change-request</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-hopic-prepare-source-tree-commit-date">
+<code class="descname">--commit-date</code><code class="descclassname"> &lt;date&gt;</code><a class="headerlink" href="#cmdoption-hopic-prepare-source-tree-commit-date" title="Permalink to this definition">¶</a></dt>
+<dd><p>Time of starting to build this change-request</p>
+</dd></dl>
+
+<div class="section" id="hopic-prepare-source-tree-apply-modality-change">
+<h4>apply-modality-change<a class="headerlink" href="#hopic-prepare-source-tree-apply-modality-change" title="Permalink to this headline">¶</a></h4>
+<p>Applies the changes specific to the specified modality.</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic prepare-source-tree apply-modality-change <span class="o">[</span>OPTIONS<span class="o">]</span> MODALITY
+</pre></div>
+</div>
+<p class="rubric">Arguments</p>
+<dl class="option">
+<dt id="cmdoption-hopic-prepare-source-tree-apply-modality-change-arg-modality">
+<code class="descname">MODALITY</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-hopic-prepare-source-tree-apply-modality-change-arg-modality" title="Permalink to this definition">¶</a></dt>
+<dd><p>Required argument</p>
+</dd></dl>
+
+</div>
+<div class="section" id="hopic-prepare-source-tree-bump-version">
+<h4>bump-version<a class="headerlink" href="#hopic-prepare-source-tree-bump-version" title="Permalink to this headline">¶</a></h4>
+<p>Bump the version based on the configuration.</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic prepare-source-tree bump-version <span class="o">[</span>OPTIONS<span class="o">]</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="hopic-prepare-source-tree-merge-change-request">
+<h4>merge-change-request<a class="headerlink" href="#hopic-prepare-source-tree-merge-change-request" title="Permalink to this headline">¶</a></h4>
+<p>Merges the change request from the specified branch.</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic prepare-source-tree merge-change-request <span class="o">[</span>OPTIONS<span class="o">]</span>
+</pre></div>
+</div>
+<p class="rubric">Options</p>
+<dl class="option">
+<dt id="cmdoption-hopic-prepare-source-tree-merge-change-request-source-remote">
+<code class="descname">--source-remote</code><code class="descclassname"> &lt;url&gt;</code><a class="headerlink" href="#cmdoption-hopic-prepare-source-tree-merge-change-request-source-remote" title="Permalink to this definition">¶</a></dt>
+<dd><p>&lt;source&gt; remote to merge into &lt;target&gt;</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-hopic-prepare-source-tree-merge-change-request-source-ref">
+<code class="descname">--source-ref</code><code class="descclassname"> &lt;ref&gt;</code><a class="headerlink" href="#cmdoption-hopic-prepare-source-tree-merge-change-request-source-ref" title="Permalink to this definition">¶</a></dt>
+<dd><p>ref of &lt;source&gt; remote to merge into &lt;target&gt;</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-hopic-prepare-source-tree-merge-change-request-change-request">
+<code class="descname">--change-request</code><code class="descclassname"> &lt;identifier&gt;</code><a class="headerlink" href="#cmdoption-hopic-prepare-source-tree-merge-change-request-change-request" title="Permalink to this definition">¶</a></dt>
+<dd><p>Identifier of change-request to use in merge commit message</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-hopic-prepare-source-tree-merge-change-request-title">
+<code class="descname">--title</code><code class="descclassname"> &lt;title&gt;</code><a class="headerlink" href="#cmdoption-hopic-prepare-source-tree-merge-change-request-title" title="Permalink to this definition">¶</a></dt>
+<dd><p>Change request title to incorporate in merge commit’s subject line</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-hopic-prepare-source-tree-merge-change-request-description">
+<code class="descname">--description</code><code class="descclassname"> &lt;description&gt;</code><a class="headerlink" href="#cmdoption-hopic-prepare-source-tree-merge-change-request-description" title="Permalink to this definition">¶</a></dt>
+<dd><p>Change request description to incorporate in merge commit message’s body</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-hopic-prepare-source-tree-merge-change-request-approved-by">
+<code class="descname">--approved-by</code><code class="descclassname"> &lt;approver&gt;</code><a class="headerlink" href="#cmdoption-hopic-prepare-source-tree-merge-change-request-approved-by" title="Permalink to this definition">¶</a></dt>
+<dd><p>Name of approving reviewer (can be provided multiple times).</p>
+</dd></dl>
+
+</div>
+</div>
+<div class="section" id="hopic-show-config">
+<h3>show-config<a class="headerlink" href="#hopic-show-config" title="Permalink to this headline">¶</a></h3>
+<p>Diagnostic helper command to display the configuration after processing.</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic show-config <span class="o">[</span>OPTIONS<span class="o">]</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="hopic-show-env">
+<h3>show-env<a class="headerlink" href="#hopic-show-env" title="Permalink to this headline">¶</a></h3>
+<p>Diagnostic helper command to display the execution environment.</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic show-env <span class="o">[</span>OPTIONS<span class="o">]</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="hopic-submit">
+<h3>submit<a class="headerlink" href="#hopic-submit" title="Permalink to this headline">¶</a></h3>
+<p>Submit the changes created by prepare-source-tree to the target remote.</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic submit <span class="o">[</span>OPTIONS<span class="o">]</span>
+</pre></div>
+</div>
+<p class="rubric">Options</p>
+<dl class="option">
+<dt id="cmdoption-hopic-submit-target-remote">
+<code class="descname">--target-remote</code><code class="descclassname"> &lt;url&gt;</code><a class="headerlink" href="#cmdoption-hopic-submit-target-remote" title="Permalink to this definition">¶</a></dt>
+<dd><p>The remote to push to, if not specified this will default to the checkout remote.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="hopic-unbundle-worktrees">
+<h3>unbundle-worktrees<a class="headerlink" href="#hopic-unbundle-worktrees" title="Permalink to this headline">¶</a></h3>
+<p>Unbundle a git bundle and fast-forward all the configured worktrees that are included in it.</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic unbundle-worktrees <span class="o">[</span>OPTIONS<span class="o">]</span>
+</pre></div>
+</div>
+<p class="rubric">Options</p>
+<dl class="option">
+<dt id="cmdoption-hopic-unbundle-worktrees-bundle">
+<code class="descname">--bundle</code><code class="descclassname"> &lt;file&gt;</code><a class="headerlink" href="#cmdoption-hopic-unbundle-worktrees-bundle" title="Permalink to this definition">¶</a></dt>
+<dd><p>Git bundle to use</p>
+</dd></dl>
+
+</div>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h3>Versions</h3>
+<ul>
+    <li><a href="../master/usage.html">master</a></li>
+    <li><a href="../release_0/usage.html">release/0</a></li>
+    <li><a href="usage.html">release/1</a></li>
+</ul>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="intro.html" title="Introduction"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="Hopic"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.21.2.dev73+g9d88565 documentation</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2018 - 2020, TomTom N.V..
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.8.5.
+    </div>
+  </body>
+</html>
