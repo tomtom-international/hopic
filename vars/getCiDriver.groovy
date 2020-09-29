@@ -486,7 +486,8 @@ docker build --build-arg=PYTHON_VERSION=3.6 --iidfile=${shell_quote(docker_src)}
       def cmd = 'LC_ALL=C.UTF-8 hopic --color=always'
       if (this.config_file != null) {
         cmd += ' --workspace=' + shell_quote(workspace)
-        cmd += ' --config=' + shell_quote("${workspace}/${config_file}")
+        def config_file_path = shell_quote(this.config_file.startsWith('/') ? "${config_file}" : "${workspace}/${config_file}")
+        cmd += ' --config=' + "${config_file_path}"
       }
 
       return closure(cmd)
