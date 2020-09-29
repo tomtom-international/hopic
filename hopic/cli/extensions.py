@@ -28,7 +28,7 @@ except ImportError:
 import click
 
 from ..config_reader import read as read_config
-from ..execution import echo_cmd
+from ..execution import echo_cmd_click as echo_cmd
 from .utils import determine_config_file_name
 
 
