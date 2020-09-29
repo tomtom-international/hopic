@@ -1,4 +1,4 @@
-# Copyright (c) 2018 - 2020 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2018 - 2020 TomTom N.V.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -1052,6 +1052,9 @@ def build(ctx, phase, variant):
     It's possible to limit building to either all variants for a single phase, all phases for a single variant or a
     single variant for a single phase.
     """
+    # Ensure any required extensions are available
+    extensions.install_extensions.callback()
+
     cfg = ctx.obj.config
 
     submit_ref = None
@@ -1081,10 +1084,6 @@ def build(ctx, phase, variant):
     except NoSectionError:
         pass
     has_change = bool(refspecs)
-
-    # Ensure any required extensions are available
-    extensions.install_extensions.callback()
-    cfg = ctx.obj.config = read_config(determine_config_file_name(ctx), ctx.obj.volume_vars)
 
     worktree_commits = {}
     for phasename, curphase in cfg['phases'].items():
