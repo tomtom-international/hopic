@@ -488,6 +488,9 @@ def process_prepare_source_tree(
         except (click.BadParameter, KeyError, TypeError, OSError, IOError):
             pass
 
+        # Ensure any required extensions are available
+        extensions.install_extensions.callback()
+
         # Ensure that, when we're dealing with a separated config and code repository, that the code repository is checked out again to the newer version
         if ctx.obj.code_dir != ctx.obj.workspace:
             with repo.config_reader() as cfg:
@@ -857,6 +860,9 @@ def apply_modality_change(
     """
     Applies the changes specific to the specified modality.
     """
+
+    # Ensure any required extensions are available
+    extensions.install_extensions.callback()
 
     modality_cmds = ctx.obj.config.get('modality-source-preparation', {}).get(modality, ())
 
