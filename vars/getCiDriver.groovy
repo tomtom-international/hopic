@@ -453,7 +453,8 @@ ${shell_quote(venv)}/bin/python -m pip install ${shell_quote(this.repo)}
       def cmd = 'LC_ALL=C.UTF-8 ' + shell_quote("${venv}/bin/python") + ' ' + shell_quote("${venv}/bin/hopic") + ' --color=always'
       if (this.config_file != null) {
         cmd += ' --workspace=' + shell_quote(workspace)
-        cmd += ' --config=' + shell_quote("${workspace}/${config_file}")
+        def config_file_path = shell_quote(this.config_file.startsWith('/') ? "${config_file}" : "${workspace}/${config_file}")
+        cmd += ' --config=' + "${config_file_path}"
       }
       this.base_cmds[steps.env.NODE_NAME] = cmd
     }
