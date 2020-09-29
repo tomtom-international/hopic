@@ -1269,11 +1269,14 @@ def build(ctx, phase, variant):
                         final_cmd = [expand_vars(cfg_vars, arg) for arg in final_cmd]
 
                         # Handle execution inside docker
-                        with tempfile.TemporaryDirectory(prefix='hopic-run-state') as tmpdir:
-                            cidfile = None
+                        cidfile = None
+                        try:
                             if image is not None:
                                 uid, gid = os.getuid(), os.getgid()
-                                cidfile = os.path.join(tmpdir, 'cid')
+                                fd, cidfile = tempfile.mkstemp(prefix='hopic-docker-run-cid-', suffix='.txt')
+                                os.close(fd)
+                                # Docker wants this file to not exist (yet) when starting a container
+                                os.unlink(cidfile)
                                 docker_run = ['docker', 'run',
                                               '--rm',
                                               f"--cidfile={cidfile}",
@@ -1337,6 +1340,12 @@ def build(ctx, phase, variant):
                                 ctx.exit(128 + e.signal)
                             for num, old_handler in old_handlers.items():
                                 signal.signal(num, old_handler)
+                        finally:
+                            if cidfile:
+                                try:
+                                    os.unlink(cidfile)
+                                except FileNotFoundError:
+                                    pass
 
                     for subdir, worktree in worktrees.items():
                         with git.Repo(os.path.join(ctx.obj.workspace, subdir)) as repo:
