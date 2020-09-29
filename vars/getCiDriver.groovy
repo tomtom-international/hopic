@@ -453,9 +453,9 @@ git reset --hard FETCH_HEAD
 cat >> hopic/test/docker-images/python/Dockerfile <<EOF
 # Install Hopic's dependencies in a separate layer to improve reuse between images produced for different Hopic versions.
 ADD setup.py /hopic-reqs/setup.py
-RUN mkdir -p /hopic-reqs/hopic/cli /hopic-reqs/hopic/yaml \\
+RUN mkdir -p /hopic-reqs/hopic/cli \\
  && cd /hopic-reqs \\
- && touch hopic/__init__.py hopic/cli/__init__.py hopic/yaml/__init__.py \\
+ && touch hopic/__init__.py hopic/cli/__init__.py README.rst \\
  && sed -i '/setuptools.scm/ d' setup.py \\
  && python setup.py dist_info \\
  && sed -n 's/^Requires-Dist: // p' hopic.dist-info/METADATA > hopic.dist-info/requires.txt \\
