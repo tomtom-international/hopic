@@ -54,7 +54,8 @@ pipeline {
            choices:      ['INFO', 'DEBUG'],
            description:  'Verbosity level to execute Git commands at.')
     choice(name: 'MODALITY',
-           choices: 'NORMAL\nAUTO_MERGE',
+           choices: 'NORMAL\nAUTO_MERGE'
+             + (BRANCH_NAME =~ /^release\/\d+(?:\.\d+)?$/ ? '\nBUMP_VERSION' : ''),
            description: 'Modality of this execution of the pipeline.')
     booleanParam(defaultValue: false,
                  description: 'Clean build',
