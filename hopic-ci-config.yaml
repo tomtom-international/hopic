@@ -3,8 +3,8 @@ version:
   format: semver
   bump:
     policy: conventional-commits
-    on-every-change: no
     strict: yes
+    on-every-change: no
 
 project-name: PIPE
 
