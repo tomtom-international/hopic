@@ -42,8 +42,16 @@ pipeline {
   agent none
 
   triggers {
-    // trigger build as AUTO_MERGE each 2 hours, on master and release branches only
-    parameterizedCron(BRANCH_NAME =~ /^master$|^release\/\d+(?:\.\d+)?$/ ? 'H */2 * * * % MODALITY=AUTO_MERGE' : '')
+    parameterizedCron(''
+      + (BRANCH_NAME =~ /^master$|^release\/\d+(?:\.\d+)?$/ ? '''
+        # trigger build as AUTO_MERGE each 2 hours, on master and release branches only
+        H */2 * * * % MODALITY=AUTO_MERGE
+        ''' : '')
+      + (BRANCH_NAME =~ /^release\/\d+(?:\.\d+)?$/ ? '''
+        # Bump the version early on every Monday. Only does something if there are any bumpable changes since the last tagged version.
+        H H(7-13) * * 1 % MODALITY=BUMP_VERSION
+        ''' : '')
+      )
   }
 
   parameters {
