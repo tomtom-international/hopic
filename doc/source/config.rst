@@ -287,7 +287,7 @@ Where ``source`` is equal to ``host-src``, ``target`` is equal to ``container-de
 
 By default the ``host-src`` is mounted rw.
 
-When the given ``host-src`` doesn't exist it will be created as a directory.
+When the given ``host-src`` doesn't exist Hopic will create the path as a directory to prevent dockerd from creating the directory as root user.
 If ``container-dest`` is not specified, it will take the same value as ``host-src``.
 For the ``host-src`` path, ``$HOME`` or ``~`` will be expanded to the home directory of the current user.
 While for the ``container-dest``, ``$HOME`` or ``~`` will be expanded to ``/home/sandbox``.
