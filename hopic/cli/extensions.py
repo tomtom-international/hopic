@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib
 import logging
 import os
 import subprocess
@@ -77,6 +78,9 @@ def install_extensions(ctx):
             cmd.extend(spec['packages'])
 
             echo_cmd(subprocess.check_call, cmd)
+
+    # Ensure newly installed packages can be imported
+    importlib.invalidate_caches()
 
     # Re-read the config file with (hopefully) all templates available now
     ctx.obj.config = read_config(determine_config_file_name(ctx), ctx.obj.volume_vars)
