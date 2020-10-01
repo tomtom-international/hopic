@@ -263,7 +263,8 @@ def checkout_tree(tree, remote, ref, clean=False, remote_name='origin', allow_su
         # Remove potentially moved submodules
         repo.git.submodule(["deinit", "--all", "--force"])
 
-        origin.fetch("refs/notes/hopic/*:refs/notes/hopic/*")
+        # Ensure we have the exact same view of all Hopic notes as are present upstream
+        origin.fetch("+refs/notes/hopic/*:refs/notes/hopic/*", prune=True)
 
         try:
             update_submodules(repo, clean)
