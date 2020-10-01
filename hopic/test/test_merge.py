@@ -1,4 +1,4 @@
-# Copyright (c) 2019 - 2020 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2019 - 2020 TomTom N.V.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ from click.testing import CliRunner
 import git
 import os
 import pytest
+import re
 import subprocess
 import sys
 from textwrap import dedent
@@ -150,11 +151,17 @@ def hopic_config_subdir_version_file_tester(capfd, config_dir, hopic_config, ver
     out, err = capfd.readouterr()
     sys.stdout.write(out)
     sys.stderr.write(err)
-    version_out = out.splitlines()[2]
+    _, merge_commit, version_out, *_ = out.splitlines()
     assert version_out == expected_version
     with git.Repo(str(toprepo), expand_vars=False) as repo:
         repo.git.checkout('master')
         assert expected_version == repo.git.tag(l=True)
+
+        note = repo.git.notes('show', merge_commit, ref='hopic/master')
+        assert re.match(
+                r'^Committed-by: Hopic.*\nWith Python version: .*\nAnd with these installed packages:\n.*\bhopic\b',
+                note, flags=re.DOTALL | re.MULTILINE,
+            )
 
     return toprepo
 
@@ -489,6 +496,12 @@ def test_modality_merge_has_all_parents(tmp_path, monkeypatch):
 
     with git.Repo(toprepo, expand_vars=False) as repo:
         assert repo.heads.master.commit.parents == (final_commit, merge_commit), f"Produced commit {repo.heads.master.commit} is not a merge commit"
+
+        note = repo.git.notes('show', 'master', ref='hopic/master')
+        assert re.match(
+                r'^Committed-by: Hopic.*\nWith Python version: .*\nAnd with these installed packages:\n.*\bhopic\b',
+                note, flags=re.DOTALL | re.MULTILINE,
+            )
 
 
 def test_separate_modality_change(tmp_path):

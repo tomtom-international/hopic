@@ -1,4 +1,4 @@
-# Copyright (c) 2018 - 2020 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2018 - 2020 TomTom N.V.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ from configparser import (
     )
 import os
 import re
+import subprocess
+import sys
 
 import click
 import git
@@ -59,3 +61,10 @@ def determine_config_file_name(ctx):
             if os.path.isfile(fname):
                 return fname
         raise
+
+
+def installed_pkgs():
+    try:
+        return subprocess.check_output((sys.executable, '-m', 'pip', 'freeze')).decode('UTF-8')
+    except subprocess.CalledProcessError:
+        pass
