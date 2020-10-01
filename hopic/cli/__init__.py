@@ -866,8 +866,8 @@ def merge_change_request(
         if description is not None:
             msg = f"{msg}\n{description}\n"
         msg += u'\n'
-        if approved_by:
-            approvers = get_valid_approvers(repo, approved_by, source, source_commit)
+        approvers = get_valid_approvers(repo, approved_by, source, source_commit)
+        if approvers:
             msg += '\n'.join(f"Acked-by: {approver}" for approver in approvers) + u'\n'
         msg += u'Merged-by: Hopic {pkg.version}\n'.format(pkg=metadata.distribution(PACKAGE))
         return {
