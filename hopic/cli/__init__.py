@@ -1,4 +1,4 @@
-# Copyright (c) 2018 - 2020 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2018 - 2020 TomTom N.V.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ import click
 from . import (
         autocomplete,
         extensions,
+        utils,
     )
 from .utils import (
         determine_config_file_name,
@@ -68,6 +69,7 @@ try:
     from importlib import metadata
 except ImportError:
     import importlib_metadata as metadata
+import platform
 import re
 import signal
 import shlex
@@ -260,6 +262,9 @@ def checkout_tree(tree, remote, ref, clean=False, remote_name='origin', allow_su
         repo.head.reset(index=True, working_tree=True)
         # Remove potentially moved submodules
         repo.git.submodule(["deinit", "--all", "--force"])
+
+        # Ensure we have the exact same view of all Hopic notes as are present upstream
+        origin.fetch("+refs/notes/hopic/*:refs/notes/hopic/*", prune=True)
 
         try:
             update_submodules(repo, clean)
@@ -488,6 +493,9 @@ def process_prepare_source_tree(
         except (click.BadParameter, KeyError, TypeError, OSError, IOError):
             pass
 
+        # Ensure any required extensions are available
+        extensions.install_extensions.callback()
+
         # Ensure that, when we're dealing with a separated config and code repository, that the code repository is checked out again to the newer version
         if ctx.obj.code_dir != ctx.obj.workspace:
             with repo.config_reader() as cfg:
@@ -598,11 +606,37 @@ def process_prepare_source_tree(
             log.error("Version bumping requested, but the version policy '%s' decided not to bump from '%s'", bump['policy'], ctx.obj.version)
             return
 
+        notes_ref = None
         if 'message' in commit_params:
             submit_commit = repo.index.commit(**commit_params)
         else:
             submit_commit = repo.head.commit
         click.echo(submit_commit)
+
+        pkgs = utils.installed_pkgs()
+        if pkgs and target_ref:
+            notes_ref = f"refs/notes/hopic/{target_ref}"
+            repo.git.notes(
+                    'add', submit_commit.hexsha,
+                    '--message=' + dedent("""\
+                    Committed-by: Hopic {version}
+
+                    With Python version: {python_version}
+
+                    And with these installed packages:
+                    {pkgs}
+                    """).format(
+                        pkgs=pkgs,
+                        version=metadata.version(PACKAGE),
+                        python_version=platform.python_version(),
+                    ),
+                    ref=notes_ref, env={
+                        'GIT_AUTHOR_NAME': author.name,
+                        'GIT_AUTHOR_EMAIL': author.email,
+                        'GIT_COMMITTER_NAME': committer.name,
+                        'GIT_COMMITTER_EMAIL': committer.email,
+                    })
+            notes_ref = f"{repo.commit(notes_ref)}:refs/notes/hopic/{target_ref}"
 
         autosquash_commits = [
                 commit
@@ -666,7 +700,7 @@ def process_prepare_source_tree(
         # Re-read version to ensure that the newly created tag is taken into account
         ctx.obj.version = determine_version(version_info, ctx.obj.config_dir, ctx.obj.code_dir)
 
-        log.info('%s', repo.git.show(submit_commit, format='fuller', stat=True))
+        log.info('%s', repo.git.show(submit_commit, format='fuller', stat=True, notes='*'))
 
         push_commit = submit_commit
         if (ctx.obj.version is not None
@@ -716,6 +750,8 @@ def process_prepare_source_tree(
                 refspecs.append(f"{push_commit}:{target_ref}")
             if tagname is not None:
                 refspecs.append(f"refs/tags/{tagname}:refs/tags/{tagname}")
+            if notes_ref is not None:
+                refspecs.append(notes_ref)
             if refspecs:
                 cfg.set_value(section, 'refspecs', ' '.join(shlex.quote(refspec) for refspec in refspecs))
             if source_commit:
@@ -831,8 +867,8 @@ def merge_change_request(
         if description is not None:
             msg = f"{msg}\n{description}\n"
         msg += u'\n'
-        if approved_by:
-            approvers = get_valid_approvers(repo, approved_by, source, source_commit)
+        approvers = get_valid_approvers(repo, approved_by, source, source_commit)
+        if approvers:
             msg += '\n'.join(f"Acked-by: {approver}" for approver in approvers) + u'\n'
         msg += u'Merged-by: Hopic {pkg.version}\n'.format(pkg=metadata.distribution(PACKAGE))
         return {
@@ -857,6 +893,9 @@ def apply_modality_change(
     """
     Applies the changes specific to the specified modality.
     """
+
+    # Ensure any required extensions are available
+    extensions.install_extensions.callback()
 
     modality_cmds = ctx.obj.config.get('modality-source-preparation', {}).get(modality, ())
 
@@ -1052,6 +1091,9 @@ def build(ctx, phase, variant):
     It's possible to limit building to either all variants for a single phase, all phases for a single variant or a
     single variant for a single phase.
     """
+    # Ensure any required extensions are available
+    extensions.install_extensions.callback()
+
     cfg = ctx.obj.config
 
     submit_ref = None
@@ -1081,10 +1123,6 @@ def build(ctx, phase, variant):
     except NoSectionError:
         pass
     has_change = bool(refspecs)
-
-    # Ensure any required extensions are available
-    extensions.install_extensions.callback()
-    cfg = ctx.obj.config = read_config(determine_config_file_name(ctx), ctx.obj.volume_vars)
 
     worktree_commits = {}
     for phasename, curphase in cfg['phases'].items():
@@ -1270,11 +1308,14 @@ def build(ctx, phase, variant):
                         final_cmd = [expand_vars(cfg_vars, arg) for arg in final_cmd]
 
                         # Handle execution inside docker
-                        with tempfile.TemporaryDirectory(prefix='hopic-run-state') as tmpdir:
-                            cidfile = None
+                        cidfile = None
+                        try:
                             if image is not None:
                                 uid, gid = os.getuid(), os.getgid()
-                                cidfile = os.path.join(tmpdir, 'cid')
+                                fd, cidfile = tempfile.mkstemp(prefix='hopic-docker-run-cid-', suffix='.txt')
+                                os.close(fd)
+                                # Docker wants this file to not exist (yet) when starting a container
+                                os.unlink(cidfile)
                                 docker_run = ['docker', 'run',
                                               '--rm',
                                               f"--cidfile={cidfile}",
@@ -1338,6 +1379,12 @@ def build(ctx, phase, variant):
                                 ctx.exit(128 + e.signal)
                             for num, old_handler in old_handlers.items():
                                 signal.signal(num, old_handler)
+                        finally:
+                            if cidfile:
+                                try:
+                                    os.unlink(cidfile)
+                                except FileNotFoundError:
+                                    pass
 
                     for subdir, worktree in worktrees.items():
                         with git.Repo(os.path.join(ctx.obj.workspace, subdir)) as repo:

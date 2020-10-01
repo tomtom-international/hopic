@@ -1,4 +1,4 @@
-# Copyright (c) 2020 - 2020 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2020 - 2020 TomTom N.V.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib
 import logging
 import os
 import subprocess
@@ -26,7 +27,9 @@ except ImportError:
 
 import click
 
+from ..config_reader import read as read_config
 from ..execution import echo_cmd
+from .utils import determine_config_file_name
 
 
 PACKAGE : str = __package__.split('.')[0]
@@ -74,4 +77,10 @@ def install_extensions(ctx):
 
             cmd.extend(spec['packages'])
 
-            echo_cmd(subprocess.check_call, cmd)
+            echo_cmd(subprocess.check_call, cmd, stdout=sys.__stderr__)
+
+    # Ensure newly installed packages can be imported
+    importlib.invalidate_caches()
+
+    # Re-read the config file with (hopefully) all templates available now
+    ctx.obj.config = read_config(determine_config_file_name(ctx), ctx.obj.volume_vars)

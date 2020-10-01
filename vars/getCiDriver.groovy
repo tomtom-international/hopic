@@ -634,6 +634,9 @@ exec ssh -i '''
       return this.target_commit
     }
 
+    // Ensure any required extensions are available
+    steps.sh(script: "${cmd} install-extensions")
+
     def code_dir_output = tmpdir + '/code-dir.txt'
     if (steps.sh(script: 'LC_ALL=C.UTF-8 git config --get hopic.code.dir > ' + shell_quote(code_dir_output), returnStatus: true) == 0) {
       workspace = steps.readFile(code_dir_output).trim()
