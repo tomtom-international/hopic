@@ -77,7 +77,7 @@ def install_extensions(ctx):
 
             cmd.extend(spec['packages'])
 
-            echo_cmd(subprocess.check_call, cmd)
+            echo_cmd(subprocess.check_call, cmd, stdout=sys.__stderr__)
 
     # Ensure newly installed packages can be imported
     importlib.invalidate_caches()
