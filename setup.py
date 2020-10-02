@@ -1,4 +1,4 @@
-# Copyright (c) 2018 - 2020 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2018 - 2020 TomTom N.V.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -61,6 +61,7 @@ setup(
       [console_scripts]
       hopic=hopic.cli.main:main
     ''',
+    zip_safe=True,
     url='https://github.com/tomtom-international/hopic',
     project_urls={
       'Documentation': 'https://tomtom-international.github.io/hopic/',
