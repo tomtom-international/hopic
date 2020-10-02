@@ -866,7 +866,12 @@ def merge_change_request(
             msg = f"{msg}: {title}\n"
         if description is not None:
             msg = f"{msg}\n{description}\n"
-        msg += u'\n'
+
+        # Prevent splitting footers with empty lines in between, because 'git interpret-trailers' doesn't like it.
+        parsed_msg = parse_commit_message(msg)
+        if not parsed_msg.footers:
+            msg += u'\n'
+
         approvers = get_valid_approvers(repo, approved_by, source, source_commit)
         if approvers:
             msg += '\n'.join(f"Acked-by: {approver}" for approver in approvers) + u'\n'
