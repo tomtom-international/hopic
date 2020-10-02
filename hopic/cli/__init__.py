@@ -616,6 +616,16 @@ def process_prepare_source_tree(
         pkgs = utils.installed_pkgs()
         if pkgs and target_ref:
             notes_ref = f"refs/notes/hopic/{target_ref}"
+            env = {
+                    'GIT_AUTHOR_NAME': author.name,
+                    'GIT_AUTHOR_EMAIL': author.email,
+                    'GIT_COMMITTER_NAME': committer.name,
+                    'GIT_COMMITTER_EMAIL': committer.email,
+                }
+            if 'author_date' in commit_params:
+                env['GIT_AUTHOR_DATE'] = commit_params['author_date']
+            if 'commit_date' in commit_params:
+                env['GIT_COMMITTER_DATE'] = commit_params['commit_date']
             repo.git.notes(
                     'add', submit_commit.hexsha,
                     '--message=' + dedent("""\
@@ -630,12 +640,7 @@ def process_prepare_source_tree(
                         version=metadata.version(PACKAGE),
                         python_version=platform.python_version(),
                     ),
-                    ref=notes_ref, env={
-                        'GIT_AUTHOR_NAME': author.name,
-                        'GIT_AUTHOR_EMAIL': author.email,
-                        'GIT_COMMITTER_NAME': committer.name,
-                        'GIT_COMMITTER_EMAIL': committer.email,
-                    })
+                    ref=notes_ref, env=env)
             notes_ref = f"{repo.commit(notes_ref)}:refs/notes/hopic/{target_ref}"
 
         autosquash_commits = [
