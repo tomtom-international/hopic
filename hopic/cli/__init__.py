@@ -79,6 +79,7 @@ import subprocess
 import sys
 import tempfile
 from textwrap import dedent
+from yaml.error import YAMLError
 
 from .main import main
 
@@ -362,7 +363,7 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean, ignore_initial_s
             with git.Repo(workspace) as repo:
                 clean_repo(repo, ctx.obj.config['clean'])
         git_cfg = ctx.obj.config['scm']['git']
-    except (click.BadParameter, KeyError, TypeError, OSError, IOError):
+    except (click.BadParameter, KeyError, TypeError, OSError, IOError, YAMLError):
         return
 
     if 'worktrees' in git_cfg:
@@ -490,7 +491,7 @@ def process_prepare_source_tree(
             config_file = determine_config_file_name(ctx)
             ctx.obj.config = read_config(config_file, ctx.obj.volume_vars)
             ctx.obj.volume_vars['CFGDIR'] = ctx.obj.config_dir = os.path.dirname(config_file)
-        except (click.BadParameter, KeyError, TypeError, OSError, IOError):
+        except (click.BadParameter, KeyError, TypeError, OSError, IOError, YAMLError):
             pass
 
         # Ensure any required extensions are available
