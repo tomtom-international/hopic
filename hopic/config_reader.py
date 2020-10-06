@@ -402,6 +402,9 @@ def read(config, volume_vars):
     if cfg is None:
         cfg = OrderedDict()
 
+    if 'config' in cfg:
+        cfg = cfg['config']
+
     cfg['volumes'] = expand_docker_volume_spec(config_dir, volume_vars, cfg.get('volumes', ()))
     cfg['version'] = read_version_info(config, cfg.get('version', OrderedDict()))
 
