@@ -15,6 +15,8 @@
 from . import hopic_cli
 
 from click.testing import CliRunner
+from textwrap import dedent
+
 import git
 import os
 import pytest
@@ -266,3 +268,25 @@ clean:
         clean_tilde_out = out.splitlines()[1]
         assert clean_home_out == home_path
         assert clean_tilde_out == home_path
+
+
+def test_handle_syntax_error_in_optional_hopic_file(capfd, tmp_path):
+    toprepo = tmp_path / 'repo'
+    with git.Repo.init(str(toprepo), expand_vars=False) as repo:
+        with (toprepo / 'hopic-ci-config.yaml').open('w') as f:
+            f.write(dedent('''
+                phases:
+                  build:
+                    test:
+                      - image:
+                        some-image-with-an-entrypoint:0.0.42
+                      - "-o subrepo/dummy.txt""
+                '''))
+        repo.index.add(('hopic-ci-config.yaml',))
+        repo.index.commit(message='Commit incorrect hopic file', **_commitargs)
+
+    # checkout-source-tree should be successful
+    result = run(
+            ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'),
+        )
+    assert result.exit_code == 0
