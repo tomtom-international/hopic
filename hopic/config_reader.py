@@ -106,6 +106,16 @@ class ConfigurationError(ClickException):
             return "configuration error: %s" % (self.message,)
 
 
+class TemplateNotFoundError(ConfigurationError):
+    def __init__(self, name, props):
+        self.name = name
+        self.props = props
+        super().__init__(self.format_message())
+
+    def format_message(self):
+        return f"No YAML template named '{self.name}' available (props={self.props})"
+
+
 class OrderedLoader(yaml.SafeLoader):
     pass
 
@@ -232,12 +242,8 @@ def load_yaml_template(volume_vars, extension_installer, loader, node):
         if ep.name == name:
             break
     else:
-        return (
-                OrderedDict((
-                    ('description', f"No YAML template named '{name}' available (props={props})"),
-                    ('sh'         , ('false',))
-                )),
-            )
+        raise TemplateNotFoundError(name=name, props=props)
+
     cfg = ep.load()(volume_vars, **props)
 
     if isinstance(cfg, str):
@@ -453,15 +459,25 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
     volume_vars['CFGDIR'] = config_dir
 
     with open(config, 'r') as f:
-        install_top_level_extensions(f, config, extension_installer, volume_vars)
+        cfg = install_top_level_extensions(f, config, extension_installer, volume_vars)
         f.seek(0)
-        cfg = yaml.load(f, ordered_config_loader(volume_vars, extension_installer))
+        try:
+            cfg = yaml.load(f, ordered_config_loader(volume_vars, extension_installer))
+        except TemplateNotFoundError as e:
+            log.error(f"{e}")
+            cfg['phases'] = OrderedDict([
+                ("yaml-error", {
+                    f"{e.name}": [
+                        {'sh': ('false',)}
+                    ]
+                })]
+            )
+        else:
+            if cfg is None:
+                cfg = OrderedDict()
 
-    if cfg is None:
-        cfg = OrderedDict()
-
-    if 'config' in cfg:
-        cfg = cfg['config']
+            if 'config' in cfg:
+                cfg = cfg['config']
 
     cfg['volumes'] = expand_docker_volume_spec(config_dir, volume_vars, cfg.get('volumes', ()))
     cfg['version'] = read_version_info(config, cfg.get('version', OrderedDict()))
