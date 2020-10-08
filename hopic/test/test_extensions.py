@@ -15,6 +15,12 @@
 from . import hopic_cli
 
 from click.testing import CliRunner
+
+try:
+    # Python >= 3.8
+    from importlib import metadata
+except ImportError:
+    import importlib_metadata as metadata
 import git
 import json
 import pytest
@@ -22,15 +28,14 @@ import subprocess
 import sys
 from textwrap import dedent
 
-
 _git_time = f"{42 * 365 * 24 * 3600} +0000"
 _author = git.Actor('Bob Tester', 'bob@example.net')
 _commitargs = dict(
-        author_date=_git_time,
-        commit_date=_git_time,
-        author=_author,
-        committer=_author,
-    )
+    author_date=_git_time,
+    commit_date=_git_time,
+    author=_author,
+    committer=_author,
+)
 
 
 def run_with_config(config, *args, env=None):
@@ -60,9 +65,9 @@ def run_with_config(config, *args, env=None):
 
 
 @pytest.mark.parametrize('expected_args', (
-    ('--extra-index-url', 'https://test.pypi.org/simple/', 'hopic>=1.19<2'    ,),
-    ('--index-url'      , 'https://test.pypi.org/simple/', 'commisery>=0.2,<1',),
-    (                                                      'flake8'           ,),  # noqa: E201
+        ('--extra-index-url', 'https://test.pypi.org/simple/', 'hopic>=1.19<2',),
+        ('--index-url', 'https://test.pypi.org/simple/', 'commisery>=0.2,<1',),
+        ('flake8',),  # noqa: E201
 ))
 def test_install_extensions_from_multiple_indices(monkeypatch, expected_args):
     def mock_check_call(args, *popenargs, **kwargs):
@@ -130,3 +135,139 @@ def test_with_single_extra_index(monkeypatch):
         ('install-extensions',))
 
     assert result.exit_code == 0
+
+
+def test_recursive_extension_installation(monkeypatch):
+    extra_index = 'https://test.pypi.org/simple/'
+    pkg = 'pipeline-template'
+    template_pkg = 'template-in-template'
+    expected_pkg_install_order = [pkg, template_pkg]
+    inner_template_called = []
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        if '--user' in args:
+            args.remove('--user')
+        if '--verbose' in args:
+            args.remove('--verbose')
+        del args[4:6]
+
+        assert [*args] == [sys.executable, '-m', 'pip', 'install', '--extra-index-url', extra_index,
+                           expected_pkg_install_order.pop(0)]
+
+    monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+
+    def template_template(volume_vars, **props):
+        inner_template_called.append(True)
+        return dedent("""\
+                        phases:
+                          test:
+                            variant:
+                              - echo 'bob'
+                        """)
+
+    class TestTemplatePackage:
+        def __init__(self):
+            self.name = f'{template_pkg}'
+
+        def load(self):
+            return template_template
+
+    def pipeline_template(volume_vars, **props):
+        return dedent(f"""\
+                        pip:
+                          - with-extra-index: {extra_index}
+                            packages:
+                              - {template_pkg}
+
+                        config: !template {template_pkg}
+                        """)
+
+    class TestPipelinePackage:
+        def __init__(self):
+            self.name = f'{pkg}'
+
+        def load(self):
+            return pipeline_template
+
+    def mock_entry_points():
+        return {
+            'hopic.plugins.yaml': (TestPipelinePackage(), TestTemplatePackage())
+        }
+
+    monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
+
+    result, = run_with_config(
+        dedent(f"""\
+                pip:
+                  - with-extra-index: {extra_index}
+                    packages:
+                      - {pkg}
+
+                config: !template {pkg}
+                """),
+        ('install-extensions',))
+
+    assert result.exit_code == 0
+    assert len(expected_pkg_install_order) == 0
+    assert inner_template_called.pop()
+
+
+def test_recursive_extension_installation_invalid_template_name(monkeypatch, capfd):
+    extra_index = 'https://test.pypi.org/simple/'
+    pkg = 'pipeline-template'
+    template_pkg = 'template-in-template'
+    expected_pkg_install_order = [pkg, template_pkg]
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        if '--user' in args:
+            args.remove('--user')
+        if '--verbose' in args:
+            args.remove('--verbose')
+        del args[4:6]
+
+        assert [*args] == [sys.executable, '-m', 'pip', 'install', '--extra-index-url', extra_index,
+                           expected_pkg_install_order.pop(0)]
+
+    monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+
+    def pipeline_template(volume_vars, **props):
+        return dedent(f"""\
+                        pip:
+                          - with-extra-index: {extra_index}
+                            packages:
+                              - {template_pkg}
+
+                        config: !template {template_pkg}-not-available
+                        """)
+
+    class TestPipelinePackage:
+        def __init__(self):
+            self.name = f'{pkg}'
+
+        def load(self):
+            return pipeline_template
+
+    def mock_entry_points():
+        return {
+            'hopic.plugins.yaml': (TestPipelinePackage(),)
+        }
+
+    monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
+
+    result, = run_with_config(
+        dedent(f"""\
+                pip:
+                  - with-extra-index: {extra_index}
+                    packages:
+                      - {pkg}
+
+                config: !template {pkg}
+                """),
+        ('install-extensions',))
+
+    assert result.exit_code == 0
+    assert len(expected_pkg_install_order) == 0
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+    assert f"No YAML template named '{template_pkg}-not-available' available (props={{}})" in err
