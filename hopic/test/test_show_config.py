@@ -15,7 +15,7 @@
 from . import hopic_cli
 
 from click.testing import CliRunner
-from collections import OrderedDict
+from collections import OrderedDict, Sequence
 import git
 import json
 import os
@@ -354,3 +354,24 @@ def test_devnull_config():
     assert result.exit_code == 0
     output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
     assert output
+
+
+def test_global_config_block():
+    result = run_with_config(dedent('''\
+                                config:
+                                  version:
+                                    bump: no
+
+                                  phases:
+                                    test-phase:
+                                      test-variant:
+                                       - echo 'bob the builder'
+                                    '''),
+                             ('show-config',))
+
+    assert result.exit_code == 0
+    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
+    assert output['version']['bump']['policy'] == 'disabled'
+    assert 'field' not in output['version']['bump']
+    print(output)
+    assert isinstance(output['phases']['test-phase']['test-variant'], Sequence)
