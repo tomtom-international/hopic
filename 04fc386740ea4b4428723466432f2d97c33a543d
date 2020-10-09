@@ -1,0 +1,42 @@
+Committed-by: Hopic 1.21.3.dev92+g8f9c6b8
+
+With Python version: 3.6.12
+
+And with these installed packages:
+appdirs==1.4.4
+cdp-xray==1.1.0
+certifi==2019.11.28
+chardet==3.0.4
+click==7.1.2
+click-log==0.3.2
+commisery==0.3.0
+copyright-checker==0.8.0
+distlib==0.3.1
+ecdsa==0.15
+filelock==3.0.12
+gitdb==4.0.5
+GitPython==3.1.9
+hopic @ git+https://github.com/tomtom-international/hopic.git@8f9c6b88746f41726aa747ae47146423e097fa79
+httplib2==0.17.0
+idna==2.7
+importlib-metadata==1.7.0
+importlib-resources==3.0.0
+oauth2==1.9.0.post1
+packaging==20.4
+pathspec==0.5.9
+pluggy==0.13.1
+py==1.9.0
+pyparsing==2.4.7
+python-dateutil==2.8.1
+PyYAML==3.13
+regex==2020.9.27
+requests==2.19.1
+six==1.15.0
+smmap==3.0.4
+stemming==1.0.1
+tlslite-ng==0.7.5
+toml==0.10.1
+tox==3.20.0
+urllib3==1.23
+virtualenv==20.0.28
+zipp==3.1.0
