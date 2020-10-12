@@ -1327,7 +1327,7 @@ def build(ctx, phase, variant):
                                               '--net=host',
                                               '--tty',
                                               '--cap-add=SYS_PTRACE',
-                                              f"--tmpfs={env['HOME']}:uid={uid},gid={gid}",
+                                              f"--tmpfs={env['HOME']}:exec,uid={uid},gid={gid}",
                                               f"--user={uid}:{gid}",
                                               '--workdir=/code',
                                               ] + [

@@ -255,7 +255,7 @@ def test_embed_variants_script_with_arguments():
 
 
 def test_embed_variants_cmd():
-    cmd = dedent("'echo -e \"%s\"'" % '''test-variant:\n
+    cmd = dedent("'printf \"%s\"'" % '''test-variant:\n
   - Bob the builder''')
 
     result = run_with_config(dedent(f'''\

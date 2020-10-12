@@ -291,7 +291,7 @@ def test_docker_run_arguments(monkeypatch, tmp_path):
             f"--env=SOURCE_DATE_EPOCH={_source_date_epoch}",
             '--env=HOME=/home/sandbox', '--env=_JAVA_OPTIONS=-Duser.home=/home/sandbox',
             f"--user={uid}:{gid}",
-            '--net=host', f"--tmpfs=/home/sandbox:uid={uid},gid={gid}",
+            '--net=host', f"--tmpfs=/home/sandbox:exec,uid={uid},gid={gid}",
             '--volume=/var/run/docker.sock:/var/run/docker.sock',
             f"--group-add={MockDockerSockStat.st_gid}",
             re.compile(r'^--cidfile=.*'),
