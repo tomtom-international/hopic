@@ -787,6 +787,20 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     return this.checkouts[steps.env.NODE_NAME]
   }
 
+  private get_repo_name_and_branch(repo_name, branch = get_branch_name()) {
+    return "${repo_name}/${branch}"
+  }
+
+  public String[] get_additional_ci_lock_names(cmd) {
+    def config = steps.readJSON(text: steps.sh(
+      script: "${cmd} show-config",
+      returnStdout: true,
+    ))
+    return config.getOrDefault('ci-locks', []).collect { lock ->
+      get_repo_name_and_branch(lock['repo-name'], lock['branch'])
+    }
+  }
+
   /**
    * @return name of target branch that we're building.
    */
@@ -800,8 +814,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   public String get_lock_name() {
     def repo_url  = steps.scm.userRemoteConfigs[0].url
     def repo_name = repo_url.tokenize('/')[-2..-1].join('/') - ~/\.git$/ // "${project}/${repo}"
-    def branch    = get_branch_name()
-    "${repo_name}/${branch}"
+    get_repo_name_and_branch(repo_name)
   }
 
   /**
@@ -935,7 +948,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     def clean = buildParams.getOrDefault('clean', false)
     def default_node = buildParams.getOrDefault('default_node_expr', this.default_node_expr)
     steps.ansiColor('xterm') {
-      def (phases, is_publishable_change, submit_meta) = steps.node(default_node) {
+      def (phases, is_publishable_change, submit_meta, additional_locks) = steps.node(default_node) {
         return this.with_hopic { cmd ->
           def workspace = steps.pwd()
 
@@ -995,7 +1008,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
             this.change.notify_build_result(get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, 'STARTING')
           }
 
-          return [phases, is_publishable, submit_meta]
+          return [phases, is_publishable, submit_meta, is_publishable ? get_additional_ci_lock_names(cmd) : []]
         }
       }
 
@@ -1004,7 +1017,19 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
       if (is_publishable_change) {
         lock_if_necessary = { closure ->
-          return steps.lock(get_lock_name()) {
+          def lock_closure = { locked_closure ->
+              if (additional_locks.size()) {
+                steps.lock(resource: get_lock_name(), extra: additional_locks.collect{['resource': it]}) {
+                  locked_closure()
+                }
+              } else {
+                steps.lock(get_lock_name()) {
+                  locked_closure()
+                }
+              }
+            }
+
+          return lock_closure {
             return closure()
           }
         }
