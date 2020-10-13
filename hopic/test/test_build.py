@@ -17,6 +17,8 @@ from .markers import (
         docker,
     )
 from .. import credentials
+from .. import config_reader
+from ..cli import extensions
 
 from click.testing import CliRunner
 from textwrap import dedent
@@ -730,3 +732,65 @@ def test_with_credentials_keyring_variable_names(monkeypatch, capfd):
     assert out.splitlines()[0] == f'{username} {password}'
     assert out.splitlines()[1] == f'{username} {password}'
     assert result.exit_code == 0
+
+
+def test_dry_run_build(capfd, monkeypatch):
+    template_build_command = ['build b from template']
+
+    expected = [
+        ['[dry-run] would execute:'],
+        ['generate doc/build/html/output.txt'],
+        template_build_command,
+        ['docker run', './test/dir:/tmp', 'test-image:42.42 invalid command a'],
+        ['invalid command b'],
+    ]
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        assert False
+    monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+
+    def mock_load_template(volume_vars, loader, node):
+        return [{
+            'sh': template_build_command
+        }]
+    monkeypatch.setattr(config_reader, 'load_yaml_template', mock_load_template)
+
+    def mock_install_extensions(ctx):
+        pass
+    mock_install_extensions.callback = lambda: 0
+    monkeypatch.setattr(extensions, 'install_extensions', mock_install_extensions)
+
+    result = run_with_config(dedent('''\
+pip:
+  - with-extra-index:
+      - 'https://test.pypi.org/simple/'
+    packages:
+      - test_template>=42.42
+
+phases:
+  build:
+    a:
+      - worktrees:
+          doc/build/html:
+            commit-message: "Update documentation"
+
+      - generate doc/build/html/output.txt
+    b: !template 'test_template'
+  test:
+    a:
+      - image: test-image:42.42
+        volumes:
+          - ./test/dir:/tmp
+      - invalid command a
+    b:
+      - invalid command b
+'''), ('build', '--dry-run'))
+    assert result.exit_code == 0
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    for line in err.splitlines():
+        for expected_string in expected.pop(0):
+            assert expected_string in line
+    assert not expected

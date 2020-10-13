@@ -21,8 +21,13 @@ log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
 
 
-def echo_cmd(fun, cmd, *args, **kwargs):
-    log.info('Executing: %s', click.style(' '.join(shlex.quote(word) for word in cmd), fg='yellow'))
+def no_exec(*args, **kwargs):
+    return 0
+
+
+def echo_cmd(fun, cmd, *args, dry_run=False, **kwargs):
+    log.info('%s%s', '' if dry_run else 'Executing: ',
+             click.style(' '.join(shlex.quote(word) for word in cmd), fg='yellow'))
 
     # Set our locale for machine readability with UTF-8
     kwargs = kwargs.copy()
@@ -37,9 +42,16 @@ def echo_cmd(fun, cmd, *args, **kwargs):
     kwargs['env'] = env
 
     try:
-        output = fun(cmd, *args, **kwargs)
+        exec_fun = no_exec if dry_run else fun
+        output = exec_fun(cmd, *args, **kwargs)
         return (output.decode('UTF-8') if isinstance(output, bytes) else output)
     except Exception as e:
         if hasattr(e, 'child_traceback'):
             log.exception('Child traceback: %s', e.child_traceback)
         raise
+
+
+@click.pass_context
+def echo_cmd_click(ctx, fun, cmd, *args, **kwargs):
+    dry_run = True if hasattr(ctx.obj, 'dry_run') and ctx.obj.dry_run else False
+    echo_cmd(fun, cmd, *args, **kwargs, dry_run=dry_run)

@@ -33,7 +33,7 @@ from ..config_reader import (
         read as read_config,
     )
 from .. import credentials
-from ..execution import echo_cmd
+from ..execution import echo_cmd_click as echo_cmd
 from ..git_time import (
         determine_git_version,
         determine_version,
@@ -79,6 +79,7 @@ import subprocess
 import sys
 import tempfile
 from textwrap import dedent
+from yaml.error import YAMLError
 
 from .main import main
 
@@ -362,7 +363,7 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean, ignore_initial_s
             with git.Repo(workspace) as repo:
                 clean_repo(repo, ctx.obj.config['clean'])
         git_cfg = ctx.obj.config['scm']['git']
-    except (click.BadParameter, KeyError, TypeError, OSError, IOError):
+    except (click.BadParameter, KeyError, TypeError, OSError, IOError, YAMLError):
         return
 
     if 'worktrees' in git_cfg:
@@ -490,7 +491,7 @@ def process_prepare_source_tree(
             config_file = determine_config_file_name(ctx)
             ctx.obj.config = read_config(config_file, ctx.obj.volume_vars)
             ctx.obj.volume_vars['CFGDIR'] = ctx.obj.config_dir = os.path.dirname(config_file)
-        except (click.BadParameter, KeyError, TypeError, OSError, IOError):
+        except (click.BadParameter, KeyError, TypeError, OSError, IOError, YAMLError):
             pass
 
         # Ensure any required extensions are available
@@ -1050,7 +1051,6 @@ def getinfo(ctx, phase, variant):
     If a phase or variant filter is specified the name of that will not be present in the output.
     Otherwise this is a nested dictionary of phases and variants.
     """
-
     info = OrderedDict()
     for phasename, curphase in ctx.obj.config['phases'].items():
         if phase and phasename not in phase:
@@ -1087,8 +1087,9 @@ def getinfo(ctx, phase, variant):
 @main.command()
 @click.option('--phase'  , metavar='<phase>'  , multiple=True, help='''Build phase to execute''', autocompletion=autocomplete.phase_from_config)
 @click.option('--variant', metavar='<variant>', multiple=True, help='''Configuration variant to build''', autocompletion=autocomplete.variant_from_config)
+@click.option('--dry-run', '-n',  is_flag=True, default=False, help='''Print commands from the configured phases and variants, but do not execute them''')
 @click.pass_context
-def build(ctx, phase, variant):
+def build(ctx, phase, variant, dry_run):
     """
     Build for the specified commit.
 
@@ -1099,6 +1100,9 @@ def build(ctx, phase, variant):
     # Ensure any required extensions are available
     extensions.install_extensions.callback()
 
+    ctx.obj.dry_run = dry_run
+    if dry_run:
+        log.info('[dry-run] would execute:')
     cfg = ctx.obj.config
 
     submit_ref = None
@@ -1204,18 +1208,19 @@ def build(ctx, phase, variant):
                         except (KeyError, TypeError):
                             pass
 
-                    try:
-                        worktrees = cmd['worktrees']
+                    if not dry_run:
+                        try:
+                            worktrees = cmd['worktrees']
 
-                        # Force clean builds when we don't know how to discover changed files
-                        for subdir, worktree in worktrees.items():
-                            if 'changed-files' not in worktree:
-                                with git.Repo(os.path.join(ctx.obj.workspace, subdir)) as repo:
-                                    clean_output = repo.git.clean('-xd', subdir, force=True)
-                                    if clean_output:
-                                        log.info('%s', clean_output)
-                    except KeyError:
-                        pass
+                            # Force clean builds when we don't know how to discover changed files
+                            for subdir, worktree in worktrees.items():
+                                if 'changed-files' not in worktree:
+                                    with git.Repo(os.path.join(ctx.obj.workspace, subdir)) as repo:
+                                        clean_output = repo.git.clean('-xd', subdir, force=True)
+                                        if clean_output:
+                                            log.info('%s', clean_output)
+                        except KeyError:
+                            pass
 
                     try:
                         foreach = cmd['foreach']
