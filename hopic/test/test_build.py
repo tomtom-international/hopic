@@ -749,7 +749,7 @@ def test_dry_run_build(capfd, monkeypatch):
         assert False
     monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
 
-    def mock_load_template(volume_vars, loader, node):
+    def mock_load_template(*args, **kwargs):
         return [{
             'sh': template_build_command
         }]
