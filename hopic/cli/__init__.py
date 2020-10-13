@@ -33,7 +33,7 @@ from ..config_reader import (
         read as read_config,
     )
 from .. import credentials
-from ..execution import echo_cmd
+from ..execution import echo_cmd_click as echo_cmd
 from ..git_time import (
         determine_git_version,
         determine_version,
@@ -1051,7 +1051,6 @@ def getinfo(ctx, phase, variant):
     If a phase or variant filter is specified the name of that will not be present in the output.
     Otherwise this is a nested dictionary of phases and variants.
     """
-
     info = OrderedDict()
     for phasename, curphase in ctx.obj.config['phases'].items():
         if phase and phasename not in phase:
@@ -1088,8 +1087,9 @@ def getinfo(ctx, phase, variant):
 @main.command()
 @click.option('--phase'  , metavar='<phase>'  , multiple=True, help='''Build phase to execute''', autocompletion=autocomplete.phase_from_config)
 @click.option('--variant', metavar='<variant>', multiple=True, help='''Configuration variant to build''', autocompletion=autocomplete.variant_from_config)
+@click.option('--dry-run', '-n',  is_flag=True, default=False, help='''Print commands from the configured phases and variants, but do not execute them''')
 @click.pass_context
-def build(ctx, phase, variant):
+def build(ctx, phase, variant, dry_run):
     """
     Build for the specified commit.
 
@@ -1100,6 +1100,9 @@ def build(ctx, phase, variant):
     # Ensure any required extensions are available
     extensions.install_extensions.callback()
 
+    ctx.obj.dry_run = dry_run
+    if dry_run:
+        log.info('[dry-run] would execute:')
     cfg = ctx.obj.config
 
     submit_ref = None
@@ -1205,18 +1208,19 @@ def build(ctx, phase, variant):
                         except (KeyError, TypeError):
                             pass
 
-                    try:
-                        worktrees = cmd['worktrees']
+                    if not dry_run:
+                        try:
+                            worktrees = cmd['worktrees']
 
-                        # Force clean builds when we don't know how to discover changed files
-                        for subdir, worktree in worktrees.items():
-                            if 'changed-files' not in worktree:
-                                with git.Repo(os.path.join(ctx.obj.workspace, subdir)) as repo:
-                                    clean_output = repo.git.clean('-xd', subdir, force=True)
-                                    if clean_output:
-                                        log.info('%s', clean_output)
-                    except KeyError:
-                        pass
+                            # Force clean builds when we don't know how to discover changed files
+                            for subdir, worktree in worktrees.items():
+                                if 'changed-files' not in worktree:
+                                    with git.Repo(os.path.join(ctx.obj.workspace, subdir)) as repo:
+                                        clean_output = repo.git.clean('-xd', subdir, force=True)
+                                        if clean_output:
+                                            log.info('%s', clean_output)
+                        except KeyError:
+                            pass
 
                     try:
                         foreach = cmd['foreach']
