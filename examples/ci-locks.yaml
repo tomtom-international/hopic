@@ -1,0 +1,11 @@
+ci-locks:
+  - branch: "master"
+    repo-name: "PIPE/ci-lock"
+
+phases:
+  phase-1:
+    variant-1:
+      - sh -c "mkdir -p /tmp/ci-lock-dir && cd /tmp/ci-lock-dir && git init"
+      - touch new_file.txt
+      - sh -c "git add new_file.txt && git commit -m 'add new_file'"
+      - rm -r /tmp/ci-lock-dir
