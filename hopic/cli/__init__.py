@@ -22,6 +22,7 @@ from . import (
 from .utils import (
         determine_config_file_name,
         is_publish_branch,
+        get_package_version,
     )
 from .. import binary_normalize
 from commisery.commit import parse_commit_message
@@ -64,11 +65,6 @@ from io import (
 import json
 import logging
 import os
-try:
-    # Python >= 3.8
-    from importlib import metadata
-except ImportError:
-    import importlib_metadata as metadata
 import platform
 import re
 import signal
@@ -635,7 +631,7 @@ def process_prepare_source_tree(
                         {pkgs}
                         """).format(
                             pkgs=pkgs,
-                            version=metadata.version(PACKAGE),
+                            version=get_package_version(PACKAGE),
                             python_version=platform.python_version(),
                         ),
                         ref=notes_ref, env=env)
@@ -696,7 +692,7 @@ def process_prepare_source_tree(
                 )
             repo.create_tag(
                     tagname, submit_commit, force=True,
-                    message=f"Tagged-by: Hopic {metadata.distribution(PACKAGE).version}",
+                    message=f"Tagged-by: Hopic {get_package_version(PACKAGE)}",
                     env={
                         'GIT_COMMITTER_NAME': committer.name,
                         'GIT_COMMITTER_EMAIL': committer.email,
@@ -876,7 +872,7 @@ def merge_change_request(
         approvers = get_valid_approvers(repo, approved_by, source, source_commit)
         if approvers:
             msg += '\n'.join(f"Acked-by: {approver}" for approver in approvers) + u'\n'
-        msg += u'Merged-by: Hopic {pkg.version}\n'.format(pkg=metadata.distribution(PACKAGE))
+        msg += f'Merged-by: Hopic {get_package_version(PACKAGE)}\n'
         return {
                 'message': msg,
                 'parent_commits': (
@@ -990,7 +986,7 @@ def apply_modality_change(
         commit_message = dedent(f"""\
             {commit_message.rstrip()}
 
-            Merged-by: Hopic {metadata.distribution(PACKAGE).version}
+            Merged-by: Hopic {get_package_version(PACKAGE)}
             """)
 
         commit_params = {'message': commit_message}
@@ -1024,7 +1020,7 @@ def bump_version(ctx):
             'bump_message': dedent(f"""\
                     chore: release new version
 
-                    Bumped-by: Hopic {metadata.distribution(PACKAGE).version}
+                    Bumped-by: Hopic {get_package_version(PACKAGE)}
                     """),
             'base_commit': tag.commit,
             'bump-override': {
