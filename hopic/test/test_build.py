@@ -865,3 +865,50 @@ def test_config_recursive_template_build(monkeypatch):
 
     assert result.exit_code == 0
     assert expected_check_calls == []
+
+
+def test_build_list_yaml_template(monkeypatch):
+    extra_index = 'https://test.pypi.org/simple/'
+    pkg = 'variant-template'
+    expected_check_calls = [['pip', 'install', pkg], ['echo', 'bob the builder'], ['echo', 'second command']]
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        assert all(elem in args for elem in expected_check_calls.pop(0))
+
+    monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+
+    def pipeline_template(volume_vars, **props):
+        return dedent("""\
+                        - echo 'bob the builder'
+                        - echo 'second command'
+                        """)
+
+    class TestPipelinePackage:
+        def __init__(self):
+            self.name = f'{pkg}'
+
+        def load(self):
+            return pipeline_template
+
+    def mock_entry_points():
+        return {
+            'hopic.plugins.yaml': (TestPipelinePackage(),)
+        }
+
+    monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
+
+    result = run_with_config(
+        dedent(f"""\
+                pip:
+                  - with-extra-index: {extra_index}
+                    packages:
+                      - {pkg}
+
+                phases:
+                  phase-1:
+                    variant-1: !template {pkg}
+                """),
+        ('build',))
+
+    assert result.exit_code == 0
+    assert expected_check_calls == []
