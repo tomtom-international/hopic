@@ -410,6 +410,9 @@ def read_version_info(config, version_info):
 
 
 def parse_pip_config(config_obj, config):
+    if not isinstance(config_obj, Mapping):
+        return ()
+
     pip = config_obj.setdefault('pip', ()) if config_obj else ()
     if not isinstance(pip, Sequence):
         raise ConfigurationError(f"`pip` doesn't contain a sequence but a {type(pip).__name__}", file=config)
