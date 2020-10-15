@@ -250,6 +250,8 @@ def load_yaml_template(volume_vars, extension_installer, loader, node):
         # Parse provided yaml without template substitution
         install_top_level_extensions(cfg, name, extension_installer, volume_vars)
         cfg = yaml.load(cfg, ordered_config_loader(volume_vars, extension_installer))
+        if 'config' in cfg:
+            cfg = cfg['config']
 
     return cfg
 
