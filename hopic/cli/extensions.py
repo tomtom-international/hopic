@@ -19,18 +19,14 @@ import subprocess
 import sys
 import tempfile
 
-try:
-    # Python >= 3.8
-    from importlib import metadata
-except ImportError:
-    import importlib_metadata as metadata
-
 import click
 
 from ..config_reader import read as read_config
 from ..execution import echo_cmd_click as echo_cmd
-from .utils import determine_config_file_name
-
+from .utils import (
+        determine_config_file_name,
+        get_package_version,
+        )
 
 PACKAGE : str = __package__.split('.')[0]
 
@@ -52,7 +48,7 @@ def install_extensions(ctx):
         # Prevent changing the Hopic version
         constraints_file = os.path.join(td, 'constraints.txt')
         with open(constraints_file, 'w', encoding='UTF-8') as cf:
-            cf.write(f"{PACKAGE}=={metadata.distribution(PACKAGE).version}\n")
+            cf.write(f"{PACKAGE}=={get_package_version(PACKAGE)}\n")
 
         base_cmd = [
                 sys.executable, '-m', 'pip', 'install',

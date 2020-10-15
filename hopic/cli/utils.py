@@ -24,6 +24,12 @@ import sys
 import click
 import git
 
+try:
+    # Python >= 3.8
+    from importlib import metadata
+except ImportError:
+    import importlib_metadata as metadata
+
 
 def is_publish_branch(ctx):
     """
@@ -68,3 +74,10 @@ def installed_pkgs():
         return subprocess.check_output((sys.executable, '-m', 'pip', 'freeze')).decode('UTF-8')
     except subprocess.CalledProcessError:
         pass
+
+
+def get_package_version(package):
+    """
+    Consults Python's `importlib.metadata` or `importlib_metadata` package and returns the target package version.
+    """
+    return metadata.version(package)
