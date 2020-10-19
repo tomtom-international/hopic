@@ -106,6 +106,16 @@ class ConfigurationError(ClickException):
             return "configuration error: %s" % (self.message,)
 
 
+class TemplateNotFoundError(ConfigurationError):
+    def __init__(self, name, props):
+        self.name = name
+        self.props = props
+        super().__init__(self.format_message())
+
+    def format_message(self):
+        return f"No YAML template named '{self.name}' available (props={self.props})"
+
+
 class OrderedLoader(yaml.SafeLoader):
     pass
 
@@ -220,7 +230,7 @@ class JSONEncoder(json.JSONEncoder):
         return super().default(o)
 
 
-def load_yaml_template(volume_vars, loader, node):
+def load_yaml_template(volume_vars, extension_installer, loader, node):
     if node.id == 'scalar':
         props = {}
         name = loader.construct_scalar(node)
@@ -232,21 +242,29 @@ def load_yaml_template(volume_vars, loader, node):
         if ep.name == name:
             break
     else:
-        return (
-                OrderedDict((
-                    ('description', f"No YAML template named '{name}' available (props={props})"),
-                    ('sh'         , ('false',))
-                )),
-            )
+        raise TemplateNotFoundError(name=name, props=props)
 
-    return ep.load()(volume_vars, **props)
+    cfg = ep.load()(volume_vars, **props)
+
+    if isinstance(cfg, str):
+        # Parse provided yaml without template substitution
+        install_top_level_extensions(cfg, name, extension_installer, volume_vars)
+        cfg = yaml.load(cfg, ordered_config_loader(volume_vars, extension_installer))
+        if 'config' in cfg:
+            cfg = cfg['config']
+
+    return cfg
 
 
-def ordered_config_loader(volume_vars):
+def ordered_config_loader(volume_vars, extension_installer, template_parsing=True):
     def pass_volume_vars(f):
         return lambda *args: f(volume_vars, *args)
 
+    def pass_volume_vars_and_extension_installer(f):
+        return lambda *args: f(volume_vars, extension_installer, *args)
+
     OrderedConfigLoader = type('OrderedConfigLoader', (OrderedLoader,), {})
+
     OrderedConfigLoader.add_constructor(
         '!image-from-ivy-manifest',
         pass_volume_vars(IvyManifestImage)
@@ -255,9 +273,11 @@ def ordered_config_loader(volume_vars):
         '!embed',
         pass_volume_vars(load_embedded_command)
     )
+
     OrderedConfigLoader.add_constructor(
         '!template',
-        pass_volume_vars(load_yaml_template)
+        pass_volume_vars_and_extension_installer(load_yaml_template) if template_parsing else pass_volume_vars(
+            lambda *args, **kwargs: "")
     )
 
     return OrderedConfigLoader
@@ -379,18 +399,80 @@ def read_version_info(config, version_info):
     return version_info
 
 
-def read(config, volume_vars):
+def parse_pip_config(config_obj, config):
+    if not isinstance(config_obj, Mapping):
+        return ()
+
+    pip = config_obj.setdefault('pip', ()) if config_obj else ()
+    if not isinstance(pip, Sequence):
+        raise ConfigurationError(f"`pip` doesn't contain a sequence but a {type(pip).__name__}", file=config)
+    for idx, spec in enumerate(pip):
+        if isinstance(spec, str):
+            pip[idx] = spec = OrderedDict((('packages', (spec,)),))
+        if not isinstance(spec, Mapping):
+            raise ConfigurationError(f"`pip[{idx}]` doesn't contain a mapping but a {type(spec).__name__}", file=config)
+        if 'packages' not in spec:
+            raise ConfigurationError(f"`pip[{idx}].packages` doesn't exist, so pip[{idx}] is useless", file=config)
+        packages = spec['packages']
+        if not (isinstance(packages, Sequence) and not isinstance(packages, str)):
+            raise ConfigurationError(
+                f"`pip[{idx}].packages` is not a sequence of package specification strings but a {type(packages).__name__}",
+                file=config)
+        if not packages:
+            raise ConfigurationError(f"`pip[{idx}].packages` is empty, so pip[{idx}] is useless", file=config)
+        from_idx = spec.get('from-index')
+        if from_idx is not None and not isinstance(from_idx, str):
+            raise ConfigurationError(
+                f"`pip[{idx}].from-index` doesn't contain an URL string but a {type(from_idx).__name__}", file=config)
+        with_extra_index = spec.setdefault('with-extra-index', ())
+        if isinstance(with_extra_index, str):
+            spec['with-extra-index'] = with_extra_index = (with_extra_index,)
+        if not isinstance(with_extra_index, Sequence):
+            raise ConfigurationError(
+                f"`pip[{idx}].with-extra-index` doesn't contain a sequence of URL strings but a {type(with_extra_index).__name__}",
+                file=config)
+        for eidx, extra in enumerate(with_extra_index):
+            if not isinstance(extra, str):
+                raise ConfigurationError(
+                    f"`pip[{idx}].with-extra-index[{eidx}]` doesn't contain an URL string but a {type(extra).__name__}",
+                    file=config)
+
+    return pip
+
+
+def install_top_level_extensions(yaml_config, config_path, extension_installer, volume_vars):
+    no_template_cfg = yaml.load(yaml_config, ordered_config_loader(volume_vars, extension_installer, False))
+    pip_cfg = parse_pip_config(no_template_cfg, config_path)
+    extension_installer(pip_cfg)
+    return no_template_cfg
+
+
+def read(config, volume_vars, extension_installer=lambda *args: None):
     config_dir = os.path.dirname(config)
 
     volume_vars = volume_vars.copy()
     volume_vars['CFGDIR'] = config_dir
-    OrderedConfigLoader = ordered_config_loader(volume_vars)
 
     with open(config, 'r') as f:
-        cfg = yaml.load(f, OrderedConfigLoader)
+        cfg = install_top_level_extensions(f, config, extension_installer, volume_vars)
+        f.seek(0)
+        try:
+            cfg = yaml.load(f, ordered_config_loader(volume_vars, extension_installer))
+        except TemplateNotFoundError as e:
+            log.error(f"{e}")
+            cfg['phases'] = OrderedDict([
+                ("yaml-error", {
+                    f"{e.name}": [
+                        {'sh': ('false',)}
+                    ]
+                })]
+            )
+        else:
+            if cfg is None:
+                cfg = OrderedDict()
 
-    if cfg is None:
-        cfg = OrderedDict()
+            if 'config' in cfg:
+                cfg = cfg['config']
 
     cfg['volumes'] = expand_docker_volume_spec(config_dir, volume_vars, cfg.get('volumes', ()))
     cfg['version'] = read_version_info(config, cfg.get('version', OrderedDict()))
@@ -431,36 +513,6 @@ def read(config, volume_vars):
                     variant[i] = cmd = OrderedDict((('sh', cmd),))
                 if isinstance(cmd, Sequence) and not isinstance(cmd, (str, bytes)):
                     variant[i:i + 1] = cmd
-
-    pip = cfg.setdefault('pip', ())
-    if not isinstance(pip, Sequence):
-        raise ConfigurationError(f"`pip` doesn't contain a sequence but a {type(pip).__name__}", file=config)
-    for idx, spec in enumerate(pip):
-        if isinstance(spec, str):
-            pip[idx] = spec = OrderedDict((('packages', (spec,)),))
-        if not isinstance(spec, Mapping):
-            raise ConfigurationError(f"`pip[{idx}]` doesn't contain a mapping but a {type(spec).__name__}", file=config)
-        if 'packages' not in spec:
-            raise ConfigurationError(f"`pip[{idx}].packages` doesn't exist, so pip[{idx}] is useless", file=config)
-        packages = spec['packages']
-        if not (isinstance(packages, Sequence) and not isinstance(packages, str)):
-            raise ConfigurationError(f"`pip[{idx}].packages` is not a sequence of package specification strings but a {type(packages).__name__}", file=config)
-        if not packages:
-            raise ConfigurationError(f"`pip[{idx}].packages` is empty, so pip[{idx}] is useless", file=config)
-        from_idx = spec.get('from-index')
-        if from_idx is not None and not isinstance(from_idx, str):
-            raise ConfigurationError(f"`pip[{idx}].from-index` doesn't contain an URL string but a {type(from_idx).__name__}", file=config)
-        with_extra_index = spec.setdefault('with-extra-index', ())
-        if isinstance(with_extra_index, str):
-            spec['with-extra-index'] = with_extra_index = (with_extra_index,)
-        if not isinstance(with_extra_index, Sequence):
-            raise ConfigurationError(
-                    f"`pip[{idx}].with-extra-index` doesn't contain a sequence of URL strings but a {type(with_extra_index).__name__}", file=config)
-        for eidx, extra in enumerate(with_extra_index):
-            if not isinstance(extra, str):
-                raise ConfigurationError(
-                        f"`pip[{idx}].with-extra-index[{eidx}]` doesn't contain an URL string but a {type(extra).__name__}",
-                        file=config)
 
     # Convert multiple different syntaxes into a single one
     for phase in cfg['phases'].values():

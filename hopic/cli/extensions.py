@@ -34,11 +34,11 @@ PACKAGE : str = __package__.split('.')[0]
 @click.command()
 @click.pass_context
 def install_extensions(ctx):
-    """
-    Install all extensions required during build execution.
-    """
+    # Read the config file and install all templates available
+    ctx.obj.config = read_config(determine_config_file_name(ctx), ctx.obj.volume_vars, install_extensions_with_config)
 
-    pip_cfg = ctx.obj.config['pip']
+
+def install_extensions_with_config(pip_cfg):
     if not pip_cfg:
         return
 
@@ -77,6 +77,3 @@ def install_extensions(ctx):
 
     # Ensure newly installed packages can be imported
     importlib.invalidate_caches()
-
-    # Re-read the config file with (hopefully) all templates available now
-    ctx.obj.config = read_config(determine_config_file_name(ctx), ctx.obj.volume_vars)

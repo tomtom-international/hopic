@@ -1,0 +1,7 @@
+pip:
+  - with-extra-index:
+      - https://test.pypi.org/simple
+    packages:
+      - hopic-templates-test[full-pipeline-template]>=0.2.3,<1
+        
+config: !template "full-pipeline-template"

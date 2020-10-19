@@ -109,6 +109,22 @@ Within the list of commands ``$HOME`` and ``~`` will be expanded to the home dir
 .. literalinclude:: ../../examples/clean.yaml
    :language: yaml
 
+Config
+------
+
+.. option:: config
+
+Some features in Hopic are using YAML's `_explicit`_ tags functionality to support custom defined YAML parsing behavior.
+Features that use this functionality can be recognized by ``<dict_key>: !<custom_function>``.
+Since explicit tags need to be specified as a value of a dictonary, the ``config`` is introduced to specify explicit tags on the top level.
+``config`` transparently adds a top level dictionary which allows making a global explicit tag.
+
+.. literalinclude:: ../../examples/config.yaml
+   :language: yaml
+
+.. _explicit: https://yaml.org/spec/1.1/#id858600
+
+
 Credentials
 -----------
 
