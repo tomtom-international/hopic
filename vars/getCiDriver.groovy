@@ -1155,10 +1155,11 @@ exec ssh -i '''
         }
       } catch(Exception e) {
         if (this.change != null) {
+          def buildStatus = (e.getClass() == org.jenkinsci.plugins.workflow.steps.FlowInterruptedException) ? 'ABORTED' : 'FAILURE'
           this.change.notify_build_result(
-              get_job_name(), steps.env.CHANGE_BRANCH, this.source_commit, e.properties.getOrDefault('result', 'FAILURE') as String)
+              get_job_name(), steps.env.CHANGE_BRANCH, this.source_commit, buildStatus)
           this.change.notify_build_result(
-              get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, e.properties.getOrDefault('result', 'FAILURE') as String)
+              get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, buildStatus)
         }
         throw e
       }
