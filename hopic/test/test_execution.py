@@ -13,6 +13,8 @@
 # limitations under the License.
 
 from .. import execution
+import hopic
+import click
 import copy
 import shlex
 import subprocess
@@ -56,3 +58,14 @@ def test_echo_cmd_dry_run(capfd, monkeypatch):
     sys.stdout.write(out)
     sys.stderr.write(err)
     assert ' '.join(expected_cmd) + ' ' + ' '.join([shlex.quote(x) for x in expected_cmd_args]) in err
+
+
+def test_echo_cmd_return_value():
+    def mock_executor(arg, *args, **kwargs):
+        assert arg == 'command'
+        return args[0]
+
+    ctx = click.Context(hopic.cli.getinfo)
+    with ctx:
+        assert execution.echo_cmd_click(mock_executor, 'command', '42') == '42'
+        assert execution.echo_cmd_click(mock_executor, 'command', b'42') == '42'
