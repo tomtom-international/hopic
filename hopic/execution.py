@@ -44,6 +44,7 @@ def echo_cmd(fun, cmd, *args, dry_run=False, **kwargs):
     try:
         exec_fun = no_exec if dry_run else fun
         output = exec_fun(cmd, *args, **kwargs)
+
         return (output.decode('UTF-8') if isinstance(output, bytes) else output)
     except Exception as e:
         if hasattr(e, 'child_traceback'):
@@ -54,4 +55,4 @@ def echo_cmd(fun, cmd, *args, dry_run=False, **kwargs):
 @click.pass_context
 def echo_cmd_click(ctx, fun, cmd, *args, **kwargs):
     dry_run = True if hasattr(ctx.obj, 'dry_run') and ctx.obj.dry_run else False
-    echo_cmd(fun, cmd, *args, **kwargs, dry_run=dry_run)
+    return echo_cmd(fun, cmd, *args, **kwargs, dry_run=dry_run)
