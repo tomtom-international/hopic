@@ -267,7 +267,3 @@ def test_recursive_extension_installation_invalid_template_name(monkeypatch, cap
 
     assert result.exit_code == 0
     assert len(expected_pkg_install_order) == 0
-    out, err = capfd.readouterr()
-    sys.stdout.write(out)
-    sys.stderr.write(err)
-    assert f"No YAML template named '{template_pkg}-not-available' available (props={{}})" in err
