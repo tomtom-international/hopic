@@ -41,6 +41,7 @@ class ChangeRequest {
         def (commit, subject) = line.split(':', 2)
         if (subject.startsWith('fixup!') || subject.startsWith('squash!')) {
           steps.println("\033[36m[info] not submitting because commit ${commit} is marked with 'fixup!' or 'squash!': ${subject}\033[39m")
+          steps.currentBuild.description = "Not submitting: PR contains fixup! or squash!"
           return true
         }
     }
@@ -192,6 +193,7 @@ class BitbucketPullRequest extends ChangeRequest {
     }
     if (!cur_cr_info.canMerge) {
       steps.println("\033[36m[info] not submitting because the BitBucket merge criteria are not met\033[39m")
+      steps.currentBuild.description = "Not submitting: Bitbucket merge criteria not met"
       if (cur_cr_info.vetoes) {
         steps.println("\033[36m[info] the following merge condition(s) are not met: \033[39m")
         cur_cr_info.vetoes.each { veto ->
@@ -689,6 +691,7 @@ exec ssh -i '''
     def r = steps.currentBuild.buildCauses.any{ cause -> cause._class.contains('ReplayCause') }
     if (r) {
       steps.println("\033[36m[info] not submitting because this build is a replay of another build.\033[39m")
+      steps.currentBuild.description = "Not submitting: this build is a replay"
     }
     return r
   }
@@ -704,6 +707,7 @@ exec ssh -i '''
       this.may_submit_result = this.has_change() && this.get_change().maySubmit(target_commit, source_commit, /* allow_cache =*/ false) && !this.is_build_a_replay()
       if (this.may_submit_result) {
         steps.println("\033[36m[info] submitting the commits since all merge criteria are met\033[39m")
+        steps.currentBuild.description = "Submitting: all merge criteria are met"
       }
     }
     this.may_submit_result = this.may_submit_result && steps.currentBuild.currentResult == 'SUCCESS'

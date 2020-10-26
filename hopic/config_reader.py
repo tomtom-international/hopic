@@ -459,10 +459,10 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
         try:
             cfg = yaml.load(f, ordered_config_loader(volume_vars, extension_installer))
         except TemplateNotFoundError as e:
-            log.error(f"{e}")
             cfg['phases'] = OrderedDict([
                 ("yaml-error", {
                     f"{e.name}": [
+                        {'sh': ('echo', f'{e}')},
                         {'sh': ('false',)}
                     ]
                 })]
