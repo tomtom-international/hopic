@@ -1,7 +1,21 @@
 phases:
+  builld:
+    stash:
+      - stash:
+          includes: stash/stash.txt
+      - mkdir -p stash
+      - sh -c 'echo stashed_file > stash/stash.txt'
+      - ls -l
+      - ls -l stash
+
+    stash-dir:
+    - stash:
+        includes: stashed_dir.txt
+        dir: stash/stashed_dir
+    - mkdir -p stash/stashed_dir
+    - sh -c 'echo stashed_dir > stash/stashed_dir/stashed_dir.txt' 
+
   upload:
-    Linux-x86_64-Release:
-      - run-on-change: only
-        stash:
-          includes: Build/Output/x86_64-Linux-clang/Release/ivy-repo/published_artifacts.yaml
-      - Build/build.py -f Build/Linux-x86_64.yaml Publish.ALL -m Release
+    stash:
+      - ls -l $WORKSPACE/stash
+      - ls -l $WORKSPACE/stashed_dir
