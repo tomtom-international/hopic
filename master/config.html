@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    <title>Configuration &#8212; Hopic 1.22.1.dev37+g1b1a265 documentation</title>
+    <title>Configuration &#8212; Hopic 1.22.1.dev121+g3baa2d7 documentation</title>
     <link rel="stylesheet" href="_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
     <link rel="stylesheet" type="text/css" href="_static/banner.css" />
@@ -30,7 +30,7 @@
         <li class="right" >
           <a href="intro.html" title="Introduction"
              accesskey="P">previous</a> |</li>
-        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.22.1.dev37+g1b1a265 documentation</a> &#187;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.22.1.dev121+g3baa2d7 documentation</a> &#187;</li> 
       </ul>
     </div>  
 
@@ -941,14 +941,29 @@ The stashed files are available for every executor/node in every phase and works
 <p>Use the option <code class="docutils literal notranslate"><span class="pre">includes</span></code> to identify the files to be stashed.
 Use Wildcards like <cite>module/dist/**/*.zip</cite>.
 A <cite>*</cite> expands only to a single directory entry, where <cite>**</cite> expands to multiple directory levels deep.</p>
+<p>Use the option <code class="docutils literal notranslate"><span class="pre">dir</span></code> to change the working directory that is being used while stashing.</p>
 <p><strong>example:</strong></p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span>
+  <span class="nt">builld</span><span class="p">:</span>
+    <span class="nt">stash</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">stash</span><span class="p">:</span>
+          <span class="nt">includes</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">stash/stash.txt</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">mkdir -p stash</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">sh -c &#39;echo stashed_file &gt; stash/stash.txt&#39;</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">ls -l</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">ls -l stash</span>
+
+    <span class="nt">stash-dir</span><span class="p">:</span>
+    <span class="p p-Indicator">-</span> <span class="nt">stash</span><span class="p">:</span>
+        <span class="nt">includes</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">stashed_dir.txt</span>
+        <span class="nt">dir</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">stash/stashed_dir</span>
+    <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">mkdir -p stash/stashed_dir</span>
+    <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">sh -c &#39;echo stashed_dir &gt; stash/stashed_dir/stashed_dir.txt&#39;</span> 
+
   <span class="nt">upload</span><span class="p">:</span>
-    <span class="nt">Linux-x86_64-Release</span><span class="p">:</span>
-      <span class="p p-Indicator">-</span> <span class="nt">run-on-change</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">only</span>
-        <span class="nt">stash</span><span class="p">:</span>
-          <span class="nt">includes</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">Build/Output/x86_64-Linux-clang/Release/ivy-repo/published_artifacts.yaml</span>
-      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">Build/build.py -f Build/Linux-x86_64.yaml Publish.ALL -m Release</span>
+    <span class="nt">stash</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">ls -l $WORKSPACE/stash</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">ls -l $WORKSPACE/stashed_dir</span>
 </pre></div>
 </div>
 </div>
@@ -1248,7 +1263,7 @@ The command should output the part of the configuration file to standard output.
         <li class="right" >
           <a href="intro.html" title="Introduction"
              >previous</a> |</li>
-        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.22.1.dev37+g1b1a265 documentation</a> &#187;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.22.1.dev121+g3baa2d7 documentation</a> &#187;</li> 
       </ul>
     </div>
     <div class="footer" role="contentinfo">
