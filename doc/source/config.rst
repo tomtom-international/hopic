@@ -583,6 +583,8 @@ Use the option ``includes`` to identify the files to be stashed.
 Use Wildcards like `module/dist/**/*.zip`.
 A `*` expands only to a single directory entry, where `**` expands to multiple directory levels deep.
 
+Use the option ``dir`` to change the working directory that is being used while stashing.
+
 **example:**
 
 .. literalinclude:: ../../examples/stash.yaml
