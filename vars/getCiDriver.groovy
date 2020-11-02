@@ -363,6 +363,7 @@ class CiDriver {
   private may_submit_result  = null
   private may_publish_result = null
   private config_file
+  private bitbucket_api_credential_id  = null
 
   private final default_node_expr = "Linux && Docker"
 
@@ -371,6 +372,7 @@ class CiDriver {
     this.steps = steps
     this.change = params.change
     this.config_file = params.config
+    this.bitbucket_api_credential_id = params.getOrDefault('bb_api_cred_id', 'tt_service_account_creds')
   }
 
   private def get_change() {
@@ -395,7 +397,7 @@ class CiDriver {
             }
           } catch (CredentialNotFoundException e2) {
             /* Fall back when this credential isn't usable for HTTP(S) Basic Auth */
-            httpServiceCredential = 'tt_service_account_creds'
+            httpServiceCredential = this.bitbucket_api_credential_id
           }
         }
         this.change = new BitbucketPullRequest(steps, steps.env.CHANGE_URL, httpServiceCredential)
