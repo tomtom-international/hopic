@@ -212,7 +212,7 @@ def test_recursive_extension_installation(monkeypatch):
     assert inner_template_called.pop()
 
 
-def test_recursive_extension_installation_invalid_template_name(monkeypatch, capfd):
+def test_recursive_extension_installation_invalid_template_name(monkeypatch):
     extra_index = 'https://test.pypi.org/simple/'
     pkg = 'pipeline-template'
     template_pkg = 'template-in-template'
