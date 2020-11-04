@@ -42,7 +42,7 @@ setup(
     install_requires=(
       'Click>=7.0,<8.0',
       'click-log',
-      'commisery>=0.3,<1',
+      'commisery>=0.5,<1',
       'GitPython>=3,<4',
       'importlib_metadata; python_version < "3.8"',
       'python-dateutil',
