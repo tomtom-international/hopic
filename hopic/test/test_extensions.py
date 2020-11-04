@@ -267,3 +267,21 @@ def test_recursive_extension_installation_invalid_template_name(monkeypatch, cap
 
     assert result.exit_code == 0
     assert len(expected_pkg_install_order) == 0
+
+
+def test_invalid_template_name(capfd):
+    '''
+    `hopic build` should return a clear error message when a template is specified
+    that can't be found.
+    '''
+
+    result, = run_with_config(dedent('''
+                config: !template xyzzy
+                '''), ('build',))
+
+    assert result.exit_code != 0
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+    assert out.strip() == "No YAML template named 'xyzzy' available (props={})"
