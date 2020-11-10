@@ -101,11 +101,12 @@ class OptionContext(object):
 @click.option('--config'         , type=click.Path(exists=False, file_okay=True , dir_okay=False, readable=True, resolve_path=True), default=lambda: None, show_default='${WORKSPACE}/hopic-ci-config.yaml')  # noqa: E501
 @click.option('--workspace'      , type=click.Path(exists=False, file_okay=False, dir_okay=True)                                   , default=lambda: None, show_default='git work tree of config file or current working directory')  # noqa: E501
 @click.option('--whitelisted-var', multiple=True                                                                                   , default=['CT_DEVENV_HOME'], hidden=True)  # noqa: E501
+@click.option('--publishable-version', is_flag=True                                                                                , default=False, hidden=True, help='''Indicate if change is publishable or not''')  # noqa: E501
 @click.version_option(get_package_version(PACKAGE))
 @click_log.simple_verbosity_option(PACKAGE                 , envvar='HOPIC_VERBOSITY', autocompletion=autocomplete.click_log_verbosity)
 @click_log.simple_verbosity_option('git', '--git-verbosity', envvar='GIT_VERBOSITY'  , autocompletion=autocomplete.click_log_verbosity)
 @click.pass_context
-def main(ctx, color, config, workspace, whitelisted_var):
+def main(ctx, color, config, workspace, whitelisted_var, publishable_version):
     if color == 'always':
         ctx.color = True
     elif color == 'never':
@@ -220,3 +221,5 @@ def main(ctx, color, config, workspace, whitelisted_var):
         # FIXME: make this conversion work even when not using SemVer as versioning policy
         # Convert SemVer to Debian version: '~' for pre-release instead of '-'
         ctx.obj.volume_vars['DEBVERSION'] = ctx.obj.volume_vars['VERSION'].replace('-', '~', 1).replace('.dirty.', '+dirty', 1)
+        ctx.obj.volume_vars['PUBLISH_VERSION'] = ctx.obj.volume_vars['PURE_VERSION'] if publishable_version \
+            else ctx.obj.volume_vars['VERSION']

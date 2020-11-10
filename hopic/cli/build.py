@@ -222,6 +222,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                         'VERSION',
                         'PURE_VERSION',
                         'DEBVERSION',
+                        'PUBLISH_VERSION'
                     ):
                 if varname in ctx.obj.volume_vars:
                     env[varname] = ctx.obj.volume_vars[varname]
