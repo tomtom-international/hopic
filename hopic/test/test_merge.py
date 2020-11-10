@@ -622,3 +622,60 @@ def test_run_on_change(monkeypatch, tmp_path, run_on_change, commit_message, exp
 
     assert result.exit_code == 0
     assert not expected
+
+
+@pytest.mark.parametrize('init_version, submittable_version', (
+    ('0.0.0', False),
+    ('0.0.0', True),
+))
+def test_run_publish_version(monkeypatch, tmp_path, init_version, submittable_version):
+    toprepo = tmp_path / 'repo'
+    with git.Repo.init(str(toprepo), expand_vars=False) as repo:
+        cfg_file = 'hopic-ci-config.yaml'
+
+        with (toprepo / cfg_file).open('w') as f:
+            f.write(dedent("""\
+                    version:
+                      format: semver
+                      tag:    true
+                      bump:
+                        policy: conventional-commits
+
+                    phases:
+                      build:
+                        a:
+                          - echo build-a ${PURE_VERSION}
+                          - echo build-a ${PUBLISH_VERSION}
+                    """))
+
+        repo.index.add((cfg_file,))
+        base_commit = repo.index.commit(message='Initial commit', **_commitargs)
+        repo.git.branch('master', move=True)
+        repo.create_tag(init_version)
+
+        # PR branch
+        repo.head.reference = repo.create_head('something-useful', base_commit)
+        assert not repo.head.is_detached
+        repo.head.reset(index=True, working_tree=True)
+
+    expected = [
+        ('echo', 'build-a', init_version),
+        ('echo', 'build-a', init_version + ('' if submittable_version else f"+g{str(base_commit)[0:7]}")),
+    ]
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        assert tuple(args) == expected.pop(0)
+
+    monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+
+    # Successful checkout and build
+    cmds = (
+            ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'),
+        ) + (
+            ('--publishable-version', 'build') if submittable_version else
+            ('build',),
+        )
+    result = run(*cmds)
+
+    assert result.exit_code == 0
+    assert not expected
