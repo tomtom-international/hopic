@@ -484,6 +484,7 @@ case "$1" in
 [Pp]assword*) echo ''' + shell_quote(steps.PASSWORD) + ''' ;;
 esac
 ''')
+
           return steps.withEnv(["GIT_ASKPASS=${askpass_program}"]) {
             steps.sh(script: 'chmod 700 "${GIT_ASKPASS}"')
             def r = closure()
@@ -939,6 +940,7 @@ exec ssh -i '''
       }
 
       def artifactoryBuildInfo = [:]
+      def hopic_extra_arguments = is_publishable_change ? ' --publishable-version': ''
 
       try {
         lock_if_necessary {
@@ -1005,7 +1007,7 @@ exec ssh -i '''
                         def error_occurred = false
                         try {
                           this.subcommand_with_credentials(
-                              cmd,
+                              cmd + hopic_extra_arguments,
                               'build'
                             + ' --phase=' + shell_quote(phase)
                             + ' --variant=' + shell_quote(variant)
@@ -1088,7 +1090,7 @@ exec ssh -i '''
                 steps.stage('submit') {
                   this.with_credentials() {
                     // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
-                    steps.sh(script: "${cmd} submit")
+                    steps.sh(script: "${cmd}${hopic_extra_arguments} submit")
                   }
                 }
               }
@@ -1110,7 +1112,7 @@ exec ssh -i '''
               def server = steps.Artifactory.server server_id
               server.publishBuildInfo(buildInfo)
               if (promotion_config.containsKey('target-repo')
-               && this.has_publishable_change()) {
+               && is_publishable_change) {
                 server.promote(
                     targetRepo:  promotion_config['target-repo'],
                     buildName:   buildInfo.name,
