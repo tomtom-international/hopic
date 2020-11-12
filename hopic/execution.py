@@ -54,5 +54,4 @@ def echo_cmd(fun, cmd, *args, dry_run=False, **kwargs):
 
 @click.pass_context
 def echo_cmd_click(ctx, fun, cmd, *args, **kwargs):
-    dry_run = True if hasattr(ctx.obj, 'dry_run') and ctx.obj.dry_run else False
-    return echo_cmd(fun, cmd, *args, **kwargs, dry_run=dry_run)
+    return echo_cmd(fun, cmd, *args, **kwargs, dry_run=getattr(ctx.obj, 'dry_run', False))
