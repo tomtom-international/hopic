@@ -23,6 +23,7 @@ import sys
 
 from dateutil.tz import (
         tzlocal,
+        tzutc,
     )
 import git
 
@@ -32,6 +33,23 @@ from .versioning import (
     )
 
 log = logging.getLogger(__name__)
+
+
+def to_git_time(date: datetime) -> str:
+    """
+    Converts a datetime object to a string with Git's internal time format.
+
+    This is necessary because GitPython, wrongly, interprets an ISO-8601 formatted time string as
+    UTC time to be converted to the specified timezone.
+
+    Git's internal time format actually is UTC time plus a timezone to be applied for display
+    purposes, so converting it to that yields correct behavior.
+    """
+
+    utctime = int((
+        date - datetime.utcfromtimestamp(0).replace(tzinfo=tzutc())
+    ).total_seconds())
+    return f"{utctime} {date:%z}"
 
 
 def determine_source_date(workspace):

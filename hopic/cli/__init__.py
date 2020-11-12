@@ -21,8 +21,8 @@ from . import (
     )
 from .utils import (
         determine_config_file_name,
-        is_publish_branch,
         get_package_version,
+        is_publish_branch,
     )
 from .. import binary_normalize
 from commisery.commit import parse_commit_message
@@ -39,6 +39,7 @@ from ..git_time import (
         determine_git_version,
         determine_version,
         restore_mtime_from_git,
+        to_git_time,
     )
 from ..versioning import (
         replace_version,
@@ -55,7 +56,7 @@ from configparser import (
 from copy import copy
 from datetime import datetime
 from dateutil.parser import parse as date_parse
-from dateutil.tz import (tzoffset, tzlocal, tzutc)
+from dateutil.tz import (tzoffset, tzlocal)
 import git
 import gitdb
 from io import (
@@ -309,23 +310,6 @@ def clean_repo(repo, clean_config=[]):
     # Only restore mtimes when doing a clean build. This prevents problems with timestamp-based build sytems.
     # I.e. make and ninja and probably half the world.
     restore_mtime_from_git(repo)
-
-
-def to_git_time(date):
-    """
-    Converts a datetime object to a string with Git's internal time format.
-
-    This is necessary because GitPython, wrongly, interprets an ISO-8601 formatted time string as
-    UTC time to be converted to the specified timezone.
-
-    Git's internal time format actually is UTC time plus a timezone to be applied for display
-    purposes, so converting it to that yields correct behavior.
-    """
-
-    utctime = int((
-        date - datetime.utcfromtimestamp(0).replace(tzinfo=tzutc())
-    ).total_seconds())
-    return f"{utctime} {date:%z}"
 
 
 @main.command()
