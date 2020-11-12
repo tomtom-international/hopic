@@ -79,6 +79,11 @@ import urllib.parse
 from yaml.error import YAMLError
 
 from .main import main
+from ..errors import (
+    MissingCredentialVarError,
+    VersioningError,
+)
+
 
 PACKAGE : str = __package__.split('.')[0]
 
@@ -96,21 +101,6 @@ for submodule in (
         if not isinstance(cmd, click.Command):
             continue
         main.add_command(cmd)
-
-
-class VersioningError(click.ClickException):
-    exit_code = 33
-
-
-class MissingCredentialVarError(click.ClickException):
-    exit_code = 34
-
-    def __init__(self, credential_id, var_name):
-        self.credential_id = credential_id
-        self.var_name      = var_name
-
-    def format_message(self):
-        return f"credential '{self.credential_id}' not available when trying to expand variable '{self.var_name}'"
 
 
 class FatalSignal(Exception):

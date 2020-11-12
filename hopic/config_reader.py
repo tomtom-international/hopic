@@ -19,7 +19,6 @@ from collections.abc import (
         Mapping,
         Sequence,
     )
-from click import ClickException
 from enum import Enum
 import errno
 try:
@@ -35,6 +34,8 @@ import shlex
 import subprocess
 import xml.etree.ElementTree as ET
 import yaml
+
+from .errors import ConfigurationError
 
 __all__ = (
     'RunOnChange',
@@ -90,20 +91,6 @@ def expand_vars(vars, expr):  # noqa: E302 'expected 2 blank lines'
         return [expand_vars(vars, val) for val in expr]
     except TypeError:
         return expr
-
-
-class ConfigurationError(ClickException):
-    exit_code = 32
-
-    def __init__(self, message, file=None):
-        super().__init__(message)
-        self.file = file
-
-    def format_message(self):
-        if self.file is not None:
-            return "configuration error in '%s': %s" % (self.file, self.message)
-        else:
-            return "configuration error: %s" % (self.message,)
 
 
 class TemplateNotFoundError(ConfigurationError):
