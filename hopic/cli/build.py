@@ -24,9 +24,6 @@ import urllib.parse
 from collections.abc import (
     Mapping,
 )
-from configparser import (
-    NoSectionError,
-)
 from copy import copy
 
 import click
@@ -48,6 +45,7 @@ from ..build import (
     FatalSignal,
     DockerContainers,
     volume_spec_to_docker_param,
+    HopicGitInfo,
 )
 from ..config_reader import (
     RunOnChange,
@@ -89,33 +87,8 @@ def build(ctx, phase, variant, dry_run):
         log.info('[dry-run] would execute:')
     cfg = ctx.obj.config
 
-    submit_ref = None
-    refspecs = []
-    source_commits = []
-    autosquashed_commits = []
-    try:
-        with git.Repo(ctx.obj.workspace) as repo:
-            submit_commit = repo.head.commit
-            section = f"hopic.{submit_commit}"
-            with repo.config_reader() as git_cfg:
-                # Determine remote ref for current commit
-                submit_ref = git_cfg.get_value(section, 'ref')
-
-                if git_cfg.has_option(section, 'refspecs'):
-                    refspecs = list(shlex.split(git_cfg.get_value(section, 'refspecs')))
-
-                if git_cfg.has_option(section, 'target-commit') and git_cfg.has_option(section, 'source-commit'):
-                    target_commit = repo.commit(git_cfg.get_value(section, 'target-commit'))
-                    source_commit = repo.commit(git_cfg.get_value(section, 'source-commit'))
-                    source_commits = git.Commit.list_items(repo, f"{target_commit}..{source_commit}", first_parent=True, no_merges=True)
-                    autosquashed_commits = source_commits
-                    log.debug('Building for source commits: %s', source_commits)
-                if git_cfg.has_option(section, 'autosquashed-commit'):
-                    autosquashed_commit = repo.commit(git_cfg.get_value(section, 'autosquashed-commit'))
-                    autosquashed_commits = git.Commit.list_items(repo, f"{target_commit}..{autosquashed_commit}", first_parent=True, no_merges=True)
-    except NoSectionError:
-        pass
-    has_change = bool(refspecs)
+    hopic_git_info = HopicGitInfo.from_repo(ctx.obj.workspace)
+    refspecs = list(hopic_git_info.refspecs)
 
     worktree_commits = {}
     for phasename, curphase in cfg['phases'].items():
@@ -135,9 +108,9 @@ def build(ctx, phase, variant, dry_run):
 
             volume_vars = ctx.obj.volume_vars.copy()
             # Give commands executing inside a container image a different view than outside
-            volume_vars['GIT_COMMIT'] = str(submit_commit)
-            if submit_ref is not None:
-                volume_vars['GIT_BRANCH'] = submit_ref
+            volume_vars['GIT_COMMIT'] = str(hopic_git_info.submit_commit)
+            if hopic_git_info.submit_ref is not None:
+                volume_vars['GIT_BRANCH'] = hopic_git_info.submit_ref
 
             artifacts = []
             with DockerContainers() as volumes_from:
@@ -155,10 +128,10 @@ def build(ctx, phase, variant, dry_run):
                     if run_on_change == RunOnChange.always:
                         pass
                     elif run_on_change == RunOnChange.never:
-                        if has_change:
+                        if hopic_git_info.has_change:
                             break
                     elif run_on_change in (RunOnChange.only, RunOnChange.new_version_only):
-                        if not has_change:
+                        if not hopic_git_info.has_change:
                             break
                         if not is_publish_allowed:
                             break
@@ -282,9 +255,9 @@ def build(ctx, phase, variant, dry_run):
 
                     foreach_items = (None,)
                     if foreach == 'SOURCE_COMMIT':
-                        foreach_items = source_commits
+                        foreach_items = hopic_git_info.source_commits
                     elif foreach == 'AUTOSQUASHED_COMMIT':
-                        foreach_items = autosquashed_commits
+                        foreach_items = hopic_git_info.autosquashed_commits
 
                     for foreach_item in foreach_items:
                         cfg_vars = volume_vars.copy()

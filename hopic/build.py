@@ -15,8 +15,23 @@
 import logging
 import os
 import re
+import shlex
 import subprocess
 import sys
+from configparser import (
+    NoSectionError,
+)
+from pathlib import (
+    PurePath,
+)
+from typing import (
+    NamedTuple,
+    Optional,
+    Sequence,
+    Union,
+)
+
+import git
 
 from .execution import echo_cmd_click as echo_cmd
 
@@ -65,6 +80,82 @@ class DockerContainers(object):
             sys.exit(1)
 
         self.containers.add(container_id)
+
+
+class HopicGitInfo(NamedTuple):
+    submit_commit        : git.Commit
+    submit_ref           : Optional[str] = None
+    refspecs             : Sequence[str] = ()
+    target_commit        : Optional[git.Commit] = None
+    source_commit        : Optional[git.Commit] = None
+    autosquashed_commit  : Optional[git.Commit] = None
+    source_commits       : Sequence[git.Commit] = ()
+    autosquashed_commits : Sequence[git.Commit] = ()
+
+    @classmethod
+    def from_repo(cls, repo_ctx: Union[git.Repo, str, PurePath]) -> 'HopicGitInfo':
+        if isinstance(repo_ctx, git.Repo):
+            repo = repo_ctx
+        else:
+            repo = git.Repo(repo_ctx)
+
+        try:
+            submit_ref, target_commit, source_commit, autosquashed_commit = None, None, None, None
+            refspecs, source_commits, autosquashed_commits = (), (), ()
+
+            submit_commit = repo.head.commit
+            section = f"hopic.{submit_commit}"
+            with repo.config_reader() as git_cfg:
+                try:
+                    # Determine remote ref for current commit
+                    submit_ref = git_cfg.get_value(section, 'ref')
+
+                    if git_cfg.has_option(section, 'refspecs'):
+                        refspecs = tuple(shlex.split(git_cfg.get_value(section, 'refspecs')))
+
+                    if git_cfg.has_option(section, 'target-commit'):
+                        target_commit = repo.commit(git_cfg.get_value(section, 'target-commit'))
+                    if git_cfg.has_option(section, 'source-commit'):
+                        source_commit = repo.commit(git_cfg.get_value(section, 'source-commit'))
+                    if git_cfg.has_option(section, 'autosquashed-commit'):
+                        autosquashed_commit = repo.commit(git_cfg.get_value(section, 'autosquashed-commit'))
+
+                    if target_commit and source_commit:
+                        source_commits = tuple(git.Commit.list_items(
+                            repo,
+                            f"{target_commit}..{source_commit}",
+                            first_parent=True,
+                            no_merges=True,
+                        ))
+                        autosquashed_commits = source_commits
+                        log.debug('Building for source commits: %s', source_commits)
+                    if target_commit and autosquashed_commit:
+                        autosquashed_commits = tuple(git.Commit.list_items(
+                            repo,
+                            f"{target_commit}..{autosquashed_commit}",
+                            first_parent=True,
+                            no_merges=True,
+                        ))
+                except NoSectionError:
+                    pass
+        finally:
+            if not isinstance(repo_ctx, git.Repo):
+                repo.close()
+
+        return cls(
+            submit_commit        = submit_commit,         # noqa: E251 "unexpected spaces around '='"
+            submit_ref           = submit_ref,            # noqa: E251 "unexpected spaces around '='"
+            refspecs             = refspecs,              # noqa: E251 "unexpected spaces around '='"
+            source_commits       = source_commits,        # noqa: E251 "unexpected spaces around '='"
+            autosquashed_commits = autosquashed_commits,  # noqa: E251 "unexpected spaces around '='"
+            target_commit        = target_commit,         # noqa: E251 "unexpected spaces around '='"
+            source_commit        = source_commit,         # noqa: E251 "unexpected spaces around '='"
+            autosquashed_commit  = autosquashed_commit,   # noqa: E251 "unexpected spaces around '='"
+        )
+
+    @property
+    def has_change(self) -> bool:
+        return bool(self.refspecs)
 
 
 def volume_spec_to_docker_param(volume):
