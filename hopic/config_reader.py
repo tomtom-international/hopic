@@ -573,6 +573,7 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
                             if not isinstance(var[var_key], Sequence):
                                 var[var_key] = [var[var_key]]
                             for cred in var[var_key]:
+                                cred.setdefault('encoding', 'plain')
                                 cred_type = cred.setdefault('type', 'username-password')
                                 if cred_type == 'username-password':
                                     if not isinstance(cred.setdefault('username-variable', 'USERNAME'), str):
