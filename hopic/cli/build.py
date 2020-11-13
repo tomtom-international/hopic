@@ -19,7 +19,6 @@ import shlex
 import signal
 import stat
 import subprocess
-import sys
 import tempfile
 import urllib.parse
 from collections.abc import (
@@ -45,6 +44,11 @@ from .. import (
     credentials,
     binary_normalize,
 )
+from ..build import (
+    FatalSignal,
+    DockerContainers,
+    volume_spec_to_docker_param,
+)
 from ..config_reader import (
     RunOnChange,
     expand_docker_volume_spec,
@@ -62,60 +66,6 @@ from ..git_time import (
 
 log = logging.getLogger(__name__)
 _env_var_re = re.compile(r'^(?P<var>[A-Za-z_][0-9A-Za-z_]*)=(?P<val>.*)$')
-
-
-class FatalSignal(Exception):
-    def __init__(self, signum):
-        self.signal = signum
-
-
-class DockerContainers(object):
-    """
-    This context manager class manages a set of Docker containers, handling their creation and deletion.
-    """
-    def __init__(self):
-        self.containers = set()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, ex_type, ex_value, tb):
-        if self.containers:
-            log.info('Cleaning up Docker containers: %s', ' '.join(self.containers))
-            try:
-                echo_cmd(subprocess.check_call, ['docker', 'rm', '-v'] + list(self.containers))
-            except subprocess.CalledProcessError as e:
-                log.error('Could not remove all Docker volumes, command failed with exit code %d', e.returncode)
-            self.containers.clear()
-
-    def __iter__(self):
-        return iter(self.containers)
-
-    def add(self, volume_image):
-        log.info('Creating new Docker container for image %s', volume_image)
-        try:
-            container_id = echo_cmd(subprocess.check_output, ['docker', 'create', volume_image]).strip()
-        except subprocess.CalledProcessError as e:
-            log.exception('Command fatally terminated with exit code %d', e.returncode)
-            sys.exit(e.returncode)
-
-        # Container ID's consist of 64 hex characters
-        if not re.match('^[0-9a-fA-F]{64}$', container_id):
-            log.error('Unable to create Docker container for %s', volume_image)
-            sys.exit(1)
-
-        self.containers.add(container_id)
-
-
-def volume_spec_to_docker_param(volume):
-    if not os.path.exists(volume['source']):
-        os.makedirs(volume['source'])
-    param = '{source}:{target}'.format(**volume)
-    try:
-        param = param + ':' + ('ro' if volume['read-only'] else 'rw')
-    except KeyError:
-        pass
-    return param
 
 
 @click.command()
