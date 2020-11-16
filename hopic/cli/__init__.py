@@ -75,6 +75,7 @@ import subprocess
 import sys
 import tempfile
 from textwrap import dedent
+import urllib.parse
 from yaml.error import YAMLError
 
 from .main import main
@@ -1258,6 +1259,9 @@ def build(ctx, phase, variant, dry_run):
                                 kcred = credentials.get_credential_by_id(cfg['project-name'], creds['id'])
                                 if kcred is not None:
                                     username, password = kcred
+                                    if creds['encoding'] == 'url':
+                                        username = urllib.parse.quote_plus(username)
+                                        password = urllib.parse.quote_plus(password)
                                     volume_vars.update({
                                         creds['username-variable']: username,
                                         creds['password-variable']: password,
