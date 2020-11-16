@@ -984,6 +984,8 @@ def getinfo(ctx, phase, variant):
                 if isinstance(var, str):
                     continue
                 for key, val in var.items():
+                    if key == 'sh':
+                        continue
                     try:
                         val = expand_vars(ctx.obj.volume_vars, val)
                     except KeyError:
