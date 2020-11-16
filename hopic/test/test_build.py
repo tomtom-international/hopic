@@ -739,6 +739,44 @@ def test_with_credentials_keyring_variable_names(monkeypatch, capfd):
     assert result.exit_code == 0
 
 
+@pytest.mark.parametrize('username, expected_username, password, expected_password', (
+    ('test_username', None,               '$&+,/:;=?@', '%24%26%2B%2C%2F%3A%3B%3D%3F%40'),
+    ('señor_tester', 'se%C3%B1or_tester', 'password',   None),
+    ('señor_tester', 'se%C3%B1or_tester', '$&+,/:;=?@', '%24%26%2B%2C%2F%3A%3B%3D%3F%40'),
+))
+def test_with_credentials_with_url_encoding(monkeypatch, capfd, username, expected_username, password, expected_password):
+    if expected_username is None:
+        expected_username = username
+    if expected_password is None:
+        expected_password = password
+    credential_id = 'test_credentialId'
+    project_name = 'test_project'
+
+    def get_credential_id(project_name_arg, cred_id):
+        assert credential_id == cred_id
+        assert project_name == project_name_arg
+        return username, password
+
+    monkeypatch.setattr(credentials, 'get_credential_by_id', get_credential_id)
+
+    result = run_with_config(dedent(f'''\
+                project-name: {project_name}
+                phases:
+                  build_and_test:
+                    clang-tidy:
+                      - with-credentials:
+                        - id: {credential_id}
+                          type: username-password
+                          encoding: url
+                      - sh -c "echo $USERNAME $PASSWORD"
+                '''), ('build',))
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+    assert out.splitlines()[0] == f'{expected_username} {expected_password}'
+    assert result.exit_code == 0
+
+
 def test_dry_run_build(capfd, monkeypatch):
     template_build_command = ['build b from template']
 
