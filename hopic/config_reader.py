@@ -444,6 +444,9 @@ def install_top_level_extensions(yaml_config, config_path, extension_installer, 
     return no_template_cfg
 
 
+_basic_image_types = (str, IvyManifestImage, type(None))
+
+
 def flatten_command_list(phase, variant, cmds, config_file=None):
     """Flattens a list of command lists into a single list of commands."""
 
@@ -457,6 +460,89 @@ def flatten_command_list(phase, variant, cmds, config_file=None):
             yield from cmd
         else:
             yield cmd
+
+
+def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
+    assert not isinstance(cmd, str), "internal error: string commands should have been converted to 'sh' dictionary format"
+    assert isinstance(cmd, Mapping)
+
+    cmd = cmd.copy()
+
+    for cmd_key in cmd:
+        if cmd_key == 'sh':
+            if isinstance(cmd[cmd_key], str):
+                cmd[cmd_key] = shlex.split(cmd[cmd_key])
+            if not isinstance(cmd[cmd_key], Sequence) or not all(isinstance(x, str) for x in cmd[cmd_key]):
+                raise ConfigurationError(
+                        "'sh' member is not a command string, nor a list of argument strings",
+                        file=config_file)
+        if cmd_key == 'run-on-change':
+            try:
+                cmd['run-on-change'] = RunOnChange(cmd['run-on-change'])
+            except ValueError as exc:
+                raise ConfigurationError(
+                        f"'run-on-change' member's value of {cmd['run-on-change']!r} is not among the valid options ({', '.join(RunOnChange)})",
+                        file=config_file) from exc
+        if cmd_key in ('archive', 'fingerprint') and isinstance(cmd[cmd_key], (OrderedDict, dict)) and 'artifacts' in cmd[cmd_key]:
+            artifacts = cmd[cmd_key]['artifacts']
+
+            # Convert single artifact string to list of single artifact specification
+            if isinstance(artifacts, str):
+                artifacts = [{'pattern': artifacts}]
+
+            # Expand short hand notation of just the artifact pattern to a full dictionary
+            artifacts = [({'pattern': artifact} if isinstance(artifact, str) else artifact) for artifact in artifacts]
+
+            try:
+                target = cmd[cmd_key]['upload-artifactory'].pop('target')
+            except (KeyError, TypeError):
+                pass
+            else:
+                for artifact in artifacts:
+                    artifact.setdefault('target', target)
+
+            cmd[cmd_key]['artifacts'] = artifacts
+        if cmd_key == 'junit':
+            if isinstance(cmd[cmd_key], str):
+                cmd[cmd_key] = [cmd[cmd_key]]
+        if cmd_key == 'with-credentials':
+            if isinstance(cmd[cmd_key], str):
+                cmd[cmd_key] = OrderedDict([('id', cmd[cmd_key])])
+            if not isinstance(cmd[cmd_key], Sequence):
+                cmd[cmd_key] = [cmd[cmd_key]]
+            for cred in cmd[cmd_key]:
+                cred.setdefault('encoding', 'plain')
+                cred_type = cred.setdefault('type', 'username-password')
+                if cred_type == 'username-password':
+                    if not isinstance(cred.setdefault('username-variable', 'USERNAME'), str):
+                        raise ConfigurationError(
+                                f"'username-variable' in with-credentials block `{cred['id']}` for "
+                                f"`{phase}.{variant}` is not a string", file=config_file)
+                    if not isinstance(cred.setdefault('password-variable', 'PASSWORD'), str):
+                        raise ConfigurationError(
+                                f"'password-variable' in with-credentials block `{cred['id']}` for "
+                                f"`{phase}.{variant}` is not a string", file=config_file)
+                elif cred_type == 'file':
+                    if not isinstance(cred.setdefault('filename-variable', 'SECRET_FILE'), str):
+                        raise ConfigurationError(
+                                f"'filename-variable' in with-credentials block `{cred['id']}` for "
+                                f"`{phase}.{variant}` is not a string", file=config_file)
+                elif cred_type == 'string':
+                    if not isinstance(cred.setdefault('string-variable'  , 'SECRET'), str):  # noqa: E203
+                        raise ConfigurationError(
+                                f"'string-variable' in with-credentials block `{cred['id']}` for "
+                                f"`{phase}.{variant}` is not a string", file=config_file)
+
+        if cmd_key == "image":
+            if not isinstance(cmd[cmd_key], _basic_image_types):
+                raise ConfigurationError(
+                    f"`image` member of `{variant}` must be a string or `!image-from-ivy-manifest`",
+                    file=config_file)
+
+        if cmd_key == 'volumes-from':
+            cmd[cmd_key] = expand_docker_volumes_from(volume_vars, cmd[cmd_key])
+
+    return cmd
 
 
 def read(config, volume_vars, extension_installer=lambda *args: None):
@@ -498,15 +584,14 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
             raise ConfigurationError(
                     f"`pass-through-environment-vars` must be a sequence containing strings only: element {idx} has type {type(var).__name__}", file=config)
 
-    basic_image_types = (str, IvyManifestImage, type(None))
-    valid_image_types = (basic_image_types, Mapping)
+    valid_image_types = (_basic_image_types, Mapping)
     image = cfg.setdefault('image', OrderedDict())
     if not isinstance(image, valid_image_types):
         raise ConfigurationError("`image` must be a string, mapping, or `!image-from-ivy-manifest`", file=config)
     if not isinstance(image, Mapping):
         image = cfg['image'] = OrderedDict((('default', cfg['image']),))
     for variant, name in image.items():
-        if not isinstance(name, basic_image_types):
+        if not isinstance(name, _basic_image_types):
             raise ConfigurationError(f"`image` member `{variant}` must be a string or `!image-from-ivy-manifest`", file=config)
 
     if 'project-name' in cfg and not isinstance(cfg['project-name'], str):
@@ -519,83 +604,9 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
             phase[variant] = list(flatten_command_list(phasename, variant, phase[variant], config_file=config))
 
     # Convert multiple different syntaxes into a single one
-    for phase in cfg['phases'].values():
-        for variant, items in phase.items():
-            for var in items:
-                assert not isinstance(var, str), "string commands should have been converted to 'sh' dictionary format"
-                if isinstance(var, (OrderedDict, dict)):
-                    for var_key in var:
-                        if var_key == 'sh':
-                            if isinstance(var[var_key], str):
-                                var[var_key] = shlex.split(var[var_key])
-                            if not isinstance(var[var_key], Sequence) or not all(isinstance(x, str) for x in var[var_key]):
-                                raise ConfigurationError(
-                                        "'sh' member is not a command string, nor a list of argument strings",
-                                        file=config)
-                        if var_key == 'run-on-change':
-                            try:
-                                var['run-on-change'] = RunOnChange(var['run-on-change'])
-                            except ValueError as exc:
-                                raise ConfigurationError(
-                                        f"'run-on-change' member's value of {var['run-on-change']!r} is not among the valid options ({', '.join(RunOnChange)})",
-                                        file=config) from exc
-                        if var_key in ('archive', 'fingerprint') and isinstance(var[var_key], (OrderedDict, dict)) and 'artifacts' in var[var_key]:
-                            artifacts = var[var_key]['artifacts']
-
-                            # Convert single artifact string to list of single artifact specification
-                            if isinstance(artifacts, str):
-                                artifacts = [{'pattern': artifacts}]
-
-                            # Expand short hand notation of just the artifact pattern to a full dictionary
-                            artifacts = [({'pattern': artifact} if isinstance(artifact, str) else artifact) for artifact in artifacts]
-
-                            try:
-                                target = var[var_key]['upload-artifactory'].pop('target')
-                            except (KeyError, TypeError):
-                                pass
-                            else:
-                                for artifact in artifacts:
-                                    artifact.setdefault('target', target)
-
-                            var[var_key]['artifacts'] = artifacts
-                        if var_key == 'junit':
-                            if isinstance(var[var_key], str):
-                                var[var_key] = [var[var_key]]
-                        if var_key == 'with-credentials':
-                            if isinstance(var[var_key], str):
-                                var[var_key] = OrderedDict([('id', var[var_key])])
-                            if not isinstance(var[var_key], Sequence):
-                                var[var_key] = [var[var_key]]
-                            for cred in var[var_key]:
-                                cred.setdefault('encoding', 'plain')
-                                cred_type = cred.setdefault('type', 'username-password')
-                                if cred_type == 'username-password':
-                                    if not isinstance(cred.setdefault('username-variable', 'USERNAME'), str):
-                                        raise ConfigurationError(
-                                                f"'username-variable' in with-credentials block `{cred['id']}` for "
-                                                f"`{phasename}.{variantname}` is not a string", file=config)
-                                    if not isinstance(cred.setdefault('password-variable', 'PASSWORD'), str):
-                                        raise ConfigurationError(
-                                                f"'password-variable' in with-credentials block `{cred['id']}` for "
-                                                f"`{phasename}.{variantname}` is not a string", file=config)
-                                elif cred_type == 'file':
-                                    if not isinstance(cred.setdefault('filename-variable', 'SECRET_FILE'), str):
-                                        raise ConfigurationError(
-                                                f"'filename-variable' in with-credentials block `{cred['id']}` for "
-                                                f"`{phasename}.{variantname}` is not a string", file=config)
-                                elif cred_type == 'string':
-                                    if not isinstance(cred.setdefault('string-variable'  , 'SECRET'), str):  # noqa: E203
-                                        raise ConfigurationError(
-                                                f"'string-variable' in with-credentials block `{cred['id']}` for "
-                                                f"`{phasename}.{variantname}` is not a string", file=config)
-
-                        if var_key == "image":
-                            if not isinstance(var[var_key], basic_image_types):
-                                raise ConfigurationError(
-                                    f"`image` member `{variant}` must be a string or `!image-from-ivy-manifest`",
-                                    file=config)
-
-                        if var_key == 'volumes-from':
-                            var[var_key] = expand_docker_volumes_from(volume_vars, var[var_key])
+    for phasename, phase in cfg['phases'].items():
+        for variant, cmds in phase.items():
+            for i in range(len(cmds)):
+                cmds[i] = process_variant_cmd(phasename, variant, cmds[i], volume_vars, config_file=config)
 
     return cfg
