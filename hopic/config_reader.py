@@ -545,6 +545,11 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
     return cmd
 
 
+def process_variant_cmds(phase, variant, cmds, volume_vars, config_file=None):
+    for cmd in cmds:
+        yield process_variant_cmd(phase, variant, cmd, volume_vars, config_file)
+
+
 def read(config, volume_vars, extension_installer=lambda *args: None):
     config_dir = os.path.dirname(config)
 
@@ -597,16 +602,17 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
     if 'project-name' in cfg and not isinstance(cfg['project-name'], str):
         raise ConfigurationError('`project-name` setting must be a string', file=config)
 
+    # Convert multiple different syntaxes into a single one
     for phasename, phase in cfg.setdefault('phases', OrderedDict()).items():
         if not isinstance(phase, Mapping):
             raise ConfigurationError(f"phase `{phasename}` doesn't contain a mapping but a {type(phase).__name__}", file=config)
         for variant in phase:
-            phase[variant] = list(flatten_command_list(phasename, variant, phase[variant], config_file=config))
-
-    # Convert multiple different syntaxes into a single one
-    for phasename, phase in cfg['phases'].items():
-        for variant, cmds in phase.items():
-            for i in range(len(cmds)):
-                cmds[i] = process_variant_cmd(phasename, variant, cmds[i], volume_vars, config_file=config)
+            phase[variant] = list(process_variant_cmds(
+                phasename,
+                variant,
+                flatten_command_list(phasename, variant, phase[variant], config_file=config),
+                volume_vars,
+                config_file=config,
+            ))
 
     return cfg
