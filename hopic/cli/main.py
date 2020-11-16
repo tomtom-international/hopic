@@ -48,7 +48,9 @@ log = logging.getLogger(__name__)
 class OptionContext(object):
     def __init__(self):
         super().__init__()
-        self._opts = {}
+        self._opts = {
+            'dry_run': False,
+        }
         self._missing_parameters = {}
 
     def __getattr__(self, name):
