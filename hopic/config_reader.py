@@ -444,6 +444,22 @@ def install_top_level_extensions(yaml_config, config_path, extension_installer, 
     return no_template_cfg
 
 
+def flatten_command_list(phase, variant, cmds):
+    """Flattens a list of command lists into a single list of commands."""
+
+    if not isinstance(cmds, Sequence):
+        raise ConfigurationError(f"variant `{phase}.{variant}` doesn't contain a sequence but a {type(cmds).__name__}", file=config)
+
+    cmds = cmds.copy()
+    for i in reversed(range(len(cmds))):
+        cmd = cmds[i]
+        if isinstance(cmd, str):
+            cmds[i] = cmd = OrderedDict((('sh', cmd),))
+        if isinstance(cmd, Sequence) and not isinstance(cmd, (str, bytes)):
+            cmds[i:i + 1] = cmd
+    return cmds
+
+
 def read(config, volume_vars, extension_installer=lambda *args: None):
     config_dir = os.path.dirname(config)
 
@@ -497,19 +513,11 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
     if 'project-name' in cfg and not isinstance(cfg['project-name'], str):
         raise ConfigurationError('`project-name` setting must be a string', file=config)
 
-    # Flatten command lists
     for phasename, phase in cfg.setdefault('phases', OrderedDict()).items():
         if not isinstance(phase, Mapping):
             raise ConfigurationError(f"phase `{phasename}` doesn't contain a mapping but a {type(phase).__name__}", file=config)
-        for variantname, variant in phase.items():
-            if not isinstance(variant, Sequence):
-                raise ConfigurationError(f"variant `{phasename}.{variantname}` doesn't contain a sequence but a {type(variant).__name__}", file=config)
-            for i in reversed(range(len(variant))):
-                cmd = variant[i]
-                if isinstance(cmd, str):
-                    variant[i] = cmd = OrderedDict((('sh', cmd),))
-                if isinstance(cmd, Sequence) and not isinstance(cmd, (str, bytes)):
-                    variant[i:i + 1] = cmd
+        for variant in phase:
+            phase[variant] = flatten_command_list(phasename, variant, phase[variant])
 
     # Convert multiple different syntaxes into a single one
     for phase in cfg['phases'].values():
