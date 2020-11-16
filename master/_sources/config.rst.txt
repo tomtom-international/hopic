@@ -135,6 +135,7 @@ For that purpose the :option:`with-credentials` configuration option can be used
 You need to specify an identifier (``id``), used for looking up the credential and its type (``type``).
 In addition to that you can specify the name of the config and environment variable that should be set to contain them.
 :option:`with-credentials` value can be specified as a list to have multiple credentials for a variant within a phase.
+Username/password credentials can be optionally encoded for use in a url by configuring encoding to (``url``).
 
 The supported types of credential are:
 
@@ -142,6 +143,7 @@ Username/password credential
    * ``type``: ``username-password``
    * ``username-variable`` default: ``USERNAME``
    * ``password-variable`` default: ``PASSWORD``
+   * ``encoding``: default: ``plain``
 
 File credential
    * ``type``: ``file``
