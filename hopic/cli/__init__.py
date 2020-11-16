@@ -966,6 +966,32 @@ def getinfo(ctx, phase, variant):
     Otherwise this is a nested dictionary of phases and variants.
     """
     info = OrderedDict()
+
+    @click.pass_context
+    def append_meta_from_cmd(ctx, info, cmd):
+        assert isinstance(cmd, Mapping)
+
+        info = info.copy()
+
+        for key, val in cmd.items():
+            if key == 'sh':
+                # Skip commands: they're not meta data
+                continue
+
+            try:
+                val = expand_vars(ctx.obj.volume_vars, val)
+            except KeyError:
+                pass
+            else:
+                if isinstance(info.get(key), Mapping):
+                    info[key].update(val)
+                elif isinstance(info.get(key), MutableSequence):
+                    info[key].extend(val)
+                else:
+                    info[key] = val
+
+        return info
+
     for phasename, curphase in ctx.obj.config['phases'].items():
         if phase and phasename not in phase:
             continue
@@ -980,23 +1006,8 @@ def getinfo(ctx, phase, variant):
             if len(variant) != 1:
                 var_info = var_info.setdefault(variantname, OrderedDict())
 
-            for var in curvariant:
-                if isinstance(var, str):
-                    continue
-                for key, val in var.items():
-                    if key == 'sh':
-                        continue
-                    try:
-                        val = expand_vars(ctx.obj.volume_vars, val)
-                    except KeyError:
-                        pass
-                    else:
-                        if key in var_info and isinstance(var_info[key], Mapping):
-                            var_info[key].update(val)
-                        elif key in var_info and isinstance(var_info[key], MutableSequence):
-                            var_info[key].extend(val)
-                        else:
-                            var_info[key] = val
+            for cmd in curvariant:
+                var_info.update(append_meta_from_cmd(var_info, cmd))
     click.echo(json.dumps(info, indent=4, separators=(',', ': '), cls=JSONEncoder))
 
 
