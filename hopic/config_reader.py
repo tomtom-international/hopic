@@ -444,20 +444,19 @@ def install_top_level_extensions(yaml_config, config_path, extension_installer, 
     return no_template_cfg
 
 
-def flatten_command_list(phase, variant, cmds):
+def flatten_command_list(phase, variant, cmds, config_file=None):
     """Flattens a list of command lists into a single list of commands."""
 
     if not isinstance(cmds, Sequence):
-        raise ConfigurationError(f"variant `{phase}.{variant}` doesn't contain a sequence but a {type(cmds).__name__}", file=config)
+        raise ConfigurationError(f"variant `{phase}.{variant}` doesn't contain a sequence but a {type(cmds).__name__}", file=config_file)
 
-    cmds = cmds.copy()
-    for i in reversed(range(len(cmds))):
-        cmd = cmds[i]
+    for cmd in cmds:
         if isinstance(cmd, str):
-            cmds[i] = cmd = OrderedDict((('sh', cmd),))
-        if isinstance(cmd, Sequence) and not isinstance(cmd, (str, bytes)):
-            cmds[i:i + 1] = cmd
-    return cmds
+            yield OrderedDict((('sh', cmd),))
+        elif isinstance(cmd, Sequence) and not isinstance(cmd, (str, bytes)):
+            yield from cmd
+        else:
+            yield cmd
 
 
 def read(config, volume_vars, extension_installer=lambda *args: None):
@@ -517,7 +516,7 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
         if not isinstance(phase, Mapping):
             raise ConfigurationError(f"phase `{phasename}` doesn't contain a mapping but a {type(phase).__name__}", file=config)
         for variant in phase:
-            phase[variant] = flatten_command_list(phasename, variant, phase[variant])
+            phase[variant] = list(flatten_command_list(phasename, variant, phase[variant], config_file=config))
 
     # Convert multiple different syntaxes into a single one
     for phase in cfg['phases'].values():
