@@ -88,9 +88,7 @@ def build(ctx, phase, variant, dry_run):
     cfg = ctx.obj.config
 
     hopic_git_info = HopicGitInfo.from_repo(ctx.obj.workspace)
-    refspecs = list(hopic_git_info.refspecs)
 
-    worktree_commits = {}
     for phasename, curphase in cfg['phases'].items():
         if phase and phasename not in phase:
             continue
@@ -113,6 +111,7 @@ def build(ctx, phase, variant, dry_run):
                 volume_vars['GIT_BRANCH'] = hopic_git_info.submit_ref
 
             artifacts = []
+            worktree_commits = {}
             with DockerContainers() as volumes_from:
                 # If the branch is not allowed to publish, skip the publish phase. If run_on_change is set to 'always', phase will be run anyway regardless of
                 # this condition. For build phase, run_on_change is set to 'always' by default, so build will always happen.
@@ -400,7 +399,14 @@ def build(ctx, phase, variant, dry_run):
                             log.info('%s', repo.git.show(submit_commit, format='fuller', stat=True))
 
                 if worktree_commits:
-                    with git.Repo(ctx.obj.workspace) as repo, repo.config_writer() as cfg:
+                    with git.Repo(ctx.obj.workspace) as repo, repo.config_writer() as git_cfg:
+                        submit_commit = repo.head.commit
+                        section = f"hopic.{submit_commit}"
+                        if git_cfg.has_option(section, 'refspecs'):
+                            refspecs = list(shlex.split(git_cfg.get_value(section, 'refspecs')))
+                        else:
+                            refspecs = []
+
                         bundle_commits = []
                         for subdir, (base_commit, submit_commit) in worktree_commits.items():
                             worktree_ref = ctx.obj.config['scm']['git']['worktrees'][subdir]
@@ -412,8 +418,7 @@ def build(ctx, phase, variant, dry_run):
                             refspecs.append(f"{submit_commit}:{worktree_ref}")
                         repo.git.bundle('create', os.path.join(ctx.obj.workspace, 'worktree-transfer.bundle'), *bundle_commits)
 
-                        submit_commit = repo.head.commit
-                        cfg.set_value(f"hopic.{submit_commit}", 'refspecs', ' '.join(shlex.quote(refspec) for refspec in refspecs))
+                        git_cfg.set_value(section, 'refspecs', ' '.join(shlex.quote(refspec) for refspec in refspecs))
 
                 # Post-processing to make these artifacts as reproducible as possible
                 for artifact in artifacts:
