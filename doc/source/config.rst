@@ -91,6 +91,7 @@ Hopic's build flow is divided in ``phases``, during which a set of commands can 
 The :option:`phases` option is a dictionary of dictionaries.
 It's top-level key specifies the name of each phase.
 The keys within each phase specify the names of variants to be executed within that phase.
+Note that the variant name ``post-submit`` is reserved for internal use and is not permitted to be specified by users.
 
 Phases are executed in the order in which they appear in the configuration.
 Within a phase each variant may be executed in parallel, possibly on different executors.
@@ -109,6 +110,18 @@ For example, the configuration example listed results in an execution flow as sh
 .. figure:: parallel-phases.svg
 
     Example execution flow of a Hopic build configuration.
+
+Post Submission Phases
+----------------------
+
+.. option:: post-submit
+
+Optionally, as part of the submission, Hopic provides the opportunity to execute another list of phases.
+These will be executed during the ``submit`` subcommand, but just after the actual submission to the revision control system has been performed.
+The :option:`post-submit` option is a dictionary of phases.
+The keys specify the name of each phase.
+
+The content of each phase has the same syntax, and is interpreted the same, as the content of a variant for :option:`phases`.
 
 Clean
 -----

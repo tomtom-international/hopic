@@ -26,6 +26,9 @@ from .utils import (
         is_publish_branch,
     )
 from commisery.commit import parse_commit_message
+from ..build import (
+    HopicGitInfo,
+)
 from ..config_reader import (
         JSONEncoder,
         expand_vars,
@@ -1079,6 +1082,10 @@ def submit(ctx, target_remote):
 
         with repo.config_writer() as cfg:
             cfg.remove_section(section)
+
+    hopic_git_info = HopicGitInfo.from_repo(ctx.obj.workspace)
+    for phase in ctx.obj.config['post-submit'].values():
+        build.build_variant(variant='post-submit', cmds=phase, hopic_git_info=hopic_git_info)
 
 
 @main.command()

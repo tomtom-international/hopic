@@ -648,6 +648,8 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
         if not isinstance(phase, Mapping):
             raise ConfigurationError(f"phase `{phasename}` doesn't contain a mapping but a {type(phase).__name__}", file=config)
         for variant in phase:
+            if variant == 'post-submit':
+                raise ConfigurationError(f"variant name 'post-submit', used in phase `{phasename}`, is reserved for internal use", file=config)
             phase[variant] = list(process_variant_cmds(
                 phasename,
                 variant,
@@ -655,5 +657,17 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
                 volume_vars,
                 config_file=config,
             ))
+
+    post_submit = cfg.setdefault('post-submit', OrderedDict())
+    if not isinstance(post_submit, Mapping):
+        raise ConfigurationError(f"`post-submit` doesn't contain a mapping but a {type(post_submit).__name__}", file=config)
+    for phase in post_submit:
+        post_submit[phase] = list(process_variant_cmds(
+            'post-submit',
+            phase,
+            flatten_command_list('post-submit', phase, post_submit[phase], config_file=config),
+            volume_vars,
+            config_file=config,
+        ))
 
     return cfg
