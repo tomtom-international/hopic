@@ -133,6 +133,10 @@ Only the following subset of options however, is permitted to be used within the
 * :option:`volumes`
 * :option:`with-credentials`
 
+The :option:`node-label` option has an additional restriction.
+If specified multiple times, it is only allowed to contain the same value for each location it is specified.
+This is necessary to keep the complexity, and thus chance of failure, of the ``submit`` command low.
+
 Clean
 -----
 

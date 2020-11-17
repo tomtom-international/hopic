@@ -679,6 +679,9 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
     post_submit = cfg.setdefault('post-submit', OrderedDict())
     if not isinstance(post_submit, Mapping):
         raise ConfigurationError(f"`post-submit` doesn't contain a mapping but a {type(post_submit).__name__}", file=config)
+    post_submit_node_label = None
+    post_submit_node_label_phase = None
+    post_submit_node_label_idx = None
     for phase in post_submit:
         post_submit[phase] = list(process_variant_cmds(
             'post-submit',
@@ -687,11 +690,21 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
             volume_vars,
             config_file=config,
         ))
-        for cmd in post_submit[phase]:
+        for cmd_idx, cmd in enumerate(post_submit[phase]):
             for field_name in cmd:
                 if field_name in _unpermitted_post_submit_meta:
                     raise ConfigurationError(f"`post-submit`.`{phase}` contains not permitted field `{field_name}`", file=config)
                 if field_name not in _supported_post_submit_meta:
                     raise ConfigurationError(f"`post-submit`.`{phase}` contains unsupported field `{field_name}`", file=config)
+            if 'node-label' in cmd:
+                if post_submit_node_label is None:
+                    post_submit_node_label = cmd['node-label']
+                    post_submit_node_label_phase = phase
+                    post_submit_node_label_idx = cmd_idx
+                if cmd['node-label'] != post_submit_node_label:
+                    raise ConfigurationError(
+                            f"`post-submit`.`{phase}`[{cmd_idx}]'s `node-label` ({cmd['node-label']!r}) differs from that previously defined in "
+                            f"`post-submit`.{post_submit_node_label_phase}[{post_submit_node_label_idx}] ({post_submit_node_label!r})",
+                            file=config)
 
     return cfg
