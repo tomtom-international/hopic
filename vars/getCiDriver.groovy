@@ -916,8 +916,12 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     }
   }
 
-  public def on_build_node(Map params = [:], closure) {
-    def node_expr = this.nodes.collect { variant, node -> node }.join(" || ") ?: params.getOrDefault('default_node_expr', this.default_node_expr)
+  public def on_build_node(Map params = [:], Closure closure) {
+    def node_expr = (
+           params.node_expr
+        ?: this.nodes.collect { variant, node -> node }.join(" || ")
+        ?: params.getOrDefault('default_node_expr', this.default_node_expr)
+      )
     return steps.node(node_expr) {
       return this.with_hopic { cmd ->
         this.ensure_checkout(cmd, params.getOrDefault('clean', false))
@@ -1152,7 +1156,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           }
 
           if (this.may_submit_result != false) {
-            this.on_build_node { cmd ->
+            this.on_build_node(node_expr: submit_meta['node-label']) { cmd ->
               if (this.has_submittable_change()) {
                 steps.stage('submit') {
                   this.with_git_credentials() {
