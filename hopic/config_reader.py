@@ -49,6 +49,24 @@ log = logging.getLogger(__name__)
 Pattern = type(re.compile(''))
 
 
+_unpermitted_post_submit_meta = frozenset({
+    'archive',
+    'fingerprint',
+    'stash',
+    'worktrees',
+})
+_supported_post_submit_meta = frozenset({
+    'description',
+    'docker-in-docker',
+    'image',
+    'node-label',
+    'run-on-change',
+    'sh',
+    'volumes',
+    'with-credentials',
+})
+
+
 class RunOnChange(str, Enum):
     """
     The :option:`run-on-change` option allows you to specify when a step needs to be executed.
@@ -669,5 +687,11 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
             volume_vars,
             config_file=config,
         ))
+        for cmd in post_submit[phase]:
+            for field_name in cmd:
+                if field_name in _unpermitted_post_submit_meta:
+                    raise ConfigurationError(f"`post-submit`.`{phase}` contains not permitted field `{field_name}`", file=config)
+                if field_name not in _supported_post_submit_meta:
+                    raise ConfigurationError(f"`post-submit`.`{phase}` contains unsupported field `{field_name}`", file=config)
 
     return cfg

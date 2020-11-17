@@ -122,6 +122,16 @@ The :option:`post-submit` option is a dictionary of phases.
 The keys specify the name of each phase.
 
 The content of each phase has the same syntax, and is interpreted the same, as the content of a variant for :option:`phases`.
+Only the following subset of options however, is permitted to be used within these phases:
+
+* :option:`description`
+* :option:`docker-in-docker`
+* :option:`image`
+* :option:`node-label`
+* :option:`run-on-change`
+* :option:`sh`
+* :option:`volumes`
+* :option:`with-credentials`
 
 Clean
 -----
@@ -631,6 +641,8 @@ Sharing Output Data Between Variants
 The option ``stash`` will save files to be used in another Hopic phase.
 The stashed files are available for every executor/node in every phase and workspace after the current one.
 
+.. note:: This option is not allowed to be used within a :option:`post-submit` phase.
+
 Use the option ``includes`` to identify the files to be stashed.
 Use Wildcards like `module/dist/**/*.zip`.
 A `*` expands only to a single directory entry, where `**` expands to multiple directory levels deep.
@@ -658,6 +670,8 @@ Branches in Subdirectory Worktrees
 ----------------------------------
 
 .. option:: worktrees
+
+.. note:: This option is not allowed to be used within a :option:`post-submit` phase.
 
 .. todo::
 
@@ -712,6 +726,8 @@ Artifact Archiving
 The option ``archive`` allows you to archive build artifacts.
 The artifacts can be stored on Jenkins and/or archived to Artifactory.
 
+.. note:: This option is not allowed to be used within a :option:`post-submit` phase.
+
 The base directory is the workspace.
 Artifacts specified are discovered relative to the workspace.
 
@@ -763,6 +779,8 @@ Artifact Fingerprint
 
 The option ``fingerprint`` triggers fingerprinting of build artifacts on Jenkins.
 Use the option ``artifacts`` to identify the artifacts to be fingerprinted.
+
+.. note:: This option is not allowed to be used within a :option:`post-submit` phase.
 
 With the ``fingerprint`` option, the Jenkins "fingerprint" feature is invoked.
 For more information about this feature see: https://jenkins.io/doc/pipeline/steps/core/#fingerprint-record-fingerprints-of-files-to-track-usage
