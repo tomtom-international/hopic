@@ -35,7 +35,7 @@ Version                                     Meaning
 
 .. option:: PURE_VERSION
 
-Contains the :option:`VERSION` (see above), but without ``+gCOMMIT_ID``.
+Contains the :option:`VERSION` (see above), but without ``build metadata`` (everything after the``+``).
 
 For example:
 
