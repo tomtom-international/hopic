@@ -39,6 +39,9 @@ from ..git_time import (
         determine_source_date,
         determine_version,
     )
+from ..versioning import (
+        SemVer
+)
 
 PACKAGE : str = __package__.split('.')[0]
 
@@ -209,8 +212,9 @@ def main(ctx, color, config, workspace, whitelisted_var, publishable_version):
                 cfg = ctx.obj.config = read_config(config, ctx.obj.volume_vars)
     ctx.obj.register_dependent_attribute('config_dir', 'config')
 
-    ctx.obj.version = determine_version(
-            cfg.get('version', {}),
+    version_info = cfg.get('version', {})
+    ctx.obj.version, commit_hash = determine_version(
+            version_info,
             config_dir=(config and ctx.obj.config_dir),
             code_dir=ctx.obj.code_dir,
         )
@@ -221,5 +225,15 @@ def main(ctx, color, config, workspace, whitelisted_var, publishable_version):
         # FIXME: make this conversion work even when not using SemVer as versioning policy
         # Convert SemVer to Debian version: '~' for pre-release instead of '-'
         ctx.obj.volume_vars['DEBVERSION'] = ctx.obj.volume_vars['VERSION'].replace('-', '~', 1).replace('.dirty.', '+dirty', 1)
-        ctx.obj.volume_vars['PUBLISH_VERSION'] = ctx.obj.volume_vars['PURE_VERSION'] if publishable_version \
-            else ctx.obj.volume_vars['VERSION']
+        if publishable_version:
+            ctx.obj.volume_vars['PUBLISH_VERSION'] = ctx.obj.volume_vars['PURE_VERSION']
+            if 'build' in version_info:
+                ctx.obj.volume_vars['PUBLISH_VERSION'] += f"+{version_info['build']}"
+        else:
+            assert commit_hash
+            ver = SemVer.parse(ctx.obj.volume_vars['VERSION'])
+            ver.build = ()  # discard duplicate commit_hash
+            ver.prerelease += (commit_hash, )
+            if 'build' in version_info:
+                ver.build = (version_info['build'],)
+            ctx.obj.volume_vars['PUBLISH_VERSION'] = str(ver)

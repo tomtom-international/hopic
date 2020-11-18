@@ -51,12 +51,11 @@ def run(*args, env=None):
                 return
 
 
-@pytest.mark.parametrize('version_file', (
-    'revision.txt',
-    None,
-))
-def test_conventional_bump(monkeypatch, tmp_path, version_file):
+@pytest.mark.parametrize('version_build', ('1.2.3', None))
+@pytest.mark.parametrize('version_file', ('revision.txt', None))
+def test_conventional_bump(version_build, version_file, monkeypatch, tmp_path):
     toprepo = tmp_path / 'repo'
+    init_version = f'0.0.0+{version_build}' if version_build else '0.0.0'
     with git.Repo.init(str(toprepo), expand_vars=False) as repo:
         cfg_file = 'hopic-ci-config.yaml'
 
@@ -70,6 +69,7 @@ def test_conventional_bump(monkeypatch, tmp_path, version_file):
                         strict: yes
                         on-every-change: no
                     {('  file: ' + version_file) if version_file else ''}
+                    {('  build: ' + version_build) if version_build else ''}
 
                     phases:
                       style:
@@ -77,13 +77,13 @@ def test_conventional_bump(monkeypatch, tmp_path, version_file):
                     """))
         if version_file:
             with (toprepo / version_file).open('w') as fp:
-                fp.write('version=0.0.0\n')
+                fp.write(f'version={init_version}\n')
             repo.index.add((version_file,))
 
         repo.index.add((cfg_file,))
         base_commit = repo.index.commit(message='Initial commit', **_commitargs)
         repo.git.branch('master', move=True)
-        repo.create_tag('0.0.0')
+        repo.create_tag(init_version)
 
         base_commit = repo.index.commit(message='Invalid For Conventional Commits', **_commitargs)
 
@@ -100,6 +100,9 @@ def test_conventional_bump(monkeypatch, tmp_path, version_file):
             'GIT_COMMITTER_EMAIL': 'nobody@example.com',
         })
         repo.index.commit(message='Merge #1: feat: something useful', **_commitargs)
+
+        expected_version = '0.1.0'
+        expected_tag = expected_version + (f'+{version_build}' if version_build else '')
 
         # Make sure we're not on master: it would make the 'git push' from 'hopic submit' fail
         repo.git.checkout('something-useful')
@@ -118,16 +121,16 @@ def test_conventional_bump(monkeypatch, tmp_path, version_file):
         ))
 
     assert all(result.exit_code == 0 for result in results)
-    assert results[1].stdout.splitlines()[-1].split('+')[0] == '0.1.0'
+    assert results[1].stdout.splitlines()[-1].split('+')[0] == expected_version
 
     with git.Repo(str(toprepo)) as repo:
         # Switch back to master to be able to easily look at its contents
         repo.git.checkout('master')
 
-        assert repo.tags['0.1.0'].commit == repo.head.commit
+        assert repo.tags[expected_tag].commit == repo.head.commit
         if version_file:
             with (toprepo / version_file).open('r') as fp:
-                assert fp.read() == 'version=0.1.0\n'
+                assert fp.read() == f'version={expected_version}\n'
 
 
 def test_bump_skipped_when_no_new_commits(monkeypatch, tmp_path):
