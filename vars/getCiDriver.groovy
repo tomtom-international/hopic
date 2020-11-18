@@ -429,7 +429,7 @@ class CiDriver {
       // Timeout prevents infinite downloads from blocking the build forever
       steps.timeout(time: 1, unit: 'MINUTES', activity: true) {
         // Use the exact same Hopic version on every build node
-        if (this.repo.startsWith("git+") && this.repo !=~ /.*@[0-9a-fA-F]{40}/) {
+        if (this.repo.startsWith("git+") && !(this.repo ==~ /.*@[0-9a-fA-F]{40}/)) {
           // Split on the last '@' only
           def split = this.repo[4..-1].split('@')
           def (remote, ref) = [split[0..-2].join('@'), split[-1]]
