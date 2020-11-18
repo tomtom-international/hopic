@@ -54,7 +54,7 @@ setup(
       'setuptools_scm_git_archive',
     ),
     extras_require={
-        'interactive': ['keyring'],
+        'interactive': ['keyring', 'netstruct>=1.1.2<2'],
     },
     use_scm_version={"relative_to": __file__, "local_scheme": "node-and-timestamp"},
     entry_points='''
