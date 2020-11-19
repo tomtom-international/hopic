@@ -542,7 +542,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     }
   }
 
-  private def subcommand_with_credentials(String cmd, String subcmd, credentials) {
+  private def with_credentials(credentials, Closure closure) {
     def creds_info = credentials.collect({ currentCredential ->
       def credential_id = currentCredential['id']
       def type          = currentCredential['type']
@@ -575,19 +575,25 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     })
 
     if (creds_info.size() == 0) {
-      return steps.sh(script: "${cmd} ${subcmd}")
+      return closure(creds_info)
     }
 
     try {
       return steps.withCredentials(creds_info*.with_credentials) {
-        steps.sh(script: cmd
-          + ' ' + creds_info*.white_listed_vars.join(" ")
-          + ' ' + subcmd)
+        return closure(creds_info)
       }
     }
     catch (CredentialNotFoundException e) {
       steps.println("\033[31m[error] credential '${credentials*.id}' does not exist or is not of type '${credentials*.type}'\033[39m")
       throw e
+    }
+  }
+
+  private def subcommand_with_credentials(String cmd, String subcmd, credentials) {
+    this.with_credentials(credentials) { creds_info ->
+      steps.sh(script: cmd
+        + ' ' + creds_info*.white_listed_vars.join(" ")
+        + ' ' + subcmd)
     }
   }
 
