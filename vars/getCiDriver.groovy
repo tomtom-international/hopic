@@ -466,7 +466,7 @@ ${shell_quote(venv)}/bin/python -m pip install ${shell_quote(this.repo)}
     return closure(this.base_cmds[steps.env.NODE_NAME])
   }
 
-  private def with_credentials(closure) {
+  private def with_git_credentials(closure) {
     // Ensure
     try {
       steps.withCredentials([steps.usernamePassword(
@@ -613,7 +613,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     params += ' --target-remote=' + shell_quote(steps.scm.userRemoteConfigs[0].url)
     params += ' --target-ref='    + shell_quote(target_ref)
 
-    steps.env.GIT_COMMIT = this.with_credentials() {
+    steps.env.GIT_COMMIT = this.with_git_credentials() {
       this.target_commit = steps.sh(script: cmd
                                           + ' checkout-source-tree'
                                           + params,
@@ -1089,7 +1089,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
             this.on_build_node { cmd ->
               if (this.has_submittable_change()) {
                 steps.stage('submit') {
-                  this.with_credentials() {
+                  this.with_git_credentials() {
                     // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
                     steps.sh(script: "${cmd} submit")
                   }
