@@ -547,11 +547,14 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       def credential_id = currentCredential['id']
       def type          = currentCredential['type']
 
-      final white_listed_var = '--whitelisted-var='
       if (type == 'username-password') {
         def user_var = currentCredential['username-variable']
         def pass_var = currentCredential['password-variable']
-        return [white_listed_vars: white_listed_var + shell_quote(user_var) + ' ' + white_listed_var + shell_quote(pass_var),
+        return [
+          white_listed_vars: [
+            user_var,
+            pass_var,
+          ],
           with_credentials: steps.usernamePassword(
             credentialsId: credential_id,
             usernameVariable: user_var,
@@ -559,14 +562,20 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
         ]
       } else if (type == 'file') {
         def file_var = currentCredential['filename-variable']
-        return [white_listed_vars: white_listed_var + shell_quote(file_var),
+        return [
+          white_listed_vars: [
+            file_var,
+          ],
           with_credentials: steps.file(
             credentialsId: credential_id,
             variable: file_var,)
         ]
       } else if (type == 'string') {
         def string_var = currentCredential['string-variable']
-        return [white_listed_vars: white_listed_var + shell_quote(string_var),
+        return [
+          white_listed_vars: [
+            string_var,
+          ],
           with_credentials: steps.string(
             credentialsId: credential_id,
             variable: string_var,)
@@ -591,8 +600,9 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
   private def subcommand_with_credentials(String cmd, String subcmd, credentials) {
     this.with_credentials(credentials) { creds_info ->
+      def white_listed_vars = creds_info*.white_listed_vars.flatten().findAll{it}
       steps.sh(script: cmd
-        + ' ' + creds_info*.white_listed_vars.join(" ")
+        + white_listed_vars.collect{" --whitelisted-var=${shell_quote(it)}"}.join('')
         + ' ' + subcmd)
     }
   }
