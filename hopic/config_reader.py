@@ -74,6 +74,13 @@ class CredentialType(str, Enum):
     default = username_password
 
 
+class CredentialEncoding(str, Enum):
+    plain   = 'plain'
+    url     = 'url'
+
+    default = plain
+
+
 _variable_interpolation_re = re.compile(r'(?<!\$)\$(?:(\w+)|\{([^}]+)\})')
 def expand_vars(vars, expr):  # noqa: E302 'expected 2 blank lines'
     if isinstance(expr, str):
@@ -526,7 +533,13 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
                             f"'with-credentials[{cred_idx}].type' value of {cred['type']!r} is not among the valid options ({', '.join(CredentialType)})",
                             file=config_file) from exc
                 if cred_type == CredentialType.username_password:
-                    cred.setdefault('encoding', 'plain')
+                    try:
+                        cred['encoding'] = CredentialEncoding(cred.get('encoding', CredentialEncoding.default))
+                    except ValueError as exc:
+                        raise ConfigurationError(
+                                f"'with-credentials[{cred_idx}].encoding' value of {cred['encoding']!r} is not among the valid options "
+                                f"({', '.join(CredentialEncoding)})",
+                                file=config_file) from exc
                     if not isinstance(cred.setdefault('username-variable', 'USERNAME'), str):
                         raise ConfigurationError(
                                 f"'username-variable' in with-credentials block `{cred['id']}` for "

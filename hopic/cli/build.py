@@ -48,6 +48,7 @@ from ..build import (
     HopicGitInfo,
 )
 from ..config_reader import (
+    CredentialEncoding,
     CredentialType,
     RunOnChange,
     expand_docker_volume_spec,
@@ -188,7 +189,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                         kcred = credentials.get_credential_by_id(cfg['project-name'], creds['id'])
                         if kcred is not None:
                             username, password = kcred
-                            if creds['encoding'] == 'url':
+                            if creds['encoding'] == CredentialEncoding.url:
                                 username = urllib.parse.quote_plus(username)
                                 password = urllib.parse.quote_plus(password)
                             volume_vars.update({
