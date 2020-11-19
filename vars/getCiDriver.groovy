@@ -514,12 +514,13 @@ echo ''' + shell_quote(steps.env.PASSPHRASE ?: '') + '''
                 file: ssh_program,
                 text: '''\
 #!/bin/sh
-# SSH_ASKPASS might be ignored if DISPLAY is not set
+# On OpenSSH versions < 8.4 SSH_ASKPASS gets ignored if DISPLAY is not set,
+# even when SSH_ASKPASS_REQUIRE=force.
 if [ -z "${DISPLAY:-}" ]; then
 DISPLAY=:123.456
 export DISPLAY
 fi
-SSH_ASKPASS='''
+SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 + shell_quote(askpass_program)
 + ''' exec ssh -i '''
 + shell_quote(steps.KEYFILE)
