@@ -519,7 +519,6 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
             if not isinstance(cmd[cmd_key], Sequence):
                 cmd[cmd_key] = [cmd[cmd_key]]
             for cred_idx, cred in enumerate(cmd[cmd_key]):
-                cred.setdefault('encoding', 'plain')
                 try:
                     cred_type = cred['type'] = CredentialType(cred.get('type', CredentialType.default))
                 except ValueError as exc:
@@ -527,6 +526,7 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
                             f"'with-credentials[{cred_idx}].type' value of {cred['type']!r} is not among the valid options ({', '.join(CredentialType)})",
                             file=config_file) from exc
                 if cred_type == CredentialType.username_password:
+                    cred.setdefault('encoding', 'plain')
                     if not isinstance(cred.setdefault('username-variable', 'USERNAME'), str):
                         raise ConfigurationError(
                                 f"'username-variable' in with-credentials block `{cred['id']}` for "
