@@ -70,6 +70,7 @@ class CredentialType(str, Enum):
     username_password = 'username-password'
     file              = 'file'
     string            = 'string'
+    ssh_key           = 'ssh-key'
 
     default = username_password
 
@@ -557,6 +558,11 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
                     if not isinstance(cred.setdefault('string-variable'  , 'SECRET'), str):  # noqa: E203
                         raise ConfigurationError(
                                 f"'string-variable' in with-credentials block `{cred['id']}` for "
+                                f"`{phase}.{variant}` is not a string", file=config_file)
+                elif cred['type'] == CredentialType.ssh_key:
+                    if not isinstance(cred.setdefault('ssh-command-variable', 'SSH'), str):
+                        raise ConfigurationError(
+                                f"'ssh-command-variable' in with-credentials block `{cred['id']}` for "
                                 f"`{phase}.{variant}` is not a string", file=config_file)
 
         if cmd_key == "image":

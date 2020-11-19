@@ -493,47 +493,14 @@ esac
       }
     } catch (CredentialNotFoundException e1) {
       try {
-        steps.withCredentials([steps.sshUserPrivateKey(
-            credentialsId: steps.scm.userRemoteConfigs[0].credentialsId,
-            keyFileVariable: 'KEYFILE',
-            usernameVariable: 'USERNAME',
-            passphraseVariable: 'PASSPHRASE',
-            )]) {
-            def tmpdir = steps.pwd(tmp: true)
-
-            def askpass_program = "${tmpdir}/jenkins-git-ssh-askpass.sh"
-            steps.writeFile(
-                file: askpass_program,
-                text: '''\
-#!/bin/sh
-echo ''' + shell_quote(steps.env.PASSPHRASE ?: '') + '''
-''')
-
-            def ssh_program = "${tmpdir}/jenkins-git-ssh.sh"
-            steps.writeFile(
-                file: ssh_program,
-                text: '''\
-#!/bin/sh
-# On OpenSSH versions < 8.4 SSH_ASKPASS gets ignored if DISPLAY is not set,
-# even when SSH_ASKPASS_REQUIRE=force.
-if [ -z "${DISPLAY:-}" ]; then
-DISPLAY=:123.456
-export DISPLAY
-fi
-SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
-+ shell_quote(askpass_program)
-+ ''' exec ssh -i '''
-+ shell_quote(steps.KEYFILE)
-+ (steps.env.USERNAME != null ? ''' -l ''' + shell_quote(steps.USERNAME) : '')
-+ ''' -o StrictHostKeyChecking=no -o IdentitiesOnly=yes "$@"
-''')
-
-            return steps.withEnv(["GIT_SSH=${ssh_program}", "GIT_SSH_VARIANT=ssh"]) {
-              steps.sh(script: "chmod 700 ${shell_quote(ssh_program)} ${shell_quote(askpass_program)}")
-              def r = closure()
-              steps.sh(script: "rm ${shell_quote(ssh_program)} ${shell_quote(askpass_program)}")
-              return r
-            }
+        return this.with_credentials([[
+          id: steps.scm.userRemoteConfigs[0].credentialsId,
+          type: 'ssh-key',
+          'ssh-command-variable': 'GIT_SSH'
+        ]]) {
+          return steps.withEnv(["GIT_SSH_VARIANT=ssh"]) {
+            return closure()
+          }
         }
       } catch (CredentialNotFoundException e2) {
         // Ignore, hoping that we're dealing with a passwordless SSH credential stored at ~/.ssh/id_rsa
@@ -580,6 +547,66 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
             credentialsId: credential_id,
             variable: string_var,)
         ]
+      } else if (type == 'ssh-key') {
+        def command_var = currentCredential['ssh-command-variable']
+
+        // normalize id for use as part of environment variable name
+        def normalized_id = credential_id.toUpperCase().replaceAll(/[^A-Z0-9_]/, '_')
+        def keyfile_var = "KEYFILE_${normalized_id}"
+        def username_var = "USERNAME_${normalized_id}"
+        def passphrase_var = "PASSPHRASE_${normalized_id}"
+
+        def tmpdir = steps.pwd(tmp: true)
+        def askpass_program = "${tmpdir}/jenkins-${normalized_id}-ssh-askpass.sh"
+        def ssh_program = "${tmpdir}/jenkins-${normalized_id}-ssh.sh"
+
+        return [
+          white_listed_vars: [
+            command_var,
+          ],
+          with_credentials: steps.sshUserPrivateKey(
+            credentialsId: credential_id,
+            keyFileVariable: keyfile_var,
+            usernameVariable: username_var,
+            passphraseVariable: passphrase_var,),
+          environment: [
+            "${command_var}=${ssh_program}",
+            "${keyfile_var}=",
+            "${username_var}=",
+            "${passphrase_var}="
+          ],
+          files: [
+            (askpass_program): {
+              steps.writeFile(
+                  file: askpass_program,
+                  text: '''\
+#!/bin/sh
+echo ''' + shell_quote(steps.env[passphrase_var] ?: '') + '''
+''')
+              steps.sh(script: "chmod 700 ${shell_quote(askpass_program)}")
+            },
+            (ssh_program): {
+              steps.writeFile(
+                  file: ssh_program,
+                  text: '''\
+#!/bin/sh
+# On OpenSSH versions < 8.4 SSH_ASKPASS gets ignored if DISPLAY is not set,
+# even when SSH_ASKPASS_REQUIRE=force.
+if [ -z "${DISPLAY:-}" ]; then
+  DISPLAY=:123.456
+  export DISPLAY
+fi
+SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
++ shell_quote(askpass_program)
++ ''' exec ssh -i '''
++ shell_quote(steps.env[keyfile_var])
++ (steps.env[username_var] != null ? ''' -l ''' + shell_quote(steps.env[username_var]) : '')
++ ''' -o StrictHostKeyChecking=no -o IdentitiesOnly=yes "$@"
+''')
+              steps.sh(script: "chmod 700 ${shell_quote(ssh_program)}")
+            },
+          ],
+        ]
       }
     })
 
@@ -587,14 +614,30 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       return closure(creds_info)
     }
 
+    def files = creds_info*.files.flatten().collectEntries{it ?: [:]}
+
     try {
       return steps.withCredentials(creds_info*.with_credentials) {
-        return closure(creds_info)
+        files.each { file, write_file ->
+          write_file()
+        }
+        def environment = creds_info*.environment.flatten().findAll{it}
+        if (environment) {
+          return steps.withEnv(environment) {
+            return closure(creds_info)
+          }
+        } else {
+          return closure(creds_info)
+        }
       }
     }
     catch (CredentialNotFoundException e) {
       steps.println("\033[31m[error] credential '${credentials*.id}' does not exist or is not of type '${credentials*.type}'\033[39m")
       throw e
+    } finally {
+      if (files) {
+        steps.sh('rm -f -- ' + files.collect{shell_quote(it.key)}.join(' '))
+      }
     }
   }
 
