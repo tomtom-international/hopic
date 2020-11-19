@@ -519,16 +519,18 @@ if [ -z "${DISPLAY:-}" ]; then
 DISPLAY=:123.456
 export DISPLAY
 fi
-exec ssh -i '''
+SSH_ASKPASS='''
++ shell_quote(askpass_program)
++ ''' exec ssh -i '''
 + shell_quote(steps.KEYFILE)
 + (steps.env.USERNAME != null ? ''' -l ''' + shell_quote(steps.USERNAME) : '')
 + ''' -o StrictHostKeyChecking=no -o IdentitiesOnly=yes "$@"
 ''')
 
-            return steps.withEnv(["SSH_ASKPASS=${askpass_program}", "GIT_SSH=${ssh_program}", "GIT_SSH_VARIANT=ssh"]) {
-              steps.sh(script: 'chmod 700 "${GIT_SSH}" "${SSH_ASKPASS}"')
+            return steps.withEnv(["GIT_SSH=${ssh_program}", "GIT_SSH_VARIANT=ssh"]) {
+              steps.sh(script: "chmod 700 ${shell_quote(ssh_program)} ${shell_quote(askpass_program)}")
               def r = closure()
-              steps.sh(script: 'rm "${GIT_SSH}" "${SSH_ASKPASS}"')
+              steps.sh(script: "rm ${shell_quote(ssh_program)} ${shell_quote(askpass_program)}")
               return r
             }
         }
