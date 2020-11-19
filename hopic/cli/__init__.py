@@ -1091,10 +1091,10 @@ def submit(ctx, target_remote):
 
         repo.git.push(target_remote, refspecs, atomic=True)
 
+        hopic_git_info = HopicGitInfo.from_repo(repo)
         with repo.config_writer() as cfg:
             cfg.remove_section(section)
 
-    hopic_git_info = HopicGitInfo.from_repo(ctx.obj.workspace)
     for phase in ctx.obj.config['post-submit'].values():
         build.build_variant(variant='post-submit', cmds=phase, hopic_git_info=hopic_git_info)
 
