@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    <title>Configuration &#8212; Hopic 1.24.1.dev37+g033f8dd documentation</title>
+    <title>Configuration &#8212; Hopic 1.24.1.dev127+g437fd44 documentation</title>
     <link rel="stylesheet" href="_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
     <link rel="stylesheet" type="text/css" href="_static/banner.css" />
@@ -30,7 +30,7 @@
         <li class="right" >
           <a href="intro.html" title="Introduction"
              accesskey="P">previous</a> |</li>
-        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.24.1.dev37+g033f8dd documentation</a> &#187;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.24.1.dev127+g437fd44 documentation</a> &#187;</li> 
       </ul>
     </div>  
 
@@ -305,28 +305,45 @@ In addition to that you can specify the name of the config and environment varia
 <a class="reference internal" href="#cmdoption-arg-with-credentials"><code class="xref std std-option docutils literal notranslate"><span class="pre">with-credentials</span></code></a> value can be specified as a list to have multiple credentials for a variant within a phase.
 Username/password credentials can be optionally encoded for use in a url by configuring encoding to (<code class="docutils literal notranslate"><span class="pre">url</span></code>).</p>
 <p>The supported types of credential are:</p>
-<dl class="docutils">
-<dt>Username/password credential</dt>
-<dd><ul class="first last simple">
+<div class="section" id="username-password-credential">
+<h3>Username/password credential<a class="headerlink" href="#username-password-credential" title="Permalink to this headline">¶</a></h3>
+<blockquote>
+<div><ul class="simple">
 <li><code class="docutils literal notranslate"><span class="pre">type</span></code>: <code class="docutils literal notranslate"><span class="pre">username-password</span></code></li>
 <li><code class="docutils literal notranslate"><span class="pre">username-variable</span></code> default: <code class="docutils literal notranslate"><span class="pre">USERNAME</span></code></li>
 <li><code class="docutils literal notranslate"><span class="pre">password-variable</span></code> default: <code class="docutils literal notranslate"><span class="pre">PASSWORD</span></code></li>
 <li><code class="docutils literal notranslate"><span class="pre">encoding</span></code>: default: <code class="docutils literal notranslate"><span class="pre">plain</span></code></li>
 </ul>
-</dd>
-<dt>File credential</dt>
-<dd><ul class="first last simple">
+</div></blockquote>
+</div>
+<div class="section" id="file-credential">
+<h3>File credential<a class="headerlink" href="#file-credential" title="Permalink to this headline">¶</a></h3>
+<blockquote>
+<div><ul class="simple">
 <li><code class="docutils literal notranslate"><span class="pre">type</span></code>: <code class="docutils literal notranslate"><span class="pre">file</span></code></li>
 <li><code class="docutils literal notranslate"><span class="pre">filename-variable</span></code> default: <code class="docutils literal notranslate"><span class="pre">SECRET_FILE</span></code></li>
 </ul>
-</dd>
-<dt>String credential</dt>
-<dd><ul class="first last simple">
+</div></blockquote>
+</div>
+<div class="section" id="string-credential">
+<h3>String credential<a class="headerlink" href="#string-credential" title="Permalink to this headline">¶</a></h3>
+<blockquote>
+<div><ul class="simple">
 <li><code class="docutils literal notranslate"><span class="pre">type</span></code>: <code class="docutils literal notranslate"><span class="pre">string</span></code></li>
 <li><code class="docutils literal notranslate"><span class="pre">string-variable</span></code> default: <code class="docutils literal notranslate"><span class="pre">SECRET</span></code></li>
 </ul>
-</dd>
-</dl>
+</div></blockquote>
+</div>
+<div class="section" id="ssh-key-credential">
+<h3>SSH key credential<a class="headerlink" href="#ssh-key-credential" title="Permalink to this headline">¶</a></h3>
+<blockquote>
+<div><ul class="simple">
+<li><code class="docutils literal notranslate"><span class="pre">type</span></code>: <code class="docutils literal notranslate"><span class="pre">ssh-key</span></code></li>
+<li><code class="docutils literal notranslate"><span class="pre">ssh-command-variable</span></code> default: <code class="docutils literal notranslate"><span class="pre">SSH</span></code></li>
+</ul>
+</div></blockquote>
+<p>This provides, in the variable specified by <code class="docutils literal notranslate"><span class="pre">ssh-command-variable</span></code>, an executable that will behave like <code class="docutils literal notranslate"><span class="pre">ssh</span></code>.
+It will however be pre-authenticated with the credential’s SSH key and, if known, associated user.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span>
   <span class="nt">download</span><span class="p">:</span>
     <span class="nt">toolchain</span><span class="p">:</span>
@@ -364,6 +381,7 @@ Username/password credentials can be optionally encoded for use in a url by conf
           <span class="nt">type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">username-password</span>
       <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">publish --user=${USERNAME} --password=${PASSWORD}</span>
 </pre></div>
+</div>
 </div>
 <div class="section" id="keyring-support">
 <h3>Keyring Support<a class="headerlink" href="#keyring-support" title="Permalink to this headline">¶</a></h3>
@@ -1265,7 +1283,7 @@ The command should output the part of the configuration file to standard output.
         <li class="right" >
           <a href="intro.html" title="Introduction"
              >previous</a> |</li>
-        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.24.1.dev37+g033f8dd documentation</a> &#187;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.24.1.dev127+g437fd44 documentation</a> &#187;</li> 
       </ul>
     </div>
     <div class="footer" role="contentinfo">
