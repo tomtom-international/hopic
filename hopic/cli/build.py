@@ -321,6 +321,12 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                                 log.error(
                                         'Could not stop Docker container (maybe it was stopped already?), command failed with exit code %d',
                                         e.returncode)
+                            except FatalSignal:
+                                # Ignore INT and TERM while sending KILL to the Docker container
+                                signal.signal(signal.SIGINT, signal.SIG_IGN)
+                                signal.signal(signal.SIGTERM, signal.SIG_IGN)
+                                log.warning('Interrupted while stopping Docker container; killing..')
+                                echo_cmd(subprocess.check_call, ('docker', 'kill', cid))
                         ctx.exit(128 + signal_exc.signal)
                     for num, old_handler in old_handlers.items():
                         signal.signal(num, old_handler)
