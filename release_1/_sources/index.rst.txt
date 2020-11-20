@@ -33,6 +33,7 @@ Contents
    usage
    intro
    config
+   changes
 
 Indices and tables
 ==================
