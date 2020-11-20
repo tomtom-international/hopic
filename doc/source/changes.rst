@@ -17,6 +17,493 @@
 Changelog
 =========
 
+1.24.0
+======
+
+New features
+------------
+
+* feat: make credential used during Bitbucket operations configurable
+
+Improvements
+------------
+
+* improvement: remove error logs during template loading
+* improvement: use longer timestamp in local version dirty field
+* docs: add CONTRIBUTING.md
+
+Bug fixes
+---------
+
+* fix: remove script approval requirement for reporting build status
+* fix: return result of echo_cmd when click context is used
+* fix: remove Jenkins script approval requirement for stash
+* fix: prevent splitting footers with empty lines
+
+1.23.0
+======
+
+New features
+------------
+
+* feat: add dry-run option to build command
+* feat: add version option to hopic
+* feat: support yaml strings from templates
+
+Bug fixes
+---------
+
+* fix: ignore YAML errors while reading optional config file
+
+1.22.0
+======
+
+New features
+------------
+
+* feat: install extensions more thoroughly and log their versions
+
+Bug fixes
+---------
+
+* fix: update __main__.py with previously moved cli entrypoint
+* fix: mark our produced package as zip-safe to increase installation speed
+* fix: give notes the same commit/author times as the commits they're annotating
+* fix: don't create a git note for existing commits
+* fix: use exec flag for tmpfs docker parameter
+
+1.21.2
+======
+
+Bug fixes
+---------
+
+* fix: handle /dev/null config file
+
+1.21.1
+======
+
+Documentation fixes
+-------------------
+
+* docs: fix reference in 'usage' page
+
+1.21.0
+======
+
+New features
+------------
+
+* feat(groovy): notify BitBucket about our build status
+
+1.20.1
+======
+
+Bug fixes
+---------
+
+* fix: convert with-extra-index into a list of itself, not its container
+
+1.20.0
+======
+
+New features
+------------
+
+* feat: add support for installation of packages with pip before building
+
+1.19.2
+======
+
+Bug fixes
+---------
+
+* hopic.cli sub package too
+
+1.19.1
+======
+
+Bug fixes
+---------
+
+* fix: don't use typing.Final because it depends on Python 3.8+
+
+1.19.0
+======
+
+New features
+------------
+
+* feat: support using /dev/null as config file to indicate using defaults only
+
+1.18.0
+======
+
+New features
+------------
+
+* feat: enable bumping on past commits instead of just the current PR's commits
+
+1.17.0
+======
+
+New features
+------------
+
+* feat: allow restricting steps to run only for new versions
+
+1.16.3
+======
+
+Bug fixes
+---------
+
+* fix: split off the branch name from the end of the URL only
+
+1.16.2
+======
+
+Bug fixes
+---------
+
+* fix: handle different credential variable names for same credential ids
+
+1.16.1
+======
+
+Bug fixes
+---------
+
+* fix: don't refer to undefined variables in error messages
+* fix: use operator '=' instead of operator '==' where assignment is required
+
+1.16.0
+======
+
+Empty release
+
+1.15.0
+======
+
+New features
+------------
+
+* feat: support command argument lists instead of space-splitted strings
+
+1.14.3
+======
+
+Bug fixes
+---------
+
+* fix(credentials): don't import unused 'secretstorage'
+
+Documentation fixes
+-------------------
+
+* docs: use correct syntax for specifying 'extra' requirements to install
+
+1.14.2
+======
+
+Bug fixes
+---------
+
+* fix: don't attempt to add deleted files to the git index
+
+1.14.1
+======
+
+Bug fixes
+---------
+
+* fix: enable deep construction while deserializing non-scalar yaml values
+
+1.14.0
+======
+
+New features
+------------
+
+* feat: attempt to obtain credentials from the user's keyring
+
+Improvements
+------------
+
+* improvement: upgrade to GitPython 3.y.z as we don't need Python 2 support
+
+1.13.4
+======
+
+Improvements
+------------
+
+* improvement: mock a username for the current uid inside docker with nss-wrapper
+
+Bug fixes
+---------
+
+* fix: pass on committer metadata to sub worktree
+
+1.13.3
+======
+
+Bug fixes
+---------
+
+* fix: don't crash for initialized but empty repositories
+
+1.13.2
+======
+
+Empty release
+
+1.13.1
+======
+
+Bug fixes
+---------
+
+* fix: use author's display name instead of user name for git author
+
+1.13.0
+======
+
+New features
+------------
+
+
+* feat: enable overriding the default volumes with 'null' to disable them
+
+1.12.0
+======
+
+New features
+------------
+
+* feat: add PURE_VERSION config and env variables
+
+1.11.3
+======
+
+Bug fixes
+---------
+
+* fix: make hopic compatible with NK2 CI
+
+1.11.2
+======
+
+Bug fixes
+---------
+
+* fix: don't assume branch name is available
+
+Documentation fixes
+-------------------
+
+* docs: fix indentation in Sphinx config file
+
+1.11.1
+======
+
+Bug fixes
+---------
+
+* fix: don't assume GIT_COMMITTER_XXX to be set, ensure it
+
+1.11.0
+======
+
+New features
+------------
+
+* feat: allow executing multiple phases/variants instead of just a single one
+
+Improvements
+------------
+
+* improvement: raise a readable error when phases/variants have the wrong type
+
+1.10.1
+======
+
+Improvements
+------------
+
+* improvement: prevent attempts to define multiple phases with the same name
+
+Bug fixes
+---------
+
+* fix: reset the WORKSPACE variable based on the use of an image before every step
+
+1.10.0
+======
+
+New features
+------------
+
+* feat: check copyright end date against last year of modification of each file
+
+1.9.0
+======
+
+New features
+------------
+
+* feat: add template support for YAML snippets
+
+Improvements
+------------
+* improvement: log when all merge criteria are met
+* improvement: log failure of sub commands instead of exiting with a traceback
+* docs: describe Hopic variables
+
+1.8.0
+======
+
+New features
+------------
+
+* feat: add !embed support in configuration
+
+Improvements
+------------
+
+* improvement: show a warning when failing to parse the version part of a git tag
+
+1.7.2
+======
+
+Bug fixes
+---------
+
+* fix: remove workspace before cloning to it
+
+1.7.1
+======
+
+Bug fixes
+---------
+
+* fix: avoid crash when passing empty variant
+
+1.7.0
+======
+
+New features
+------------
+
+* feat: allow prepare-source-tree to be used without checkout-source-tree
+
+1.6.0
+======
+
+New features
+------------
+
+* feat: allow specifying the parents for commits produced by modality changes
+
+1.5.2
+======
+
+Bug fixes
+---------
+
+* fix: prevent build reincarnation due to internal Jenkins exception
+
+1.5.1
+======
+
+Improvements
+------------
+
+* improvement: switch to 'slim' image for Python instead of 'alpine'
+
+Bug fixes
+---------
+
+* fix: ensure that we always pass the --workspace and --config arguments to Hopic
+
+1.5.0
+======
+
+New features
+------------
+
+* feat: make Hopic command available as param to on_build_node/with_hopic closures
+
+1.4.0
+======
+
+New features
+------------
+
+* feat: add configuration to upload artifacts on failed builds
+
+1.3.0
+======
+
+New features
+------------
+
+* feat: allow docker-in-docker access
+
+1.2.2
+======
+
+Bug fixes
+---------
+
+* fix: always get the same last Hopic version on every build node
+* revert: add configuration to upload artifacts on failed builds
+
+1.2.1
+======
+
+Bug fixes
+---------
+
+* fix: always use most recent change request information
+
+1.2.0
+======
+
+New features
+------------
+
+* feat: add configuration to upload artifacts on failed builds
+
+1.1.0
+======
+
+New features
+------------
+
+* feat: stop the running Docker container when receiving SIGINT or SIGTERM
+
+Improvements
+------------
+
+* refactor: use commisery's commit message parsing
+
+1.0.0
+======
+
+Improvements
+------------
+
+* ci: run tests with Python 3.7 too
+
+Cleanup
+-------
+
+* refactor!: rename 'ci-driver' to 'hopic'
+* chore!: get rid of old cfg.yml as default config file name
+* chore!: switch over to Python 3.6.5 (PIPE-251)
+* chore(cli)!: delete unused 'phases' and 'variants' sub commands
+
 0.15.2
 ======
 
