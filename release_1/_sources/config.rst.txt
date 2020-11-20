@@ -140,18 +140,33 @@ Username/password credentials can be optionally encoded for use in a url by conf
 The supported types of credential are:
 
 Username/password credential
+++++++++++++++++++++++++++++
+
    * ``type``: ``username-password``
    * ``username-variable`` default: ``USERNAME``
    * ``password-variable`` default: ``PASSWORD``
    * ``encoding``: default: ``plain``
 
 File credential
++++++++++++++++
+
    * ``type``: ``file``
    * ``filename-variable`` default: ``SECRET_FILE``
 
 String credential
++++++++++++++++++
+
    * ``type``: ``string``
    * ``string-variable`` default: ``SECRET``
+
+SSH key credential
+++++++++++++++++++
+
+   * ``type``: ``ssh-key``
+   * ``ssh-command-variable`` default: ``SSH``
+
+This provides, in the variable specified by ``ssh-command-variable``, an executable that will behave like ``ssh``.
+It will however be pre-authenticated with the credential's SSH key and, if known, associated user.
 
 .. literalinclude:: ../../examples/with-credentials.yaml
    :language: yaml
