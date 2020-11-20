@@ -429,7 +429,7 @@ class CiDriver {
         assert this.repo.startsWith('git+'), "getCiDriver repo URL _must_ start with 'git+' but doesn't: ${this.repo}"
 
         // Use the exact same Hopic version on every build node
-        if (this.repo !=~ /.*@[0-9a-fA-F]{40}/) {
+        if (!(this.repo ==~ /.*@[0-9a-fA-F]{40}/)) {
           // Split on the last '@' only
           def split = this.repo[4..-1].split('@')
           def (remote, ref) = [split[0..-2].join('@'), split[-1]]
