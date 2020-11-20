@@ -15,7 +15,8 @@
 from . import hopic_cli
 
 from click.testing import CliRunner
-from collections import OrderedDict, Sequence
+from collections import OrderedDict
+from collections.abc import Sequence
 import git
 import json
 import os

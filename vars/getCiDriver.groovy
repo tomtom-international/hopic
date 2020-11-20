@@ -498,7 +498,7 @@ docker build --build-arg=PYTHON_VERSION=3.6 --iidfile=${shell_quote(docker_src)}
     }
   }
 
-  private def with_credentials(closure) {
+  private def with_git_credentials(closure) {
     // Ensure
     try {
       steps.withCredentials([steps.usernamePassword(
@@ -525,44 +525,14 @@ esac
       }
     } catch (CredentialNotFoundException e1) {
       try {
-        steps.withCredentials([steps.sshUserPrivateKey(
-            credentialsId: steps.scm.userRemoteConfigs[0].credentialsId,
-            keyFileVariable: 'KEYFILE',
-            usernameVariable: 'USERNAME',
-            passphraseVariable: 'PASSPHRASE',
-            )]) {
-            def tmpdir = steps.pwd(tmp: true)
-
-            def askpass_program = "${tmpdir}/jenkins-git-ssh-askpass.sh"
-            steps.writeFile(
-                file: askpass_program,
-                text: '''\
-#!/bin/sh
-echo ''' + shell_quote(steps.env.PASSPHRASE ?: '') + '''
-''')
-
-            def ssh_program = "${tmpdir}/jenkins-git-ssh.sh"
-            steps.writeFile(
-                file: ssh_program,
-                text: '''\
-#!/bin/sh
-# SSH_ASKPASS might be ignored if DISPLAY is not set
-if [ -z "${DISPLAY:-}" ]; then
-DISPLAY=:123.456
-export DISPLAY
-fi
-exec ssh -i '''
-+ shell_quote(steps.KEYFILE)
-+ (steps.env.USERNAME != null ? ''' -l ''' + shell_quote(steps.USERNAME) : '')
-+ ''' -o StrictHostKeyChecking=no -o IdentitiesOnly=yes "$@"
-''')
-
-            return steps.withEnv(["SSH_ASKPASS=${askpass_program}", "GIT_SSH=${ssh_program}", "GIT_SSH_VARIANT=ssh"]) {
-              steps.sh(script: 'chmod 700 "${GIT_SSH}" "${SSH_ASKPASS}"')
-              def r = closure()
-              steps.sh(script: 'rm "${GIT_SSH}" "${SSH_ASKPASS}"')
-              return r
-            }
+        return this.with_credentials([[
+          id: steps.scm.userRemoteConfigs[0].credentialsId,
+          type: 'ssh-key',
+          'ssh-command-variable': 'GIT_SSH'
+        ]]) {
+          return steps.withEnv(["GIT_SSH_VARIANT=ssh"]) {
+            return closure()
+          }
         }
       } catch (CredentialNotFoundException e2) {
         // Ignore, hoping that we're dealing with a passwordless SSH credential stored at ~/.ssh/id_rsa
@@ -571,16 +541,19 @@ exec ssh -i '''
     }
   }
 
-  private def subcommand_with_credentials(String cmd, String subcmd, credentials) {
+  private def with_credentials(credentials, Closure closure) {
     def creds_info = credentials.collect({ currentCredential ->
       def credential_id = currentCredential['id']
       def type          = currentCredential['type']
 
-      final white_listed_var = '--whitelisted-var='
       if (type == 'username-password') {
         def user_var = currentCredential['username-variable']
         def pass_var = currentCredential['password-variable']
-        return [white_listed_vars: white_listed_var + shell_quote(user_var) + ' ' + white_listed_var + shell_quote(pass_var),
+        return [
+          white_listed_vars: [
+            user_var,
+            pass_var,
+          ],
           with_credentials: steps.usernamePassword(
             credentialsId: credential_id,
             usernameVariable: user_var,
@@ -588,35 +561,124 @@ exec ssh -i '''
         ]
       } else if (type == 'file') {
         def file_var = currentCredential['filename-variable']
-        return [white_listed_vars: white_listed_var + shell_quote(file_var),
+        return [
+          white_listed_vars: [
+            file_var,
+          ],
           with_credentials: steps.file(
             credentialsId: credential_id,
             variable: file_var,)
         ]
       } else if (type == 'string') {
         def string_var = currentCredential['string-variable']
-        return [white_listed_vars: white_listed_var + shell_quote(string_var),
+        return [
+          white_listed_vars: [
+            string_var,
+          ],
           with_credentials: steps.string(
             credentialsId: credential_id,
             variable: string_var,)
+        ]
+      } else if (type == 'ssh-key') {
+        def command_var = currentCredential['ssh-command-variable']
+
+        // normalize id for use as part of environment variable name
+        def normalized_id = credential_id.toUpperCase().replaceAll(/[^A-Z0-9_]/, '_')
+        def keyfile_var = "KEYFILE_${normalized_id}"
+        def username_var = "USERNAME_${normalized_id}"
+        def passphrase_var = "PASSPHRASE_${normalized_id}"
+
+        def tmpdir = steps.pwd(tmp: true)
+        def askpass_program = "${tmpdir}/jenkins-${normalized_id}-ssh-askpass.sh"
+        def ssh_program = "${tmpdir}/jenkins-${normalized_id}-ssh.sh"
+
+        return [
+          white_listed_vars: [
+            command_var,
+          ],
+          with_credentials: steps.sshUserPrivateKey(
+            credentialsId: credential_id,
+            keyFileVariable: keyfile_var,
+            usernameVariable: username_var,
+            passphraseVariable: passphrase_var,),
+          environment: [
+            "${command_var}=${ssh_program}",
+            "${keyfile_var}=",
+            "${username_var}=",
+            "${passphrase_var}="
+          ],
+          files: [
+            (askpass_program): {
+              steps.writeFile(
+                  file: askpass_program,
+                  text: '''\
+#!/bin/sh
+echo ''' + shell_quote(steps.env[passphrase_var] ?: '') + '''
+''')
+              steps.sh(script: "chmod 700 ${shell_quote(askpass_program)}")
+            },
+            (ssh_program): {
+              steps.writeFile(
+                  file: ssh_program,
+                  text: '''\
+#!/bin/sh
+# On OpenSSH versions < 8.4 SSH_ASKPASS gets ignored if DISPLAY is not set,
+# even when SSH_ASKPASS_REQUIRE=force.
+if [ -z "${DISPLAY:-}" ]; then
+  DISPLAY=:123.456
+  export DISPLAY
+fi
+SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
++ shell_quote(askpass_program)
++ ''' exec ssh -i '''
++ shell_quote(steps.env[keyfile_var])
++ (steps.env[username_var] != null ? ''' -l ''' + shell_quote(steps.env[username_var]) : '')
++ ''' -o StrictHostKeyChecking=no -o IdentitiesOnly=yes "$@"
+''')
+              steps.sh(script: "chmod 700 ${shell_quote(ssh_program)}")
+            },
+          ],
         ]
       }
     })
 
     if (creds_info.size() == 0) {
-      return steps.sh(script: "${cmd} ${subcmd}")
+      return closure(creds_info)
     }
+
+    def files = creds_info*.files.flatten().collectEntries{it ?: [:]}
 
     try {
       return steps.withCredentials(creds_info*.with_credentials) {
-        steps.sh(script: cmd
-          + ' ' + creds_info*.white_listed_vars.join(" ")
-          + ' ' + subcmd)
+        files.each { file, write_file ->
+          write_file()
+        }
+        def environment = creds_info*.environment.flatten().findAll{it}
+        if (environment) {
+          return steps.withEnv(environment) {
+            return closure(creds_info)
+          }
+        } else {
+          return closure(creds_info)
+        }
       }
     }
     catch (CredentialNotFoundException e) {
       steps.println("\033[31m[error] credential '${credentials*.id}' does not exist or is not of type '${credentials*.type}'\033[39m")
       throw e
+    } finally {
+      if (files) {
+        steps.sh('rm -f -- ' + files.collect{shell_quote(it.key)}.join(' '))
+      }
+    }
+  }
+
+  private def subcommand_with_credentials(String cmd, String subcmd, credentials) {
+    this.with_credentials(credentials) { creds_info ->
+      def white_listed_vars = creds_info*.white_listed_vars.flatten().findAll{it}
+      steps.sh(script: cmd
+        + white_listed_vars.collect{" --whitelisted-var=${shell_quote(it)}"}.join('')
+        + ' ' + subcmd)
     }
   }
 
@@ -642,7 +704,7 @@ exec ssh -i '''
     params += ' --target-remote=' + shell_quote(steps.scm.userRemoteConfigs[0].url)
     params += ' --target-ref='    + shell_quote(target_ref)
 
-    steps.env.GIT_COMMIT = this.with_credentials() {
+    steps.env.GIT_COMMIT = this.with_git_credentials() {
       this.target_commit = steps.sh(script: cmd
                                           + ' checkout-source-tree'
                                           + params,
@@ -1118,7 +1180,7 @@ exec ssh -i '''
             this.on_build_node { cmd ->
               if (this.has_submittable_change()) {
                 steps.stage('submit') {
-                  this.with_credentials() {
+                  this.with_git_credentials() {
                     // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
                     steps.sh(script: "${cmd} submit")
                   }

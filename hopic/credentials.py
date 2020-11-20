@@ -17,7 +17,26 @@ import sys
 
 try:
     import keyring
+    import netstruct
     from contextlib import closing
+
+    class OSXKeyring(keyring.backends.OS_X.Keyring):
+
+        pattern = b'b$b$'
+
+        def get_credential(self, service, username):
+            if username is None:
+                username = service
+            cred = super().get_credential(service, username)
+            if cred is not None:
+                u, p = netstruct.unpack(self.pattern, cred.password.encode('UTF-8'))
+                cred = keyring.credentials.SimpleCredential(u.decode('UTF-8'), p.decode('UTF-8'))
+            return cred
+
+        def set_password(self, service, username, password):
+            password = netstruct.pack(self.pattern, username.encode('UTF-8'), password.encode('UTF-8')).decode('UTF-8')
+            username = service
+            return super().set_password(service, username, password)
 
     class KeePassKeyring(keyring.backends.SecretService.Keyring):
         """
@@ -81,6 +100,10 @@ def _init_keyring():
                 keyring.backends.SecretService.Keyring,
                 )):
             backend.appid = 'Hopic'
+
+        if isinstance(backend, keyring.backends.OS_X.Keyring):
+            backends[i] = OSXKeyring()
+            backend = backends
 
     if len(backends) == 1:
         _keyring_backend = backends[0]
