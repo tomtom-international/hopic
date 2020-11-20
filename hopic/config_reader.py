@@ -66,6 +66,22 @@ class RunOnChange(str, Enum):
     default = always
 
 
+class CredentialType(str, Enum):
+    username_password = 'username-password'
+    file              = 'file'
+    string            = 'string'
+    ssh_key           = 'ssh-key'
+
+    default = username_password
+
+
+class CredentialEncoding(str, Enum):
+    plain   = 'plain'
+    url     = 'url'
+
+    default = plain
+
+
 _variable_interpolation_re = re.compile(r'(?<!\$)\$(?:(\w+)|\{([^}]+)\})')
 def expand_vars(vars, expr):  # noqa: E302 'expected 2 blank lines'
     if isinstance(expr, str):
@@ -510,10 +526,21 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
                 cmd[cmd_key] = OrderedDict([('id', cmd[cmd_key])])
             if not isinstance(cmd[cmd_key], Sequence):
                 cmd[cmd_key] = [cmd[cmd_key]]
-            for cred in cmd[cmd_key]:
-                cred.setdefault('encoding', 'plain')
-                cred_type = cred.setdefault('type', 'username-password')
-                if cred_type == 'username-password':
+            for cred_idx, cred in enumerate(cmd[cmd_key]):
+                try:
+                    cred_type = cred['type'] = CredentialType(cred.get('type', CredentialType.default))
+                except ValueError as exc:
+                    raise ConfigurationError(
+                            f"'with-credentials[{cred_idx}].type' value of {cred['type']!r} is not among the valid options ({', '.join(CredentialType)})",
+                            file=config_file) from exc
+                if cred_type == CredentialType.username_password:
+                    try:
+                        cred['encoding'] = CredentialEncoding(cred.get('encoding', CredentialEncoding.default))
+                    except ValueError as exc:
+                        raise ConfigurationError(
+                                f"'with-credentials[{cred_idx}].encoding' value of {cred['encoding']!r} is not among the valid options "
+                                f"({', '.join(CredentialEncoding)})",
+                                file=config_file) from exc
                     if not isinstance(cred.setdefault('username-variable', 'USERNAME'), str):
                         raise ConfigurationError(
                                 f"'username-variable' in with-credentials block `{cred['id']}` for "
@@ -522,15 +549,20 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
                         raise ConfigurationError(
                                 f"'password-variable' in with-credentials block `{cred['id']}` for "
                                 f"`{phase}.{variant}` is not a string", file=config_file)
-                elif cred_type == 'file':
+                elif cred_type == CredentialType.file:
                     if not isinstance(cred.setdefault('filename-variable', 'SECRET_FILE'), str):
                         raise ConfigurationError(
                                 f"'filename-variable' in with-credentials block `{cred['id']}` for "
                                 f"`{phase}.{variant}` is not a string", file=config_file)
-                elif cred_type == 'string':
+                elif cred_type == CredentialType.string:
                     if not isinstance(cred.setdefault('string-variable'  , 'SECRET'), str):  # noqa: E203
                         raise ConfigurationError(
                                 f"'string-variable' in with-credentials block `{cred['id']}` for "
+                                f"`{phase}.{variant}` is not a string", file=config_file)
+                elif cred['type'] == CredentialType.ssh_key:
+                    if not isinstance(cred.setdefault('ssh-command-variable', 'SSH'), str):
+                        raise ConfigurationError(
+                                f"'ssh-command-variable' in with-credentials block `{cred['id']}` for "
                                 f"`{phase}.{variant}` is not a string", file=config_file)
 
         if cmd_key == "image":
