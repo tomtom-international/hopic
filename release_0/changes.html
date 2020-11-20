@@ -1,0 +1,661 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>Changelog &#8212; Hopic 0.15.3.dev13+g06b48490 documentation</title>
+    <link rel="stylesheet" href="_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" type="text/css" href="_static/banner.css" />
+    
+    <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="_static/language_data.js"></script>
+    
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="Configuration" href="config.html" /> 
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="config.html" title="Configuration"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 0.15.3.dev13+g06b48490 documentation</a> &#187;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="changelog">
+<h1>Changelog<a class="headerlink" href="#changelog" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="id1">
+<h2>0.15.2<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="bug-fixes">
+<h3>Bug fixes<a class="headerlink" href="#bug-fixes" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>fix: don’t force type conversion to bytes</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id2">
+<h2>0.15.1<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id3">
+<h3>Bug fixes<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>fix: prevent pip from looking at the current repo while installing Hopic</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id4">
+<h2>0.15.0<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="new-features">
+<h3>New features<a class="headerlink" href="#new-features" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>feat: don’t execute run on change variants if build isn’t green</li>
+<li>feat: only version bump if it contains a new feature, bug fix or breaking change</li>
+</ul>
+</div>
+<div class="section" id="id5">
+<h3>Bug fixes<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>fix: increase git-rebase –autosquash timeout from 5 secs to 5 mins</li>
+<li>fix: don’t clear Acked-By on autosquashes</li>
+<li>fix: crash when moving submodule in PR</li>
+<li>fix: give decent error messages for conventional commit syntax errors</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id6">
+<h2>0.14.1<a class="headerlink" href="#id6" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id7">
+<h3>Bug fixes<a class="headerlink" href="#id7" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>fix(groovy): stash files relative to Hopic’s workspace, not Jenkins’</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id8">
+<h2>0.14.0<a class="headerlink" href="#id8" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id9">
+<h3>New Features<a class="headerlink" href="#id9" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>feat: don’t clear Acked-By on autosquashes</li>
+</ul>
+</div>
+<div class="section" id="id10">
+<h3>Bug fixes<a class="headerlink" href="#id10" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>fix: ensure hopic is always executed with a UTF-8 locale</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id11">
+<h2>0.13.1<a class="headerlink" href="#id11" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id12">
+<h3>Bug fixes<a class="headerlink" href="#id12" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>fix: display type of invalid element instead of ‘type’ function</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id13">
+<h2>0.13.0<a class="headerlink" href="#id13" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id14">
+<h3>New features<a class="headerlink" href="#id14" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>feat: add docker image override within a phase #PIPE-367</li>
+<li>feat: allow ptrace operations within docker #PIPE-385</li>
+<li>feat(config): search for specified Ivy manifest relative to $CFGDIR</li>
+</ul>
+</div>
+<div class="section" id="improvements">
+<h3>Improvements<a class="headerlink" href="#improvements" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>ci(message-checker): ignore tag merges as well as branch merges</li>
+<li>improvement(logging): display info used by conventional-commits bumping policy</li>
+</ul>
+</div>
+<div class="section" id="id15">
+<h3>Bug fixes<a class="headerlink" href="#id15" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>fix: replace DOS line endings with Unix line endings in produced commit messages</li>
+<li>fix: use Python 2-compatible super() function</li>
+<li>fix: parsing of conventional-commits on Python 2 #PIPE-405</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id16">
+<h2>0.12.1<a class="headerlink" href="#id16" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id17">
+<h3>Bug fixes<a class="headerlink" href="#id17" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>fix: handle missing BitBucket users without raising an exception</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id18">
+<h2>0.12.0<a class="headerlink" href="#id18" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id19">
+<h3>New features<a class="headerlink" href="#id19" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>feat: use conventional commits for bumping and branch restriction (d313ddf)<ul>
+<li>feat: add commit message decomposition class (e0b8a29)</li>
+<li>feat: add Conventional Commmit parser (6e90e39)</li>
+<li>feat: add conventional commit footer parsing (9d04254)</li>
+<li>feat(config): add a bumping policy (ef34046)</li>
+<li>feat(merge): parse commit messages according to the configured policy (27d8858)</li>
+<li>feat(merge): bump the correct version field according to conventional commits (2905ea9)</li>
+<li>feat(merge): allow a version bumping policy for less than every change (eb3b8b6)</li>
+<li>feat(merge): reject breaking changes and new features on release branches (d200cdf)</li>
+</ul>
+</li>
+<li>feat: make clean checkout commands customizable (3b0fafb)</li>
+<li>feat: allow multiple with-credentials (d3418a1)</li>
+</ul>
+</div>
+<div class="section" id="id20">
+<h3>Improvements<a class="headerlink" href="#id20" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>improvement: detect wrongly typed <cite>image</cite> options (8c706af)</li>
+<li>refactor(config): unify the produced ‘image’ config structure (449c744)</li>
+<li>improvement(config): display config error messages without backtrace (c8329b0)</li>
+<li>improvement: have workspace default to containing repository of config file (e8e89c7)</li>
+<li>docs: add documentation for description and stash (a427d90)</li>
+</ul>
+</div>
+<div class="section" id="id21">
+<h3>Bug fixes<a class="headerlink" href="#id21" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>fix(show-config): allow JSON serialization of ‘!image-from-ivy-manifest’ images (b37321b)</li>
+<li>fix(carver): separate the major, minor and patch components by dots (b23b733)</li>
+<li>fix: use relative config path for version file (59199f1)</li>
+<li>fix: handle CredentialNotFoundException where it can be thrown (a47cdd4)</li>
+<li>fix: avoid wrapping in withCredentials when no credentials are requested (f08e9c2)</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id22">
+<h2>0.11.0<a class="headerlink" href="#id22" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id23">
+<h3>New features<a class="headerlink" href="#id23" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>feat: make execution possible with ‘hopic’ as command</li>
+</ul>
+</div>
+<div class="section" id="id24">
+<h3>Improvements<a class="headerlink" href="#id24" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>improvement: raise exception when specified ivy manifest does not exist</li>
+<li>improvement(log): add hint for initial version tag</li>
+</ul>
+</div>
+<div class="section" id="id25">
+<h3>Bug fixes<a class="headerlink" href="#id25" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>fix: only restore mtime for regular files and symlinks</li>
+<li>fix: use the common ancestor of the source and target commit for autosquash</li>
+<li>fix: ignore submodule checkout failure during checkout-source-tree</li>
+<li>fix: use git submodule sync to update submodule url when checking out source</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id26">
+<h2>0.10.2<a class="headerlink" href="#id26" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id27">
+<h3>Bug fixes<a class="headerlink" href="#id27" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>fix: provide an empty dict instead of nothing for metadata-less variants</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id28">
+<h2>0.10.1<a class="headerlink" href="#id28" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id29">
+<h3>Improvements<a class="headerlink" href="#id29" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>improvement(groovy): retrieve execution graph in a single ‘getinfo’ call</li>
+</ul>
+</div>
+<div class="section" id="id30">
+<h3>Bug fixes<a class="headerlink" href="#id30" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>fix: use full repository directory when updating submodules recursively</li>
+<li>fix: reset the config directory after re-reading the config file</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id31">
+<h2>0.10.0<a class="headerlink" href="#id31" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id32">
+<h3>New features<a class="headerlink" href="#id32" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>feat: allow passing environment variables into containers</li>
+</ul>
+</div>
+<div class="section" id="id33">
+<h3>Improvements<a class="headerlink" href="#id33" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>improvement: log reason why Bitbucket refuses to merge</li>
+</ul>
+</div>
+<div class="section" id="id34">
+<h3>Bug fixes<a class="headerlink" href="#id34" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>fix: use blacklisted object when printing error to avoid crash</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id35">
+<h2>0.9.0<a class="headerlink" href="#id35" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id36">
+<h3>New features<a class="headerlink" href="#id36" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>feat: checkout submodules too during checkout</li>
+<li>feat: note the used Hopic version in the merge commit</li>
+</ul>
+</div>
+<div class="section" id="id37">
+<h3>Improvements<a class="headerlink" href="#id37" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>improvement: use Hopic’s default config location in the CI-Driver</li>
+<li>improvement(groovy): log when we’re skipping submission for replays</li>
+</ul>
+</div>
+<div class="section" id="id38">
+<h3>Bug fixes<a class="headerlink" href="#id38" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>fix: re-check default locations for config file after checking out and merging</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id39">
+<h2>0.8.1<a class="headerlink" href="#id39" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id40">
+<h3>Bug fixes<a class="headerlink" href="#id40" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>fix(groovy): avoid confusing e-mail addresses for usernames</li>
+<li>fix(carver): don’t include the prerelease portion in tags by default</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id41">
+<h2>0.8.0<a class="headerlink" href="#id41" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id42">
+<h3>New features<a class="headerlink" href="#id42" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>feat: reject submission of replay builds</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id43">
+<h2>0.7.1<a class="headerlink" href="#id43" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id44">
+<h3>Bug fixes<a class="headerlink" href="#id44" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>fix(groovy): move regex evaluation to non-CPS context</li>
+</ul>
+</div>
+<div class="section" id="id45">
+<h3>Improvements<a class="headerlink" href="#id45" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>improvement: use : as GIT_EDITOR to prevent starting an editor at all</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id46">
+<h2>0.7.0<a class="headerlink" href="#id46" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id47">
+<h3>New features<a class="headerlink" href="#id47" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>feat: add support for volume overrides per variant</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id48">
+<h2>0.6.0<a class="headerlink" href="#id48" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id49">
+<h3>New features<a class="headerlink" href="#id49" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>feat: add support for Docker <cite>–volume-from</cite> mapping at variant level</li>
+<li>feat: expose current GIT_COMMIT and GIT_BRANCH</li>
+</ul>
+</div>
+<div class="section" id="id50">
+<h3>Bug fixes<a class="headerlink" href="#id50" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>fix: ensure that the execution flow is built _after_ merging</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id51">
+<h2>0.5.1<a class="headerlink" href="#id51" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id52">
+<h3>Bug fixes<a class="headerlink" href="#id52" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>fix: only remove/add files from non-empty lists</li>
+<li>doc: document all release branch versions</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id53">
+<h2>0.5.0<a class="headerlink" href="#id53" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id54">
+<h3>New features<a class="headerlink" href="#id54" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>feat: support file and string credentials too</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id55">
+<h2>0.4.1<a class="headerlink" href="#id55" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="logging-improvements">
+<h3>Logging improvements<a class="headerlink" href="#logging-improvements" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>logging(debug): tell when we’re restoring mtimes</li>
+<li>improvement: don’t log a back trace for fatally terminated commands</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id56">
+<h2>0.4.0<a class="headerlink" href="#id56" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id57">
+<h3>New features<a class="headerlink" href="#id57" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>feat: make Hopic’s verbosity controllable via environment variables</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id58">
+<h2>0.3.1<a class="headerlink" href="#id58" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id59">
+<h3>Improvements<a class="headerlink" href="#id59" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>improvement: add debug logging about pre/post autosquashing commit sets</li>
+<li>improvement: log the failure information when failing to autosquash</li>
+<li>improvement: ensure hash stability of autosquashed commit</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id60">
+<h2>0.3.0<a class="headerlink" href="#id60" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id61">
+<h3>New features<a class="headerlink" href="#id61" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>feat: add support for promoting builds after submission</li>
+<li>feat: make default node expression configurable via optional param</li>
+<li>feat: support feature branches</li>
+<li>feat: execute a command once for every autosquashed source commit</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id62">
+<h2>0.2.5<a class="headerlink" href="#id62" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="documentation-fixes">
+<h3>Documentation fixes<a class="headerlink" href="#documentation-fixes" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>docs: match installation URL to current branch</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id63">
+<h2>0.2.4<a class="headerlink" href="#id63" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id64">
+<h3>Bug fixes<a class="headerlink" href="#id64" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>fix: ensure that the execution flow is built <em>after</em> merging</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id65">
+<h2>0.2.3<a class="headerlink" href="#id65" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id66">
+<h3>Bug fixes<a class="headerlink" href="#id66" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>fix: only remove/add files from non-empty lists</li>
+<li>doc: document all release branch versions</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id67">
+<h2>0.2.2<a class="headerlink" href="#id67" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id68">
+<h3>Improvements<a class="headerlink" href="#id68" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>improvement: better logging about submittability</li>
+</ul>
+</div>
+<div class="section" id="id69">
+<h3>Bug fixes<a class="headerlink" href="#id69" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>fix: only restore mtimes for clean builds</li>
+<li>fix: avoid scientific notation for timestamps</li>
+<li>fix: workaround Groovy regexes producing null matches</li>
+<li>fix: ensure $HOME is available for modality changes</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id70">
+<h2>0.2.1<a class="headerlink" href="#id70" title="Permalink to this headline">¶</a></h2>
+<p>Artifactory related improvements</p>
+<div class="section" id="id71">
+<h3>Improvements<a class="headerlink" href="#id71" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>improvement: handle artifactory ‘target’ in config reader</li>
+<li>improvement: expose all versioning related environment variables</li>
+<li>improvement: perform all artifactory build uploads from a single node</li>
+<li>improvement: translate Artifactory FileSpec patterns to Ant FileSet</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id72">
+<h2>0.2.0<a class="headerlink" href="#id72" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id73">
+<h3>New features<a class="headerlink" href="#id73" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>feat: execute a command once for every source commit</li>
+<li>feat: make the branch name, build id and lock name public</li>
+<li>feat(bb-pr): expand <a class="reference external" href="mailto:'&#37;&#52;&#48;user">‘<span>&#64;</span>user</a>’ tokens in pull request descriptions</li>
+<li>feat: add support for executing commands with credentials</li>
+<li>feat(git): support for other branches in subdirectory worktrees</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id74">
+<h2>0.1.9<a class="headerlink" href="#id74" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id75">
+<h3>Bug fixes<a class="headerlink" href="#id75" title="Permalink to this headline">¶</a></h3>
+<p>fix: ensure that the execution flow is built _after_ merging</p>
+</div>
+</div>
+<div class="section" id="id76">
+<h2>0.1.8<a class="headerlink" href="#id76" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="documentation">
+<h3>Documentation<a class="headerlink" href="#documentation" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>doc: document all release branch versions</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id77">
+<h2>0.1.7<a class="headerlink" href="#id77" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id78">
+<h3>Bug fixes<a class="headerlink" href="#id78" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>fix: only restore mtimes for clean builds</li>
+<li>fix: avoid scientific notation for timestamps</li>
+<li>fix: ensure $HOME is available for modality changes</li>
+</ul>
+</div>
+<div class="section" id="id79">
+<h3>Improvements<a class="headerlink" href="#id79" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>improvement: better logging about submittability</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id80">
+<h2>0.1.6<a class="headerlink" href="#id80" title="Permalink to this headline">¶</a></h2>
+<p>Artifactory related improvements</p>
+<div class="section" id="id81">
+<h3>Improvements<a class="headerlink" href="#id81" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>improvement: handle artifactory ‘target’ in config reader</li>
+<li>improvement: expose all versioning related environment variables</li>
+<li>improvement: perform all artifactory build uploads from a single node</li>
+<li>improvement: translate Artifactory FileSpec patterns to Ant FileSet</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id82">
+<h2>0.1.5<a class="headerlink" href="#id82" title="Permalink to this headline">¶</a></h2>
+<p>Bugfix and greater docker volume specification flexibility</p>
+<div class="section" id="id83">
+<h3>Improvements<a class="headerlink" href="#id83" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>improvement: allow overriding the ${WORKSPACE} volume</li>
+</ul>
+</div>
+<div class="section" id="id84">
+<h3>Bug fixes<a class="headerlink" href="#id84" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>fix: use slicing instead of indexing to get string suffix</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id85">
+<h2>0.1.4<a class="headerlink" href="#id85" title="Permalink to this headline">¶</a></h2>
+<p>Fix versioning bugs and improve CLI defaults</p>
+<div class="section" id="id86">
+<h3>Improvements<a class="headerlink" href="#id86" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>improvement: don’t destroy config sections until we’re done with them</li>
+<li>improvement: give –config a default</li>
+<li>improvement: give –workspace a decent default</li>
+</ul>
+</div>
+<div class="section" id="id87">
+<h3>Bug fixes<a class="headerlink" href="#id87" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>fix: find version file relative to CI config file</li>
+<li>fix: use version-policy specific defaults for the formatting of tags</li>
+<li>fix: prevent tag failure for non-semver versioning policies</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id88">
+<h2>0.1.3<a class="headerlink" href="#id88" title="Permalink to this headline">¶</a></h2>
+<p>Fix various bugs and produce more stable build ids on Artifactory</p>
+<div class="section" id="id89">
+<h3>Improvements<a class="headerlink" href="#id89" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>improvement: produce more stable build names and numbers on Artifactory</li>
+</ul>
+</div>
+<div class="section" id="id90">
+<h3>Bug fixes<a class="headerlink" href="#id90" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>fix: don’t forget to delete checkouts if we don’t have change-only steps</li>
+<li>fix: remove checkouts without wrongly checking for them first</li>
+<li>fix: work around bug JENKINS-47730</li>
+<li>fix: don’t break when given multiple target artifactory servers</li>
+<li>fix: lock without ‘run-on-change: only’ steps too when submitting</li>
+<li>fix: workaround Jenkins Git plugin bug causing wrong GIT_COMMIT</li>
+<li>fix: submit even if we don’t have any build steps</li>
+<li>fix: prevent infinite downloads from blocking the build forever</li>
+<li>fix: don’t read config file before checking it out</li>
+<li>fix: complain when trying to bump a non-existant version</li>
+<li>fix(config): allow using Hopic CI driver without build steps</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id91">
+<h2>0.1.2<a class="headerlink" href="#id91" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id92">
+<h3>Improvements<a class="headerlink" href="#id92" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>improvement: allow stacking prepare-source-tree commands</li>
+</ul>
+</div>
+<div class="section" id="id93">
+<h3>Bug fixes<a class="headerlink" href="#id93" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>fix: prevent failure when failing to read an optional config file</li>
+<li>fix: apply version bumping policy for the change that introduces it too</li>
+<li>fix: prevent interpreting local time as UTC</li>
+<li>fix: don’t remove submit-config until successfully used</li>
+<li>fix(groovy): lock change target branch instead of target repo</li>
+<li>fix(git): don’t remove or add empty lists of files</li>
+<li>fix(restore-mtimes): don’t update mtime of symlink targets</li>
+<li>fix(shell-completion): only yield completions matching (partial) input</li>
+<li>fix(groovy): allow expansion of ${WORKSPACE} always</li>
+</ul>
+</div>
+<div class="section" id="id94">
+<h3>Documentation<a class="headerlink" href="#id94" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>docs: add the start of documentation</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id95">
+<h2>0.1.1<a class="headerlink" href="#id95" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="id96">
+<h3>Bug fixes<a class="headerlink" href="#id96" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>fix: properly detect submission failures</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id97">
+<h2>0.1.0<a class="headerlink" href="#id97" title="Permalink to this headline">¶</a></h2>
+<p>Initial release</p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h3>Versions</h3>
+<ul>
+    <li><a href="../master/index.html">master</a></li>
+    <li><a href="changes.html">release/0</a></li>
+    <li><a href="../release_1/index.html">release/1</a></li>
+</ul>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="config.html" title="Configuration"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 0.15.3.dev13+g06b48490 documentation</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2020 - 2020, TomTom N.V..
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.8.5.
+    </div>
+  </body>
+</html>
