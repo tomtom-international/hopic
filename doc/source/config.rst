@@ -127,7 +127,7 @@ Config
 
 .. option:: config
 
-Some features in Hopic are using YAML's `_explicit`_ tags functionality to support custom defined YAML parsing behavior.
+Some features in Hopic are using YAML's `explicit tags`_ functionality to support custom defined YAML parsing behavior.
 Features that use this functionality can be recognized by ``<dict_key>: !<custom_function>``.
 Since explicit tags need to be specified as a value of a dictonary, the ``config`` is introduced to specify explicit tags on the top level.
 ``config`` transparently adds a top level dictionary which allows making a global explicit tag.
@@ -135,7 +135,7 @@ Since explicit tags need to be specified as a value of a dictonary, the ``config
 .. literalinclude:: ../../examples/config.yaml
    :language: yaml
 
-.. _explicit: https://yaml.org/spec/1.1/#id858600
+.. _explicit tags: https://yaml.org/spec/1.1/#id858600
 
 
 Credentials
