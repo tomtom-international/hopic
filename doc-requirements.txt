@@ -1,3 +1,4 @@
 sphinx<2,>=1.5
 sphinx-click
+recommonmark
 git+https://github.com/muggenhor/sphinxcontrib-versioning.git
