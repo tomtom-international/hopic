@@ -42,21 +42,21 @@ phases:
       - junit: junit-test.xml
         image: hopic-python:3.6-slim-git
         docker-in-docker: yes
-        sh: tox -e py36
+        sh: tox -r -e py36
 
     python3.7:
       - docker build --build-arg=PYTHON_VERSION=3.7 -t hopic-python:3.7-slim-git hopic/test/docker-images/python
       - junit: junit-test.xml
         image: hopic-python:3.7-slim-git
         docker-in-docker: yes
-        sh: tox -e py37
+        sh: tox -r -e py37
 
     python3.8:
       - docker build --build-arg=PYTHON_VERSION=3.8 -t hopic-python:3.8-slim-git hopic/test/docker-images/python
       - junit: junit-test.xml
         image: hopic-python:3.8-slim-git
         docker-in-docker: yes
-        sh: tox -e py38
+        sh: tox -r -e py38
 
   build:
     sphinx-doc:
