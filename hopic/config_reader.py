@@ -399,8 +399,8 @@ def read_version_info(config, version_info):
         build = version_info['build']
         if not isinstance(build, str):
             raise ConfigurationError("`version.build` field must be a string identifying the build metadata", file=config)
-        if not re.match(r'^[-0-9a-zA-Z]+(?:\.[-0-9a-zA-Z]+)*$', build):
-            raise ConfigurationError("`version.build` field must be a valid semantic versioning build metadata string matching [0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))", file=config)
+        if not re.match(r"^[-0-9a-zA-Z]+(?:\.[-0-9a-zA-Z]+)*$", build):
+            raise ConfigurationError("`version.build` field must be a valid semantic versioning build metadata string", file=config)
 
     return version_info
 
