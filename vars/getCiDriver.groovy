@@ -423,6 +423,9 @@ class CiDriver {
   public def with_hopic(closure) {
     assert steps.env.NODE_NAME != null, "with_hopic must be executed on a node"
 
+    def tmpdir = steps.pwd(tmp: true)
+    def local_home_dir = tmpdir + '/home-local'
+
     if (!this.docker_images.containsKey(steps.env.NODE_NAME)) {
       // Timeout prevents infinite downloads from blocking the build forever
       steps.timeout(time: 1, unit: 'MINUTES', activity: true) {
@@ -446,8 +449,9 @@ class CiDriver {
 
         def (remote, ref) = this.repo[4..-1].split('@', 2)
 
-        def docker_src = steps.pwd(tmp: true) + '/docker-src'
+        def docker_src = tmpdir + '/docker-src'
         steps.sh(script: """\
+mkdir -p ${shell_quote(local_home_dir)}
 mkdir -p ${shell_quote(docker_src)}
 cd ${shell_quote(docker_src)}
 git init
@@ -480,6 +484,7 @@ docker build --build-arg=PYTHON_VERSION=3.6 --iidfile=${shell_quote(docker_src)}
     return this.docker_images[steps.env.NODE_NAME].inside([
         // Extra writable directories
         "--volume=${steps.env.HOME}:${steps.env.HOME}:rw",
+        "--volume=${local_home_dir}:${steps.env.HOME}/.local:rw",
 
         "--env=HOME=${steps.env.HOME}",
 
