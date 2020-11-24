@@ -636,6 +636,9 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
             if 'config' in cfg:
                 cfg = cfg['config']
 
+    if not isinstance(cfg, Mapping):
+        raise ConfigurationError(f"top level configuration should be a map, but is a {type(cfg).__name__}", file=config)
+
     cfg['volumes'] = expand_docker_volume_spec(config_dir, volume_vars, cfg.get('volumes', ()))
     cfg['version'] = read_version_info(config, cfg.get('version', OrderedDict()))
 
