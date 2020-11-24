@@ -39,6 +39,9 @@ from ..git_time import (
         determine_source_date,
         determine_version,
     )
+from ..versioning import (
+        SemVer
+)
 
 PACKAGE : str = __package__.split('.')[0]
 
@@ -101,11 +104,12 @@ class OptionContext(object):
 @click.option('--config'         , type=click.Path(exists=False, file_okay=True , dir_okay=False, readable=True, resolve_path=True), default=lambda: None, show_default='${WORKSPACE}/hopic-ci-config.yaml')  # noqa: E501
 @click.option('--workspace'      , type=click.Path(exists=False, file_okay=False, dir_okay=True)                                   , default=lambda: None, show_default='git work tree of config file or current working directory')  # noqa: E501
 @click.option('--whitelisted-var', multiple=True                                                                                   , default=['CT_DEVENV_HOME'], hidden=True)  # noqa: E501
+@click.option('--publishable-version', is_flag=True                                                                                , default=False, hidden=True, help='''Indicate if change is publishable or not''')  # noqa: E501
 @click.version_option(get_package_version(PACKAGE))
 @click_log.simple_verbosity_option(PACKAGE                 , envvar='HOPIC_VERBOSITY', autocompletion=autocomplete.click_log_verbosity)
 @click_log.simple_verbosity_option('git', '--git-verbosity', envvar='GIT_VERBOSITY'  , autocompletion=autocomplete.click_log_verbosity)
 @click.pass_context
-def main(ctx, color, config, workspace, whitelisted_var):
+def main(ctx, color, config, workspace, whitelisted_var, publishable_version):
     if color == 'always':
         ctx.color = True
     elif color == 'never':
@@ -208,8 +212,9 @@ def main(ctx, color, config, workspace, whitelisted_var):
                 cfg = ctx.obj.config = read_config(config, ctx.obj.volume_vars)
     ctx.obj.register_dependent_attribute('config_dir', 'config')
 
-    ctx.obj.version = determine_version(
-            cfg.get('version', {}),
+    version_info = cfg.get('version', {})
+    ctx.obj.version, commit_hash = determine_version(
+            version_info,
             config_dir=(config and ctx.obj.config_dir),
             code_dir=ctx.obj.code_dir,
         )
@@ -220,3 +225,15 @@ def main(ctx, color, config, workspace, whitelisted_var):
         # FIXME: make this conversion work even when not using SemVer as versioning policy
         # Convert SemVer to Debian version: '~' for pre-release instead of '-'
         ctx.obj.volume_vars['DEBVERSION'] = ctx.obj.volume_vars['VERSION'].replace('-', '~', 1).replace('.dirty.', '+dirty', 1)
+        if publishable_version:
+            ctx.obj.volume_vars['PUBLISH_VERSION'] = ctx.obj.volume_vars['PURE_VERSION']
+            if 'build' in version_info:
+                ctx.obj.volume_vars['PUBLISH_VERSION'] += f"+{version_info['build']}"
+        else:
+            assert commit_hash
+            ver = SemVer.parse(ctx.obj.volume_vars['VERSION'])
+            ver.build = ()  # discard duplicate commit_hash
+            ver.prerelease += (commit_hash, )
+            if 'build' in version_info:
+                ver.build = (version_info['build'],)
+            ctx.obj.volume_vars['PUBLISH_VERSION'] = str(ver)

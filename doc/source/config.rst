@@ -35,7 +35,7 @@ Version                                     Meaning
 
 .. option:: PURE_VERSION
 
-Contains the :option:`VERSION` (see above), but without ``+gCOMMIT_ID``.
+Contains the :option:`VERSION` (see above), but without ``build metadata`` (everything after the``+``).
 
 For example:
 
@@ -64,10 +64,23 @@ Version                                     Meaning
 ``1.8.1~1+dirty20200609152429+g4dbb6b4``    tag **1.8.1**, with one commit on top of it, as well as uncommitted changes
 =========================================== ==================================================
 
+.. option:: PUBLISH_VERSION
+
+Based on the :option:`VERSION` (see above) by default, with the following differences:
+* Where ``COMMIT_ID`` is part part of the ``prerelease`` (``-COMMIT_ID``) instead of ``build metadata`` (``+gCommit_ID``)
+* Where ``build`` is present in the `Versioning`_ configuration this is added, e.g. ``+build`` (only to ``PUBLISH_VERSION``)
+
+During a build that is publishing, this is based on :option:`PURE_VERSION`.
+Currently the version ``build`` property only affects ``PUBLISH_VERSION``.
+The ``build`` property value is appended to the build metadata.
+
+Some package managers (e.g Maven) do not correctly implement SemVer 2.0.0. 
+Those package managers fail to perform range checks with a 'build metadata' component, because they treat the build metadata as an alphanumeric part of the version instead of ignoring it.
+
 Pre-defined environment variables
 ---------------------------------
 
-The **VERSION**, **PURE_VERSION** and **DEBVERSION** variables (documented above) are also available in the environment of any process spawned by Hopic.
+The **VERSION**, **PURE_VERSION**, **DEBVERSION** and **PUBLISH_VERSION** variables (documented above) are also available in the environment of any process spawned by Hopic.
 
 Build Phases
 ------------
@@ -114,7 +127,7 @@ Config
 
 .. option:: config
 
-Some features in Hopic are using YAML's `_explicit`_ tags functionality to support custom defined YAML parsing behavior.
+Some features in Hopic are using YAML's `explicit tags`_ functionality to support custom defined YAML parsing behavior.
 Features that use this functionality can be recognized by ``<dict_key>: !<custom_function>``.
 Since explicit tags need to be specified as a value of a dictonary, the ``config`` is introduced to specify explicit tags on the top level.
 ``config`` transparently adds a top level dictionary which allows making a global explicit tag.
@@ -122,7 +135,7 @@ Since explicit tags need to be specified as a value of a dictonary, the ``config
 .. literalinclude:: ../../examples/config.yaml
    :language: yaml
 
-.. _explicit: https://yaml.org/spec/1.1/#id858600
+.. _explicit tags: https://yaml.org/spec/1.1/#id858600
 
 
 Credentials
@@ -448,6 +461,11 @@ The version can be read from and stored in two locations:
     Setting this option to a string can, for example, be used to add a prefix like ``v`` to tags, e.g. by using ``v{version}``.
     Having it set to ``true`` instead uses the version policy's default formatting.
 
+``version.build``
+    When using ``semver`` it is possible to define custom `build metadata`_ (see https://semver.org/#spec-item-10), by setting the ``build`` property.
+    When this option is set, the ``build`` value will be appended to the tag according to the semver build metadata spec (``+<version.build>``).
+    Currently, this setting will only affect the PUBLISH_VERSION as described in the `Pre-defined Hopic variables`_ chapter.
+
 When and what to bump can be controlled by the ``version.bump`` option.
 When set to ``false`` it disables automated bumping completely.
 Otherwise it describes a version bumping policy in its ``version.bump.policy`` member.
@@ -488,6 +506,7 @@ Another option is when it's performing a modality change (currently only ``UPDAT
 
 .. _Semantic Versioning: https://semver.org/
 .. _Python Format Specification: https://docs.python.org/3/library/string.html#formatspec
+.. _Build Metadata: https://semver.org/#spec-item-10
 .. _Conventional Commits: https://www.conventionalcommits.org/en/v1.0.0/
 
 Modality Changes

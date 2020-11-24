@@ -423,7 +423,7 @@ def process_prepare_source_tree(
         version_info = ctx.obj.config['version']
 
         # Re-read version to ensure that the version policy in the reloaded configuration is used for it
-        ctx.obj.version = determine_version(version_info, ctx.obj.config_dir, ctx.obj.code_dir)
+        ctx.obj.version, _ = determine_version(version_info, ctx.obj.config_dir, ctx.obj.code_dir)
 
         # If the branch is not allowed to publish, skip version bump step
         is_publish_allowed = is_publish_branch(ctx)
@@ -603,6 +603,8 @@ def process_prepare_source_tree(
                     version        = ctx.obj.version,                                           # noqa: E251 "unexpected spaces around '='"
                     build_sep      = ('+' if getattr(ctx.obj.version, 'build', None) else ''),  # noqa: E251 "unexpected spaces around '='"
                 )
+            if 'build' in version_info and '+' not in tagname:
+                tagname += f"+{version_info['build']}"
             repo.create_tag(
                     tagname, submit_commit, force=True,
                     message=f"Tagged-by: Hopic {get_package_version(PACKAGE)}",
@@ -613,7 +615,7 @@ def process_prepare_source_tree(
                 )
 
         # Re-read version to ensure that the newly created tag is taken into account
-        ctx.obj.version = determine_version(version_info, ctx.obj.config_dir, ctx.obj.code_dir)
+        ctx.obj.version, _ = determine_version(version_info, ctx.obj.config_dir, ctx.obj.code_dir)
 
         log.info('%s', repo.git.show(submit_commit, format='fuller', stat=True, notes='*'))
 
