@@ -409,6 +409,15 @@ def read_version_info(config, version_info):
             raise ConfigurationError(
                     "`version.bump.reject-new-features-on` field for the `conventional-commits` policy must be a regex or boolean", file=config)
 
+    if 'build' in version_info:
+        if 'format' in version_info and version_info['format'] != 'semver':
+            raise ConfigurationError("`version.build` field must only be used when version.format is semver", file=config)
+        build = version_info['build']
+        if not isinstance(build, str):
+            raise ConfigurationError("`version.build` field must be a string identifying the build metadata", file=config)
+        if not re.match(r"^[-0-9a-zA-Z]+(?:\.[-0-9a-zA-Z]+)*$", build):
+            raise ConfigurationError("`version.build` field must be a valid semantic versioning build metadata string", file=config)
+
     return version_info
 
 

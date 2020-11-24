@@ -65,8 +65,9 @@ class MonkeypatchInjector:
             return self.monkeypatch_context.__exit__(exc_type, exc_val, exc_tb)
 
 
-def run_with_config(config, *args, files={}, env=None, monkeypatch_injector=MonkeypatchInjector()):
+def run_with_config(config, *args, files={}, env=None, monkeypatch_injector=MonkeypatchInjector(), init_version='0.0.0', commit_count=0, dirty=False):
     runner = CliRunner(mix_stderr=False, env=env)
+    commit = None
     with runner.isolated_filesystem():
         with git.Repo.init() as repo:
             with open('hopic-ci-config.yaml', 'w') as f:
@@ -78,8 +79,14 @@ def run_with_config(config, *args, files={}, env=None, monkeypatch_injector=Monk
                     f.write(content)
                 on_file_created_callback()
             repo.index.add(('hopic-ci-config.yaml',) + tuple(files.keys()))
-            repo.index.commit(message='Initial commit', **_commitargs)
-            repo.create_tag('0.0.0')
+            commit = repo.index.commit(message='Initial commit', **_commitargs)
+            repo.create_tag(init_version)
+            for i in range(commit_count):
+                commit = repo.index.commit(message=f"Some commit {i}", **_commitargs)
+            if dirty:
+                with open('dirty_file', 'w') as f:
+                    f.write('dirty')
+                repo.index.add(('dirty_file'))  # do not commit to create the dirty state
         for arg in args:
             with monkeypatch_injector:
                 result = runner.invoke(hopic_cli, arg)
@@ -95,6 +102,7 @@ def run_with_config(config, *args, files={}, env=None, monkeypatch_injector=Monk
             if result.exit_code != 0:
                 return result
 
+    result.commit = commit
     return result
 
 
@@ -658,30 +666,49 @@ def test_embed_variants_syntax_error(capfd):
     assert 'An error occurred when parsing the hopic configuration file' in out
 
 
-def test_version_variables_content(capfd):
-    result = run_with_config(dedent('''\
+@pytest.mark.parametrize('init_version, build, commit_count, dirty, expected_version, expected_pure_version, expected_debversion', (
+    ('0.0.0', None   , 0, False, '0.0.0+g{commit}'                    , '0.0.0'                          , '0.0.0+g{commit}'                   ),
+    ('1.2.3', None   , 2, False, '1.2.4-2+g{commit}'                  , '1.2.4-2'                        , '1.2.4~2+g{commit}'                 ),
+    ('2.0.0', None   , 0, True , '2.0.1-0.dirty.{timestamp}+g{commit}', '2.0.1-0.dirty.{timestamp}'      , '2.0.1~0+dirty{timestamp}+g{commit}'),
+    ('2.5.1', None   , 1, True , '2.5.2-1.dirty.{timestamp}+g{commit}', '2.5.2-1.dirty.{timestamp}'      , '2.5.2~1+dirty{timestamp}+g{commit}'),
+    ('0.0.0', '1.0.0', 0, False, '0.0.0+g{commit}'                    , '0.0.0'                          , '0.0.0+g{commit}'                   ),
+))
+def test_version_variables_content(capfd, init_version, build, commit_count, dirty, expected_version, expected_pure_version, expected_debversion):
+    result = run_with_config(dedent(f"""\
                 version:
                   format: semver
                   tag:    true
                   bump:   patch
+                {('  build: ' + build) if build else ''}
 
                 phases:
                   test:
                     version:
-                      - echo ${VERSION}
-                      - sh -c 'echo $${VERSION}'
-                      - echo ${PURE_VERSION}
-                      - sh -c 'echo $${PURE_VERSION}'
-                '''), ('build',))
+                      - echo ${{VERSION}}
+                      - sh -c 'echo $${{VERSION}}'
+                      - echo ${{PURE_VERSION}}
+                      - sh -c 'echo $${{PURE_VERSION}}'
+                      - echo ${{DEBVERSION}}
+                      - sh -c 'echo $${{DEBVERSION}}'
+                """), ('build',), init_version=init_version, commit_count=commit_count, dirty=dirty)
     assert result.exit_code == 0
     out, err = capfd.readouterr()
     sys.stdout.write(out)
     sys.stderr.write(err)
 
-    assert out.splitlines()[0].startswith('0.0.0+g')
+    # Length needs to match the length of a commit hash of `git describe`
+    commit_hash = str(result.commit)[:7]
+
+    expected_version = expected_version.format(commit=commit_hash, timestamp='19700108000000')
+    expected_pure_version = expected_pure_version.format(commit=commit_hash, timestamp='19700108000000')
+    expected_debversion = expected_debversion.format(commit=commit_hash, timestamp='19700108000000')
+
+    assert out.splitlines()[0] == expected_version
     assert out.splitlines()[0] == out.splitlines()[1]
-    assert out.splitlines()[2] == '0.0.0'
+    assert out.splitlines()[2] == expected_pure_version
     assert out.splitlines()[2] == out.splitlines()[3]
+    assert out.splitlines()[4] == expected_debversion
+    assert out.splitlines()[4] == out.splitlines()[5]
 
 
 def test_execute_list(monkeypatch):

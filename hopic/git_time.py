@@ -115,28 +115,34 @@ def determine_version(version_info, config_dir, code_dir=None):
     Determines the current version for the given version configuration snippet.
     """
 
+    version = commit_hash = None
+
     if 'file' in version_info:
         params = {}
         if 'format' in version_info:
             params['format'] = version_info['format']
         fname = os.path.join(config_dir, version_info['file'])
         if os.path.isfile(fname):
-            return read_version(fname, **params)
+            version = read_version(fname, **params)
 
     if version_info.get('tag', False) and code_dir is not None:
         try:
             with git.Repo(code_dir) as repo:
                 gitversion = determine_git_version(repo)
+                commit_hash = gitversion.commit_hash
 
-                params = {}
-                if 'format' in version_info:
-                    params['format'] = version_info['format']
-                if gitversion.dirty:
-                    params['dirty_date'] = determine_source_date(repo)
+                if version is None:
+                    params = {}
+                    if 'format' in version_info:
+                        params['format'] = version_info['format']
+                    if gitversion.dirty:
+                        params['dirty_date'] = determine_source_date(repo)
 
-                return gitversion.to_version(**params)
+                    version = gitversion.to_version(**params)
         except (git.InvalidGitRepositoryError, git.NoSuchPathError):
             pass
+
+    return version, commit_hash
 
 
 @unique
