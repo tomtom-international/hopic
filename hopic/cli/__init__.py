@@ -48,6 +48,7 @@ from collections import OrderedDict
 from collections.abc import (
         Mapping,
         MutableSequence,
+        Set,
     )
 from configparser import (
         NoOptionError,
@@ -974,12 +975,15 @@ def getinfo(ctx, phase, variant, post_submit):
     info = OrderedDict()
 
     @click.pass_context
-    def append_meta_from_cmd(ctx, info, cmd):
+    def append_meta_from_cmd(ctx, info, cmd, permitted_fields: Set):
         assert isinstance(cmd, Mapping)
 
         info = info.copy()
 
         for key, val in cmd.items():
+            if key not in permitted_fields:
+                continue
+
             try:
                 val = expand_vars(ctx.obj.volume_vars, val)
             except KeyError:
@@ -995,14 +999,13 @@ def getinfo(ctx, phase, variant, post_submit):
         return info
 
     if post_submit:
+        permitted_fields = frozenset({
+            'node-label',
+            'with-credentials',
+        })
         for phasename, cmds in ctx.obj.config['post-submit'].items():
             for cmd in cmds:
-                info.update(append_meta_from_cmd(info, cmd))
-        info = OrderedDict((
-            (field, value)
-            for field, value in info.items()
-            if field in frozenset({'node-label', 'with-credentials'})
-        ))
+                info.update(append_meta_from_cmd(info, cmd, permitted_fields))
     else:
         permitted_fields = frozenset({
             'archive',
@@ -1029,10 +1032,7 @@ def getinfo(ctx, phase, variant, post_submit):
                     var_info = var_info.setdefault(variantname, OrderedDict())
 
                 for cmd in curvariant:
-                    var_info.update(append_meta_from_cmd(var_info, cmd))
-
-                for key in set(var_info.keys()) - permitted_fields:
-                    del var_info[key]
+                    var_info.update(append_meta_from_cmd(var_info, cmd, permitted_fields))
     click.echo(json.dumps(info, indent=4, separators=(',', ': '), cls=JSONEncoder))
 
 
