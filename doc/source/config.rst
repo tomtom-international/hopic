@@ -91,6 +91,7 @@ Hopic's build flow is divided in ``phases``, during which a set of commands can 
 The :option:`phases` option is a dictionary of dictionaries.
 It's top-level key specifies the name of each phase.
 The keys within each phase specify the names of variants to be executed within that phase.
+Note that the variant name ``post-submit`` is reserved for internal use and is not permitted to be specified by users.
 
 Phases are executed in the order in which they appear in the configuration.
 Within a phase each variant may be executed in parallel, possibly on different executors.
@@ -109,6 +110,35 @@ For example, the configuration example listed results in an execution flow as sh
 .. figure:: parallel-phases.svg
 
     Example execution flow of a Hopic build configuration.
+
+Post Submission Phases
+----------------------
+
+.. option:: post-submit
+
+Optionally, as part of the submission, Hopic provides the opportunity to execute another list of phases.
+These will be executed during the ``submit`` subcommand, but just after the actual submission to the revision control system has been performed.
+The :option:`post-submit` option is a dictionary of phases.
+The keys specify the name of each phase.
+
+The content of each phase has the same syntax, and is interpreted the same, as the content of a variant for :option:`phases`.
+Only the following subset of options however, is permitted to be used within these phases:
+
+* :option:`description`
+* :option:`docker-in-docker`
+* :option:`image`
+* :option:`node-label`
+* :option:`run-on-change`
+* :option:`sh`
+* :option:`volumes`
+* :option:`with-credentials`
+
+The :option:`node-label` option has an additional restriction.
+If specified multiple times, it is only allowed to contain the same value for each location it is specified.
+This is necessary to keep the complexity, and thus chance of failure, of the ``submit`` command low.
+
+.. literalinclude:: ../../examples/post-submit.yaml
+   :language: yaml
 
 Clean
 -----
@@ -618,6 +648,8 @@ Sharing Output Data Between Variants
 The option ``stash`` will save files to be used in another Hopic phase.
 The stashed files are available for every executor/node in every phase and workspace after the current one.
 
+.. note:: This option is not allowed to be used within a :option:`post-submit` phase.
+
 Use the option ``includes`` to identify the files to be stashed.
 Use Wildcards like `module/dist/**/*.zip`.
 A `*` expands only to a single directory entry, where `**` expands to multiple directory levels deep.
@@ -645,6 +677,8 @@ Branches in Subdirectory Worktrees
 ----------------------------------
 
 .. option:: worktrees
+
+.. note:: This option is not allowed to be used within a :option:`post-submit` phase.
 
 .. todo::
 
@@ -699,6 +733,8 @@ Artifact Archiving
 The option ``archive`` allows you to archive build artifacts.
 The artifacts can be stored on Jenkins and/or archived to Artifactory.
 
+.. note:: This option is not allowed to be used within a :option:`post-submit` phase.
+
 The base directory is the workspace.
 Artifacts specified are discovered relative to the workspace.
 
@@ -750,6 +786,8 @@ Artifact Fingerprint
 
 The option ``fingerprint`` triggers fingerprinting of build artifacts on Jenkins.
 Use the option ``artifacts`` to identify the artifacts to be fingerprinted.
+
+.. note:: This option is not allowed to be used within a :option:`post-submit` phase.
 
 With the ``fingerprint`` option, the Jenkins "fingerprint" feature is invoked.
 For more information about this feature see: https://jenkins.io/doc/pipeline/steps/core/#fingerprint-record-fingerprints-of-files-to-track-usage

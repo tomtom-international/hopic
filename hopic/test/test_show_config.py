@@ -376,3 +376,45 @@ def test_global_config_block():
     assert 'field' not in output['version']['bump']
     print(output)
     assert isinstance(output['phases']['test-phase']['test-variant'], Sequence)
+
+
+def test_post_submit_type_error(capfd):
+    result = run_with_config(dedent('''\
+                            post-submit:
+                                - echo 'hello Bob'
+                            '''), ('show-config',))
+
+    assert result.exit_code == 32
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    assert re.search(r"^Error: configuration error in '.*?\bhopic-ci-config\.yaml': `post-submit` doesn't contain a mapping but a list", err, re.MULTILINE)
+
+
+def test_post_submit_forbidden_field(capfd):
+    result = run_with_config(dedent('''\
+                            post-submit:
+                              stash-phase:
+                                - stash:
+                                    includes: stash/stash.tx
+                                - echo 'hello Bob'
+'''), ('show-config',))
+
+    assert result.exit_code == 32
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+    assert "`post-submit`.`stash-phase` contains not permitted field `stash`" in err
+
+
+def test_post_submit():
+    result = run_with_config(dedent('''\
+                            post-submit:
+                                some-phase:
+                                    - echo 'hello Bob'
+                            '''), ('show-config',))
+
+    assert result.exit_code == 0

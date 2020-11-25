@@ -91,7 +91,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
     with DockerContainers() as volumes_from:
         # If the branch is not allowed to publish, skip the publish phase. If run_on_change is set to 'always', phase will be run anyway regardless of
         # this condition. For build phase, run_on_change is set to 'always' by default, so build will always happen.
-        is_publish_allowed = is_publish_branch(ctx)
+        is_publish_allowed = is_publish_branch(ctx, hopic_git_info)
         volumes = cfg['volumes'].copy()
         for cmd in cmds:
             worktrees = {}

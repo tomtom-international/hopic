@@ -49,6 +49,24 @@ log = logging.getLogger(__name__)
 Pattern = type(re.compile(''))
 
 
+_unpermitted_post_submit_meta = frozenset({
+    'archive',
+    'fingerprint',
+    'stash',
+    'worktrees',
+})
+_supported_post_submit_meta = frozenset({
+    'description',
+    'docker-in-docker',
+    'image',
+    'node-label',
+    'run-on-change',
+    'sh',
+    'volumes',
+    'with-credentials',
+})
+
+
 class RunOnChange(str, Enum):
     """
     The :option:`run-on-change` option allows you to specify when a step needs to be executed.
@@ -648,6 +666,8 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
         if not isinstance(phase, Mapping):
             raise ConfigurationError(f"phase `{phasename}` doesn't contain a mapping but a {type(phase).__name__}", file=config)
         for variant in phase:
+            if variant == 'post-submit':
+                raise ConfigurationError(f"variant name 'post-submit', used in phase `{phasename}`, is reserved for internal use", file=config)
             phase[variant] = list(process_variant_cmds(
                 phasename,
                 variant,
@@ -655,5 +675,36 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
                 volume_vars,
                 config_file=config,
             ))
+
+    post_submit = cfg.setdefault('post-submit', OrderedDict())
+    if not isinstance(post_submit, Mapping):
+        raise ConfigurationError(f"`post-submit` doesn't contain a mapping but a {type(post_submit).__name__}", file=config)
+    post_submit_node_label = None
+    post_submit_node_label_phase = None
+    post_submit_node_label_idx = None
+    for phase in post_submit:
+        post_submit[phase] = list(process_variant_cmds(
+            'post-submit',
+            phase,
+            flatten_command_list('post-submit', phase, post_submit[phase], config_file=config),
+            volume_vars,
+            config_file=config,
+        ))
+        for cmd_idx, cmd in enumerate(post_submit[phase]):
+            for field_name in cmd:
+                if field_name in _unpermitted_post_submit_meta:
+                    raise ConfigurationError(f"`post-submit`.`{phase}` contains not permitted field `{field_name}`", file=config)
+                if field_name not in _supported_post_submit_meta:
+                    raise ConfigurationError(f"`post-submit`.`{phase}` contains unsupported field `{field_name}`", file=config)
+            if 'node-label' in cmd:
+                if post_submit_node_label is None:
+                    post_submit_node_label = cmd['node-label']
+                    post_submit_node_label_phase = phase
+                    post_submit_node_label_idx = cmd_idx
+                if cmd['node-label'] != post_submit_node_label:
+                    raise ConfigurationError(
+                            f"`post-submit`.`{phase}`[{cmd_idx}]'s `node-label` ({cmd['node-label']!r}) differs from that previously defined in "
+                            f"`post-submit`.{post_submit_node_label_phase}[{post_submit_node_label_idx}] ({post_submit_node_label!r})",
+                            file=config)
 
     return cfg
