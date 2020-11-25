@@ -47,6 +47,7 @@ from ..versioning import (
 from collections import OrderedDict
 from collections.abc import (
         Mapping,
+        MutableMapping,
         MutableSequence,
         Set,
     )
@@ -990,11 +991,13 @@ def getinfo(ctx, phase, variant, post_submit):
                 pass
             else:
                 if isinstance(info.get(key), Mapping):
-                    info[key].update(val)
+                    assert isinstance(info[key], MutableMapping)
+                    for subkey, subval in val.items():
+                        info[key].setdefault(subkey, subval)
                 elif isinstance(info.get(key), MutableSequence):
                     info[key].extend(val)
                 else:
-                    info[key] = val
+                    info.setdefault(key, val)
 
         return info
 
