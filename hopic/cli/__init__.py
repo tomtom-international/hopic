@@ -980,10 +980,6 @@ def getinfo(ctx, phase, variant, post_submit):
         info = info.copy()
 
         for key, val in cmd.items():
-            if key == 'sh':
-                # Skip commands: they're not meta data
-                continue
-
             try:
                 val = expand_vars(ctx.obj.volume_vars, val)
             except KeyError:
@@ -1005,9 +1001,19 @@ def getinfo(ctx, phase, variant, post_submit):
         info = OrderedDict((
             (field, value)
             for field, value in info.items()
-            if field in {'node-label', 'with-credentials'}
+            if field in frozenset({'node-label', 'with-credentials'})
         ))
     else:
+        permitted_fields = frozenset({
+            'archive',
+            'fingerprint',
+            'junit',
+            'node-label',
+            'run-on-change',
+            'stash',
+            'with-credentials',
+            'worktrees',
+        })
         for phasename, curphase in ctx.obj.config['phases'].items():
             if phase and phasename not in phase:
                 continue
@@ -1024,6 +1030,9 @@ def getinfo(ctx, phase, variant, post_submit):
 
                 for cmd in curvariant:
                     var_info.update(append_meta_from_cmd(var_info, cmd))
+
+                for key in set(var_info.keys()) - permitted_fields:
+                    del var_info[key]
     click.echo(json.dumps(info, indent=4, separators=(',', ': '), cls=JSONEncoder))
 
 
