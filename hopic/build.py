@@ -108,7 +108,7 @@ class HopicGitInfo(NamedTuple):
             with repo.config_reader() as git_cfg:
                 try:
                     # Determine remote ref for current commit
-                    submit_ref = git_cfg.get_value(section, 'ref')
+                    submit_ref = git_cfg.get(section, 'ref', fallback=None)
 
                     if git_cfg.has_option(section, 'refspecs'):
                         refspecs = tuple(shlex.split(git_cfg.get_value(section, 'refspecs')))

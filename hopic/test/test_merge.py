@@ -23,6 +23,7 @@ import subprocess
 import sys
 from textwrap import dedent
 
+from .. import credentials
 
 _git_time = f"{42 * 365 * 24 * 3600} +0000"
 _author = git.Actor('Bob Tester', 'bob@example.net')
@@ -35,21 +36,25 @@ _commitargs = dict(
 
 
 def run(*args, env=None):
+    result = None
     runner = CliRunner(mix_stderr=False, env=env)
     with runner.isolated_filesystem():
         for arg in args:
-            result = runner.invoke(hopic_cli, arg)
+            if callable(arg):
+                arg()
+            else:
+                result = runner.invoke(hopic_cli, arg)
 
-            if result.stdout_bytes:
-                print(result.stdout, end='')
-            if result.stderr_bytes:
-                print(result.stderr, end='', file=sys.stderr)
+                if result.stdout_bytes:
+                    print(result.stdout, end='')
+                if result.stderr_bytes:
+                    print(result.stderr, end='', file=sys.stderr)
 
-            if result.exception is not None and not isinstance(result.exception, SystemExit):
-                raise result.exception
+                if result.exception is not None and not isinstance(result.exception, SystemExit):
+                    raise result.exception
 
-            if result.exit_code != 0:
-                return result
+                if result.exit_code != 0:
+                    return result
 
     return result
 
@@ -688,3 +693,103 @@ def test_run_publish_version(monkeypatch, tmp_path, init_version, submittable_ve
 
     assert result.exit_code == 0
     assert not expected
+
+
+@pytest.mark.parametrize('commit_message, expected_version', (
+    ('feat: initial test feature', '0.1.0'),
+    ('chore: initial test feature', None),
+))
+def test_post_submit(tmp_path, capfd, monkeypatch, commit_message, expected_version):
+    username = 'test_username'
+    password = 'super_secret'
+    credential_id = 'test_credentialId'
+    project_name = 'test-project'
+    toprepo = tmp_path / 'repo'
+    init_version = '0.0.0'
+
+    expected_post_submit_commands = [
+        ('echo', f"{username} {password}"),
+    ]
+    if expected_version:
+        expected_post_submit_commands.append(('echo', 'on new version only'),)
+
+    with git.Repo.init(str(toprepo), expand_vars=False) as repo:
+        with (toprepo / 'hopic-ci-config.yaml').open('w') as f:
+            f.write(dedent(f'''\
+                    project-name: {project_name}
+                    version:
+                      format: semver
+                      tag:    true
+                      bump:
+                        policy: conventional-commits
+                        strict: yes
+
+                    phases:
+                      phase:
+                        variant:
+                          - echo "BUILD VERSION $VERSION"
+                      publish:
+                        variant:
+                          - run-on-change: 'new-version-only'
+                          - echo publish-a ${{PURE_VERSION}}
+
+                    post-submit:
+                      credential-step:
+                        - with-credentials:
+                            id: {credential_id}
+                        - echo "$USERNAME $PASSWORD"
+                      new-version-only-step:
+                        - run-on-change: 'new-version-only'
+                          sh: echo "on new version only"
+                    '''))
+        repo.index.add(('hopic-ci-config.yaml',))
+        repo.index.commit(message='chore: initial commit', **_commitargs)
+        repo.git.branch('master', move=True)
+        repo.create_tag(init_version)
+
+        # PR branch
+        repo.head.reference = repo.create_head('something-useful')
+        assert not repo.head.is_detached
+
+        # Some change
+        with (toprepo / 'something.txt').open('w') as f:
+            f.write('some text')
+        repo.index.add(('something.txt',))
+        repo.index.commit(message=commit_message, **_commitargs)
+
+        repo.git.checkout('something-useful')
+        assert not repo.head.is_detached
+
+        def get_credential_id(project_name_arg, cred_id):
+            assert credential_id == cred_id
+            assert project_name == project_name_arg
+            return username, password
+
+        monkeypatch.setattr(credentials, 'get_credential_by_id', get_credential_id)
+
+        def prepare_subprocess_mock():
+            def mock_check_call(args, *popenargs, **kwargs):
+                assert tuple(args) == expected_post_submit_commands.pop(0)
+
+            monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+
+        hopic_result = run(
+            ('checkout-source-tree',
+             '--target-remote', str(toprepo),
+             '--target-ref', 'master',),
+            ('prepare-source-tree',
+             '--author-date', f"@{_git_time}",
+             '--commit-date', f"@{_git_time}",
+             '--author-name', _author.name,
+             '--author-email', _author.email,
+             'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful'),
+            ('build',),
+            prepare_subprocess_mock,
+            ('submit',)
+        )
+
+        assert hopic_result.exit_code == 0
+        assert not expected_post_submit_commands
+        if expected_version:
+            repo.git.checkout('master')
+            assert repo.git.describe() == expected_version

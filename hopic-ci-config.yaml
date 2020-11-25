@@ -75,12 +75,12 @@ phases:
           && find doc/build/html \( -name .doctrees -o -name objects.inv -o -name jquery-\*.js \) -exec rm -v -r "{}" +
           && touch doc/build/html/.nojekyll'
 
+post-submit:
   publish:
-    python:
-      - run-on-change: new-version-only
-        with-credentials:
-          id: hopic-pypi
-          type: username-password
-      - python3 -m venv --clear venv3
-      - venv3/bin/python -m pip install --upgrade tox
-      - venv3/bin/python -m tox -e publish
+    - run-on-change: new-version-only
+      with-credentials:
+        id: hopic-pypi
+        type: username-password
+    - python3 -m venv --clear venv3
+    - venv3/bin/python -m pip install --upgrade tox
+    - venv3/bin/python -m tox -e publish

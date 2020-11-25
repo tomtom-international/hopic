@@ -12,17 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from configparser import (
-        NoOptionError,
-        NoSectionError,
-    )
 import os
 import re
 import subprocess
 import sys
 
 import click
-import git
+
+from ..build import (
+    HopicGitInfo,
+)
 
 try:
     # Python >= 3.8
@@ -31,17 +30,14 @@ except ImportError:
     import importlib_metadata as metadata
 
 
-def is_publish_branch(ctx):
+def is_publish_branch(ctx, hopic_git_info=None):
     """
     Check if the branch name is allowed to publish, if publish-from-branch is not defined in the config file, all the branches should be allowed to publish
     """
 
-    try:
-        with git.Repo(ctx.obj.workspace) as repo:
-            target_commit = repo.head.commit
-            with repo.config_reader() as cfg:
-                target_ref = cfg.get_value(f"hopic.{target_commit}", 'ref')
-    except (NoOptionError, NoSectionError):
+    if hopic_git_info is None:
+        hopic_git_info = HopicGitInfo.from_repo(ctx.obj.workspace)
+    if hopic_git_info is None or hopic_git_info.submit_ref is None:
         return False
 
     try:
@@ -50,7 +46,7 @@ def is_publish_branch(ctx):
         return True
 
     publish_branch_pattern = re.compile(f"(?:{publish_from_branch})$")
-    return publish_branch_pattern.match(target_ref)
+    return publish_branch_pattern.match(hopic_git_info.submit_ref)
 
 
 def determine_config_file_name(ctx):

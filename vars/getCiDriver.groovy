@@ -953,8 +953,12 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     }
   }
 
-  public def on_build_node(Map params = [:], closure) {
-    def node_expr = this.nodes.collect { variant, node -> node }.join(" || ") ?: params.getOrDefault('default_node_expr', this.default_node_expr)
+  public def on_build_node(Map params = [:], Closure closure) {
+    def node_expr = (
+           params.node_expr
+        ?: this.nodes.collect { variant, node -> node }.join(" || ")
+        ?: params.getOrDefault('default_node_expr', this.default_node_expr)
+      )
     return steps.node(node_expr) {
       return this.with_hopic { cmd ->
         this.ensure_checkout(cmd, params.getOrDefault('clean', false))
@@ -968,7 +972,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     def clean = buildParams.getOrDefault('clean', false)
     def default_node = buildParams.getOrDefault('default_node_expr', this.default_node_expr)
     steps.ansiColor('xterm') {
-      def (phases, is_publishable_change) = steps.node(default_node) {
+      def (phases, is_publishable_change, submit_meta) = steps.node(default_node) {
         return this.with_hopic { cmd ->
           def workspace = steps.pwd()
 
@@ -1009,6 +1013,11 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
             ]
           }
 
+          def submit_meta = steps.readJSON(text: steps.sh(
+              script: "${cmd} getinfo --post-submit",
+              returnStdout: true,
+            ))
+
           def is_publishable = this.has_publishable_change()
 
           if (is_publishable) {
@@ -1023,7 +1032,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
             this.change.notify_build_result(get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, 'STARTING')
           }
 
-          return [phases, is_publishable]
+          return [phases, is_publishable, submit_meta]
         }
       }
 
@@ -1184,12 +1193,14 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           }
 
           if (this.may_submit_result != false) {
-            this.on_build_node { cmd ->
+            this.on_build_node(node_expr: submit_meta['node-label']) { cmd ->
               if (this.has_submittable_change()) {
                 steps.stage('submit') {
                   this.with_git_credentials() {
-                    // addBuildSteps(steps.isMainlineBranch(steps.env.CHANGE_TARGET) || steps.isReleaseBranch(steps.env.CHANGE_TARGET))
-                    steps.sh(script: "${cmd}${hopic_extra_arguments} submit")
+                    this.subcommand_with_credentials(
+                        cmd + hopic_extra_arguments,
+                        'submit'
+                      , submit_meta.getOrDefault('with-credentials', []))
                   }
                 }
               }

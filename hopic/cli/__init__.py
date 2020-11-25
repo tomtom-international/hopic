@@ -26,6 +26,9 @@ from .utils import (
         is_publish_branch,
     )
 from commisery.commit import parse_commit_message
+from ..build import (
+    HopicGitInfo,
+)
 from ..config_reader import (
         JSONEncoder,
         expand_vars,
@@ -957,8 +960,9 @@ def bump_version(ctx):
 @main.command()
 @click.option('--phase'             , metavar='<phase>'  , multiple=True, help='''Build phase''', autocompletion=autocomplete.phase_from_config)
 @click.option('--variant'           , metavar='<variant>', multiple=True, help='''Configuration variant''', autocompletion=autocomplete.variant_from_config)
+@click.option('--post-submit'       , is_flag=True       ,                help='''Display only post-submit meta-data.''')
 @click.pass_context
-def getinfo(ctx, phase, variant):
+def getinfo(ctx, phase, variant, post_submit):
     """
     Display meta-data associated with each (or the specified) variant in each (or the specified) phase.
 
@@ -994,22 +998,32 @@ def getinfo(ctx, phase, variant):
 
         return info
 
-    for phasename, curphase in ctx.obj.config['phases'].items():
-        if phase and phasename not in phase:
-            continue
-        for variantname, curvariant in curphase.items():
-            if variant and variantname not in variant:
+    if post_submit:
+        for phasename, cmds in ctx.obj.config['post-submit'].items():
+            for cmd in cmds:
+                info.update(append_meta_from_cmd(info, cmd))
+        info = OrderedDict((
+            (field, value)
+            for field, value in info.items()
+            if field in {'node-label', 'with-credentials'}
+        ))
+    else:
+        for phasename, curphase in ctx.obj.config['phases'].items():
+            if phase and phasename not in phase:
                 continue
+            for variantname, curvariant in curphase.items():
+                if variant and variantname not in variant:
+                    continue
 
-            # Only store phase/variant keys if we're not filtering on a single one of them.
-            var_info = info
-            if len(phase) != 1:
-                var_info = var_info.setdefault(phasename, OrderedDict())
-            if len(variant) != 1:
-                var_info = var_info.setdefault(variantname, OrderedDict())
+                # Only store phase/variant keys if we're not filtering on a single one of them.
+                var_info = info
+                if len(phase) != 1:
+                    var_info = var_info.setdefault(phasename, OrderedDict())
+                if len(variant) != 1:
+                    var_info = var_info.setdefault(variantname, OrderedDict())
 
-            for cmd in curvariant:
-                var_info.update(append_meta_from_cmd(var_info, cmd))
+                for cmd in curvariant:
+                    var_info.update(append_meta_from_cmd(var_info, cmd))
     click.echo(json.dumps(info, indent=4, separators=(',', ': '), cls=JSONEncoder))
 
 
@@ -1077,8 +1091,12 @@ def submit(ctx, target_remote):
 
         repo.git.push(target_remote, refspecs, atomic=True)
 
+        hopic_git_info = HopicGitInfo.from_repo(repo)
         with repo.config_writer() as cfg:
             cfg.remove_section(section)
+
+    for phase in ctx.obj.config['post-submit'].values():
+        build.build_variant(variant='post-submit', cmds=phase, hopic_git_info=hopic_git_info)
 
 
 @main.command()
