@@ -221,6 +221,7 @@ For local, interactive, use Hopic also supports credentials stored in your keyri
 Note that ``keyring`` is only an optional dependency of Hopic and will only get installed when the ``interactive`` extra feature is selected.
 
 If you didn't install Hopic with the ``interactive`` feature you can either reinstall it or install the ``keyring`` library yourself.
+Note on macOS you will also need to install the ``netstruct`` library.
 
 .. code-block:: console
 
