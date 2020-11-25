@@ -47,7 +47,9 @@ from ..versioning import (
 from collections import OrderedDict
 from collections.abc import (
         Mapping,
+        MutableMapping,
         MutableSequence,
+        Set,
     )
 from configparser import (
         NoOptionError,
@@ -974,14 +976,13 @@ def getinfo(ctx, phase, variant, post_submit):
     info = OrderedDict()
 
     @click.pass_context
-    def append_meta_from_cmd(ctx, info, cmd):
+    def append_meta_from_cmd(ctx, info, cmd, permitted_fields: Set):
         assert isinstance(cmd, Mapping)
 
         info = info.copy()
 
         for key, val in cmd.items():
-            if key == 'sh':
-                # Skip commands: they're not meta data
+            if key not in permitted_fields:
                 continue
 
             try:
@@ -990,24 +991,35 @@ def getinfo(ctx, phase, variant, post_submit):
                 pass
             else:
                 if isinstance(info.get(key), Mapping):
-                    info[key].update(val)
+                    assert isinstance(info[key], MutableMapping)
+                    for subkey, subval in val.items():
+                        info[key].setdefault(subkey, subval)
                 elif isinstance(info.get(key), MutableSequence):
                     info[key].extend(val)
                 else:
-                    info[key] = val
+                    info.setdefault(key, val)
 
         return info
 
     if post_submit:
+        permitted_fields = frozenset({
+            'node-label',
+            'with-credentials',
+        })
         for phasename, cmds in ctx.obj.config['post-submit'].items():
             for cmd in cmds:
-                info.update(append_meta_from_cmd(info, cmd))
-        info = OrderedDict((
-            (field, value)
-            for field, value in info.items()
-            if field in {'node-label', 'with-credentials'}
-        ))
+                info.update(append_meta_from_cmd(info, cmd, permitted_fields))
     else:
+        permitted_fields = frozenset({
+            'archive',
+            'fingerprint',
+            'junit',
+            'node-label',
+            'run-on-change',
+            'stash',
+            'with-credentials',
+            'worktrees',
+        })
         for phasename, curphase in ctx.obj.config['phases'].items():
             if phase and phasename not in phase:
                 continue
@@ -1023,7 +1035,7 @@ def getinfo(ctx, phase, variant, post_submit):
                     var_info = var_info.setdefault(variantname, OrderedDict())
 
                 for cmd in curvariant:
-                    var_info.update(append_meta_from_cmd(var_info, cmd))
+                    var_info.update(append_meta_from_cmd(var_info, cmd, permitted_fields))
     click.echo(json.dumps(info, indent=4, separators=(',', ': '), cls=JSONEncoder))
 
 
