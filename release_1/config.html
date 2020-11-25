@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    <title>Configuration &#8212; Hopic 1.25.1.dev108+g3ce72903 documentation</title>
+    <title>Configuration &#8212; Hopic 1.25.1.dev21+gf198665 documentation</title>
     <link rel="stylesheet" href="_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
     <link rel="stylesheet" type="text/css" href="_static/banner.css" />
@@ -34,7 +34,7 @@
         <li class="right" >
           <a href="intro.html" title="Introduction"
              accesskey="P">previous</a> |</li>
-        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.25.1.dev108+g3ce72903 documentation</a> &#187;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.25.1.dev21+gf198665 documentation</a> &#187;</li> 
       </ul>
     </div>  
 
@@ -188,7 +188,8 @@ Those package managers fail to perform range checks with a ‘build metadata’ 
 <p>Hopic’s build flow is divided in <code class="docutils literal notranslate"><span class="pre">phases</span></code>, during which a set of commands can be executed for different <code class="docutils literal notranslate"><span class="pre">variants</span></code>.
 The <a class="reference internal" href="#cmdoption-arg-phases"><code class="xref std std-option docutils literal notranslate"><span class="pre">phases</span></code></a> option is a dictionary of dictionaries.
 It’s top-level key specifies the name of each phase.
-The keys within each phase specify the names of variants to be executed within that phase.</p>
+The keys within each phase specify the names of variants to be executed within that phase.
+Note that the variant name <code class="docutils literal notranslate"><span class="pre">post-submit</span></code> is reserved for internal use and is not permitted to be specified by users.</p>
 <p>Phases are executed in the order in which they appear in the configuration.
 Within a phase each variant may be executed in parallel, possibly on different executors.
 Every next phase only starts executing when each variant within the previous phase finished successfully.
@@ -269,6 +270,61 @@ This provides a stable environment (workspace) to work in and allows incremental
 </div>
 <div class="figure" id="id6">
 <img alt="_images/parallel-phases.svg" src="_images/parallel-phases.svg" /><p class="caption"><span class="caption-text">Example execution flow of a Hopic build configuration.</span></p>
+</div>
+</div>
+<div class="section" id="post-submission-phases">
+<h2>Post Submission Phases<a class="headerlink" href="#post-submission-phases" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="cmdoption-arg-post-submit">
+<code class="descname">post-submit</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-post-submit" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>Optionally, as part of the submission, Hopic provides the opportunity to execute another list of phases.
+These will be executed during the <code class="docutils literal notranslate"><span class="pre">submit</span></code> subcommand, but just after the actual submission to the revision control system has been performed.
+The <a class="reference internal" href="#cmdoption-arg-post-submit"><code class="xref std std-option docutils literal notranslate"><span class="pre">post-submit</span></code></a> option is a dictionary of phases.
+The keys specify the name of each phase.</p>
+<p>The content of each phase has the same syntax, and is interpreted the same, as the content of a variant for <a class="reference internal" href="#cmdoption-arg-phases"><code class="xref std std-option docutils literal notranslate"><span class="pre">phases</span></code></a>.
+Only the following subset of options however, is permitted to be used within these phases:</p>
+<ul class="simple">
+<li><a class="reference internal" href="#cmdoption-arg-description"><code class="xref std std-option docutils literal notranslate"><span class="pre">description</span></code></a></li>
+<li><a class="reference internal" href="#cmdoption-arg-docker-in-docker"><code class="xref std std-option docutils literal notranslate"><span class="pre">docker-in-docker</span></code></a></li>
+<li><a class="reference internal" href="#cmdoption-arg-image"><code class="xref std std-option docutils literal notranslate"><span class="pre">image</span></code></a></li>
+<li><a class="reference internal" href="#cmdoption-arg-node-label"><code class="xref std std-option docutils literal notranslate"><span class="pre">node-label</span></code></a></li>
+<li><a class="reference internal" href="#cmdoption-arg-run-on-change"><code class="xref std std-option docutils literal notranslate"><span class="pre">run-on-change</span></code></a></li>
+<li><code class="xref std std-option docutils literal notranslate"><span class="pre">sh</span></code></li>
+<li><a class="reference internal" href="#cmdoption-arg-volumes"><code class="xref std std-option docutils literal notranslate"><span class="pre">volumes</span></code></a></li>
+<li><a class="reference internal" href="#cmdoption-arg-with-credentials"><code class="xref std std-option docutils literal notranslate"><span class="pre">with-credentials</span></code></a></li>
+</ul>
+<p>The <a class="reference internal" href="#cmdoption-arg-node-label"><code class="xref std std-option docutils literal notranslate"><span class="pre">node-label</span></code></a> option has an additional restriction.
+If specified multiple times, it is only allowed to contain the same value for each location it is specified.
+This is necessary to keep the complexity, and thus chance of failure, of the <code class="docutils literal notranslate"><span class="pre">submit</span></code> command low.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">version</span><span class="p">:</span>
+  <span class="nt">tag</span><span class="p">:</span>    <span class="s">&#39;v{version.major}.{version.minor}.{version.patch}&#39;</span>
+  <span class="nt">format</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">semver</span>
+  <span class="nt">bump</span><span class="p">:</span>
+    <span class="nt">policy</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">conventional-commits</span>
+    <span class="nt">strict</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">yes</span>
+    <span class="nt">on-every-change</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">no</span>
+
+<span class="nt">project-name</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">PIPE</span>
+
+<span class="nt">phases</span><span class="p">:</span>
+  <span class="nt">style</span><span class="p">:</span>
+    <span class="nt">flake8</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">tox -e flake8</span>
+
+  <span class="nt">test</span><span class="p">:</span>
+    <span class="nt">python3.8</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">tox -r -e py38</span>
+
+<span class="nt">post-submit</span><span class="p">:</span>
+  <span class="nt">publish</span><span class="p">:</span>
+    <span class="p p-Indicator">-</span> <span class="nt">run-on-change</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">new-version-only</span>
+      <span class="nt">with-credentials</span><span class="p">:</span>
+        <span class="nt">id</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">pypi</span>
+        <span class="nt">type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">username-password</span>
+      <span class="nt">sh</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">tox -e publish</span>
+</pre></div>
 </div>
 </div>
 <div class="section" id="clean">
@@ -995,6 +1051,10 @@ The value of this option can be one of:</p>
 
 <p>The option <code class="docutils literal notranslate"><span class="pre">stash</span></code> will save files to be used in another Hopic phase.
 The stashed files are available for every executor/node in every phase and workspace after the current one.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">This option is not allowed to be used within a <a class="reference internal" href="#cmdoption-arg-post-submit"><code class="xref std std-option docutils literal notranslate"><span class="pre">post-submit</span></code></a> phase.</p>
+</div>
 <p>Use the option <code class="docutils literal notranslate"><span class="pre">includes</span></code> to identify the files to be stashed.
 Use Wildcards like <cite>module/dist/**/*.zip</cite>.
 A <cite>*</cite> expands only to a single directory entry, where <cite>**</cite> expands to multiple directory levels deep.</p>
@@ -1051,6 +1111,10 @@ A <cite>*</cite> expands only to a single directory entry, where <cite>**</cite>
 <code class="descname">worktrees</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-worktrees" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">This option is not allowed to be used within a <a class="reference internal" href="#cmdoption-arg-post-submit"><code class="xref std std-option docutils literal notranslate"><span class="pre">post-submit</span></code></a> phase.</p>
+</div>
 <div class="admonition-todo admonition" id="index-1">
 <p class="first admonition-title">Todo</p>
 <p class="last">Document <a class="reference internal" href="#cmdoption-arg-worktrees"><code class="xref std std-option docutils literal notranslate"><span class="pre">worktrees</span></code></a> option.</p>
@@ -1113,6 +1177,10 @@ For more information about this feature see: <a class="reference external" href=
 
 <p>The option <code class="docutils literal notranslate"><span class="pre">archive</span></code> allows you to archive build artifacts.
 The artifacts can be stored on Jenkins and/or archived to Artifactory.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">This option is not allowed to be used within a <a class="reference internal" href="#cmdoption-arg-post-submit"><code class="xref std std-option docutils literal notranslate"><span class="pre">post-submit</span></code></a> phase.</p>
+</div>
 <p>The base directory is the workspace.
 Artifacts specified are discovered relative to the workspace.</p>
 <p>Use Wildcards like <cite>module/dist/**/*.zip</cite>.
@@ -1209,6 +1277,10 @@ The option <code class="docutils literal notranslate"><span class="pre">target-r
 
 <p>The option <code class="docutils literal notranslate"><span class="pre">fingerprint</span></code> triggers fingerprinting of build artifacts on Jenkins.
 Use the option <code class="docutils literal notranslate"><span class="pre">artifacts</span></code> to identify the artifacts to be fingerprinted.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">This option is not allowed to be used within a <a class="reference internal" href="#cmdoption-arg-post-submit"><code class="xref std std-option docutils literal notranslate"><span class="pre">post-submit</span></code></a> phase.</p>
+</div>
 <p>With the <code class="docutils literal notranslate"><span class="pre">fingerprint</span></code> option, the Jenkins “fingerprint” feature is invoked.
 For more information about this feature see: <a class="reference external" href="https://jenkins.io/doc/pipeline/steps/core/#fingerprint-record-fingerprints-of-files-to-track-usage">https://jenkins.io/doc/pipeline/steps/core/#fingerprint-record-fingerprints-of-files-to-track-usage</a></p>
 <p><strong>example:</strong></p>
@@ -1323,7 +1395,7 @@ The command should output the part of the configuration file to standard output.
         <li class="right" >
           <a href="intro.html" title="Introduction"
              >previous</a> |</li>
-        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.25.1.dev108+g3ce72903 documentation</a> &#187;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.25.1.dev21+gf198665 documentation</a> &#187;</li> 
       </ul>
     </div>
     <div class="footer" role="contentinfo">
