@@ -1,0 +1,26 @@
+version:
+  tag:    'v{version.major}.{version.minor}.{version.patch}'
+  format: semver
+  bump:
+    policy: conventional-commits
+    strict: yes
+    on-every-change: no
+
+project-name: PIPE
+
+phases:
+  style:
+    flake8:
+      - tox -e flake8
+
+  test:
+    python3.8:
+      - tox -r -e py38
+
+post-submit:
+  publish:
+    - run-on-change: new-version-only
+      with-credentials:
+        id: pypi
+        type: username-password
+      sh: tox -e publish
