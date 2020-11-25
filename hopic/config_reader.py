@@ -623,10 +623,10 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
         except TemplateNotFoundError as e:
             cfg['phases'] = OrderedDict([
                 ("yaml-error", {
-                    f"{e.name}": [
-                        {'sh': ('echo', f'{e}')},
-                        {'sh': ('false',)}
-                    ]
+                    f"{e.name}": [{
+                        'description': str(e),
+                        'sh': ('false',)
+                    }]
                 })]
             )
         else:
