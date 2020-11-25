@@ -418,3 +418,24 @@ def test_post_submit():
                             '''), ('show-config',))
 
     assert result.exit_code == 0
+
+
+def test_config_is_mapping_failure(capfd):
+    result = run_with_config(dedent('''\
+                                  - phases:
+                                    test-phase:
+                                      test-variant:
+                                       - echo 'bob the builder'
+                                    '''),
+                             ('show-config',))
+    assert result.exit_code == 32
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+    assert re.search(r"^Error: configuration error in '.*?\bhopic-ci-config\.yaml': top level configuration should be a map, but is a list",
+                     err, re.MULTILINE)
+
+
+def test_config_is_mapping_empty():
+    result = run_with_config(dedent(''''''), ('show-config',))
+    assert result.exit_code == 0

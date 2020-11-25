@@ -284,4 +284,4 @@ def test_invalid_template_name(capfd):
     out, err = capfd.readouterr()
     sys.stdout.write(out)
     sys.stderr.write(err)
-    assert out.strip() == "No YAML template named 'xyzzy' available (props={})"
+    assert "No YAML template named 'xyzzy' available (props={})" in err.strip()
