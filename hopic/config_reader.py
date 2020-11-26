@@ -304,8 +304,12 @@ def match_template_props_to_signature(
             # don't check forward references to types
             and not isinstance(param.annotation, (str, typing.ForwardRef))
         ):
+            origin_type = getattr(param.annotation, '__origin__', None)
             try:
-                type_valid = isinstance(val, param.annotation)
+                if origin_type is typing.Union:
+                    type_valid = isinstance(val, param.annotation.__args__)
+                else:
+                    type_valid = isinstance(val, param.annotation)
             except TypeError:
                 # ignore failures to type check, propbably some subscripted 'typing.Something[SomeOtherType]'
                 type_valid = True
