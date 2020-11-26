@@ -26,12 +26,14 @@ try:
     from importlib import metadata
 except ImportError:
     import importlib_metadata as metadata
+import inspect
 import json
 import logging
 import os
 import re
 import shlex
 import subprocess
+import typing
 import xml.etree.ElementTree as ET
 import yaml
 
@@ -251,6 +253,78 @@ class JSONEncoder(json.JSONEncoder):
         return super().default(o)
 
 
+def match_template_props_to_signature(
+    template_name: str,
+    signature: typing.Mapping[str, inspect.Parameter],
+    params: typing.Mapping[str, typing.Any],
+) -> typing.Mapping[str, typing.Any]:
+
+    kwargs_var, *_ = [
+        *[
+            param for param in signature.values()
+            if param.kind == inspect.Parameter.VAR_KEYWORD
+        ],
+        None
+    ]
+
+    new_params = OrderedDict()
+    for prop, val in params.items():
+        # Translate kebab-case to snake_case when the snake_case parameter exists
+        orig_prop = prop
+        snake_prop = prop.replace('-', '_')
+        if (
+            snake_prop in signature
+            and prop not in signature
+            # Prevent duplicates
+            and snake_prop not in params
+        ):
+            prop = snake_prop
+
+        if '_' in orig_prop and (
+            kwargs_var is None
+            or prop in signature
+        ):
+            # Disallow usage of snake_case as an alternate spelling of kebab-case parameters.
+            kebab_name = prop.replace('_', '-')
+            raise ConfigurationError(
+                f"Trying to instantiate template `{template_name}` with unexpected parameter `{orig_prop}`. Did you mean `{kebab_name}`?")
+
+        try:
+            param = signature[prop]
+        except KeyError as exc:
+            if kwargs_var is not None:
+                new_params[orig_prop] = val
+                continue
+            raise ConfigurationError(f"Trying to instantiate template `{template_name}` with unexpected parameter `{orig_prop}`") from exc
+        else:
+            new_params[prop] = val
+
+        if (
+            param.annotation is not inspect.Parameter.empty
+            # don't check forward references to types
+            and not isinstance(param.annotation, (str, typing.ForwardRef))
+        ):
+            try:
+                type_valid = isinstance(val, param.annotation)
+            except TypeError:
+                # ignore failures to type check, propbably some subscripted 'typing.Something[SomeOtherType]'
+                type_valid = True
+
+            if not type_valid:
+                raise ConfigurationError(
+                        f"Trying to instantiate template `{template_name}` with parameter `{orig_prop}` of type `{type(val).__name__}`, "
+                        f"expected `{getattr(param.annotation, '__name__', None) or getattr(param.annotation, '_name', None) or param.annotation}`")
+
+        if param.kind in {
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        }:
+            raise ConfigurationError(f"Trying to use reserved keyword `{orig_prop}` to instantiate template `{template_name}`")
+
+    return new_params
+
+
 def load_yaml_template(volume_vars, extension_installer, loader, node):
     if node.id == 'scalar':
         props = {}
@@ -259,17 +333,17 @@ def load_yaml_template(volume_vars, extension_installer, loader, node):
         props = loader.construct_mapping(node, deep=True)
         name = props.pop('name')
 
-    for prop in props:
-        if prop in {'volume_vars', 'volume-vars'}:
-            raise ConfigurationError(f"Trying to use reserved keyword `{prop}` to instantiate template `{name}`")
-
     for ep in metadata.entry_points().get('hopic.plugins.yaml', ()):
         if ep.name == name:
             break
     else:
         raise TemplateNotFoundError(name=name, props=props)
 
-    cfg = ep.load()(volume_vars, **props)
+    template_fn = ep.load()
+    template_sig = inspect.signature(template_fn)
+
+    props = match_template_props_to_signature(name, template_sig.parameters, props)
+    cfg = template_fn(volume_vars, **props)
 
     if isinstance(cfg, str):
         # Parse provided yaml without template substitution
