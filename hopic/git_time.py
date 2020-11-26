@@ -125,13 +125,13 @@ def determine_version(version_info, config_dir, code_dir=None):
         if os.path.isfile(fname):
             version = read_version(fname, **params)
 
-    if version_info.get('tag', False) and code_dir is not None:
+    if code_dir is not None:
         try:
             with git.Repo(code_dir) as repo:
                 gitversion = determine_git_version(repo)
                 commit_hash = gitversion.commit_hash
 
-                if version is None:
+                if version_info.get('tag', False) and version is None:
                     params = {}
                     if 'format' in version_info:
                         params['format'] = version_info['format']
