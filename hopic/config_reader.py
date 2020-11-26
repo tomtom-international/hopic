@@ -259,6 +259,10 @@ def load_yaml_template(volume_vars, extension_installer, loader, node):
         props = loader.construct_mapping(node, deep=True)
         name = props.pop('name')
 
+    for prop in props:
+        if prop in {'volume_vars', 'volume-vars'}:
+            raise ConfigurationError(f"Trying to use reserved keyword `{prop}` to instantiate template `{name}`")
+
     for ep in metadata.entry_points().get('hopic.plugins.yaml', ()):
         if ep.name == name:
             break
