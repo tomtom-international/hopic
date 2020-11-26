@@ -877,7 +877,7 @@ def test_config_recursive_template_build(monkeypatch):
 
     monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
 
-    def template_template(volume_vars, **props):
+    def template_template(volume_vars):
         return dedent("""\
                       config:
                         phases:
@@ -887,13 +887,12 @@ def test_config_recursive_template_build(monkeypatch):
                         """)
 
     class TestTemplatePackage:
-        def __init__(self):
-            self.name = f'{template_pkg}'
+        name = template_pkg
 
         def load(self):
             return template_template
 
-    def pipeline_template(volume_vars, **props):
+    def pipeline_template(volume_vars):
         return dedent(f"""\
                         pip:
                           - with-extra-index: {extra_index}
@@ -904,8 +903,7 @@ def test_config_recursive_template_build(monkeypatch):
                         """)
 
     class TestPipelinePackage:
-        def __init__(self):
-            self.name = f'{pkg}'
+        name = pkg
 
         def load(self):
             return pipeline_template
@@ -942,7 +940,7 @@ def test_build_list_yaml_template(monkeypatch):
 
     monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
 
-    def pipeline_template(volume_vars, **props):
+    def pipeline_template(volume_vars):
         return dedent("""\
                         - echo 'bob the builder'
                         - echo 'second command'
