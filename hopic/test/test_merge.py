@@ -118,7 +118,7 @@ phases:
     assert str(base_commit) in autosquashed_commits
 
 
-def hopic_config_subdir_version_file_tester(capfd, config_dir, hopic_config, version_file, version_input, expected_version, tmp_path):
+def hopic_config_subdir_version_file_tester(capfd, config_dir, hopic_config, version_file, version_input, expected_version, tmp_path, expect_tag=True):
     toprepo = tmp_path / 'repo'
     with git.Repo.init(str(toprepo), expand_vars=False) as repo:
         if not os.path.exists(toprepo / config_dir):
@@ -158,9 +158,10 @@ def hopic_config_subdir_version_file_tester(capfd, config_dir, hopic_config, ver
     sys.stderr.write(err)
     _, merge_commit, version_out, *_ = out.splitlines()
     assert version_out == expected_version
-    with git.Repo(str(toprepo), expand_vars=False) as repo:
+    with git.Repo(toprepo, expand_vars=False) as repo:
         repo.git.checkout('master')
-        assert expected_version == repo.git.tag(l=True)
+        if expect_tag:
+            assert repo.git.tag(l=True) == expected_version
 
         note = repo.git.notes('show', merge_commit, ref='hopic/master')
         assert re.match(
@@ -239,6 +240,29 @@ version={version}""",
                                                         tmp_path)
     with (test_repo / config_dir / version_file).open('r') as f:
         assert f.read() == "version=0.0.4-PRERELEASE-TEST"
+
+
+def test_version_file_without_tag_and_bump(capfd, tmp_path):
+    version = '1.2.3'
+    expected_version = version
+    version_file = "revision_test.txt"
+    config_dir = '.ci'
+    hopic_config_subdir_version_file_tester(
+        capfd,
+        config_dir,
+        dedent(f"""\
+            version:
+              file: {version_file}
+              tag:  no
+              bump: no
+            """),
+        version_file,
+        dedent(f"""\
+            version={version}"""),
+        expected_version,
+        tmp_path,
+        expect_tag=False,
+    )
 
 
 def merge_conventional_bump(capfd, tmp_path, message, strict=False, on_every_change=True, target='master'):
