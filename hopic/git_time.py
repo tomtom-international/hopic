@@ -139,7 +139,7 @@ def determine_version(version_info, config_dir, code_dir=None):
                         params['dirty_date'] = determine_source_date(repo)
 
                     version = gitversion.to_version(**params)
-        except (git.InvalidGitRepositoryError, git.NoSuchPathError):
+        except (git.InvalidGitRepositoryError, git.NoSuchPathError, git.CommandError):
             pass
 
     return version, commit_hash
