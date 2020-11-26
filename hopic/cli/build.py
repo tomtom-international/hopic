@@ -88,6 +88,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
 
     artifacts = []
     worktree_commits = {}
+    variant_credentials = {}
     with DockerContainers() as volumes_from:
         # If the branch is not allowed to publish, skip the publish phase. If run_on_change is set to 'always', phase will be run anyway regardless of
         # this condition. For build phase, run_on_change is set to 'always' by default, so build will always happen.
@@ -200,8 +201,9 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                     cred_vars = {name for key, name in creds.items() if key.endswith('-variable')}
                     for cred_var in cred_vars:
                         if cred_var in volume_vars:
-                            continue
-                        volume_vars[cred_var] = MissingCredentialVarError(creds['id'], cred_var)
+                            variant_credentials[cred_var] = volume_vars[cred_var]
+                        else:
+                            volume_vars[cred_var] = MissingCredentialVarError(creds['id'], cred_var)
 
             try:
                 cmd = cmd['sh']
@@ -229,6 +231,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                 if varname in ctx.obj.volume_vars:
                     env[varname] = ctx.obj.volume_vars[varname]
 
+            env.update(variant_credentials)
             foreach_items = (None,)
             if foreach == 'SOURCE_COMMIT':
                 foreach_items = hopic_git_info.source_commits
