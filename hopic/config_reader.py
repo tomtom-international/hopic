@@ -267,6 +267,15 @@ def match_template_props_to_signature(
         None
     ]
 
+    required_params = [
+        param for param in signature.values()
+        if param.kind in {
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.KEYWORD_ONLY,
+        }
+        and param.default is inspect.Parameter.empty
+    ]
+
     new_params = OrderedDict()
     for prop, val in params.items():
         # Translate kebab-case to snake_case when the snake_case parameter exists
@@ -325,6 +334,11 @@ def match_template_props_to_signature(
             inspect.Parameter.VAR_KEYWORD,
         }:
             raise ConfigurationError(f"Trying to use reserved keyword `{orig_prop}` to instantiate template `{template_name}`")
+
+    for param in required_params:
+        if param.name not in new_params:
+            kebab_name = param.name.replace('_', '-')
+            raise ConfigurationError(f"Trying to instantiate template `{template_name}` without required parameter `{kebab_name}`")
 
     return new_params
 
