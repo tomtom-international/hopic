@@ -268,12 +268,14 @@ def match_template_props_to_signature(
     ]
 
     required_params = [
-        param for param in signature.values()
+        param for param_idx, param in enumerate(signature.values())
         if param.kind in {
             inspect.Parameter.POSITIONAL_OR_KEYWORD,
             inspect.Parameter.KEYWORD_ONLY,
         }
         and param.default is inspect.Parameter.empty
+        # Skip first 'volume_vars' parameter, because Hopic passes that one instead of the user.
+        and param_idx != 0
     ]
 
     new_params = OrderedDict()
@@ -332,7 +334,7 @@ def match_template_props_to_signature(
             inspect.Parameter.POSITIONAL_ONLY,
             inspect.Parameter.VAR_POSITIONAL,
             inspect.Parameter.VAR_KEYWORD,
-        }:
+        } or param.name == 'volume_vars':
             raise ConfigurationError(f"Trying to use reserved keyword `{orig_prop}` to instantiate template `{template_name}`")
 
     for param in required_params:
