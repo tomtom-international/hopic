@@ -706,12 +706,20 @@ def process_variant_cmds(phase, variant, cmds, volume_vars, config_file=None):
 
 
 def read(config, volume_vars, extension_installer=lambda *args: None):
-    config_dir = os.path.dirname(config)
+    if hasattr(config, 'name'):
+        f = config
+        config = f.name
+        file_close = False
+    else:
+        f = open(config, 'r')
+        file_close = True
 
-    volume_vars = volume_vars.copy()
-    volume_vars['CFGDIR'] = config_dir
+    try:
+        config_dir = os.path.dirname(config)
 
-    with open(config, 'r') as f:
+        volume_vars = volume_vars.copy()
+        volume_vars['CFGDIR'] = config_dir
+
         cfg = install_top_level_extensions(f, config, extension_installer, volume_vars)
         f.seek(0)
         try:
@@ -731,6 +739,9 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
 
             if 'config' in cfg:
                 cfg = cfg['config']
+    finally:
+        if file_close:
+            f.close()
 
     if not isinstance(cfg, Mapping):
         raise ConfigurationError(f"top level configuration should be a map, but is a {type(cfg).__name__}", file=config)
