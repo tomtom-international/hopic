@@ -83,9 +83,23 @@ def mock_yaml_plugin(monkeypatch):
             assert isinstance(val['required'], str)
             return (val,)
 
+    class TestSimpleTemplate:
+        name = 'simple'
+
+        def load(self):
+            return self.no_arg_template
+
+        @staticmethod
+        def no_arg_template(volume_vars):
+            return ()
+
     def mock_entry_points():
         return {
-            'hopic.plugins.yaml': (TestTemplate(), TestKwargTemplate())
+            'hopic.plugins.yaml': (
+                TestTemplate(),
+                TestKwargTemplate(),
+                TestSimpleTemplate(),
+            )
         }
     monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
 
@@ -271,3 +285,24 @@ def test_template_kwargs_type_mismatch(mock_yaml_plugin):
                   name: kwarg
                   required-param: null
         ''')), {'WORKSPACE': None})
+
+
+def test_template_simple_unknown_param(mock_yaml_plugin):
+    with pytest.raises(ConfigurationError, match=r'(?i)trying to instantiate template `.*?` with unexpected parameter `unknown-param`'):
+        config_reader.read(_config_file(dedent('''\
+            phases:
+              test:
+                example: !template
+                  name: simple
+                  unknown-param: 42
+        ''')), {'WORKSPACE': None})
+
+
+def test_template_simple_without_param(mock_yaml_plugin):
+    cfg = config_reader.read(_config_file(dedent('''\
+        phases:
+          test:
+            example: !template "simple"
+    ''')), {'WORKSPACE': None})
+    out = cfg['phases']['test']['example']
+    assert out == []
