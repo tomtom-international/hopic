@@ -981,3 +981,35 @@ def test_build_list_yaml_template(monkeypatch):
 
     assert result.exit_code == 0
     assert expected_check_calls == []
+
+
+def test_with_credentials_obfuscation(monkeypatch, capfd):
+    username = 'test_username'
+    password = '\'#$%123'
+    credential_id = 'test_credentialId'
+    project_name = 'test_project'
+
+    def get_credential_id(project_name_arg, cred_id):
+        assert cred_id == credential_id
+        assert project_name_arg == project_name
+        return username, password
+
+    monkeypatch.setattr(credentials, 'get_credential_by_id', get_credential_id)
+
+    result = run_with_config(dedent(f'''\
+                project-name: {project_name}
+                phases:
+                  build_and_test:
+                    clang-tidy:
+                      - with-credentials:
+                        - id: {credential_id}
+                          type: username-password
+                      - echo $USERNAME $PASSWORD
+                '''), ('build',))
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    assert out.splitlines()[0] == f'{username} {password}'
+    assert "'${USERNAME}' '${PASSWORD}'" in err.splitlines()[0]
+    assert result.exit_code == 0
