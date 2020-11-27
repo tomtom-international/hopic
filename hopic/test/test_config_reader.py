@@ -45,7 +45,7 @@ def mock_yaml_plugin(monkeypatch):
         @staticmethod
         def example_template(
             volume_vars : typing.Mapping[str, str],
-            /, *,
+            *,
             required_param : str,
             optional_param : typing.Optional[str] = None,
             defaulted_param : bool = False,
@@ -67,7 +67,7 @@ def mock_yaml_plugin(monkeypatch):
         @staticmethod
         def kwarg_template(
             volume_vars : typing.Mapping[str, str],
-            /, *,
+            *,
             required_param : str,
             **kwargs,
         ) -> typing.Sequence[typing.Mapping[str, typing.Any]]:

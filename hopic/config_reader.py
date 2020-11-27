@@ -313,7 +313,7 @@ def match_template_props_to_signature(
         if (
             param.annotation is not inspect.Parameter.empty
             # don't check forward references to types
-            and not isinstance(param.annotation, (str, typing.ForwardRef))
+            and not isinstance(param.annotation, (str, getattr(typing, 'ForwardRef', str)))
         ):
             origin_type = getattr(param.annotation, '__origin__', None)
             try:
