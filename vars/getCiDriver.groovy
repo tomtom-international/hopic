@@ -263,7 +263,7 @@ class BitbucketPullRequest extends ChangeRequest {
     return rv
   }
 
-  public def notify_build_result(String job_name, String branch, String commit, String result) {
+  public def notify_build_result(String job_name, String branch, String commit, String result, boolean exclude_branches_filled_with_pr_branch_discovery) {
     def state = (result == 'STARTING'
         ? 'INPROGRESS'
         : (result == 'SUCCESS' ? 'SUCCESSFUL' : 'FAILED')
@@ -286,8 +286,12 @@ class BitbucketPullRequest extends ChangeRequest {
       }
     }
 
-    // Derive 'key' compatible with the BitBucket branch source plugin
+    // It is impossible to get this Bitbucket branch plugin trait setting via groovy, therefore it is a parameter here
+    if (!exclude_branches_filled_with_pr_branch_discovery) {
+      branch = "${steps.env.JOB_BASE_NAME}"
+    }
     def key = "${job_name}/${branch}"
+
     if (!this.keyIds[key]) {
       // We could use java.security.MessageDigest instead of relying on a node. But that requires extra script approvals.
       assert steps.env.NODE_NAME != null, "notify_build_result must be executed on a node the first time"
@@ -988,6 +992,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   public def build(Map buildParams = [:]) {
     def clean = buildParams.getOrDefault('clean', false)
     def default_node = buildParams.getOrDefault('default_node_expr', this.default_node_expr)
+    def exclude_branches_filled_with_pr_branch_discovery = buildParams.getOrDefault('exclude_branches_filled_with_pr_branch_discovery', true)
     steps.ansiColor('xterm') {
       def (phases, is_publishable_change, submit_meta, additional_locks) = steps.node(default_node) {
         return this.with_hopic { cmd ->
@@ -1000,6 +1005,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
            * In order to do this we only check out the CI config file to the orchestrator node.
            */
           def scm = steps.checkout(steps.scm)
+
           // Don't trust Jenkin's scm.GIT_COMMIT because it sometimes lies
           steps.env.GIT_COMMIT          = steps.sh(script: 'LC_ALL=C.UTF-8 git rev-parse HEAD', returnStdout: true).trim()
           steps.env.GIT_COMMITTER_NAME  = scm.GIT_COMMITTER_NAME
@@ -1045,8 +1051,8 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           // Report start of build. _Must_ come after having determined whether this build is submittable and
           // publishable, because it may affect the result of the submittability check.
           if (this.change != null) {
-            this.change.notify_build_result(get_job_name(), steps.env.CHANGE_BRANCH, this.source_commit, 'STARTING')
-            this.change.notify_build_result(get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, 'STARTING')
+            this.change.notify_build_result(get_job_name(), steps.env.CHANGE_BRANCH, this.source_commit, 'STARTING', exclude_branches_filled_with_pr_branch_discovery)
+            this.change.notify_build_result(get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, 'STARTING', exclude_branches_filled_with_pr_branch_discovery)
           }
 
           return [phases, is_publishable, submit_meta, is_publishable ? get_additional_ci_lock_names(cmd) : []]
@@ -1272,16 +1278,16 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
         if (this.change != null) {
           def buildStatus = (e.getClass() == org.jenkinsci.plugins.workflow.steps.FlowInterruptedException) ? 'ABORTED' : 'FAILURE'
           this.change.notify_build_result(
-              get_job_name(), steps.env.CHANGE_BRANCH, this.source_commit, buildStatus)
+              get_job_name(), steps.env.CHANGE_BRANCH, this.source_commit, buildStatus, exclude_branches_filled_with_pr_branch_discovery)
           this.change.notify_build_result(
-              get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, buildStatus)
+              get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, buildStatus, exclude_branches_filled_with_pr_branch_discovery)
         }
         throw e
       }
 
       if (this.change != null) {
-        this.change.notify_build_result(get_job_name(), steps.env.CHANGE_BRANCH, this.source_commit, steps.currentBuild.result ?: 'SUCCESS')
-        this.change.notify_build_result(get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, steps.currentBuild.result ?: 'SUCCESS')
+        this.change.notify_build_result(get_job_name(), steps.env.CHANGE_BRANCH, this.source_commit, steps.currentBuild.result ?: 'SUCCESS', exclude_branches_filled_with_pr_branch_discovery)
+        this.change.notify_build_result(get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, steps.currentBuild.result ?: 'SUCCESS', exclude_branches_filled_with_pr_branch_discovery)
       }
     }
   }
