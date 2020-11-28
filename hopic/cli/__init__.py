@@ -960,8 +960,8 @@ def bump_version(ctx):
 
 
 @main.command()
-@click.option('--phase'             , metavar='<phase>'  , multiple=True, help='''Build phase''', autocompletion=autocomplete.phase_from_config)
-@click.option('--variant'           , metavar='<variant>', multiple=True, help='''Configuration variant''', autocompletion=autocomplete.variant_from_config)
+@click.option('--phase'      , '-p' , metavar='<phase>'  , multiple=True, help='''Build phase''', autocompletion=autocomplete.phase_from_config)
+@click.option('--variant'    , '-v' , metavar='<variant>', multiple=True, help='''Configuration variant''', autocompletion=autocomplete.variant_from_config)
 @click.option('--post-submit'       , is_flag=True       ,                help='''Display only post-submit meta-data.''')
 @click.pass_context
 def getinfo(ctx, phase, variant, post_submit):
