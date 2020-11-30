@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    <title>Configuration &#8212; Hopic 1.26.1.dev103+g079f8c39 documentation</title>
+    <title>Configuration &#8212; Hopic 1.26.1.dev3+g14ec7f1 documentation</title>
     <link rel="stylesheet" href="_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
     <link rel="stylesheet" type="text/css" href="_static/banner.css" />
@@ -34,7 +34,7 @@
         <li class="right" >
           <a href="intro.html" title="Introduction"
              accesskey="P">previous</a> |</li>
-        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.26.1.dev103+g079f8c39 documentation</a> &#187;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.26.1.dev3+g14ec7f1 documentation</a> &#187;</li> 
       </ul>
     </div>  
 
@@ -324,6 +324,40 @@ This is necessary to keep the complexity, and thus chance of failure, of the <co
         <span class="nt">id</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">pypi</span>
         <span class="nt">type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">username-password</span>
       <span class="nt">sh</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">tox -e publish</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="ci-locks">
+<h2>CI-locks<a class="headerlink" href="#ci-locks" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="cmdoption-arg-ci-locks">
+<code class="descname">ci-locks</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-ci-locks" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>When within a Hopic file multiple git repo’s are changed and submitted it might be required to have a lock on every git repo.
+The current repo where Hopic is used is automatically protected with a lock.
+The :option: <cite>ci-locks</cite> option can be used to specify additional repositories whose locks should be acquired during the merge submit flow.
+This assumes that the other git repo’s are protected with a named lock while merging a change.</p>
+<p><a class="reference internal" href="#cmdoption-arg-ci-locks"><code class="xref std std-option docutils literal notranslate"><span class="pre">ci-locks</span></code></a> requires a list of of <code class="docutils literal notranslate"><span class="pre">branch</span></code> and <code class="docutils literal notranslate"><span class="pre">repo-name</span></code>:</p>
+<dl class="docutils">
+<dt><code class="docutils literal notranslate"><span class="pre">branch</span></code></dt>
+<dd>Target git branch name that needs to be protected</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">repo-name</span></code></dt>
+<dd>Target git repo-name that needs to be protected</dd>
+</dl>
+<p>The named lock that Hopic will acquire is formatted as <code class="docutils literal notranslate"><span class="pre">repo-name</span></code>/<code class="docutils literal notranslate"><span class="pre">branch</span></code>
+If all merge checks pass and Hopic is going to submit the merge, all specified addition locks will be acquired at the beginning of a build, alongside the repository’s own lock.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">ci-locks</span><span class="p">:</span>
+  <span class="p p-Indicator">-</span> <span class="nt">branch</span><span class="p">:</span> <span class="s">&quot;master&quot;</span>
+    <span class="nt">repo-name</span><span class="p">:</span> <span class="s">&quot;PIPE/ci-lock&quot;</span>
+
+<span class="nt">phases</span><span class="p">:</span>
+  <span class="nt">phase-1</span><span class="p">:</span>
+    <span class="nt">variant-1</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">sh -c &quot;mkdir -p /tmp/ci-lock-dir &amp;&amp; cd /tmp/ci-lock-dir &amp;&amp; git init&quot;</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">touch new_file.txt</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">sh -c &quot;git add new_file.txt &amp;&amp; git commit -m &#39;add new_file&#39;&quot;</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">rm -r /tmp/ci-lock-dir</span>
 </pre></div>
 </div>
 </div>
@@ -1396,7 +1430,7 @@ The command should output the part of the configuration file to standard output.
         <li class="right" >
           <a href="intro.html" title="Introduction"
              >previous</a> |</li>
-        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.26.1.dev103+g079f8c39 documentation</a> &#187;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.26.1.dev3+g14ec7f1 documentation</a> &#187;</li> 
       </ul>
     </div>
     <div class="footer" role="contentinfo">

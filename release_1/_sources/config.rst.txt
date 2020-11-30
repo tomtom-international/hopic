@@ -140,6 +140,30 @@ This is necessary to keep the complexity, and thus chance of failure, of the ``s
 .. literalinclude:: ../../examples/post-submit.yaml
    :language: yaml
 
+CI-locks
+--------
+
+.. option:: ci-locks
+
+When within a Hopic file multiple git repo's are changed and submitted it might be required to have a lock on every git repo.
+The current repo where Hopic is used is automatically protected with a lock.
+The :option: `ci-locks` option can be used to specify additional repositories whose locks should be acquired during the merge submit flow.
+This assumes that the other git repo's are protected with a named lock while merging a change. 
+
+:option:`ci-locks` requires a list of of ``branch`` and ``repo-name``:
+
+``branch``
+    Target git branch name that needs to be protected
+
+``repo-name``
+    Target git repo-name that needs to be protected
+
+The named lock that Hopic will acquire is formatted as ``repo-name``/``branch``
+If all merge checks pass and Hopic is going to submit the merge, all specified addition locks will be acquired at the beginning of a build, alongside the repository's own lock.
+
+.. literalinclude:: ../../examples/ci-locks.yaml
+   :language: yaml
+
 Clean
 -----
 
