@@ -410,9 +410,9 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
 
 
 @click.command()
-@click.option('--phase'  , metavar='<phase>'  , multiple=True, help='''Build phase to execute''', autocompletion=autocomplete.phase_from_config)
-@click.option('--variant', metavar='<variant>', multiple=True, help='''Configuration variant to build''', autocompletion=autocomplete.variant_from_config)
-@click.option('--dry-run', '-n',  is_flag=True, default=False, help='''Print commands from the configured phases and variants, but do not execute them''')
+@click.option('--phase'  , '-p', metavar='<phase>'  , multiple=True, help='''Build phase to execute''', autocompletion=autocomplete.phase_from_config)
+@click.option('--variant', '-v', metavar='<variant>', multiple=True, help='''Configuration variant to build''', autocompletion=autocomplete.variant_from_config)
+@click.option('--dry-run', '-n', is_flag=True, default=False, help='''Print commands from the configured phases and variants, but do not execute them''')
 @click.pass_context
 def build(ctx, phase, variant, dry_run):
     """
