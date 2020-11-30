@@ -1,0 +1,30 @@
+Committed-by: Hopic 1.25.1.dev140+g1852a45
+
+With Python version: 3.6.12
+
+And with these installed packages:
+appdirs==1.4.4
+click==7.1.2
+click-log==0.3.2
+commisery==0.5.0
+distlib==0.3.1
+filelock==3.0.12
+gitdb==4.0.5
+GitPython==3.1.11
+hopic @ git+https://github.com/tomtom-international/hopic.git@1852a45b0614e89e2749ec28a52dcedd6714cffd
+importlib-metadata==2.0.0
+importlib-resources==3.0.0
+packaging==20.4
+pluggy==0.13.1
+py==1.9.0
+pyparsing==2.4.7
+python-dateutil==2.8.1
+PyYAML==5.3.1
+regex==2020.11.13
+six==1.15.0
+smmap==3.0.4
+stemming==1.0.1
+toml==0.10.1
+tox==3.20.0
+virtualenv==20.1.0
+zipp==3.2.0
