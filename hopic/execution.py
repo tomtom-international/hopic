@@ -25,9 +25,15 @@ def no_exec(*args, **kwargs):
     return 0
 
 
-def echo_cmd(fun, cmd, *args, dry_run=False, **kwargs):
+def echo_cmd(fun, cmd, *args, dry_run=False, obfuscate=None, **kwargs):
+    command_list = []
+    for word in cmd:
+        if obfuscate is not None:
+            for secret in obfuscate:
+                word = word.replace(obfuscate[secret], f'${{{secret}}}')
+        command_list.append(shlex.quote(word))
     log.info('%s%s', '' if dry_run else 'Executing: ',
-             click.style(' '.join(shlex.quote(word) for word in cmd), fg='yellow'))
+             click.style(' '.join(command_list), fg='yellow'))
 
     # Set our locale for machine readability with UTF-8
     kwargs = kwargs.copy()
@@ -53,5 +59,5 @@ def echo_cmd(fun, cmd, *args, dry_run=False, **kwargs):
 
 
 @click.pass_context
-def echo_cmd_click(ctx, fun, cmd, *args, **kwargs):
-    return echo_cmd(fun, cmd, *args, **kwargs, dry_run=getattr(ctx.obj, 'dry_run', False))
+def echo_cmd_click(ctx, fun, cmd, *args, obfuscate=None, **kwargs):
+    return echo_cmd(fun, cmd, *args, **kwargs, obfuscate=obfuscate, dry_run=getattr(ctx.obj, 'dry_run', False))
