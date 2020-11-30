@@ -26,12 +26,14 @@ try:
     from importlib import metadata
 except ImportError:
     import importlib_metadata as metadata
+import inspect
 import json
 import logging
 import os
 import re
 import shlex
 import subprocess
+import typing
 import xml.etree.ElementTree as ET
 import yaml
 
@@ -251,6 +253,98 @@ class JSONEncoder(json.JSONEncoder):
         return super().default(o)
 
 
+def match_template_props_to_signature(
+    template_name: str,
+    signature: typing.Mapping[str, inspect.Parameter],
+    params: typing.Mapping[str, typing.Any],
+) -> typing.Mapping[str, typing.Any]:
+
+    kwargs_var, *_ = [
+        *[
+            param for param in signature.values()
+            if param.kind == inspect.Parameter.VAR_KEYWORD
+        ],
+        None
+    ]
+
+    required_params = [
+        param for param_idx, param in enumerate(signature.values())
+        if param.kind in {
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.KEYWORD_ONLY,
+        }
+        and param.default is inspect.Parameter.empty
+        # Skip first 'volume_vars' parameter, because Hopic passes that one instead of the user.
+        and param_idx != 0
+    ]
+
+    new_params = OrderedDict()
+    for prop, val in params.items():
+        # Translate kebab-case to snake_case when the snake_case parameter exists
+        orig_prop = prop
+        snake_prop = prop.replace('-', '_')
+        if (
+            snake_prop in signature
+            and prop not in signature
+            # Prevent duplicates
+            and snake_prop not in params
+        ):
+            prop = snake_prop
+
+        if '_' in orig_prop and (
+            kwargs_var is None
+            or prop in signature
+        ):
+            # Disallow usage of snake_case as an alternate spelling of kebab-case parameters.
+            kebab_name = prop.replace('_', '-')
+            raise ConfigurationError(
+                f"Trying to instantiate template `{template_name}` with unexpected parameter `{orig_prop}`. Did you mean `{kebab_name}`?")
+
+        try:
+            param = signature[prop]
+        except KeyError as exc:
+            if kwargs_var is not None:
+                new_params[orig_prop] = val
+                continue
+            raise ConfigurationError(f"Trying to instantiate template `{template_name}` with unexpected parameter `{orig_prop}`") from exc
+        else:
+            new_params[prop] = val
+
+        if (
+            param.annotation is not inspect.Parameter.empty
+            # don't check forward references to types
+            and not isinstance(param.annotation, (str, getattr(typing, 'ForwardRef', str)))
+        ):
+            origin_type = getattr(param.annotation, '__origin__', None)
+            try:
+                if origin_type is typing.Union:
+                    type_valid = isinstance(val, param.annotation.__args__)
+                else:
+                    type_valid = isinstance(val, param.annotation)
+            except TypeError:
+                # ignore failures to type check, propbably some subscripted 'typing.Something[SomeOtherType]'
+                type_valid = True
+
+            if not type_valid:
+                raise ConfigurationError(
+                        f"Trying to instantiate template `{template_name}` with parameter `{orig_prop}` of type `{type(val).__name__}`, "
+                        f"expected `{getattr(param.annotation, '__name__', None) or getattr(param.annotation, '_name', None) or param.annotation}`")
+
+        if param.kind in {
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        } or param.name == 'volume_vars':
+            raise ConfigurationError(f"Trying to use reserved keyword `{orig_prop}` to instantiate template `{template_name}`")
+
+    for param in required_params:
+        if param.name not in new_params:
+            kebab_name = param.name.replace('_', '-')
+            raise ConfigurationError(f"Trying to instantiate template `{template_name}` without required parameter `{kebab_name}`")
+
+    return new_params
+
+
 def load_yaml_template(volume_vars, extension_installer, loader, node):
     if node.id == 'scalar':
         props = {}
@@ -265,7 +359,11 @@ def load_yaml_template(volume_vars, extension_installer, loader, node):
     else:
         raise TemplateNotFoundError(name=name, props=props)
 
-    cfg = ep.load()(volume_vars, **props)
+    template_fn = ep.load()
+    template_sig = inspect.signature(template_fn)
+
+    props = match_template_props_to_signature(name, template_sig.parameters, props)
+    cfg = template_fn(volume_vars, **props)
 
     if isinstance(cfg, str):
         # Parse provided yaml without template substitution
@@ -600,12 +698,20 @@ def process_variant_cmds(phase, variant, cmds, volume_vars, config_file=None):
 
 
 def read(config, volume_vars, extension_installer=lambda *args: None):
-    config_dir = os.path.dirname(config)
+    if hasattr(config, 'name'):
+        f = config
+        config = f.name
+        file_close = False
+    else:
+        f = open(config, 'r')
+        file_close = True
 
-    volume_vars = volume_vars.copy()
-    volume_vars['CFGDIR'] = config_dir
+    try:
+        config_dir = os.path.dirname(config)
 
-    with open(config, 'r') as f:
+        volume_vars = volume_vars.copy()
+        volume_vars['CFGDIR'] = config_dir
+
         cfg = install_top_level_extensions(f, config, extension_installer, volume_vars)
         f.seek(0)
         try:
@@ -625,6 +731,9 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
 
             if 'config' in cfg:
                 cfg = cfg['config']
+    finally:
+        if file_close:
+            f.close()
 
     if not isinstance(cfg, Mapping):
         raise ConfigurationError(f"top level configuration should be a map, but is a {type(cfg).__name__}", file=config)
