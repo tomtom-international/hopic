@@ -309,7 +309,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
 
                     old_handlers = dict((num, signal.signal(num, signal_handler)) for num in (signal.SIGINT, signal.SIGTERM))
                     try:
-                        echo_cmd(subprocess.check_call, final_cmd, env=new_env, cwd=ctx.obj.code_dir)
+                        echo_cmd(subprocess.check_call, final_cmd, env=new_env, cwd=ctx.obj.code_dir, obfuscate=variant_credentials)
                     except subprocess.CalledProcessError as e:
                         log.error("Command fatally terminated with exit code %d", e.returncode)
                         ctx.exit(e.returncode)

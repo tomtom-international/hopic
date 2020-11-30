@@ -750,6 +750,17 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
             raise ConfigurationError(
                     f"`pass-through-environment-vars` must be a sequence containing strings only: element {idx} has type {type(var).__name__}", file=config)
 
+    ci_locks = cfg.setdefault('ci-locks', [])
+    if not isinstance(ci_locks, Sequence):
+        raise ConfigurationError(f"`ci-locks` doesn't contain a sequence but a {type(ci_locks).__name__}", file=config)
+    for lock_properties in ci_locks:
+        for property in ['branch', 'repo-name']:
+            if property not in lock_properties:
+                raise ConfigurationError(f"`ci-locks` {lock_properties} doesn't contain a {property}", file=config)
+            if not isinstance(lock_properties[property], str):
+                raise ConfigurationError(f"`ci-locks` {lock_properties} has an invalid attribute {property}, "
+                                         f"expected a string but got a {type(lock_properties[property])}", file=config)
+
     valid_image_types = (_basic_image_types, Mapping)
     image = cfg.setdefault('image', OrderedDict())
     if not isinstance(image, valid_image_types):
