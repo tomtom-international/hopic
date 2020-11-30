@@ -17,6 +17,55 @@
 Changelog
 =========
 
+1.26.0
+======
+
+New features
+------------
+
+* feat: add publishable-version to hopic (#229)
+* feat: add post-submit block that gets executed just after submission (#230)
+* feat: perform type and existance checking of template parameters (#249)
+
+Improvements
+------------
+
+* improvement: log error when root config object is not a map (#245)
+* improvement(getinfo): only expose first value of permitted fields (#246)
+
+Bug fixes
+---------
+
+* fix: determine git's commit hash even when not creating a tag (#248)
+* fix: expose credentials in local environment as well (#250)
+
+Documentation fixes
+-------------------
+
+* docs: update instructions to enable interactive support post install on macos (#247)
+
+1.25.0
+======
+
+New features
+------------
+
+* feat: support url encoding in username/password credentials (#235)
+* feat: on macosx pack the username and password into the password field (#234)
+* feat: add support for using Jenkins' SSH key credentials (#241)
+
+Bug fixes
+---------
+
+* fix: only determine Hopic's commit hash once (#238)
+* fix: pin 'keyring' on a version that we can actually work with (#242)
+* fix: handle signals while stopping Docker containers (#236)
+
+Documentation improvements
+--------------------------
+
+* docs: include contribution guidelines in the produced documentation (#243)
+
 1.24.0
 ======
 
