@@ -16,6 +16,7 @@
 
 import groovy.json.JsonOutput
 import org.jenkinsci.plugins.credentialsbinding.impl.CredentialNotFoundException
+import org.jenkinsci.plugins.scriptsecurity.sandbox.RejectedAccessException
 
 class ChangeRequest {
   protected steps
@@ -420,10 +421,15 @@ class CiDriver {
     return text.split('\\r?\\n') as ArrayList
   }
 
-  public def with_hopic(closure) {
+  private String get_executor_identifier(variant) {
+    return steps.env.NODE_NAME + (variant ? "_${variant}" : "")
+  }
+
+  public def with_hopic(variant = '', closure) {
     assert steps.env.NODE_NAME != null, "with_hopic must be executed on a node"
 
-    if (!this.base_cmds.containsKey(steps.env.NODE_NAME)) {
+    String executor_identifier = get_executor_identifier(variant)
+    if (!this.base_cmds.containsKey(executor_identifier)) {
       def venv = steps.pwd(tmp: true) + "/hopic-venv"
       def workspace = steps.pwd()
       // Timeout prevents infinite downloads from blocking the build forever
@@ -460,10 +466,10 @@ ${shell_quote(venv)}/bin/python -m pip install ${shell_quote(this.repo)}
         def config_file_path = shell_quote(this.config_file.startsWith('/') ? "${config_file}" : "${workspace}/${config_file}")
         cmd += ' --config=' + "${config_file_path}"
       }
-      this.base_cmds[steps.env.NODE_NAME] = cmd
+      this.base_cmds[executor_identifier] = cmd
     }
 
-    return closure(this.base_cmds[steps.env.NODE_NAME])
+    return closure(this.base_cmds[executor_identifier])
   }
 
   private def with_git_credentials(closure) {
@@ -768,23 +774,25 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   /**
    * @pre this has to be executed on a node
    */
-  private def ensure_checkout(String cmd, clean = false) {
+  private def ensure_checkout(String cmd, clean = false, variant = '') {
     assert steps.env.NODE_NAME != null, "ensure_checkout must be executed on a node"
 
-    if (!this.checkouts.containsKey(steps.env.NODE_NAME)) {
-      this.checkouts[steps.env.NODE_NAME] = this.checkout(cmd, clean)
+    String executor_identifier = get_executor_identifier(variant)
+
+    if (!this.checkouts.containsKey(executor_identifier)) {
+      this.checkouts[executor_identifier] = this.checkout(cmd, clean)
     }
     this.worktree_bundles.each { name, bundle ->
-      if (bundle.nodes[steps.env.NODE_NAME]) {
+      if (bundle.nodes[executor_identifier]) {
         return
       }
       steps.unstash(name)
       steps.sh(
           script: "${cmd} unbundle-worktrees --bundle=worktree-transfer.bundle",
         )
-      this.worktree_bundles[name].nodes[steps.env.NODE_NAME] = true
+      this.worktree_bundles[name].nodes[executor_identifier] = true
     }
-    return this.checkouts[steps.env.NODE_NAME]
+    return this.checkouts[executor_identifier]
   }
 
   private get_repo_name_and_branch(repo_name, branch = get_branch_name()) {
@@ -848,17 +856,19 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
    *
    * @pre this has to be executed on a node
    */
-  private def ensure_unstashed() {
+  private def ensure_unstashed(variant = '') {
     assert steps.env.NODE_NAME != null, "ensure_unstashed must be executed on a node"
 
+    String executor_identifier = get_executor_identifier(variant)
+
     this.stashes.each { name, stash ->
-      if (stash.nodes[steps.env.NODE_NAME]) {
+      if (stash.nodes[executor_identifier]) {
         return
       }
       steps.dir(stash.dir) {
         steps.unstash(name)
       }
-      this.stashes[name].nodes[steps.env.NODE_NAME] = true
+      this.stashes[name].nodes[executor_identifier] = true
     }
   }
 
@@ -941,6 +951,37 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
         this.ensure_unstashed()
         return closure(cmd)
       }
+    }
+  }
+
+  private def with_workspace_for_variant(variant, closure) {
+    def num_executors = 1
+    try {
+      num_executors = Jenkins.instance.getComputer(steps.env.NODE_NAME).numExecutors
+    } catch(org.jenkinsci.plugins.scriptsecurity.sandbox.RejectedAccessException e) {
+      steps.println('\033[33m[warning] could not determine number of executors because of missing script approval; '
+                  + 'assuming one executor\033[39m')
+    }
+
+    if (num_executors > 1) {
+      /*
+       * If the node has more than one executor, unfortunately, we'll need to manually handle workspaces,
+       * as Jenkins has no means of requesting specific executors and workspaces on a node.
+       */
+      steps.println('\033[36m[info] node has multiple executors; Hopic will manage workspaces\033[39m')
+
+      String target_identifier = (steps.env.CHANGE_TARGET ? "PR-${steps.env.CHANGE_ID}" : get_branch_name())
+      String workspace_spec = "${get_job_name()}_${target_identifier}_${variant}"
+      steps.ws(workspace_spec) {
+        /* We need to be somewhat paranoid, as `steps.ws` is not guaranteed to give us the path we expect */
+        String pwd = steps.pwd().replaceAll(/(\/|\\)+$/, "") // Strip any trailing slashes/backslashes
+        assert pwd.endsWith(workspace_spec) :
+               "Jenkins did not yield the correct workspace path (" + steps.pwd() + "), try rebuilding"
+
+        closure(true)
+      }
+    } else {
+      closure(false)
     }
   }
 
@@ -1087,89 +1128,94 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
                     label = this.nodes[variant]
                   }
                   steps.node(label) {
-                    steps.stage("${phase}-${variant}") {
-                      this.with_hopic { cmd ->
-                        final workspace = this.ensure_checkout(cmd, clean)
-                        this.pin_variant_to_current_node(variant)
+                    with_workspace_for_variant(variant) { multiple_executors ->
+                      steps.stage("${phase}-${variant}") {
+                        this.with_hopic(variant) { cmd ->
+                          // If working with multiple executors on this node, uniquely identify this node by variant
+                          // to ensure the correct workspace.
+                          final workspace = this.ensure_checkout(cmd, clean, multiple_executors ? variant : '')
+                          this.pin_variant_to_current_node(variant)
 
-                        this.ensure_unstashed()
+                          this.ensure_unstashed(variant)
 
-                        // Meta-data retrieval needs to take place on the executing node to ensure environment variable expansion happens properly
-                        def meta = steps.readJSON(text: steps.sh(
-                            script: "${cmd} getinfo --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant),
-                            returnStdout: true,
-                          ))
+                          // Meta-data retrieval needs to take place on the executing node to ensure environment variable expansion happens properly
+                          def meta = steps.readJSON(text: steps.sh(
+                              script: "${cmd} getinfo --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant),
+                              returnStdout: true,
+                            ))
 
-                        def error_occurred = false
-                        try {
-                          this.subcommand_with_credentials(
-                              cmd + hopic_extra_arguments,
-                              'build'
-                            + ' --phase=' + shell_quote(phase)
-                            + ' --variant=' + shell_quote(variant)
-                            , meta.getOrDefault('with-credentials', []))
-                        } catch(Exception e) {
-                          error_occurred = true // Jenkins only sets its currentResult to Failure after all user code is executed
-                          throw e
-                        } finally {
-                          if (meta.containsKey('junit')) {
-                            def results = meta.junit
-                            steps.dir(workspace) {
-                              meta.junit.each { result ->
-                                steps.junit(result)
+                          def error_occurred = false
+                          try {
+                            this.subcommand_with_credentials(
+                                cmd + hopic_extra_arguments,
+                                'build'
+                              + ' --phase=' + shell_quote(phase)
+                              + ' --variant=' + shell_quote(variant)
+                              , meta.getOrDefault('with-credentials', []))
+                          } catch(Exception e) {
+                            error_occurred = true // Jenkins only sets its currentResult to Failure after all user code is executed
+                            throw e
+                          } finally {
+                            if (meta.containsKey('junit')) {
+                              def results = meta.junit
+                              steps.dir(workspace) {
+                                meta.junit.each { result ->
+                                  steps.junit(result)
+                                }
                               }
                             }
+                            this.archive_artifacts_if_enabled(meta, workspace, error_occurred, { server_id ->
+                              if (!artifactoryBuildInfo.containsKey(server_id)) {
+                                def newBuildInfo = steps.Artifactory.newBuildInfo()
+                                def (build_name, build_identifier) = get_build_id()
+                                newBuildInfo.name = build_name
+                                newBuildInfo.number = build_identifier
+                                artifactoryBuildInfo[server_id] = newBuildInfo
+                              }
+                              return artifactoryBuildInfo[server_id]
+                            })
                           }
-                          this.archive_artifacts_if_enabled(meta, workspace, error_occurred, { server_id ->
-                            if (!artifactoryBuildInfo.containsKey(server_id)) {
-                              def newBuildInfo = steps.Artifactory.newBuildInfo()
-                              def (build_name, build_identifier) = get_build_id()
-                              newBuildInfo.name = build_name
-                              newBuildInfo.number = build_identifier
-                              artifactoryBuildInfo[server_id] = newBuildInfo
-                            }
-                            return artifactoryBuildInfo[server_id]
-                          })
-                        }
 
-                        // FIXME: re-evaluate if we can and need to get rid of special casing for stashing
-                        if (meta.containsKey('stash')) {
-                          def name  = "${phase}-${variant}"
-                          def params = [
-                              name: name,
-                            ]
-                          if (meta.stash.containsKey('includes')) {
-                            params['includes'] = meta.stash.includes
-                          }
-                          def stash_dir = workspace
-                          if (meta.stash.containsKey('dir')) {
-                            if (meta.stash.dir.startsWith('/')) {
-                              stash_dir = meta.stash.dir
-                            } else {
-                              stash_dir = "${workspace}/${meta.stash.dir}"
+                          String executor_identifier = get_executor_identifier(multiple_executors ? variant : '')
+                          // FIXME: re-evaluate if we can and need to get rid of special casing for stashing
+                          if (meta.containsKey('stash')) {
+                            def name  = "${phase}-${variant}"
+                            def params = [
+                                name: name,
+                              ]
+                            if (meta.stash.containsKey('includes')) {
+                              params['includes'] = meta.stash.includes
                             }
-                          }
-                          // Make stash locations node-independent by making them relative to the Jenkins workspace
-                          if (stash_dir.startsWith('/')) {
-                            def cwd = steps.pwd()
-                            // We could use java.io.File and java.nio.file.Path relativize, but that requires extra script approvals.
-                            stash_dir = steps.sh(script: "realpath --relative-to=$cwd ${stash_dir}", returnStdout: true).trim()
-                            if (stash_dir == '') {
-                              stash_dir = '.'
+                            def stash_dir = workspace
+                            if (meta.stash.containsKey('dir')) {
+                              if (meta.stash.dir.startsWith('/')) {
+                                stash_dir = meta.stash.dir
+                              } else {
+                                stash_dir = "${workspace}/${meta.stash.dir}"
+                              }
                             }
+                            // Make stash locations node-independent by making them relative to the Jenkins workspace
+                            if (stash_dir.startsWith('/')) {
+                              def cwd = steps.pwd()
+                              // We could use java.io.File and java.nio.file.Path relativize, but that requires extra script approvals.
+                              stash_dir = steps.sh(script: "realpath --relative-to=$cwd ${stash_dir}", returnStdout: true).trim()
+                              if (stash_dir == '') {
+                                stash_dir = '.'
+                              }
+                            }
+                            steps.dir(stash_dir) {
+                              steps.stash(params)
+                            }
+                            this.stashes[name] = [dir: stash_dir, nodes: [(executor_identifier): true]]
                           }
-                          steps.dir(stash_dir) {
-                            steps.stash(params)
+                          if (meta.containsKey('worktrees')) {
+                            def name = "${phase}-${variant}-worktree-transfer.bundle"
+                            steps.stash(
+                                name: name,
+                                includes: 'worktree-transfer.bundle',
+                              )
+                            this.worktree_bundles[name] = [nodes: [(executor_identifier): true]]
                           }
-                          this.stashes[name] = [dir: stash_dir, nodes: [(steps.env.NODE_NAME): true]]
-                        }
-                        if (meta.containsKey('worktrees')) {
-                          def name = "${phase}-${variant}-worktree-transfer.bundle"
-                          steps.stash(
-                              name: name,
-                              includes: 'worktree-transfer.bundle',
-                            )
-                          this.worktree_bundles[name] = [nodes: [(steps.env.NODE_NAME): true]]
                         }
                       }
                     }

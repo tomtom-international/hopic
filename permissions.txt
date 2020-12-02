@@ -10,3 +10,6 @@ method hudson.model.Run delete
 staticMethod groovy.json.JsonOutput toJson java.lang.Object
 staticMethod org.codehaus.groovy.runtime.DefaultGroovyMethods getAt java.util.List java.util.Collection
 staticMethod org.codehaus.groovy.runtime.DefaultGroovyMethods getAt java.lang.Object java.lang.String
+staticMethod jenkins.model.Jenkins getInstance
+method jenkins.model.Jenkins getComputer java.lang.String
+method hudson.model.Computer getNumExecutors
