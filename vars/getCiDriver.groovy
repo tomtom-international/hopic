@@ -1148,6 +1148,97 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     steps.print(printable_string.trim())
   }
 
+  private void build_variant(String phase, String variant, String cmd, String workspace, Map artifactoryBuildInfo, String hopic_extra_arguments) {
+    steps.stage("${phase}-${variant}") {
+      // Meta-data retrieval needs to take place on the executing node to ensure environment variable expansion happens properly
+      def meta = steps.readJSON(text: steps.sh(
+          script: "${cmd} getinfo --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant),
+          label: "Hopic: retrieving configuration for phase '${phase}', variant '${variant}'",
+          returnStdout: true,
+        ))
+
+      def error_occurred = false
+      try {
+        this.subcommand_with_credentials(
+            cmd + hopic_extra_arguments,
+            'build'
+          + ' --phase=' + shell_quote(phase)
+          + ' --variant=' + shell_quote(variant)
+          , meta.getOrDefault('with-credentials', []),
+          , "Hopic: running build for phase '" + phase + "',  variant '" + variant + "'"
+          )
+      } catch(Exception e) {
+        error_occurred = true // Jenkins only sets its currentResult to Failure after all user code is executed
+        throw e
+      } finally {
+        if (meta.containsKey('junit')) {
+          def results = meta.junit
+          steps.dir(workspace) {
+            meta.junit.each { result ->
+              steps.junit(result)
+            }
+          }
+        }
+        this.archive_artifacts_if_enabled(meta, workspace, error_occurred) { server_id ->
+          if (!artifactoryBuildInfo.containsKey(server_id)) {
+            def newBuildInfo = steps.Artifactory.newBuildInfo()
+            def (build_name, build_identifier) = get_build_id()
+            newBuildInfo.name = build_name
+            newBuildInfo.number = build_identifier
+            artifactoryBuildInfo[server_id] = newBuildInfo
+          }
+          return artifactoryBuildInfo[server_id]
+        }
+      }
+
+      def executor_identifier = get_executor_identifier(variant)
+      // FIXME: re-evaluate if we can and need to get rid of special casing for stashing
+      if (meta.containsKey('stash')) {
+        def name  = "${phase}-${variant}"
+        def params = [
+            name: name,
+          ]
+        if (meta.stash.containsKey('includes')) {
+          params['includes'] = meta.stash.includes
+        }
+        def stash_dir = workspace
+        if (meta.stash.containsKey('dir')) {
+          if (meta.stash.dir.startsWith('/')) {
+            stash_dir = meta.stash.dir
+          } else {
+            stash_dir = "${workspace}/${meta.stash.dir}"
+          }
+        }
+        // Make stash locations node-independent by making them relative to the Jenkins workspace
+        if (stash_dir.startsWith('/')) {
+          def cwd = steps.pwd()
+          // This check, unlike relativize() below, doesn't depend on File() and thus doesn't require script approval
+          if (stash_dir == cwd) {
+            stash_dir = '.'
+          } else {
+            cwd = new File(cwd).toPath()
+            stash_dir = cwd.relativize(new File(stash_dir).toPath()) as String
+          }
+          if (stash_dir == '') {
+            stash_dir = '.'
+          }
+        }
+        steps.dir(stash_dir) {
+          steps.stash(params)
+        }
+        this.stashes[name] = [dir: stash_dir, nodes: [(executor_identifier): true]]
+      }
+      if (meta.containsKey('worktrees')) {
+        def name = "${phase}-${variant}-worktree-transfer.bundle"
+        steps.stash(
+            name: name,
+            includes: 'worktree-transfer.bundle',
+          )
+        this.worktree_bundles[name] = [nodes: [(executor_identifier): true]]
+      }
+    }
+  }
+
   public def build(Map buildParams = [:]) {
     def clean = buildParams.getOrDefault('clean', false)
     def default_node = buildParams.getOrDefault('default_node_expr', this.default_node_expr)
@@ -1303,101 +1394,15 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
                   }
                   this.on_node(node_expr: label, name: stage_name) {
                     with_workspace_for_variant(variant) {
-                      steps.stage(stage_name) {
-                        this.with_hopic(variant) { cmd ->
-                          // If working with multiple executors on this node, uniquely identify this node by variant
-                          // to ensure the correct workspace.
-                          final workspace = this.ensure_checkout(cmd, clean, variant)
-                          this.pin_variant_to_current_node(variant)
+                      this.with_hopic(variant) { cmd ->
+                        // If working with multiple executors on this node, uniquely identify this node by variant
+                        // to ensure the correct workspace.
+                        final workspace = this.ensure_checkout(cmd, clean, variant)
+                        this.pin_variant_to_current_node(variant)
 
-                          this.ensure_unstashed(variant)
+                        this.ensure_unstashed(variant)
 
-                          // Meta-data retrieval needs to take place on the executing node to ensure environment variable expansion happens properly
-                          def meta = steps.readJSON(text: steps.sh(
-                              script: "${cmd} getinfo --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant),
-                              label: "Hopic: retrieving configuration for phase '" + phase + "', variant '" + variant + "'",
-                              returnStdout: true,
-                            ))
-
-                          def error_occurred = false
-                          try {
-                            this.subcommand_with_credentials(
-                                cmd + hopic_extra_arguments,
-                                'build'
-                              + ' --phase=' + shell_quote(phase)
-                              + ' --variant=' + shell_quote(variant)
-                              , meta.getOrDefault('with-credentials', []),
-                              "Hopic: running build for phase '" + phase + "',  variant '" + variant + "'")
-                          } catch(Exception e) {
-                            error_occurred = true // Jenkins only sets its currentResult to Failure after all user code is executed
-                            throw e
-                          } finally {
-                            if (meta.containsKey('junit')) {
-                              def results = meta.junit
-                              steps.dir(workspace) {
-                                meta.junit.each { result ->
-                                  steps.junit(result)
-                                }
-                              }
-                            }
-                            this.archive_artifacts_if_enabled(meta, workspace, error_occurred, { server_id ->
-                              if (!artifactoryBuildInfo.containsKey(server_id)) {
-                                def newBuildInfo = steps.Artifactory.newBuildInfo()
-                                def (build_name, build_identifier) = get_build_id()
-                                newBuildInfo.name = build_name
-                                newBuildInfo.number = build_identifier
-                                artifactoryBuildInfo[server_id] = newBuildInfo
-                              }
-                              return artifactoryBuildInfo[server_id]
-                            })
-                          }
-
-                          def executor_identifier = get_executor_identifier(variant)
-                          // FIXME: re-evaluate if we can and need to get rid of special casing for stashing
-                          if (meta.containsKey('stash')) {
-                            def name  = "${phase}-${variant}"
-                            def params = [
-                                name: name,
-                              ]
-                            if (meta.stash.containsKey('includes')) {
-                              params['includes'] = meta.stash.includes
-                            }
-                            def stash_dir = workspace
-                            if (meta.stash.containsKey('dir')) {
-                              if (meta.stash.dir.startsWith('/')) {
-                                stash_dir = meta.stash.dir
-                              } else {
-                                stash_dir = "${workspace}/${meta.stash.dir}"
-                              }
-                            }
-                            // Make stash locations node-independent by making them relative to the Jenkins workspace
-                            if (stash_dir.startsWith('/')) {
-                              def cwd = steps.pwd()
-                              // This check, unlike relativize() below, doesn't depend on File() and thus doesn't require script approval
-                              if (stash_dir == cwd) {
-                                stash_dir = '.'
-                              } else {
-                                cwd = new File(cwd).toPath()
-                                stash_dir = cwd.relativize(new File(stash_dir).toPath()) as String
-                              }
-                              if (stash_dir == '') {
-                                stash_dir = '.'
-                              }
-                            }
-                            steps.dir(stash_dir) {
-                              steps.stash(params)
-                            }
-                            this.stashes[name] = [dir: stash_dir, nodes: [(executor_identifier): true]]
-                          }
-                          if (meta.containsKey('worktrees')) {
-                            def name = "${phase}-${variant}-worktree-transfer.bundle"
-                            steps.stash(
-                                name: name,
-                                includes: 'worktree-transfer.bundle',
-                              )
-                            this.worktree_bundles[name] = [nodes: [(executor_identifier): true]]
-                          }
-                        }
+                        this.build_variant(phase, variant, cmd, workspace, artifactoryBuildInfo, hopic_extra_arguments)
                       }
                     }
                   }
