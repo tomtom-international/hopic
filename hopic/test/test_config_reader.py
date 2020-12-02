@@ -93,12 +93,30 @@ def mock_yaml_plugin(monkeypatch):
         def no_arg_template(volume_vars):
             return ()
 
+    class TestSequenceTemplate:
+        name = 'sequence'
+
+        def load(self):
+            return self.sequence_template
+
+        @staticmethod
+        def sequence_template(
+            volume_vars : typing.Mapping[str, str],
+            *,
+            sequence : typing.Sequence[str] = [],
+        ) -> typing.Sequence[typing.Mapping[str, typing.Any]]:
+            assert isinstance(sequence, typing.Sequence)
+            for v in sequence:
+                assert isinstance(v, str)
+            return ({'sequence': sequence},)
+
     def mock_entry_points():
         return {
             'hopic.plugins.yaml': (
                 TestTemplate(),
                 TestKwargTemplate(),
                 TestSimpleTemplate(),
+                TestSequenceTemplate(),
             )
         }
     monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
@@ -306,3 +324,40 @@ def test_template_simple_without_param(mock_yaml_plugin):
     ''')), {'WORKSPACE': None})
     out = cfg['phases']['test']['example']
     assert out == []
+
+
+def test_template_sequence_without_param(mock_yaml_plugin):
+    cfg = config_reader.read(_config_file(dedent('''\
+        phases:
+          test:
+            example: !template "sequence"
+    ''')), {'WORKSPACE': None})
+    out = cfg['phases']['test']['example'][0]['sequence']
+    assert out == []
+
+
+def test_template_sequence_with_single_entry(mock_yaml_plugin):
+    cfg = config_reader.read(_config_file(dedent('''\
+        phases:
+          test:
+            example: !template
+              name: "sequence"
+              sequence:
+                - mooh
+    ''')), {'WORKSPACE': None})
+    out = cfg['phases']['test']['example'][0]['sequence']
+    assert out == ['mooh']
+
+
+def test_template_sequence_with_type_mismatched_entry(mock_yaml_plugin):
+    with pytest.raises(ConfigurationError, match=r'(?i)trying to instantiate template `.*?` with parameter `sequence\[1\]` of type `bool`, expected'):
+        config_reader.read(_config_file(dedent('''\
+            phases:
+              test:
+                example: !template
+                  name: "sequence"
+                  sequence:
+                    - mooh
+                    - false
+                    - sheep
+        ''')), {'WORKSPACE': None})
