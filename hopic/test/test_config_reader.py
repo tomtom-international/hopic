@@ -207,6 +207,116 @@ def test_environment_from_prefix():
     assert dict(out['environment']) == {'SHEEP': '1', 'EMPTY': ''}
 
 
+def test_node_label_type_mismatch():
+    with pytest.raises(ConfigurationError, match=r"`node-label` .*? string .*? bool"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    '''\
+                    phases:
+                      test:
+                        example:
+                          - node-label: true
+                    '''
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_node_label_mismatch():
+    with pytest.raises(ConfigurationError, match=r"`node-label` .*?\bdiffers from .*?\bprevious.*?\bdefined"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    '''\
+                    phases:
+                      build:
+                        example:
+                          - node-label: first
+                      test:
+                        example:
+                          - node-label: second
+                    '''
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_node_label_default_override():
+    with pytest.raises(ConfigurationError, match=r"`node-label` .*?\boverride default"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    '''\
+                    phases:
+                      build:
+                        example: []
+                      test:
+                        example:
+                          - node-label: second
+                    '''
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_post_submit_node_label_mismatch():
+    with pytest.raises(ConfigurationError, match=r"`node-label` .*?\bdiffers from .*?\bprevious.*?\bdefined"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    '''\
+                    post-submit:
+                      build:
+                        - node-label: first
+                      test:
+                        - node-label: second
+                    '''
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_node_label_match():
+    config_reader.read(
+        _config_file(
+            dedent(
+                '''\
+                phases:
+                  build:
+                    example:
+                      - node-label: first
+                  test:
+                    example:
+                      - node-label: first
+                '''
+            )
+        ),
+        {'WORKSPACE': None},
+    )
+
+
+def test_post_submit_node_label_match():
+    config_reader.read(
+        _config_file(
+            dedent(
+                '''\
+                post-submit:
+                  build:
+                    - node-label: first
+                  test:
+                    - node-label: first
+                '''
+            )
+        ),
+        {'WORKSPACE': None},
+    )
+
+
 def test_template_reserved_param(mock_yaml_plugin):
     with pytest.raises(ConfigurationError, match=r'(?i)trying to use reserved keyword `volume-vars` to instantiate template `.*?`'):
         config_reader.read(_config_file(dedent('''\

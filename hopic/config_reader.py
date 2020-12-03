@@ -830,6 +830,9 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
         raise ConfigurationError('`project-name` setting must be a string', file=config)
 
     # Convert multiple different syntaxes into a single one
+    variant_node_label = OrderedDict()
+    variant_node_label_phase = OrderedDict()
+    variant_node_label_idx = OrderedDict()
     for phasename, phase in cfg.setdefault('phases', OrderedDict()).items():
         if not isinstance(phase, Mapping):
             raise ConfigurationError(f"phase `{phasename}` doesn't contain a mapping but a {type(phase).__name__}", file=config)
@@ -843,6 +846,35 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
                 volume_vars,
                 config_file=config,
             ))
+            for cmd_idx, cmd in enumerate(phase[variant]):
+                if 'node-label' in cmd:
+                    node_label = cmd['node-label']
+                    if not isinstance(node_label, str):
+                        raise ConfigurationError(
+                            f"`{phasename}`.`{variant}`[{cmd_idx}].`node-label` doesn't contain a string but a {type(node_label).__name__}",
+                            file=config,
+                        )
+                    if variant not in variant_node_label:
+                        variant_node_label[variant] = node_label
+                        variant_node_label_phase[variant] = phasename
+                        variant_node_label_idx[variant] = cmd_idx
+                    if variant_node_label[variant] is None:
+                        raise ConfigurationError(
+                            f"`{phasename}`.`{variant}`[{cmd_idx}].`node-label` ({node_label!r}) attempts to override default set for "
+                            f"`{variant_node_label_phase[variant]}`.`{variant}`",
+                            file=config,
+                        )
+                    if node_label != variant_node_label[variant]:
+                        raise ConfigurationError(
+                            f"`{phasename}`.`{variant}`[{cmd_idx}].`node-label` ({node_label!r}) differs from that previously defined in "
+                            f"`{variant_node_label_phase[variant]}`.`{variant}`[{variant_node_label_idx[variant]}] ({variant_node_label[variant]!r})",
+                            file=config,
+                        )
+            # If the node label has not been set in the first phase that a variant occurs in it's the default
+            if variant not in variant_node_label:
+                variant_node_label[variant] = None
+                variant_node_label_phase[variant] = phasename
+            variant_node_label.setdefault(variant, None)
 
     post_submit = cfg.setdefault('post-submit', OrderedDict())
     if not isinstance(post_submit, Mapping):
@@ -871,8 +903,9 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
                     post_submit_node_label_idx = cmd_idx
                 if cmd['node-label'] != post_submit_node_label:
                     raise ConfigurationError(
-                            f"`post-submit`.`{phase}`[{cmd_idx}]'s `node-label` ({cmd['node-label']!r}) differs from that previously defined in "
-                            f"`post-submit`.{post_submit_node_label_phase}[{post_submit_node_label_idx}] ({post_submit_node_label!r})",
-                            file=config)
+                        f"`post-submit`.`{phase}`[{cmd_idx}].`node-label` ({cmd['node-label']!r}) differs from that previously defined in "
+                        f"`post-submit`.`{post_submit_node_label_phase}`[{post_submit_node_label_idx}] ({post_submit_node_label!r})",
+                        file=config,
+                    )
 
     return cfg
