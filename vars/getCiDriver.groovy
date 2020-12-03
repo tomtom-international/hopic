@@ -421,8 +421,22 @@ class CiDriver {
     return text.split('\\r?\\n') as ArrayList
   }
 
+  private int get_number_of_executors() {
+    try {
+      return Jenkins.instance.getComputer(steps.env.NODE_NAME).numExecutors
+    } catch(org.jenkinsci.plugins.scriptsecurity.sandbox.RejectedAccessException e) {
+      steps.println('\033[33m[warning] could not determine number of executors because of missing script approval; '
+                  + 'assuming one executor\033[39m')
+      return 1
+    }
+  }
+
   private String get_executor_identifier(variant) {
-    return steps.env.NODE_NAME + (variant ? "_${variant}" : "")
+    if (get_number_of_executors() > 1) {
+      return "${steps.env.NODE_NAME}_${variant}"
+    } else {
+      return steps.env.NODE_NAME
+    }
   }
 
   public def with_hopic(variant = '', closure) {
@@ -954,16 +968,8 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     }
   }
 
-  private def with_workspace_for_variant(variant, closure) {
-    def num_executors = 1
-    try {
-      num_executors = Jenkins.instance.getComputer(steps.env.NODE_NAME).numExecutors
-    } catch(org.jenkinsci.plugins.scriptsecurity.sandbox.RejectedAccessException e) {
-      steps.println('\033[33m[warning] could not determine number of executors because of missing script approval; '
-                  + 'assuming one executor\033[39m')
-    }
-
-    if (num_executors > 1) {
+  private def with_workspace_for_variant(String variant, Closure closure) {
+    if (get_number_of_executors() > 1) {
       /*
        * If the node has more than one executor, unfortunately, we'll need to manually handle workspaces,
        * as Jenkins has no means of requesting specific executors and workspaces on a node.
@@ -978,10 +984,10 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
         assert pwd.endsWith(workspace_spec) :
                "Jenkins did not yield the correct workspace path (" + steps.pwd() + "), try rebuilding"
 
-        closure(true)
+        return closure()
       }
     } else {
-      closure(false)
+      return closure()
     }
   }
 
@@ -1128,12 +1134,12 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
                     label = this.nodes[variant]
                   }
                   steps.node(label) {
-                    with_workspace_for_variant(variant) { multiple_executors ->
+                    with_workspace_for_variant(variant) {
                       steps.stage("${phase}-${variant}") {
                         this.with_hopic(variant) { cmd ->
                           // If working with multiple executors on this node, uniquely identify this node by variant
                           // to ensure the correct workspace.
-                          final workspace = this.ensure_checkout(cmd, clean, multiple_executors ? variant : '')
+                          final workspace = this.ensure_checkout(cmd, clean, variant)
                           this.pin_variant_to_current_node(variant)
 
                           this.ensure_unstashed(variant)
@@ -1176,7 +1182,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
                             })
                           }
 
-                          String executor_identifier = get_executor_identifier(multiple_executors ? variant : '')
+                          def executor_identifier = get_executor_identifier(variant)
                           // FIXME: re-evaluate if we can and need to get rid of special casing for stashing
                           if (meta.containsKey('stash')) {
                             def name  = "${phase}-${variant}"
