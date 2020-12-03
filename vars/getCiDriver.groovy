@@ -34,7 +34,7 @@ class ChangeRequest {
   }
 
   protected def maySubmitImpl(target_commit, source_commit, allow_cache = true) {
-    return !line_split(steps.sh(script: 'LC_ALL=C.UTF-8 git log ' + shell_quote(target_commit) + '..' + shell_quote(source_commit) + " --pretty='%H:%s' --reverse", returnStdout: true)
+    return !line_split(steps.sh(script: 'LC_ALL=C.UTF-8 TZ=UTC git log ' + shell_quote(target_commit) + '..' + shell_quote(source_commit) + " --pretty='%H:%s' --reverse", returnStdout: true)
       .trim()).find { line ->
         if (!line) {
           return false
@@ -470,7 +470,8 @@ class CiDriver {
 
         steps.sh(script: """\
 LC_ALL=C.UTF-8
-export LC_ALL
+TZ=UTC
+export LC_ALL TZ
 rm -rf ${shell_quote(venv)}
 python3 -m virtualenv --clear ${shell_quote(venv)}
 cd /
@@ -478,7 +479,7 @@ ${shell_quote(venv)}/bin/python -m pip install ${shell_quote(this.repo)}
 """)
       }
 
-      def cmd = 'LC_ALL=C.UTF-8 ' + shell_quote("${venv}/bin/python") + ' ' + shell_quote("${venv}/bin/hopic") + ' --color=always'
+      def cmd = 'LC_ALL=C.UTF-8 TZ=UTC ' + shell_quote("${venv}/bin/python") + ' ' + shell_quote("${venv}/bin/hopic") + ' --color=always'
       if (this.config_file != null) {
         cmd += ' --workspace=' + shell_quote(workspace)
         def config_file_path = shell_quote(this.config_file.startsWith('/') ? "${config_file}" : "${workspace}/${config_file}")
@@ -729,7 +730,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     steps.sh(script: "${cmd} install-extensions")
 
     def code_dir_output = tmpdir + '/code-dir.txt'
-    if (steps.sh(script: 'LC_ALL=C.UTF-8 git config --get hopic.code.dir > ' + shell_quote(code_dir_output), returnStatus: true) == 0) {
+    if (steps.sh(script: 'LC_ALL=C.UTF-8 TZ=UTC git config --get hopic.code.dir > ' + shell_quote(code_dir_output), returnStatus: true) == 0) {
       workspace = steps.readFile(code_dir_output).trim()
     }
 
@@ -1013,7 +1014,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           def scm = steps.checkout(steps.scm)
 
           // Don't trust Jenkin's scm.GIT_COMMIT because it sometimes lies
-          steps.env.GIT_COMMIT          = steps.sh(script: 'LC_ALL=C.UTF-8 git rev-parse HEAD', returnStdout: true).trim()
+          steps.env.GIT_COMMIT          = steps.sh(script: 'LC_ALL=C.UTF-8 TZ=UTC git rev-parse HEAD', returnStdout: true).trim()
           steps.env.GIT_COMMITTER_NAME  = scm.GIT_COMMITTER_NAME
           steps.env.GIT_COMMITTER_EMAIL = scm.GIT_COMMITTER_EMAIL
           steps.env.GIT_AUTHOR_NAME     = scm.GIT_AUTHOR_NAME
