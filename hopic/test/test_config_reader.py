@@ -244,6 +244,24 @@ def test_node_label_mismatch():
         )
 
 
+def test_node_label_mismatch_single_phase():
+    with pytest.raises(ConfigurationError, match=r"`node-label` .*?\bdiffers from .*?\bprevious.*?\bdefined"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    '''\
+                    phases:
+                      build:
+                        example:
+                          - node-label: first
+                          - node-label: second
+                    '''
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
 def test_node_label_default_override():
     with pytest.raises(ConfigurationError, match=r"`node-label` .*?\boverride default"):
         config_reader.read(
