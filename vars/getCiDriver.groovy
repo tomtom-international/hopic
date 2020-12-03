@@ -1130,7 +1130,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
                   steps.node(label) {
                     with_workspace_for_variant(variant) { multiple_executors ->
                       steps.stage("${phase}-${variant}") {
-                        this.with_hopic(variant) { cmd ->
+                        this.with_hopic(multiple_executors ? variant : '') { cmd ->
                           // If working with multiple executors on this node, uniquely identify this node by variant
                           // to ensure the correct workspace.
                           final workspace = this.ensure_checkout(cmd, clean, multiple_executors ? variant : '')
