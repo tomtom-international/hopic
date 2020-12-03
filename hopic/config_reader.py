@@ -318,9 +318,18 @@ def match_template_props_to_signature(
             and not isinstance(param.annotation, (str, getattr(typing, 'ForwardRef', str)))
         ):
             origin_type = getattr(param.annotation, '__origin__', None)
+            type_args = getattr(param.annotation, '__args__', None)
             try:
                 if origin_type is typing.Union:
-                    type_valid = isinstance(val, param.annotation.__args__)
+                    type_valid = isinstance(val, type_args)
+                elif origin_type in (typing.Sequence, Sequence):
+                    type_valid = isinstance(val, Sequence)
+                    if type_valid and type_args is not None:
+                        for i, m in enumerate(val):
+                            if not isinstance(m, type_args):
+                                raise ConfigurationError(
+                                        f"Trying to instantiate template `{template_name}` with parameter `{orig_prop}[{i}]` of type `{type(m).__name__}`, "
+                                        f"expected `{getattr(type_args[0], '__name__', None) or getattr(type_args[0], '_name', None) or type_args[0]}`")
                 else:
                     type_valid = isinstance(val, param.annotation)
             except TypeError:
