@@ -14,7 +14,6 @@
 
 import logging
 import os
-import re
 import shlex
 import signal
 import stat
@@ -24,7 +23,6 @@ import urllib.parse
 from collections.abc import (
     Mapping,
 )
-from copy import copy
 
 import click
 import git
@@ -65,7 +63,6 @@ from ..git_time import (
 
 
 log = logging.getLogger(__name__)
-_env_var_re = re.compile(r'^(?P<var>[A-Za-z_][0-9A-Za-z_]*)=(?P<val>.*)$')
 
 
 @click.pass_context
@@ -206,6 +203,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                             volume_vars[cred_var] = MissingCredentialVarError(creds['id'], cred_var)
 
             try:
+                cmd_env = cmd['environment']
                 cmd = cmd['sh']
             except KeyError:
                 continue
@@ -246,15 +244,13 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                         ):
                     cfg_vars[foreach] = str(foreach_item)
 
-                # Strip off prefixed environment variables from this command-line and apply them
-                final_cmd = copy(cmd)
-                while final_cmd:
-                    m = _env_var_re.match(final_cmd[0])
-                    if not m:
-                        break
-                    env[m.group('var')] = expand_vars(cfg_vars, m.group('val'))
-                    final_cmd.pop(0)
-                final_cmd = [expand_vars(cfg_vars, arg) for arg in final_cmd]
+                final_env = env.copy()
+                for k, v in cmd_env.items():
+                    if v is None and k in final_env:
+                        del final_env[k]
+                    else:
+                        final_env[k] = expand_vars(cfg_vars, v)
+                final_cmd = [expand_vars(cfg_vars, arg) for arg in cmd]
 
                 # Handle execution inside docker
                 cidfile = None
@@ -271,11 +267,11 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                                       '--net=host',
                                       '--tty',
                                       '--cap-add=SYS_PTRACE',
-                                      f"--tmpfs={env['HOME']}:exec,uid={uid},gid={gid}",
+                                      f"--tmpfs={final_env['HOME']}:exec,uid={uid},gid={gid}",
                                       f"--user={uid}:{gid}",
                                       '--workdir=/code',
                                       ] + [
-                                          f"--env={k}={v}" for k, v in env.items()
+                                          f"--env={k}={v}" for k, v in final_env.items()
                                       ]
 
                         if docker_in_docker:
@@ -301,7 +297,10 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                         final_cmd = docker_run + final_cmd
                     new_env = os.environ.copy()
                     if image is None:
-                        new_env.update(env)
+                        new_env.update(final_env)
+                        for k, v in cmd_env.items():
+                            if v is None and k in new_env:
+                                del new_env[k]
 
                     def signal_handler(signum, frame):
                         log.warning('Received fatal signal %d', signum)

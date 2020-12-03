@@ -133,6 +133,62 @@ def test_version_build_non_semver():
         config_reader.read_version_info({}, {'format': 'carver', 'build': '1.0.0'})
 
 
+def test_environment_without_cmd():
+    with pytest.raises(ConfigurationError, match=r"set 'environment' member .* doesn't have 'sh'"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    '''\
+                    phases:
+                      test:
+                        example:
+                          - environment: {}
+                    '''
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_environment_type_mismatch():
+    with pytest.raises(ConfigurationError, match=r"`environment\['sheep'\]` is not a string"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    '''\
+                    phases:
+                      test:
+                        example:
+                          - environment:
+                              sheep: 1
+                            sh:
+                              - printenv
+                    '''
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_environment_from_prefix():
+    cfg = config_reader.read(
+        _config_file(
+            dedent(
+                '''\
+                phases:
+                  test:
+                    example:
+                      - SHEEP=1 EMPTY= ./command.sh
+                '''
+            )
+        ),
+        {'WORKSPACE': None},
+    )
+    (out,) = cfg['phases']['test']['example']
+    assert out['sh'] == ['./command.sh']
+    assert dict(out['environment']) == {'SHEEP': '1', 'EMPTY': ''}
+
+
 def test_template_reserved_param(mock_yaml_plugin):
     with pytest.raises(ConfigurationError, match=r'(?i)trying to use reserved keyword `volume-vars` to instantiate template `.*?`'):
         config_reader.read(_config_file(dedent('''\

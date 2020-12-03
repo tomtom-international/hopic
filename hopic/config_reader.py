@@ -58,6 +58,7 @@ _unpermitted_post_submit_meta = frozenset({
     'worktrees',
 })
 _supported_post_submit_meta = frozenset({
+    'environment',
     'description',
     'docker-in-docker',
     'image',
@@ -67,6 +68,7 @@ _supported_post_submit_meta = frozenset({
     'volumes',
     'with-credentials',
 })
+_env_var_re = re.compile(r'^(?P<var>[A-Za-z_][0-9A-Za-z_]*)=(?P<val>.*)$')
 
 
 class RunOnChange(str, Enum):
@@ -698,6 +700,40 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
 
         if cmd_key == 'volumes-from':
             cmd[cmd_key] = expand_docker_volumes_from(volume_vars, cmd[cmd_key])
+
+    if 'environment' in cmd and 'sh' not in cmd:
+        raise ConfigurationError(
+            "Trying to set 'environment' member for a command entry that doesn't have 'sh'",
+            file=config_file,
+        )
+    if 'sh' in cmd:
+        if 'environment' not in cmd:
+            # Strip off prefixed environment variables from this command-line and apply them
+            env = cmd['environment'] = OrderedDict()
+            while cmd['sh']:
+                m = _env_var_re.match(cmd['sh'][0])
+                if not m:
+                    break
+                env[m.group('var')] = m.group('val')
+                cmd['sh'].pop(0)
+
+        env = cmd['environment']
+        if not isinstance(env, Mapping):
+            raise ConfigurationError(
+                "'environment' member is not a mapping of strings to strings",
+                file=config_file,
+            )
+        for i, (k, v) in enumerate(env.items()):
+            if not isinstance(k, str):
+                raise ConfigurationError(
+                    f"'environment' member has key `{k!r}` at index {i} that is not a string but a `{type(k).__name__}`",
+                    file=config_file,
+                )
+            if v is not None and not isinstance(v, str):
+                raise ConfigurationError(
+                    f"`environment[{k!r}]` is not a string or null but a `{type(v).__name__}`",
+                    file=config_file,
+                )
 
     return cmd
 
