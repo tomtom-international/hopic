@@ -16,18 +16,10 @@ from .. import config_reader
 
 
 def test_example(example_file):
-    config_reader.read(example_file, volume_vars={'WORKSPACE': None})
-
-
-def test_simple_example(simple_example_file):
     config_reader.read(
-        simple_example_file,
+        example_file,
         {
             'WORKSPACE': None,
             'CT_DEVENV_HOME': '/tools/devenv',
         },
     )
-
-
-def test_embed_example(embed_example_file):
-    config_reader.read(embed_example_file, volume_vars={'WORKSPACE': None})

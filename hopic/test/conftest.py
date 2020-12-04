@@ -46,9 +46,14 @@ def pip_freeze_constant(monkeypatch):
 def _data_file_paths(
     datadir: typing.Union[str, PurePath],
     *,
+    recurse: bool = False,
     suffices: typing.Optional[typing.AbstractSet[str]] = None,
 ):
     for entry in datadir.iterdir():
+        if recurse and entry.is_dir():
+            yield from _data_file_paths(entry, suffices=suffices)
+            continue
+
         if suffices is not None and entry.suffix not in suffices:
             continue
 
@@ -78,6 +83,6 @@ def pytest_generate_tests(metafunc):
 
             metafunc.parametrize(
                 fixture,
-                _data_file_paths(datadir, suffices={'.yml', '.yaml'}),
+                _data_file_paths(datadir, recurse=not dir_prefix, suffices={'.yml', '.yaml'}),
                 ids=lambda entry: _data_file_path_id(_example_dir, entry),
             )
