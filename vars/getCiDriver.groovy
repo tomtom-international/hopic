@@ -56,7 +56,7 @@ class ChangeRequest {
     assert false : "Change request instance does not override apply()"
   }
 
-  public def notify_build_result(String job_name, String branch, String commit, String result) {
+  public def notify_build_result(String job_name, String branch, String commit, String result, boolean exclude_branches_filled_with_pr_branch_discovery) {
     // Default NOP
   }
 }
