@@ -68,28 +68,16 @@ def _data_file_path_id(
         return str(name)
 
 
-@pytest.fixture(
-    params=_data_file_paths(_example_dir, suffices={'.yml', '.yaml'}),
-    ids=lambda entry: _data_file_path_id(_example_dir, entry),
-)
-def example_file(request):
-    with open(request.param, 'r') as f:
-        yield f
+def pytest_generate_tests(metafunc):
+    for fixture in metafunc.fixturenames:
+        if fixture.endswith('example_file'):
+            datadir = _example_dir
+            dir_prefix = fixture[: -len('_example_file')]
+            if dir_prefix:
+                datadir = datadir.joinpath(*dir_prefix.split('_'))
 
-
-@pytest.fixture(
-    params=_data_file_paths(_example_dir / 'simple', suffices={'.yml', '.yaml'}),
-    ids=lambda entry: _data_file_path_id(_example_dir, entry),
-)
-def simple_example_file(request):
-    with open(request.param, 'r') as f:
-        yield f
-
-
-@pytest.fixture(
-    params=_data_file_paths(_example_dir / 'embed', suffices={'.yml', '.yaml'}),
-    ids=lambda entry: _data_file_path_id(_example_dir, entry),
-)
-def embed_example_file(request):
-    with open(request.param, 'r') as f:
-        yield f
+            metafunc.parametrize(
+                fixture,
+                _data_file_paths(datadir, suffices={'.yml', '.yaml'}),
+                ids=lambda entry: _data_file_path_id(_example_dir, entry),
+            )
