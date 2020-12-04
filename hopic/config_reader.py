@@ -27,6 +27,7 @@ try:
 except ImportError:
     import importlib_metadata as metadata
 import inspect
+import io
 import json
 import logging
 import os
@@ -753,7 +754,7 @@ def process_variant_cmds(phase, variant, cmds, volume_vars, config_file=None):
 
 
 def read(config, volume_vars, extension_installer=lambda *args: None):
-    if hasattr(config, 'name'):
+    if isinstance(config, io.TextIOBase):
         f = config
         config = f.name
         file_close = False
