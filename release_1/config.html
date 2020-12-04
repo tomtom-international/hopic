@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    <title>Configuration &#8212; Hopic 1.26.1.dev29+g3271a80 documentation</title>
+    <title>Configuration &#8212; Hopic 1.26.1.dev36+ge7ad354 documentation</title>
     <link rel="stylesheet" href="_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
     <link rel="stylesheet" type="text/css" href="_static/banner.css" />
@@ -34,7 +34,7 @@
         <li class="right" >
           <a href="intro.html" title="Introduction"
              accesskey="P">previous</a> |</li>
-        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.26.1.dev29+g3271a80 documentation</a> &#187;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.26.1.dev36+ge7ad354 documentation</a> &#187;</li> 
       </ul>
     </div>  
 
@@ -499,7 +499,7 @@ It will however be pre-authenticated with the credential’s SSH key and, if kno
     <span class="nt">toolchain</span><span class="p">:</span>
       <span class="p p-Indicator">-</span> <span class="nt">with-credentials</span><span class="p">:</span>
           <span class="p p-Indicator">-</span> <span class="nt">id</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">squish_cred</span>
-            <span class="nt">type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">username_password</span>
+            <span class="nt">type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">username-password</span>
             <span class="nt">username-variable</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">SQUISH_USERNAME</span>
             <span class="nt">password-variable</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">SQUISH_PASSWORD</span>
           <span class="p p-Indicator">-</span> <span class="nt">id</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">artifactory_creds</span>
@@ -804,12 +804,12 @@ If the named environment variable exists in the host environment, it will be set
   <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">JENKINS_TEST_INSTANCE</span>
 
 <span class="nt">phases</span><span class="p">:</span>
-  <span class="nt">x86</span><span class="p">:</span>
-    <span class="nt">build</span><span class="p">:</span>
+  <span class="nt">build</span><span class="p">:</span>
+    <span class="nt">x86</span><span class="p">:</span>
       <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">./build.sh</span>
 
-  <span class="nt">x86</span><span class="p">:</span>
-    <span class="nt">upload</span><span class="p">:</span>
+  <span class="nt">upload</span><span class="p">:</span>
+    <span class="nt">x86</span><span class="p">:</span>
       <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">./upload-from-non-test-only.sh</span>
 </pre></div>
 </div>
@@ -1459,7 +1459,7 @@ The command should output the part of the configuration file to standard output.
         <li class="right" >
           <a href="intro.html" title="Introduction"
              >previous</a> |</li>
-        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.26.1.dev29+g3271a80 documentation</a> &#187;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.26.1.dev36+ge7ad354 documentation</a> &#187;</li> 
       </ul>
     </div>
     <div class="footer" role="contentinfo">
