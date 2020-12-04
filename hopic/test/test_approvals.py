@@ -119,7 +119,7 @@ def _perform_merge(repo, approvals):
 def test_approval_still_valid_on_autosquash(repo_with_fixup, tmp_path):
     presquash_commit_sha = repo_with_fixup.head.commit.hexsha
     repo_with_fixup.git.rebase('HEAD~~', interactive=True, autosquash=True, kill_after_timeout=5, env={
-            'GIT_EDITOR': ':',
+            'GIT_SEQUENCE_EDITOR': ':',
             'GIT_COMMITTER_NAME': 'My Name is Nobody',
             'GIT_COMMITTER_EMAIL': 'nobody@example.com',
         })
@@ -139,7 +139,7 @@ def test_approval_invalid_on_commit_msg_change(repo_with_fixup, tmp_path):
     presquash_commit_sha = repo_with_fixup.head.commit.hexsha
 
     repo_with_fixup.git.rebase('HEAD~~', interactive=True, autosquash=True, kill_after_timeout=5, env={
-            'GIT_EDITOR': ':',
+            'GIT_SEQUENCE_EDITOR': ':',
             'GIT_COMMITTER_NAME': 'My Name is Nobody',
             'GIT_COMMITTER_EMAIL': 'nobody@example.com',
         })
@@ -162,7 +162,7 @@ def test_approval_invalid_on_author_change(repo_with_fixup, tmp_path):
     presquash_commit_sha = repo_with_fixup.head.commit.hexsha
 
     repo_with_fixup.git.rebase('HEAD~~', interactive=True, autosquash=True, kill_after_timeout=5, env={
-            'GIT_EDITOR': ':',
+            'GIT_SEQUENCE_EDITOR': ':',
             'GIT_COMMITTER_NAME': 'My Name is Nobody',
             'GIT_COMMITTER_EMAIL': 'nobody@example.com',
         })
@@ -187,7 +187,7 @@ def test_approval_invalid_on_content_change(repo_with_fixup, tmp_path):
     presquash_commit_sha = repo_with_fixup.head.commit.hexsha
 
     repo_with_fixup.git.rebase('HEAD~~', interactive=True, autosquash=True, kill_after_timeout=5, env={
-            'GIT_EDITOR': ':',
+            'GIT_SEQUENCE_EDITOR': ':',
             'GIT_COMMITTER_NAME': 'My Name is Nobody',
             'GIT_COMMITTER_EMAIL': 'nobody@example.com',
         })
@@ -216,7 +216,7 @@ def test_approval_handle_invalid_shas_gracefully(repo_with_fixup, tmp_path):
     presquash_commit_sha = repo_with_fixup.head.commit.hexsha
 
     repo_with_fixup.git.rebase('HEAD~~', interactive=True, autosquash=True, kill_after_timeout=5, env={
-            'GIT_EDITOR': ':',
+            'GIT_SEQUENCE_EDITOR': ':',
             'GIT_COMMITTER_NAME': 'My Name is Nobody',
             'GIT_COMMITTER_EMAIL': 'nobody@example.com',
         })

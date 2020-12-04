@@ -576,7 +576,7 @@ def process_prepare_source_tree(
             repo.head.reset(index=True, working_tree=True)
             try:
                 try:
-                    env = {'GIT_EDITOR': ':'}
+                    env = {'GIT_SEQUENCE_EDITOR': ':'}
                     if 'commit_date' in commit_params:
                         env['GIT_COMMITTER_DATE'] = commit_params['commit_date']
                     repo.git.rebase(autosquash_base, interactive=True, autosquash=True, env=env, kill_after_timeout=300)
