@@ -4,10 +4,10 @@ pass-through-environment-vars:
   - JENKINS_TEST_INSTANCE
 
 phases:
-  x86:
-    build:
+  build:
+    x86:
       - ./build.sh
 
-  x86:
-    upload:
+  upload:
+    x86:
       - ./upload-from-non-test-only.sh
