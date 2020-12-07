@@ -435,15 +435,15 @@ class CiDriver {
     }
   }
 
-  private String get_executor_identifier(variant) {
-    if (get_number_of_executors() > 1) {
+  private String get_executor_identifier(String variant = null) {
+    if (variant && get_number_of_executors() > 1) {
       return "${steps.env.NODE_NAME}_${variant}"
     } else {
       return steps.env.NODE_NAME
     }
   }
 
-  public def with_hopic(variant = '', closure) {
+  public def with_hopic(String variant = null, closure) {
     assert steps.env.NODE_NAME != null, "with_hopic must be executed on a node"
 
     String executor_identifier = get_executor_identifier(variant)
@@ -793,7 +793,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   /**
    * @pre this has to be executed on a node
    */
-  private def ensure_checkout(String cmd, clean = false, variant = '') {
+  private def ensure_checkout(String cmd, clean = false, String variant = null) {
     assert steps.env.NODE_NAME != null, "ensure_checkout must be executed on a node"
 
     String executor_identifier = get_executor_identifier(variant)
@@ -875,7 +875,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
    *
    * @pre this has to be executed on a node
    */
-  private def ensure_unstashed(variant = '') {
+  private def ensure_unstashed(String variant = null) {
     assert steps.env.NODE_NAME != null, "ensure_unstashed must be executed on a node"
 
     String executor_identifier = get_executor_identifier(variant)
@@ -1052,7 +1052,8 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
           if (is_publishable) {
             // Ensure a new checkout is performed because the target repository may change while waiting for the lock
-            this.checkouts.remove(steps.env.NODE_NAME)
+            final executor_identifier = get_executor_identifier()
+            this.checkouts.remove(executor_identifier)
           }
 
           // Report start of build. _Must_ come after having determined whether this build is submittable and
