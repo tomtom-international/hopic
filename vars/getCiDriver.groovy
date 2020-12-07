@@ -1052,7 +1052,8 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
           if (is_publishable) {
             // Ensure a new checkout is performed because the target repository may change while waiting for the lock
-            this.checkouts.remove(steps.env.NODE_NAME)
+            final executor_identifier = get_executor_identifier('')
+            this.checkouts.remove(executor_identifier)
           }
 
           // Report start of build. _Must_ come after having determined whether this build is submittable and
