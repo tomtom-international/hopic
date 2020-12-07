@@ -16,6 +16,7 @@
 
 import groovy.json.JsonOutput
 import org.jenkinsci.plugins.credentialsbinding.impl.CredentialNotFoundException
+import org.jenkinsci.plugins.scriptsecurity.sandbox.RejectedAccessException
 
 class ChangeRequest {
   protected steps
@@ -33,7 +34,7 @@ class ChangeRequest {
   }
 
   protected def maySubmitImpl(target_commit, source_commit, allow_cache = true) {
-    return !line_split(steps.sh(script: 'LC_ALL=C.UTF-8 git log ' + shell_quote(target_commit) + '..' + shell_quote(source_commit) + " --pretty='%H:%s' --reverse", returnStdout: true)
+    return !line_split(steps.sh(script: 'LC_ALL=C.UTF-8 TZ=UTC git log ' + shell_quote(target_commit) + '..' + shell_quote(source_commit) + " --pretty='%H:%s' --reverse", returnStdout: true)
       .trim()).find { line ->
         if (!line) {
           return false
@@ -55,7 +56,7 @@ class ChangeRequest {
     assert false : "Change request instance does not override apply()"
   }
 
-  public def notify_build_result(String job_name, String branch, String commit, String result) {
+  public def notify_build_result(String job_name, String branch, String commit, String result, boolean exclude_branches_filled_with_pr_branch_discovery) {
     // Default NOP
   }
 }
@@ -262,7 +263,7 @@ class BitbucketPullRequest extends ChangeRequest {
     return rv
   }
 
-  public def notify_build_result(String job_name, String branch, String commit, String result) {
+  public def notify_build_result(String job_name, String branch, String commit, String result, boolean exclude_branches_filled_with_pr_branch_discovery) {
     def state = (result == 'STARTING'
         ? 'INPROGRESS'
         : (result == 'SUCCESS' ? 'SUCCESSFUL' : 'FAILED')
@@ -285,8 +286,12 @@ class BitbucketPullRequest extends ChangeRequest {
       }
     }
 
-    // Derive 'key' compatible with the BitBucket branch source plugin
+    // It is impossible to get this Bitbucket branch plugin trait setting via groovy, therefore it is a parameter here
+    if (!exclude_branches_filled_with_pr_branch_discovery) {
+      branch = "${steps.env.JOB_BASE_NAME}"
+    }
     def key = "${job_name}/${branch}"
+
     if (!this.keyIds[key]) {
       // We could use java.security.MessageDigest instead of relying on a node. But that requires extra script approvals.
       assert steps.env.NODE_NAME != null, "notify_build_result must be executed on a node the first time"
@@ -420,13 +425,32 @@ class CiDriver {
     return text.split('\\r?\\n') as ArrayList
   }
 
-  public def with_hopic(closure) {
+  private int get_number_of_executors() {
+    try {
+      return Jenkins.instance.getComputer(steps.env.NODE_NAME).numExecutors
+    } catch(org.jenkinsci.plugins.scriptsecurity.sandbox.RejectedAccessException e) {
+      steps.println('\033[33m[warning] could not determine number of executors because of missing script approval; '
+                  + 'assuming one executor\033[39m')
+      return 1
+    }
+  }
+
+  private String get_executor_identifier(String variant = null) {
+    if (variant && get_number_of_executors() > 1) {
+      return "${steps.env.NODE_NAME}_${variant}"
+    } else {
+      return steps.env.NODE_NAME
+    }
+  }
+
+  public def with_hopic(String variant = null, closure) {
     assert steps.env.NODE_NAME != null, "with_hopic must be executed on a node"
 
     def tmpdir = steps.pwd(tmp: true)
     def local_home_dir = tmpdir + '/home-local'
 
-    if (!this.docker_images.containsKey(steps.env.NODE_NAME)) {
+    String executor_identifier = get_executor_identifier(variant)
+    if (!this.docker_images.containsKey(executor_identifier)) {
       // Timeout prevents infinite downloads from blocking the build forever
       steps.timeout(time: 1, unit: 'MINUTES', activity: true) {
         assert this.repo.startsWith('git+'), "getCiDriver repo URL _must_ start with 'git+' but doesn't: ${this.repo}"
@@ -477,11 +501,11 @@ cp -p setup.py hopic/test/docker-images/python/
 docker build --build-arg=PYTHON_VERSION=3.6 --iidfile=${shell_quote(docker_src)}/id.txt hopic/test/docker-images/python
 """)
         final imageId = steps.readFile("${docker_src}/id.txt").trim()
-        this.docker_images[steps.env.NODE_NAME] = steps.docker.image(imageId)
+        this.docker_images[executor_identifier] = steps.docker.image(imageId)
       }
     }
 
-    return this.docker_images[steps.env.NODE_NAME].inside([
+    return this.docker_images[executor_identifier].inside([
         // Extra writable directories
         "--volume=${steps.env.HOME}:${steps.env.HOME}:rw",
         "--volume=${local_home_dir}:${steps.env.HOME}/.local:rw",
@@ -492,7 +516,7 @@ docker build --build-arg=PYTHON_VERSION=3.6 --iidfile=${shell_quote(docker_src)}
         '--volume=/var/run/docker.sock:/var/run/docker.sock',
         "--group-add=${shell_quote(steps.sh(script: 'stat -c %g /var/run/docker.sock', returnStdout: true).trim())}",
       ].join(' ')) {
-      def cmd = 'LC_ALL=C.UTF-8 hopic --color=always'
+      def cmd = 'LC_ALL=C.UTF-8 TZ=UTC hopic --color=always'
       if (this.config_file != null) {
         cmd += ' --workspace=' + shell_quote(workspace)
         def config_file_path = shell_quote(this.config_file.startsWith('/') ? "${config_file}" : "${workspace}/${config_file}")
@@ -742,7 +766,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     steps.sh(script: "${cmd} install-extensions")
 
     def code_dir_output = tmpdir + '/code-dir.txt'
-    if (steps.sh(script: 'LC_ALL=C.UTF-8 git config --get hopic.code.dir > ' + shell_quote(code_dir_output), returnStatus: true) == 0) {
+    if (steps.sh(script: 'LC_ALL=C.UTF-8 TZ=UTC git config --get hopic.code.dir > ' + shell_quote(code_dir_output), returnStatus: true) == 0) {
       workspace = steps.readFile(code_dir_output).trim()
     }
 
@@ -805,23 +829,25 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   /**
    * @pre this has to be executed on a node
    */
-  private def ensure_checkout(String cmd, clean = false) {
+  private def ensure_checkout(String cmd, clean = false, String variant = null) {
     assert steps.env.NODE_NAME != null, "ensure_checkout must be executed on a node"
 
-    if (!this.checkouts.containsKey(steps.env.NODE_NAME)) {
-      this.checkouts[steps.env.NODE_NAME] = this.checkout(cmd, clean)
+    String executor_identifier = get_executor_identifier(variant)
+
+    if (!this.checkouts.containsKey(executor_identifier)) {
+      this.checkouts[executor_identifier] = this.checkout(cmd, clean)
     }
     this.worktree_bundles.each { name, bundle ->
-      if (bundle.nodes[steps.env.NODE_NAME]) {
+      if (bundle.nodes[executor_identifier]) {
         return
       }
       steps.unstash(name)
       steps.sh(
           script: "${cmd} unbundle-worktrees --bundle=worktree-transfer.bundle",
         )
-      this.worktree_bundles[name].nodes[steps.env.NODE_NAME] = true
+      this.worktree_bundles[name].nodes[executor_identifier] = true
     }
-    return this.checkouts[steps.env.NODE_NAME]
+    return this.checkouts[executor_identifier]
   }
 
   private get_repo_name_and_branch(repo_name, branch = get_branch_name()) {
@@ -885,17 +911,19 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
    *
    * @pre this has to be executed on a node
    */
-  private def ensure_unstashed() {
+  private def ensure_unstashed(String variant = null) {
     assert steps.env.NODE_NAME != null, "ensure_unstashed must be executed on a node"
 
+    String executor_identifier = get_executor_identifier(variant)
+
     this.stashes.each { name, stash ->
-      if (stash.nodes[steps.env.NODE_NAME]) {
+      if (stash.nodes[executor_identifier]) {
         return
       }
       steps.dir(stash.dir) {
         steps.unstash(name)
       }
-      this.stashes[name].nodes[steps.env.NODE_NAME] = true
+      this.stashes[name].nodes[executor_identifier] = true
     }
   }
 
@@ -981,9 +1009,33 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     }
   }
 
+  private def with_workspace_for_variant(String variant, Closure closure) {
+    if (get_number_of_executors() > 1) {
+      /*
+       * If the node has more than one executor, unfortunately, we'll need to manually handle workspaces,
+       * as Jenkins has no means of requesting specific executors and workspaces on a node.
+       */
+      steps.println('\033[36m[info] node has multiple executors; Hopic will manage workspaces\033[39m')
+
+      String target_identifier = (steps.env.CHANGE_TARGET ? "PR-${steps.env.CHANGE_ID}" : get_branch_name())
+      String workspace_spec = "${get_job_name()}_${target_identifier}_${variant}"
+      steps.ws(workspace_spec) {
+        /* We need to be somewhat paranoid, as `steps.ws` is not guaranteed to give us the path we expect */
+        String pwd = steps.pwd().replaceAll(/(\/|\\)+$/, "") // Strip any trailing slashes/backslashes
+        assert pwd.endsWith(workspace_spec) :
+               "Jenkins did not yield the correct workspace path (" + steps.pwd() + "), try rebuilding"
+
+        return closure()
+      }
+    } else {
+      return closure()
+    }
+  }
+
   public def build(Map buildParams = [:]) {
     def clean = buildParams.getOrDefault('clean', false)
     def default_node = buildParams.getOrDefault('default_node_expr', this.default_node_expr)
+    def exclude_branches_filled_with_pr_branch_discovery = buildParams.getOrDefault('exclude_branches_filled_with_pr_branch_discovery', true)
     steps.ansiColor('xterm') {
       def (phases, is_publishable_change, submit_meta, additional_locks) = steps.node(default_node) {
         return this.with_hopic { cmd ->
@@ -996,8 +1048,9 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
            * In order to do this we only check out the CI config file to the orchestrator node.
            */
           def scm = steps.checkout(steps.scm)
+
           // Don't trust Jenkin's scm.GIT_COMMIT because it sometimes lies
-          steps.env.GIT_COMMIT          = steps.sh(script: 'LC_ALL=C.UTF-8 git rev-parse HEAD', returnStdout: true).trim()
+          steps.env.GIT_COMMIT          = steps.sh(script: 'LC_ALL=C.UTF-8 TZ=UTC git rev-parse HEAD', returnStdout: true).trim()
           steps.env.GIT_COMMITTER_NAME  = scm.GIT_COMMITTER_NAME
           steps.env.GIT_COMMITTER_EMAIL = scm.GIT_COMMITTER_EMAIL
           steps.env.GIT_AUTHOR_NAME     = scm.GIT_AUTHOR_NAME
@@ -1035,14 +1088,15 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
           if (is_publishable) {
             // Ensure a new checkout is performed because the target repository may change while waiting for the lock
-            this.checkouts.remove(steps.env.NODE_NAME)
+            final executor_identifier = get_executor_identifier()
+            this.checkouts.remove(executor_identifier)
           }
 
           // Report start of build. _Must_ come after having determined whether this build is submittable and
           // publishable, because it may affect the result of the submittability check.
           if (this.change != null) {
-            this.change.notify_build_result(get_job_name(), steps.env.CHANGE_BRANCH, this.source_commit, 'STARTING')
-            this.change.notify_build_result(get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, 'STARTING')
+            this.change.notify_build_result(get_job_name(), steps.env.CHANGE_BRANCH, this.source_commit, 'STARTING', exclude_branches_filled_with_pr_branch_discovery)
+            this.change.notify_build_result(get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, 'STARTING', exclude_branches_filled_with_pr_branch_discovery)
           }
 
           return [phases, is_publishable, submit_meta, is_publishable ? get_additional_ci_lock_names(cmd) : []]
@@ -1124,89 +1178,94 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
                     label = this.nodes[variant]
                   }
                   steps.node(label) {
-                    steps.stage("${phase}-${variant}") {
-                      this.with_hopic { cmd ->
-                        final workspace = this.ensure_checkout(cmd, clean)
-                        this.pin_variant_to_current_node(variant)
+                    with_workspace_for_variant(variant) {
+                      steps.stage("${phase}-${variant}") {
+                        this.with_hopic(variant) { cmd ->
+                          // If working with multiple executors on this node, uniquely identify this node by variant
+                          // to ensure the correct workspace.
+                          final workspace = this.ensure_checkout(cmd, clean, variant)
+                          this.pin_variant_to_current_node(variant)
 
-                        this.ensure_unstashed()
+                          this.ensure_unstashed(variant)
 
-                        // Meta-data retrieval needs to take place on the executing node to ensure environment variable expansion happens properly
-                        def meta = steps.readJSON(text: steps.sh(
-                            script: "${cmd} getinfo --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant),
-                            returnStdout: true,
-                          ))
+                          // Meta-data retrieval needs to take place on the executing node to ensure environment variable expansion happens properly
+                          def meta = steps.readJSON(text: steps.sh(
+                              script: "${cmd} getinfo --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant),
+                              returnStdout: true,
+                            ))
 
-                        def error_occurred = false
-                        try {
-                          this.subcommand_with_credentials(
-                              cmd + hopic_extra_arguments,
-                              'build'
-                            + ' --phase=' + shell_quote(phase)
-                            + ' --variant=' + shell_quote(variant)
-                            , meta.getOrDefault('with-credentials', []))
-                        } catch(Exception e) {
-                          error_occurred = true // Jenkins only sets its currentResult to Failure after all user code is executed
-                          throw e
-                        } finally {
-                          if (meta.containsKey('junit')) {
-                            def results = meta.junit
-                            steps.dir(workspace) {
-                              meta.junit.each { result ->
-                                steps.junit(result)
+                          def error_occurred = false
+                          try {
+                            this.subcommand_with_credentials(
+                                cmd + hopic_extra_arguments,
+                                'build'
+                              + ' --phase=' + shell_quote(phase)
+                              + ' --variant=' + shell_quote(variant)
+                              , meta.getOrDefault('with-credentials', []))
+                          } catch(Exception e) {
+                            error_occurred = true // Jenkins only sets its currentResult to Failure after all user code is executed
+                            throw e
+                          } finally {
+                            if (meta.containsKey('junit')) {
+                              def results = meta.junit
+                              steps.dir(workspace) {
+                                meta.junit.each { result ->
+                                  steps.junit(result)
+                                }
                               }
                             }
+                            this.archive_artifacts_if_enabled(meta, workspace, error_occurred, { server_id ->
+                              if (!artifactoryBuildInfo.containsKey(server_id)) {
+                                def newBuildInfo = steps.Artifactory.newBuildInfo()
+                                def (build_name, build_identifier) = get_build_id()
+                                newBuildInfo.name = build_name
+                                newBuildInfo.number = build_identifier
+                                artifactoryBuildInfo[server_id] = newBuildInfo
+                              }
+                              return artifactoryBuildInfo[server_id]
+                            })
                           }
-                          this.archive_artifacts_if_enabled(meta, workspace, error_occurred, { server_id ->
-                            if (!artifactoryBuildInfo.containsKey(server_id)) {
-                              def newBuildInfo = steps.Artifactory.newBuildInfo()
-                              def (build_name, build_identifier) = get_build_id()
-                              newBuildInfo.name = build_name
-                              newBuildInfo.number = build_identifier
-                              artifactoryBuildInfo[server_id] = newBuildInfo
-                            }
-                            return artifactoryBuildInfo[server_id]
-                          })
-                        }
 
-                        // FIXME: re-evaluate if we can and need to get rid of special casing for stashing
-                        if (meta.containsKey('stash')) {
-                          def name  = "${phase}-${variant}"
-                          def params = [
-                              name: name,
-                            ]
-                          if (meta.stash.containsKey('includes')) {
-                            params['includes'] = meta.stash.includes
-                          }
-                          def stash_dir = workspace
-                          if (meta.stash.containsKey('dir')) {
-                            if (meta.stash.dir.startsWith('/')) {
-                              stash_dir = meta.stash.dir
-                            } else {
-                              stash_dir = "${workspace}/${meta.stash.dir}"
+                          def executor_identifier = get_executor_identifier(variant)
+                          // FIXME: re-evaluate if we can and need to get rid of special casing for stashing
+                          if (meta.containsKey('stash')) {
+                            def name  = "${phase}-${variant}"
+                            def params = [
+                                name: name,
+                              ]
+                            if (meta.stash.containsKey('includes')) {
+                              params['includes'] = meta.stash.includes
                             }
-                          }
-                          // Make stash locations node-independent by making them relative to the Jenkins workspace
-                          if (stash_dir.startsWith('/')) {
-                            def cwd = steps.pwd()
-                            // We could use java.io.File and java.nio.file.Path relativize, but that requires extra script approvals.
-                            stash_dir = steps.sh(script: "realpath --relative-to=$cwd ${stash_dir}", returnStdout: true).trim()
-                            if (stash_dir == '') {
-                              stash_dir = '.'
+                            def stash_dir = workspace
+                            if (meta.stash.containsKey('dir')) {
+                              if (meta.stash.dir.startsWith('/')) {
+                                stash_dir = meta.stash.dir
+                              } else {
+                                stash_dir = "${workspace}/${meta.stash.dir}"
+                              }
                             }
+                            // Make stash locations node-independent by making them relative to the Jenkins workspace
+                            if (stash_dir.startsWith('/')) {
+                              def cwd = steps.pwd()
+                              // We could use java.io.File and java.nio.file.Path relativize, but that requires extra script approvals.
+                              stash_dir = steps.sh(script: "realpath --relative-to=$cwd ${stash_dir}", returnStdout: true).trim()
+                              if (stash_dir == '') {
+                                stash_dir = '.'
+                              }
+                            }
+                            steps.dir(stash_dir) {
+                              steps.stash(params)
+                            }
+                            this.stashes[name] = [dir: stash_dir, nodes: [(executor_identifier): true]]
                           }
-                          steps.dir(stash_dir) {
-                            steps.stash(params)
+                          if (meta.containsKey('worktrees')) {
+                            def name = "${phase}-${variant}-worktree-transfer.bundle"
+                            steps.stash(
+                                name: name,
+                                includes: 'worktree-transfer.bundle',
+                              )
+                            this.worktree_bundles[name] = [nodes: [(executor_identifier): true]]
                           }
-                          this.stashes[name] = [dir: stash_dir, nodes: [(steps.env.NODE_NAME): true]]
-                        }
-                        if (meta.containsKey('worktrees')) {
-                          def name = "${phase}-${variant}-worktree-transfer.bundle"
-                          steps.stash(
-                              name: name,
-                              includes: 'worktree-transfer.bundle',
-                            )
-                          this.worktree_bundles[name] = [nodes: [(steps.env.NODE_NAME): true]]
                         }
                       }
                     }
@@ -1263,16 +1322,16 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
         if (this.change != null) {
           def buildStatus = (e.getClass() == org.jenkinsci.plugins.workflow.steps.FlowInterruptedException) ? 'ABORTED' : 'FAILURE'
           this.change.notify_build_result(
-              get_job_name(), steps.env.CHANGE_BRANCH, this.source_commit, buildStatus)
+              get_job_name(), steps.env.CHANGE_BRANCH, this.source_commit, buildStatus, exclude_branches_filled_with_pr_branch_discovery)
           this.change.notify_build_result(
-              get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, buildStatus)
+              get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, buildStatus, exclude_branches_filled_with_pr_branch_discovery)
         }
         throw e
       }
 
       if (this.change != null) {
-        this.change.notify_build_result(get_job_name(), steps.env.CHANGE_BRANCH, this.source_commit, steps.currentBuild.result ?: 'SUCCESS')
-        this.change.notify_build_result(get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, steps.currentBuild.result ?: 'SUCCESS')
+        this.change.notify_build_result(get_job_name(), steps.env.CHANGE_BRANCH, this.source_commit, steps.currentBuild.result ?: 'SUCCESS', exclude_branches_filled_with_pr_branch_discovery)
+        this.change.notify_build_result(get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, steps.currentBuild.result ?: 'SUCCESS', exclude_branches_filled_with_pr_branch_discovery)
       }
     }
   }

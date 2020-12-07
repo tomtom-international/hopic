@@ -572,6 +572,23 @@ phases:
     assert out.strip() == str(_source_date_epoch)
 
 
+def test_command_with_deleted_env_var(capfd):
+    result = run_with_config(
+        dedent(
+            '''\
+            phases:
+              build:
+                test:
+                  - environment:
+                      SOURCE_DATE_EPOCH: null
+                    sh: printenv SOURCE_DATE_EPOCH
+            '''
+        ),
+        ('build',),
+    )
+    assert result.exit_code != 0
+
+
 def test_command_with_branch_and_commit(capfd):
     result = run_with_config(
         dedent('''\

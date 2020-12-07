@@ -1,0 +1,11 @@
+phases:
+  a:
+    x:
+      # leading name=value environment variable overrides
+      - ENV_1=one ENV_2="two and three" ./command.sh --option=four
+      # explicit environment mapping override
+      - environment:
+          ENV_1: one
+          ENV_2: two and three
+          SOURCE_DATE_EPOCH: null
+        sh: ./command.sh --option=four

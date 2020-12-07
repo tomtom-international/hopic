@@ -27,6 +27,7 @@ try:
 except ImportError:
     import importlib_metadata as metadata
 import inspect
+import io
 import json
 import logging
 import os
@@ -58,6 +59,7 @@ _unpermitted_post_submit_meta = frozenset({
     'worktrees',
 })
 _supported_post_submit_meta = frozenset({
+    'environment',
     'description',
     'docker-in-docker',
     'image',
@@ -67,6 +69,7 @@ _supported_post_submit_meta = frozenset({
     'volumes',
     'with-credentials',
 })
+_env_var_re = re.compile(r'^(?P<var>[A-Za-z_][0-9A-Za-z_]*)=(?P<val>.*)$')
 
 
 class RunOnChange(str, Enum):
@@ -316,9 +319,18 @@ def match_template_props_to_signature(
             and not isinstance(param.annotation, (str, getattr(typing, 'ForwardRef', str)))
         ):
             origin_type = getattr(param.annotation, '__origin__', None)
+            type_args = getattr(param.annotation, '__args__', None)
             try:
                 if origin_type is typing.Union:
-                    type_valid = isinstance(val, param.annotation.__args__)
+                    type_valid = isinstance(val, type_args)
+                elif origin_type in (typing.Sequence, Sequence):
+                    type_valid = isinstance(val, Sequence)
+                    if type_valid and type_args is not None:
+                        for i, m in enumerate(val):
+                            if not isinstance(m, type_args):
+                                raise ConfigurationError(
+                                        f"Trying to instantiate template `{template_name}` with parameter `{orig_prop}[{i}]` of type `{type(m).__name__}`, "
+                                        f"expected `{getattr(type_args[0], '__name__', None) or getattr(type_args[0], '_name', None) or type_args[0]}`")
                 else:
                     type_valid = isinstance(val, param.annotation)
             except TypeError:
@@ -689,6 +701,40 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
         if cmd_key == 'volumes-from':
             cmd[cmd_key] = expand_docker_volumes_from(volume_vars, cmd[cmd_key])
 
+    if 'environment' in cmd and 'sh' not in cmd:
+        raise ConfigurationError(
+            "Trying to set 'environment' member for a command entry that doesn't have 'sh'",
+            file=config_file,
+        )
+    if 'sh' in cmd:
+        if 'environment' not in cmd:
+            # Strip off prefixed environment variables from this command-line and apply them
+            env = cmd['environment'] = OrderedDict()
+            while cmd['sh']:
+                m = _env_var_re.match(cmd['sh'][0])
+                if not m:
+                    break
+                env[m.group('var')] = m.group('val')
+                cmd['sh'].pop(0)
+
+        env = cmd['environment']
+        if not isinstance(env, Mapping):
+            raise ConfigurationError(
+                "'environment' member is not a mapping of strings to strings",
+                file=config_file,
+            )
+        for i, (k, v) in enumerate(env.items()):
+            if not isinstance(k, str):
+                raise ConfigurationError(
+                    f"'environment' member has key `{k!r}` at index {i} that is not a string but a `{type(k).__name__}`",
+                    file=config_file,
+                )
+            if v is not None and not isinstance(v, str):
+                raise ConfigurationError(
+                    f"`environment[{k!r}]` is not a string or null but a `{type(v).__name__}`",
+                    file=config_file,
+                )
+
     return cmd
 
 
@@ -698,7 +744,7 @@ def process_variant_cmds(phase, variant, cmds, volume_vars, config_file=None):
 
 
 def read(config, volume_vars, extension_installer=lambda *args: None):
-    if hasattr(config, 'name'):
+    if isinstance(config, io.TextIOBase):
         f = config
         config = f.name
         file_close = False
@@ -775,6 +821,9 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
         raise ConfigurationError('`project-name` setting must be a string', file=config)
 
     # Convert multiple different syntaxes into a single one
+    variant_node_label = OrderedDict()
+    variant_node_label_phase = OrderedDict()
+    variant_node_label_idx = OrderedDict()
     for phasename, phase in cfg.setdefault('phases', OrderedDict()).items():
         if not isinstance(phase, Mapping):
             raise ConfigurationError(f"phase `{phasename}` doesn't contain a mapping but a {type(phase).__name__}", file=config)
@@ -788,6 +837,35 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
                 volume_vars,
                 config_file=config,
             ))
+            for cmd_idx, cmd in enumerate(phase[variant]):
+                if 'node-label' in cmd:
+                    node_label = cmd['node-label']
+                    if not isinstance(node_label, str):
+                        raise ConfigurationError(
+                            f"`{phasename}`.`{variant}`[{cmd_idx}].`node-label` doesn't contain a string but a {type(node_label).__name__}",
+                            file=config,
+                        )
+                    if variant not in variant_node_label:
+                        variant_node_label[variant] = node_label
+                        variant_node_label_phase[variant] = phasename
+                        variant_node_label_idx[variant] = cmd_idx
+                    if variant_node_label[variant] is None:
+                        raise ConfigurationError(
+                            f"`{phasename}`.`{variant}`[{cmd_idx}].`node-label` ({node_label!r}) attempts to override default set for "
+                            f"`{variant_node_label_phase[variant]}`.`{variant}`",
+                            file=config,
+                        )
+                    if node_label != variant_node_label[variant]:
+                        raise ConfigurationError(
+                            f"`{phasename}`.`{variant}`[{cmd_idx}].`node-label` ({node_label!r}) differs from that previously defined in "
+                            f"`{variant_node_label_phase[variant]}`.`{variant}`[{variant_node_label_idx[variant]}] ({variant_node_label[variant]!r})",
+                            file=config,
+                        )
+            # If the node label has not been set in the first phase that a variant occurs in it's the default
+            if variant not in variant_node_label:
+                variant_node_label[variant] = None
+                variant_node_label_phase[variant] = phasename
+            variant_node_label.setdefault(variant, None)
 
     post_submit = cfg.setdefault('post-submit', OrderedDict())
     if not isinstance(post_submit, Mapping):
@@ -816,8 +894,9 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
                     post_submit_node_label_idx = cmd_idx
                 if cmd['node-label'] != post_submit_node_label:
                     raise ConfigurationError(
-                            f"`post-submit`.`{phase}`[{cmd_idx}]'s `node-label` ({cmd['node-label']!r}) differs from that previously defined in "
-                            f"`post-submit`.{post_submit_node_label_phase}[{post_submit_node_label_idx}] ({post_submit_node_label!r})",
-                            file=config)
+                        f"`post-submit`.`{phase}`[{cmd_idx}].`node-label` ({cmd['node-label']!r}) differs from that previously defined in "
+                        f"`post-submit`.`{post_submit_node_label_phase}`[{post_submit_node_label_idx}] ({post_submit_node_label!r})",
+                        file=config,
+                    )
 
     return cfg
