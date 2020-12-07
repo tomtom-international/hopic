@@ -17,6 +17,38 @@
 Changelog
 =========
 
+1.27.0
+======
+
+New features
+------------
+
+* feat: add additional ci-locks to hopic (#214)
+* feat: hide credential information during command printing (#253)
+* improvement: allow for providing phase and variant as short options (#252)
+* improvement: add support for multiple executors on a single node (#251)
+* feat: report build status in same way as bitbucket Jenkins plugin (#257)
+* feat(config): add the 'environment' keyword for easier overriding of env vars (#256)
+
+Improvements
+------------
+
+* improvement(template): type check Sequence template parameters (#255)
+* fix(groovy): always generate merge commits in the UTC timezone (#260)
+* improvement: use GIT_SEQUENCE_EDITOR to override only the 'git rebase -i' editor (#262)
+* improvement(config): reject attempts to use conflicting 'node-label' values (#259)
+
+Documentation improvements
+--------------------------
+
+* test(doc): examples used in the documentation are syntactically valid (#263)
+
+Documentation fixes
+-------------------
+
+* docs: don't swap the phase and variant names (#263)
+* docs(with-credentials): fix typo in credential type (#263)
+
 1.26.0
 ======
 
