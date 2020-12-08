@@ -29,8 +29,9 @@ def echo_cmd(fun, cmd, *args, dry_run=False, obfuscate=None, **kwargs):
     command_list = []
     for word in cmd:
         if obfuscate is not None:
-            for secret in obfuscate:
-                word = word.replace(obfuscate[secret], f'${{{secret}}}')
+            for secret_name, secret in obfuscate.items():
+                if secret:
+                    word = word.replace(secret, f'${{{secret_name}}}')
         command_list.append(shlex.quote(word))
     log.info('%s%s', '' if dry_run else 'Executing: ',
              click.style(' '.join(command_list), fg='yellow'))
