@@ -140,6 +140,25 @@ This is necessary to keep the complexity, and thus chance of failure, of the ``s
 .. literalinclude:: ../../examples/post-submit.yaml
    :language: yaml
 
+Environment
+-----------
+
+.. option:: environment
+
+Sometimes it's necessary to execute a command with altered environment variables.
+For that purpose it's possible to use leading ``name=value`` words in the :option:`sh` command.
+This requires shell escaping and because of that may not always be convenient enough to use.
+To address this command entries may instead use the ``environment`` option.
+Note that using the ``environment`` option disables processing of leading ``name=value`` words.
+
+This option specifies a mapping of environment variables and the values to override them with for the current command only.
+The ``null`` value can be used to require removal of the specified environment variable.
+This is different from specifying the empty string which will still allow the environment variable to exist (but be empty).
+
+.. literalinclude:: ../../examples/environment.yaml
+   :language: yaml
+
+
 CI-locks
 --------
 
