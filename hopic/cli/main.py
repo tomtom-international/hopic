@@ -35,6 +35,9 @@ from .utils import (
 from ..config_reader import (
         read as read_config,
     )
+from ..errors import (
+    VersioningError,
+)
 from ..git_time import (
         determine_source_date,
         determine_version,
@@ -237,3 +240,19 @@ def main(ctx, color, config, workspace, whitelisted_var, publishable_version):
             if 'build' in version_info:
                 ver.build = (version_info['build'],)
             ctx.obj.volume_vars['PUBLISH_VERSION'] = str(ver)
+    else:
+        if version_info.get('tag'):
+            error_msg = (
+                "Failed to determine the current version from Git tag. "
+                "If this is a new repository, please create a version tag. "
+                "If this is a shallow clone, try a deepening fetch."
+            )
+        elif version_info.get('file'):
+            error_msg = (
+                "Failed to determine the current version from file. "
+                "Make sure the file exists and contains the expected value."
+            )
+        else:
+            error_msg = "Failed to determine the current version."
+
+        ctx.obj.volume_vars['VERSION'] = ctx.obj.volume_vars['PURE_VERSION'] = ctx.obj.volume_vars['PUBLISH_VERSION'] = VersioningError(error_msg)

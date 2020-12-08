@@ -65,7 +65,7 @@ class MonkeypatchInjector:
             return self.monkeypatch_context.__exit__(exc_type, exc_val, exc_tb)
 
 
-def run_with_config(config, *args, files={}, env=None, monkeypatch_injector=MonkeypatchInjector(), init_version='0.0.0', commit_count=0, dirty=False):
+def run_with_config(config, *args, files={}, env=None, monkeypatch_injector=MonkeypatchInjector(), init_version='0.0.0', commit_count=0, dirty=False, tag=True):
     runner = CliRunner(mix_stderr=False, env=env)
     commit = None
     with runner.isolated_filesystem():
@@ -80,7 +80,8 @@ def run_with_config(config, *args, files={}, env=None, monkeypatch_injector=Monk
                 on_file_created_callback()
             repo.index.add(('hopic-ci-config.yaml',) + tuple(files.keys()))
             commit = repo.index.commit(message='Initial commit', **_commitargs)
-            repo.create_tag(init_version)
+            if tag:
+                repo.create_tag(init_version)
             for i in range(commit_count):
                 commit = repo.index.commit(message=f"Some commit {i}", **_commitargs)
             if dirty:
@@ -1052,3 +1053,27 @@ def test_with_credentials_obfuscation_empty_credentials(monkeypatch, capfd):
     sys.stdout.write(out)
     sys.stderr.write(err)
     assert out.splitlines()[0] == ' '
+
+
+@pytest.mark.parametrize('version_param', (
+    ('tag: true', r"^Error: Failed to determine the current version from Git tag\."),
+    ('file: version.txt', r"^Error: Failed to determine the current version from file\."),
+    ('bump: false', r"^Error: Failed to determine the current version\."),
+))
+def test_version_variable_with_undetermined_version(capfd, version_param):
+    result = run_with_config(dedent(f'''\
+                version:
+                  {version_param[0]}
+                phases:
+                  phase-one:
+                    variant-one:
+                      - sh -c "set +u; echo VERSION=$$VERSION"
+                      - echo $VERSION
+                '''), ('build',), tag=False)
+
+    assert result.exit_code != 0
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+    assert out.splitlines()[0] == 'VERSION='
+    assert re.search(version_param[1], err, re.MULTILINE)
