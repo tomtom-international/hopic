@@ -1028,3 +1028,27 @@ def test_with_credentials_obfuscation(monkeypatch, capfd):
     assert out.splitlines()[0] == f'{username} {password}'
     assert "'${USERNAME}' '${PASSWORD}'" in err.splitlines()[0]
     assert result.exit_code == 0
+
+
+def test_with_credentials_obfuscation_empty_credentials(monkeypatch, capfd):
+    def get_credential_id(project_name_arg, cred_id):
+        return '', ''
+
+    monkeypatch.setattr(credentials, 'get_credential_by_id', get_credential_id)
+
+    result = run_with_config(dedent('''\
+                project-name: dummy
+                phases:
+                  p1:
+                    v1:
+                      - with-credentials:
+                        - id: some_empty_credentials
+                          type: username-password
+                      - echo $USERNAME $PASSWORD
+                '''), ('build',))
+
+    assert result.exit_code == 0
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+    assert out.splitlines()[0] == ' '
