@@ -59,6 +59,11 @@ log = logging.getLogger(__name__)
 Pattern = type(re.compile(''))
 
 
+_interphase_dependent_meta = frozenset({
+    'archive',
+    'stash',
+    'worktrees',
+})
 _unpermitted_post_submit_meta = frozenset({
     'archive',
     'fingerprint',
@@ -884,9 +889,13 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
     variant_node_label = OrderedDict()
     variant_node_label_phase = OrderedDict()
     variant_node_label_idx = OrderedDict()
+
+    dependent_meta = OrderedDict()
+    previous_phase = None
     for phasename, phase in cfg.setdefault('phases', OrderedDict()).items():
         if not isinstance(phase, Mapping):
             raise ConfigurationError(f"phase `{phasename}` doesn't contain a mapping but a {type(phase).__name__}", file=config)
+        dependent_meta[phasename] = set()
         for variant in phase:
             if variant == 'post-submit':
                 raise ConfigurationError(f"variant name 'post-submit', used in phase `{phasename}`, is reserved for internal use", file=config)
@@ -897,7 +906,9 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
                 volume_vars,
                 config_file=config,
             ))
+            wait_on_full_previous_phase = None
             for cmd_idx, cmd in enumerate(phase[variant]):
+                dependent_meta[phasename] |= set(cmd.keys()) & _interphase_dependent_meta
                 if 'node-label' in cmd:
                     node_label = cmd['node-label']
                     if not isinstance(node_label, str):
@@ -921,11 +932,50 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
                             f"`{variant_node_label_phase[variant]}`.`{variant}`[{variant_node_label_idx[variant]}] ({variant_node_label[variant]!r})",
                             file=config,
                         )
+                if 'wait-on-full-previous-phase' in cmd:
+                    if wait_on_full_previous_phase is not None:
+                        raise ConfigurationError(
+                            f"`wait-on-full-previous-phase` defined multiple times for `{phasename}`.`{variant}`",
+                            file=config,
+                        )
+                    wait_on_full_previous_phase = cmd['wait-on-full-previous-phase']
+                    if not isinstance(wait_on_full_previous_phase, bool):
+                        raise ConfigurationError(
+                            f"`{phasename}`.`{variant}`[{cmd_idx}].`wait-on-full-previous-phase` doesn't contain a boolean but a "
+                            f"{type(wait_on_full_previous_phase).__name__}",
+                            file=config,
+                        )
+                    elif not wait_on_full_previous_phase and previous_phase is None:
+                        raise ConfigurationError(
+                            f"`{phasename}`.`{variant}`[{cmd_idx}].`wait-on-full-previous-phase` defined but there is no previous phase",
+                            file=config,
+                        )
+                    elif not wait_on_full_previous_phase and variant not in cfg['phases'][previous_phase]:
+                        raise ConfigurationError(
+                            f"`{phasename}`.`{variant}`[{cmd_idx}].`wait-on-full-previous-phase` disabled but previous phase `{previous_phase}` "
+                            f"doesn't contain variant `{variant}`",
+                            file=config,
+                        )
+                    elif not wait_on_full_previous_phase and dependent_meta[previous_phase]:
+                        raise ConfigurationError(
+                            f"`{phasename}`.`{variant}`[{cmd_idx}].`wait-on-full-previous-phase` disabled but previous phase `{previous_phase}` "
+                            f"uses dependency-creating options {dependent_meta[previous_phase]}",
+                            file=config,
+                        )
             # If the node label has not been set in the first phase that a variant occurs in it's the default
             if variant not in variant_node_label:
                 variant_node_label[variant] = None
                 variant_node_label_phase[variant] = phasename
             variant_node_label.setdefault(variant, None)
+            if (
+                wait_on_full_previous_phase is None
+                and previous_phase is not None
+                and variant in cfg['phases'][previous_phase]
+            ):
+                if not phase[variant]:
+                    phase[variant].insert(0, OrderedDict())
+                phase[variant][0]['wait-on-full-previous-phase'] = True
+        previous_phase = phasename
 
     post_submit = cfg.setdefault('post-submit', OrderedDict())
     if not isinstance(post_submit, Mapping):

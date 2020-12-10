@@ -1011,6 +1011,7 @@ def getinfo(ctx, phase, variant, post_submit):
     else:
         permitted_fields = frozenset({
             'archive',
+            'wait-on-full-previous-phase',
             'fingerprint',
             'junit',
             'node-label',
