@@ -1345,19 +1345,18 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
       try {
         lock_if_necessary {
-          phases.each {
-            def phase    = it.phase
-            def is_build_successful = steps.currentBuild.currentResult == 'SUCCESS'
+          phases = phases.collect {
             // Make sure steps exclusive to changes, or not intended to execute for changes, are skipped when appropriate
-            def variants = it.variants.findAll { variant ->
-              def run_on_change = variant.run_on_change
+            [
+              phase: it.phase,
+              variants: it.variants.findAll { variant ->
+                def run_on_change = variant.run_on_change
 
-              if (run_on_change == 'always') {
-                return true
-              } else if (run_on_change == 'never') {
-                return !this.has_change()
-              } else if (run_on_change == 'only' || run_on_change == 'new-version-only') {
-                if (is_build_successful) {
+                if (run_on_change == 'always') {
+                  return true
+                } else if (run_on_change == 'never') {
+                  return !this.has_change()
+                } else if (run_on_change == 'only' || run_on_change == 'new-version-only') {
                   if (this.source_commit == null
                    || this.target_commit == null) {
                     // Don't have enough information to determine whether this is a submittable change: assume it is
@@ -1372,13 +1371,28 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
                     }
                   }
                   return is_publishable_change
-                } else {
+                }
+                assert false : "Unknown 'run-on-change' option: ${run_on_change}"
+              },
+            ]
+          }
+          while (phases) {
+            final it = phases.removeAt(0)
+            def phase    = it.phase
+            def is_build_successful = steps.currentBuild.currentResult == 'SUCCESS'
+            // Make sure steps exclusive to changes are skipped when a failure occurred during one of the previous phases.
+            def variants = it.variants.findAll { variant ->
+              def run_on_change = variant.run_on_change
+
+              if (run_on_change == 'only' || run_on_change == 'new-version-only') {
+                if (!is_build_successful) {
                   steps.println("Skipping variant ${variant.variant} in ${phase} because build is not successful")
                   return false
                 }
               }
-              assert false : "Unknown 'run-on-change' option: ${run_on_change}"
+              return true
             }
+            // Skip creation of a stage for phases with no variants to execute
             if (variants.size() == 0) {
               return
             }
