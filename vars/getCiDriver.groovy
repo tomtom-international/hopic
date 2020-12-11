@@ -1282,11 +1282,12 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
             )).collect { phase, variants ->
             [
               phase: phase,
-              variants: variants.collect { variant, meta ->
+              variants: variants.collectEntries { variant, meta ->
                 [
-                  variant: variant,
-                  label: meta.getOrDefault('node-label', default_node),
-                  run_on_change: meta.getOrDefault('run-on-change', 'always'),
+                  (variant): [
+                    label: meta.getOrDefault('node-label', default_node),
+                    run_on_change: meta.getOrDefault('run-on-change', 'always'),
+                  ]
                 ]
               }
             ]
@@ -1349,8 +1350,8 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
             // Make sure steps exclusive to changes, or not intended to execute for changes, are skipped when appropriate
             [
               phase: it.phase,
-              variants: it.variants.findAll { variant ->
-                def run_on_change = variant.run_on_change
+              variants: it.variants.findAll { variant, meta ->
+                def run_on_change = meta.run_on_change
 
                 if (run_on_change == 'always') {
                   return true
@@ -1381,12 +1382,12 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
             def phase    = it.phase
             def is_build_successful = steps.currentBuild.currentResult == 'SUCCESS'
             // Make sure steps exclusive to changes are skipped when a failure occurred during one of the previous phases.
-            def variants = it.variants.findAll { variant ->
-              def run_on_change = variant.run_on_change
+            def variants = it.variants.findAll { variant, meta ->
+              def run_on_change = meta.run_on_change
 
               if (run_on_change == 'only' || run_on_change == 'new-version-only') {
                 if (!is_build_successful) {
-                  steps.println("Skipping variant ${variant.variant} in ${phase} because build is not successful")
+                  steps.println("Skipping variant ${variant} in ${phase} because build is not successful")
                   return false
                 }
               }
@@ -1398,8 +1399,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
             }
 
             steps.stage(phase) {
-              def stepsForBuilding = variants.collectEntries {
-                def variant = it.variant
+              def stepsForBuilding = variants.collectEntries { variant, meta ->
                 def label   = it.label
                 def stage_name = "${phase}-${variant}"
                 [ (stage_name): {
