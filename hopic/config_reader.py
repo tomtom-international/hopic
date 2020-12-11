@@ -61,6 +61,7 @@ Pattern = type(re.compile(''))
 
 _interphase_dependent_meta = frozenset({
     'archive',
+    'run-on-change',
     'stash',
     'worktrees',
 })
@@ -908,7 +909,11 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
             ))
             wait_on_full_previous_phase = None
             for cmd_idx, cmd in enumerate(phase[variant]):
-                dependent_meta[phasename] |= set(cmd.keys()) & _interphase_dependent_meta
+                for metakey, metaval in cmd.items():
+                    if metakey in _interphase_dependent_meta:
+                        metatype = type(metaval)
+                        if not hasattr(metatype, 'default') or metaval != metatype.default:
+                            dependent_meta[phasename].add(metakey)
                 if 'node-label' in cmd:
                     node_label = cmd['node-label']
                     if not isinstance(node_label, str):

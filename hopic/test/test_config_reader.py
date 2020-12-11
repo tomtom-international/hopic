@@ -819,6 +819,9 @@ def test_wait_on_full_previous_phase_dependency_multiple_definitions():
 @pytest.mark.parametrize(
     "dep_option",
     (
+        "run-on-change: never",
+        "run-on-change: only",
+        "run-on-change: new-version-only",
         "stash: {includes: test/**}",
         "archive: {artifacts: [pattern: test/**]}",
         "worktrees: {doc/build/html: {commit-message: bla bla}}",
@@ -844,6 +847,30 @@ def test_wait_on_full_previous_phase_dependency_violation(dep_option):
             ),
             {'WORKSPACE': None},
         )
+
+
+def test_wait_on_full_previous_phase_dependency_run_on_change():
+    cfg = config_reader.read(
+        _config_file(
+            dedent(
+                """\
+                phases:
+                  x:
+                    a:
+                      - run-on-change: always
+                  y:
+                    a:
+                      - run-on-change: only
+                        wait-on-full-previous-phase: no
+                """
+            )
+        ),
+        {'WORKSPACE': None},
+    )
+    (x_a,) = cfg['phases']['x']['a']
+    (y_a,) = cfg['phases']['y']['a']
+    assert 'wait-on-full-previous-phase' not in x_a
+    assert y_a['wait-on-full-previous-phase'] is False
 
 
 def test_wait_on_full_previous_phase_dependency_default_yes():
