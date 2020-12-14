@@ -47,7 +47,7 @@ def mock_yaml_plugin(monkeypatch):
             volume_vars : typing.Mapping[str, str],
             *,
             required_param : str,
-            optional_param : typing.Optional[str] = None,
+            optional_param: 'typing.Optional[str]' = None,
             defaulted_param : bool = False,
         ) -> typing.Sequence[typing.Mapping[str, typing.Any]]:
             val = {
@@ -103,9 +103,9 @@ def mock_yaml_plugin(monkeypatch):
         def sequence_template(
             volume_vars : typing.Mapping[str, str],
             *,
-            sequence : typing.Sequence[str] = [],
+            sequence: typing.List[str] = [],
         ) -> typing.Sequence[typing.Mapping[str, typing.Any]]:
-            assert isinstance(sequence, typing.Sequence)
+            assert isinstance(sequence, typing.List)
             for v in sequence:
                 assert isinstance(v, str)
             return ({'sequence': sequence},)
@@ -357,7 +357,7 @@ def test_template_missing_param(mock_yaml_plugin):
 
 
 def test_template_mismatched_param_simple_type(mock_yaml_plugin):
-    with pytest.raises(ConfigurationError, match=r'(?i)trying to instantiate template `.*?` with parameter .*? of type .*? expected'):
+    with pytest.raises(ConfigurationError, match=r'(?i)trying to instantiate template `.*?`: type of required-param must be str; got bool instead'):
         config_reader.read(_config_file(dedent('''\
             phases:
               test:
@@ -368,7 +368,7 @@ def test_template_mismatched_param_simple_type(mock_yaml_plugin):
 
 
 def test_template_mismatched_param_optional_type(mock_yaml_plugin):
-    with pytest.raises(ConfigurationError, match=r'(?i)trying to instantiate template `.*?` with parameter .*? of type .*? expected'):
+    with pytest.raises(ConfigurationError, match=r'(?i)trying to instantiate template `.*?`: type of optional-param must be .*?; got bool instead'):
         config_reader.read(_config_file(dedent('''\
             phases:
               test:
@@ -479,7 +479,7 @@ def test_template_kwargs_missing_param(mock_yaml_plugin):
 
 
 def test_template_kwargs_type_mismatch(mock_yaml_plugin):
-    with pytest.raises(ConfigurationError, match=r'(?i)trying to instantiate template `.*?` with parameter .*? of type .*? expected'):
+    with pytest.raises(ConfigurationError, match=r'(?i)trying to instantiate template `.*?`: type of required-param must be str; got NoneType instead'):
         config_reader.read(_config_file(dedent('''\
             phases:
               test:
@@ -533,8 +533,26 @@ def test_template_sequence_with_single_entry(mock_yaml_plugin):
     assert out == ['mooh']
 
 
+def test_template_sequence_with_str_instead_of_list(mock_yaml_plugin):
+    with pytest.raises(ConfigurationError, match=r'(?i)trying to instantiate template `.*?`: type of sequence must be\b.*?\blist; got str instead'):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    """\
+                    phases:
+                      test:
+                        example: !template
+                          name: "sequence"
+                          sequence: mooh
+                    """
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
 def test_template_sequence_with_type_mismatched_entry(mock_yaml_plugin):
-    with pytest.raises(ConfigurationError, match=r'(?i)trying to instantiate template `.*?` with parameter `sequence\[1\]` of type `bool`, expected'):
+    with pytest.raises(ConfigurationError, match=r'(?i)trying to instantiate template `.*?`: type of sequence\[1\] must be str; got bool instead'):
         config_reader.read(_config_file(dedent('''\
             phases:
               test:
