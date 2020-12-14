@@ -545,3 +545,33 @@ def test_template_sequence_with_type_mismatched_entry(mock_yaml_plugin):
                     - false
                     - sheep
         ''')), {'WORKSPACE': None})
+
+
+def test_nested_command_list_flattening():
+    cfg = config_reader.read(
+        _config_file(
+            dedent(
+                """\
+                phases:
+                  test:
+                    example:
+                      - run-on-change: always
+                      -
+                        - description: something happening here
+                        -
+                            - echo "Tada!"
+                            - sh: echo "Tada!"
+                            - sh: [echo, "Tada!"]
+                """
+            )
+        ),
+        {'WORKSPACE': None},
+    )
+    out = [dict(cmd) for cmd in cfg['phases']['test']['example']]
+    assert out == [
+        {"run-on-change": config_reader.RunOnChange.always},
+        {"description": "something happening here"},
+        {"environment": {}, "sh": ["echo", "Tada!"]},
+        {"environment": {}, "sh": ["echo", "Tada!"]},
+        {"environment": {}, "sh": ["echo", "Tada!"]},
+    ]
