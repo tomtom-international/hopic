@@ -606,11 +606,11 @@ def flatten_command_list(phase, variant, cmds, config_file=None):
     if not isinstance(cmds, Sequence):
         raise ConfigurationError(f"variant `{phase}.{variant}` doesn't contain a sequence but a {type(cmds).__name__}", file=config_file)
 
-    for cmd in cmds:
+    for i, cmd in enumerate(cmds):
         if isinstance(cmd, str):
             yield OrderedDict((('sh', cmd),))
         elif isinstance(cmd, Sequence) and not isinstance(cmd, (str, bytes)):
-            yield from cmd
+            yield from flatten_command_list(phase, f"variant[{i}]", cmd, config_file=config_file)
         else:
             yield cmd
 
