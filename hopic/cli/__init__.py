@@ -975,8 +975,7 @@ def getinfo(ctx, phase, variant, post_submit):
     """
     info = OrderedDict()
 
-    @click.pass_context
-    def append_meta_from_cmd(ctx, info, cmd, permitted_fields: Set):
+    def append_meta_from_cmd(info, cmd, permitted_fields: Set):
         assert isinstance(cmd, Mapping)
 
         info = info.copy()

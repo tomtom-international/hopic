@@ -34,7 +34,13 @@ import os
 import re
 import shlex
 import subprocess
+import typeguard
 import typing
+try:
+    # Python >= 3.8
+    from typing import ForwardRef
+except ImportError:
+    from typing import _ForwardRef as ForwardRef
 import xml.etree.ElementTree as ET
 import yaml
 
@@ -260,6 +266,9 @@ def match_template_props_to_signature(
     template_name: str,
     signature: typing.Mapping[str, inspect.Parameter],
     params: typing.Mapping[str, typing.Any],
+    *,
+    globals: typing.Optional[typing.Mapping[str, typing.Any]] = None,
+    locals: typing.Optional[typing.Mapping[str, typing.Any]] = None,
 ) -> typing.Mapping[str, typing.Any]:
 
     kwargs_var, *_ = [
@@ -313,34 +322,15 @@ def match_template_props_to_signature(
         else:
             new_params[prop] = val
 
-        if (
-            param.annotation is not inspect.Parameter.empty
-            # don't check forward references to types
-            and not isinstance(param.annotation, (str, getattr(typing, 'ForwardRef', str)))
-        ):
-            origin_type = getattr(param.annotation, '__origin__', None)
-            type_args = getattr(param.annotation, '__args__', None)
+        annotation = param.annotation
+        if annotation is not inspect.Parameter.empty:
+            # Ensure we check forward references to types too
+            if isinstance(annotation, str):
+                annotation = ForwardRef(annotation)
             try:
-                if origin_type is typing.Union:
-                    type_valid = isinstance(val, type_args)
-                elif origin_type in (typing.Sequence, Sequence):
-                    type_valid = isinstance(val, Sequence)
-                    if type_valid and type_args is not None:
-                        for i, m in enumerate(val):
-                            if not isinstance(m, type_args):
-                                raise ConfigurationError(
-                                        f"Trying to instantiate template `{template_name}` with parameter `{orig_prop}[{i}]` of type `{type(m).__name__}`, "
-                                        f"expected `{getattr(type_args[0], '__name__', None) or getattr(type_args[0], '_name', None) or type_args[0]}`")
-                else:
-                    type_valid = isinstance(val, param.annotation)
-            except TypeError:
-                # ignore failures to type check, propbably some subscripted 'typing.Something[SomeOtherType]'
-                type_valid = True
-
-            if not type_valid:
-                raise ConfigurationError(
-                        f"Trying to instantiate template `{template_name}` with parameter `{orig_prop}` of type `{type(val).__name__}`, "
-                        f"expected `{getattr(param.annotation, '__name__', None) or getattr(param.annotation, '_name', None) or param.annotation}`")
+                typeguard.check_type(argname=orig_prop, value=val, expected_type=annotation, globals=globals, locals=locals)
+            except TypeError as exc:
+                raise ConfigurationError(f"Trying to instantiate template `{template_name}`: {exc}") from exc
 
         if param.kind in {
             inspect.Parameter.POSITIONAL_ONLY,
@@ -374,7 +364,16 @@ def load_yaml_template(volume_vars, extension_installer, loader, node):
     template_fn = ep.load()
     template_sig = inspect.signature(template_fn)
 
-    props = match_template_props_to_signature(name, template_sig.parameters, props)
+    # Unwrap stacked decorators to get at the underlying function's annotations
+    unwrapped = template_fn
+    while (
+        hasattr(unwrapped, '__wrapped__')
+        and getattr(unwrapped.__wrapped__, '__annotations__', None) is not None
+        and getattr(unwrapped, '__annotations__') is unwrapped.__wrapped__.__annotations__
+    ):
+        unwrapped = unwrapped.__wrapped__
+
+    props = match_template_props_to_signature(name, template_sig.parameters, props, globals=getattr(unwrapped, '__globals__', None))
     cfg = template_fn(volume_vars, **props)
 
     if isinstance(cfg, str):
