@@ -344,6 +344,23 @@ def match_template_props_to_signature(
             kebab_name = param.name.replace('_', '-')
             raise ConfigurationError(f"Trying to instantiate template `{template_name}` without required parameter `{kebab_name}`")
 
+    # Complain about templates with defaults that mismatch their own type annotation
+    for param in signature.values():
+        default = param.default
+        annotation = param.annotation
+        if default is inspect.Parameter.empty or annotation is inspect.Parameter.empty:
+            continue
+        if isinstance(annotation, str):
+            annotation = ForwardRef(annotation)
+        name = param.name
+        if kwargs_var is None:
+            name = name.replace('_', '-')
+
+        try:
+            typeguard.check_type(argname=name, value=default, expected_type=annotation, globals=globals, locals=locals)
+        except TypeError as exc:
+            raise ConfigurationError(f"Wrong default of parameter for template `{template_name}`: {exc}") from exc
+
     return new_params
 
 
