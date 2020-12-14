@@ -364,7 +364,16 @@ def load_yaml_template(volume_vars, extension_installer, loader, node):
     template_fn = ep.load()
     template_sig = inspect.signature(template_fn)
 
-    props = match_template_props_to_signature(name, template_sig.parameters, props, globals=getattr(template_fn, '__globals__', None))
+    # Unwrap stacked decorators to get at the underlying function's annotations
+    unwrapped = template_fn
+    while (
+        hasattr(unwrapped, '__wrapped__')
+        and getattr(unwrapped.__wrapped__, '__annotations__', None) is not None
+        and getattr(unwrapped, '__annotations__') is unwrapped.__wrapped__.__annotations__
+    ):
+        unwrapped = unwrapped.__wrapped__
+
+    props = match_template_props_to_signature(name, template_sig.parameters, props, globals=getattr(unwrapped, '__globals__', None))
     cfg = template_fn(volume_vars, **props)
 
     if isinstance(cfg, str):
