@@ -110,6 +110,22 @@ def mock_yaml_plugin(monkeypatch):
                 assert isinstance(v, str)
             return ({'sequence': sequence},)
 
+    class TestWrongDefaultTemplate:
+        name = 'wrong-default'
+
+        def load(self):
+            return self.wrong_default_template
+
+        @staticmethod
+        def wrong_default_template(
+            volume_vars : typing.Mapping[str, str],
+            *,
+            defaulted_param : 'str' = None,
+        ) -> typing.Sequence[typing.Mapping[str, typing.Any]]:
+            return ({
+                'defaulted': defaulted_param,
+            },)
+
     def mock_entry_points():
         return {
             'hopic.plugins.yaml': (
@@ -117,6 +133,7 @@ def mock_yaml_plugin(monkeypatch):
                 TestKwargTemplate(),
                 TestSimpleTemplate(),
                 TestSequenceTemplate(),
+                TestWrongDefaultTemplate(),
             )
         }
     monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
@@ -518,6 +535,17 @@ def test_template_sequence_without_param(mock_yaml_plugin):
     ''')), {'WORKSPACE': None})
     out = cfg['phases']['test']['example'][0]['sequence']
     assert out == []
+
+
+def test_template_with_wrong_default(mock_yaml_plugin):
+    with pytest.raises(ConfigurationError, match=r'(?i)\bwrong default of parameter for template `.*?`: type of defaulted-param must be str; got .*? instead'):
+        config_reader.read(_config_file(dedent('''\
+            phases:
+              test:
+                example: !template
+                  name: wrong-default
+                  defaulted-param: mooh
+        ''')), {'WORKSPACE': None})
 
 
 def test_template_sequence_with_single_entry(mock_yaml_plugin):
