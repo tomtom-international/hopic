@@ -17,13 +17,19 @@
 Changelog
 =========
 
-1.28.0-3+g7a57f09b
+1.28.0-9+g35820157
 ======
 
 New features
 ------------
 
 * feat(templates): use 'typeguard' pkg to type check arguments to templates (#272)
+* feat(config): complain about templates' defaults not matching their own types (#273)
+
+Improvements
+------------
+
+* improvement: git clean sub modules and sub repositories too (#274)
 
 1.27.1
 ======
