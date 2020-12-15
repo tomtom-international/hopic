@@ -55,6 +55,9 @@ def run_with_config(config, args, resource=()):
     if result.stderr_bytes:
         print(result.stderr, end='', file=sys.stderr)
 
+    if result.exception is not None and not isinstance(result.exception, SystemExit):
+        raise result.exception
+
     return result
 
 

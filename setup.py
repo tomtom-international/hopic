@@ -48,6 +48,7 @@ setup(
       'python-dateutil',
       'PyYAML',
       'setuptools',
+      'typeguard>=2.10,<3',
     ),
     setup_requires=(
       'setuptools_scm',
