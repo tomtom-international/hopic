@@ -17,6 +17,24 @@
 Changelog
 =========
 
+1.28.0-3+g7a57f09b
+======
+
+New features
+------------
+
+* feat(templates): use 'typeguard' pkg to type check arguments to templates (#272)
+
+1.27.1
+======
+
+Bug fixes
+---------
+
+* fix(groovy): force new checkout on initial node when publishing (#264)
+* fix: don't try to obfuscate empty credential strings (#267)
+* fix(config): recurse when flattening command lists (#271)
+
 1.27.0
 ======
 
