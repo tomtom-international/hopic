@@ -246,7 +246,7 @@ def clean_repo(repo, clean_config=[]):
             log.error("Command fatally terminated with exit code %d", e.returncode)
             sys.exit(e.returncode)
 
-    clean_output = repo.git.clean('-xd', force=True)
+    clean_output = repo.git.clean(x=True, d=True, force=(True, True))
     if clean_output:
         log.info('%s', clean_output)
 
