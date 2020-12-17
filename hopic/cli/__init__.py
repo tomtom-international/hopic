@@ -498,9 +498,9 @@ def process_prepare_source_tree(
             assert new_version >= ctx.obj.version, "the new version should be more recent than the old one"
 
             if new_version != ctx.obj.version:
+                log.info("bumped version to: %s (from %s)", click.style(str(new_version), fg='blue'), click.style(str(ctx.obj.version), fg='blue'))
                 version_bumped = True
                 ctx.obj.version = new_version
-                log.debug("bumped version to: %s", click.style(str(ctx.obj.version), fg='blue'))
 
                 if 'file' in version_info:
                     replace_version(os.path.join(ctx.obj.config_dir, version_info['file']), ctx.obj.version)
