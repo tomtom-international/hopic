@@ -1416,24 +1416,20 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
                         this.build_variant(phase, variant, cmd, workspace, artifactoryBuildInfo, hopic_extra_arguments)
 
-                        // Take a string of uninterrupted phases that we can execute without waiting on preceding phases
-                        def next_phases = [:]
-                        try {
-                          next_phases = phases.takeWhile { next_phase, next_variants ->
-                            (
-                                 next_variants.containsKey(variant)
-                              && !next_variants[variant].wait_on_full_previous_phase
-                            )
+                        // Execute a string of uninterrupted phases with our current variant for which we don't need to wait on preceding phases
+                        //
+                        // Using a regular for loop because we need to break out of it early and .takeWhile doesn't work with closures defined in CPS context
+                        for (next_phase in phases.keySet()) {
+                          final next_variants = phases[next_phase]
+
+                          if (!next_variants.containsKey(variant)
+                           // comparing against 'false' directly because we want to reject 'null' too
+                           || next_variants[variant].wait_on_full_previous_phase != false) {
+                            break
                           }
-                        } catch(RejectedAccessException e) {
-                          steps.println("\033[33m[warning] could not determine phases to execute early because of missing script approval: ${e}\033[39m")
-                        }
-                        next_phases.each { next_phase, next_variants ->
-                          assert next_variants.containsKey(variant)
 
                           // Prevent executing this variant again during the phase it really belongs too
                           final next_variant = next_variants.remove(variant)
-                          assert next_variant.wait_on_full_previous_phase == false
 
                           // Execute this variant's next phase already.
                           // Because the user asked for it, in order not to relinquish this node until we really have to.
