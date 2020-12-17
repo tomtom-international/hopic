@@ -1277,12 +1277,11 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
           def phases = steps.readJSON(text: steps.sh(
               script: "${cmd} getinfo",
-              label: 'Hopic: retrieving Hopic execution graph',
-              returnStdout: true
-            )).collect { phase, variants ->
+              label: 'Hopic: retrieving execution graph',
+              returnStdout: true,
+            )).collectEntries { phase, variants ->
             [
-              phase: phase,
-              variants: variants.collectEntries { variant, meta ->
+              (phase): variants.collectEntries { variant, meta ->
                 [
                   (variant): [
                     label: meta.getOrDefault('node-label', default_node),
@@ -1347,11 +1346,10 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
       try {
         lock_if_necessary {
-          phases = phases.collect {
+          phases = phases.collectEntries { phase, variants ->
             // Make sure steps exclusive to changes, or not intended to execute for changes, are skipped when appropriate
             [
-              phase: it.phase,
-              variants: it.variants.findAll { variant, meta ->
+              (phase): variants.findAll { variant, meta ->
                 def run_on_change = meta.run_on_change
 
                 if (run_on_change == 'always') {
@@ -1379,11 +1377,10 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
             ]
           }
           while (phases) {
-            final it = phases.removeAt(0)
-            def phase    = it.phase
+            final phase = phases.keySet()[0]
             def is_build_successful = steps.currentBuild.currentResult == 'SUCCESS'
             // Make sure steps exclusive to changes are skipped when a failure occurred during one of the previous phases.
-            def variants = it.variants.findAll { variant, meta ->
+            final variants = phases.remove(phase).findAll { variant, meta ->
               def run_on_change = meta.run_on_change
 
               if (run_on_change == 'only' || run_on_change == 'new-version-only') {
@@ -1420,21 +1417,22 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
                         this.build_variant(phase, variant, cmd, workspace, artifactoryBuildInfo, hopic_extra_arguments)
 
                         // Take a string of uninterrupted phases that we can execute without waiting on preceding phases
-                        def next_phases = phases.takeWhile {
+                        def next_phases = phases.takeWhile { next_phase, next_variants ->
                           (
-                               it.variants.containsKey(variant)
-                            && !it.variants[variant].wait_on_full_previous_phase
+                               next_variants.containsKey(variant)
+                            && !next_variants[variant].wait_on_full_previous_phase
                           )
                         }
-                        next_phases.each {
-                          def next_phase = it.phase
-                          def next_variant = it.variants[variant]
+                        next_phases.each { next_phase, next_variants ->
+                          assert next_variants.containsKey(variant)
+
+                          // Prevent executing this variant again during the phase it really belongs too
+                          final next_variant = next_variants.remove(variant)
                           assert next_variant.wait_on_full_previous_phase == false
+
                           // Execute this variant's next phase already.
                           // Because the user asked for it, in order not to relinquish this node until we really have to.
                           this.build_variant(next_phase, variant, cmd, workspace, artifactoryBuildInfo, hopic_extra_arguments)
-                          // Prevent executing this variant again during the phase it really belongs too
-                          it.variants.remove(variant)
                         }
                       }
                     }
