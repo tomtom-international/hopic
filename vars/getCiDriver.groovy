@@ -1417,11 +1417,16 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
                         this.build_variant(phase, variant, cmd, workspace, artifactoryBuildInfo, hopic_extra_arguments)
 
                         // Take a string of uninterrupted phases that we can execute without waiting on preceding phases
-                        def next_phases = phases.takeWhile { next_phase, next_variants ->
-                          (
-                               next_variants.containsKey(variant)
-                            && !next_variants[variant].wait_on_full_previous_phase
-                          )
+                        def next_phases = [:]
+                        try {
+                          next_phases = phases.takeWhile { next_phase, next_variants ->
+                            (
+                                 next_variants.containsKey(variant)
+                              && !next_variants[variant].wait_on_full_previous_phase
+                            )
+                          }
+                        } catch(RejectedAccessException e) {
+                          steps.println("\033[33m[warning] could not determine phases to execute early because of missing script approval: ${e}\033[39m")
                         }
                         next_phases.each { next_phase, next_variants ->
                           assert next_variants.containsKey(variant)
