@@ -188,8 +188,8 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                         if kcred is not None:
                             username, password = kcred
                             if creds['encoding'] == CredentialEncoding.url:
-                                username = urllib.parse.quote_plus(username)
-                                password = urllib.parse.quote_plus(password)
+                                username = urllib.parse.quote(username, safe='')
+                                password = urllib.parse.quote(password, safe='')
                             volume_vars.update({
                                 creds['username-variable']: username,
                                 creds['password-variable']: password,
