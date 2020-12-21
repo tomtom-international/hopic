@@ -788,9 +788,10 @@ def test_with_credentials_keyring_variable_names(monkeypatch, capfd):
 
 
 @pytest.mark.parametrize('username, expected_username, password, expected_password', (
-    ('test_username', None,               '$&+,/:;=?@', '%24%26%2B%2C%2F%3A%3B%3D%3F%40'),
-    ('señor_tester', 'se%C3%B1or_tester', 'password',   None),
-    ('señor_tester', 'se%C3%B1or_tester', '$&+,/:;=?@', '%24%26%2B%2C%2F%3A%3B%3D%3F%40'),
+    ('test_username', None,                 '$&+,/:;=?@', '%24%26%2B%2C%2F%3A%3B%3D%3F%40'),
+    ('señor_tester', 'se%C3%B1or_tester'  , 'password'  , None),
+    ('señor_tester', 'se%C3%B1or_tester'  , '$&+,/:;=?@', '%24%26%2B%2C%2F%3A%3B%3D%3F%40'),
+    ('señor tester', 'se%C3%B1or%20tester', 'the secret', 'the%20secret'),
 ))
 def test_with_credentials_with_url_encoding(monkeypatch, capfd, username, expected_username, password, expected_password):
     if expected_username is None:
