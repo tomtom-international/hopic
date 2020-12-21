@@ -15,6 +15,8 @@
  */
 
 import groovy.json.JsonOutput
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter;
 import org.jenkinsci.plugins.credentialsbinding.impl.CredentialNotFoundException
 import org.jenkinsci.plugins.scriptsecurity.sandbox.RejectedAccessException
 
@@ -358,6 +360,7 @@ class CiDriver {
   private base_cmds          = [:]
   private cmds               = [:]
   private nodes              = [:]
+  private nodes_usage        = [:]
   private checkouts          = [:]
   private stashes            = [:]
   private worktree_bundles   = [:]
@@ -964,7 +967,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
         ?: this.nodes.collect { variant, node -> node }.join(" || ")
         ?: params.getOrDefault('default_node_expr', this.default_node_expr)
       )
-    return steps.node(node_expr) {
+    return this.on_node([node_expr: node_expr, name: params.name]) {
       return this.with_hopic { cmd ->
         this.ensure_checkout(cmd, params.getOrDefault('clean', false))
         this.ensure_unstashed()
@@ -996,12 +999,65 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     }
   }
 
+  private String determine_error_build_result(Exception e) {
+    return e.getClass() == org.jenkinsci.plugins.workflow.steps.FlowInterruptedException ? 'ABORTED' : 'FAILURE'
+  }
+
+  private LocalDateTime get_local_time() {
+    return LocalDateTime.now()
+  }
+
+  private def on_node(Map node_params = [:], Closure closure) {
+    def node_expr = node_params.getOrDefault("node_expr", this.default_node_expr)
+    def name = node_params.name
+    def request_time = this.get_local_time()
+    return steps.node(node_expr) {
+      if (name != null) {
+        this.nodes_usage.get(steps.env.NODE_NAME, []).add(name: name, request_time: request_time, start_time: this.get_local_time())
+      }
+      def build_result = 'SUCCESS'
+      try {
+        return closure()
+      } catch(Exception e) {
+        build_result = this.determine_error_build_result(e)
+        throw e
+      } finally {
+        if (name != null) {
+          assert this.nodes_usage[steps.env.NODE_NAME]
+          assert this.nodes_usage[steps.env.NODE_NAME][-1].name == name
+          this.nodes_usage[steps.env.NODE_NAME][-1].end_time = this.get_local_time()
+          this.nodes_usage[steps.env.NODE_NAME][-1].status = build_result
+        }
+      }
+    }
+  }
+
+  private def print_node_usage() {
+    def largest_name_size = this.nodes_usage.collect { it.value.collect { it.name }}.flatten().max { it.size() }.size()
+    String printable_string = ""
+    this.nodes_usage.each { node, allocation ->
+      printable_string += "node: ${node}\n"
+      allocation.each {
+        printable_string += String.format("  %-${largest_name_size}s request time %s start time: %s end time: %s status: %s\n",
+          it.name,
+          it.request_time.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
+          it.start_time.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
+          it.end_time.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
+          it.status
+        )
+      }
+      printable_string += "\n"
+    }
+    steps.print(printable_string.trim())
+  }
+
   public def build(Map buildParams = [:]) {
     def clean = buildParams.getOrDefault('clean', false)
     def default_node = buildParams.getOrDefault('default_node_expr', this.default_node_expr)
     def exclude_branches_filled_with_pr_branch_discovery = buildParams.getOrDefault('exclude_branches_filled_with_pr_branch_discovery', true)
+
     steps.ansiColor('xterm') {
-      def (phases, is_publishable_change, submit_meta, additional_locks) = steps.node(default_node) {
+      def (phases, is_publishable_change, submit_meta, additional_locks) = this.on_node(node_expr: default_node, name: "hopic-init") {
         return this.with_hopic { cmd ->
           def workspace = steps.pwd()
 
@@ -1137,13 +1193,14 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
               def stepsForBuilding = variants.collectEntries {
                 def variant = it.variant
                 def label   = it.label
-                [ "${phase}-${variant}": {
+                def stage_name = "${phase}-${variant}"
+                [ (stage_name): {
                   if (this.nodes.containsKey(variant)) {
                     label = this.nodes[variant]
                   }
-                  steps.node(label) {
+                  this.on_node(node_expr: label, name: stage_name) {
                     with_workspace_for_variant(variant) {
-                      steps.stage("${phase}-${variant}") {
+                      steps.stage(stage_name) {
                         this.with_hopic(variant) { cmd ->
                           // If working with multiple executors on this node, uniquely identify this node by variant
                           // to ensure the correct workspace.
@@ -1241,7 +1298,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           }
 
           if (this.may_submit_result != false) {
-            this.on_build_node(node_expr: submit_meta['node-label']) { cmd ->
+            this.on_build_node(node_expr: submit_meta['node-label'], name: 'submit') { cmd ->
               if (this.has_submittable_change()) {
                 steps.stage('submit') {
                   this.with_git_credentials() {
@@ -1284,13 +1341,15 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
         }
       } catch(Exception e) {
         if (this.change != null) {
-          def buildStatus = (e.getClass() == org.jenkinsci.plugins.workflow.steps.FlowInterruptedException) ? 'ABORTED' : 'FAILURE'
+          def buildStatus = this.determine_error_build_result(e)
           this.change.notify_build_result(
               get_job_name(), steps.env.CHANGE_BRANCH, this.source_commit, buildStatus, exclude_branches_filled_with_pr_branch_discovery)
           this.change.notify_build_result(
               get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, buildStatus, exclude_branches_filled_with_pr_branch_discovery)
         }
         throw e
+      } finally {
+        this.print_node_usage()
       }
 
       if (this.change != null) {
