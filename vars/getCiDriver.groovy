@@ -1398,13 +1398,12 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
             steps.stage(phase) {
               def stepsForBuilding = variants.collectEntries { variant, meta ->
-                def label   = it.label
-                def stage_name = "${phase}-${variant}"
-                [ (stage_name): {
+                def label = meta.label
+                [ (variant): {
                   if (this.nodes.containsKey(variant)) {
                     label = this.nodes[variant]
                   }
-                  this.on_node(node_expr: label, name: stage_name) {
+                  this.on_node(node_expr: label, name: "${phase}-${variant}") {
                     with_workspace_for_variant(variant) {
                       this.with_hopic(variant) { cmd ->
                         // If working with multiple executors on this node, uniquely identify this node by variant
