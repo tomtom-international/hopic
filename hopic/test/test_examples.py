@@ -19,7 +19,7 @@ def test_example(example_file):
     config_reader.read(
         example_file,
         {
-            'WORKSPACE': None,
+            'WORKSPACE': '.',
             'CT_DEVENV_HOME': '/tools/devenv',
         },
     )
