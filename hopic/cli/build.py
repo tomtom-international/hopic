@@ -233,7 +233,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                         'DEBVERSION',
                         'PUBLISH_VERSION'
                     ):
-                if varname in ctx.obj.volume_vars:
+                if varname in ctx.obj.volume_vars and not isinstance(ctx.obj.volume_vars[varname], BaseException):
                     env[varname] = ctx.obj.volume_vars[varname]
 
             env.update(variant_credentials)
