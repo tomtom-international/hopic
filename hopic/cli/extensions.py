@@ -15,9 +15,11 @@
 import importlib
 import logging
 import os
+import re
 import subprocess
 import sys
 import tempfile
+from textwrap import dedent
 
 import click
 
@@ -29,6 +31,7 @@ from .utils import (
         )
 
 PACKAGE : str = __package__.split('.')[0]
+log = logging.getLogger(__name__)
 
 
 @click.command()
@@ -73,7 +76,43 @@ def install_extensions_with_config(pip_cfg):
 
             cmd.extend(spec['packages'])
 
-            echo_cmd(subprocess.check_call, cmd, stdout=sys.__stderr__)
+            try:
+                echo_cmd(subprocess.check_call, cmd, stdout=sys.__stderr__)
+            except subprocess.CalledProcessError as exc:
+                if not spec['with-extra-index']:
+                    raise
+
+                versionstr = subprocess.check_output((sys.executable, "-m", "pip", "--version")).decode("UTF-8")
+                m = re.match(r"^pip (\d+\S*)", versionstr)
+                if not m:
+                    raise
+                versionstr = m.group(1)
+
+                def try_int(s):
+                    try:
+                        return int(s)
+                    except ValueError:
+                        return s
+
+                version = tuple(try_int(x) for x in versionstr.split("."))
+                # This is the first version that fixes https://github.com/pypa/pip/issues/4195
+                if version < (19, 1):
+                    log.error(
+                        dedent(
+                            """\
+                            pip failed to install with error code %i while using an extra-index.
+
+                            The pip version available (%s) is older than 19.1 and may contain a bug related to usage of --extra-index-url.
+
+                            Consider updating pip to a more recent version.
+                            For example: %s -m pip install --upgrade pip
+                            """
+                        ),
+                        exc.returncode,
+                        versionstr,
+                        sys.executable,
+                    )
+                raise
 
     # Ensure newly installed packages can be imported
     importlib.invalidate_caches()
