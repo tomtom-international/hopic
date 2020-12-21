@@ -1012,8 +1012,10 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     def name = node_params.name
     def request_time = this.get_local_time()
     return steps.node(node_expr) {
+      def usage_entry = null
       if (name != null) {
         this.nodes_usage.get(steps.env.NODE_NAME, []).add(name: name, request_time: request_time, start_time: this.get_local_time())
+        usage_entry = this.nodes_usage[steps.env.NODE_NAME][-1]
       }
       def build_result = 'SUCCESS'
       try {
@@ -1023,10 +1025,10 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
         throw e
       } finally {
         if (name != null) {
-          assert this.nodes_usage[steps.env.NODE_NAME]
-          assert this.nodes_usage[steps.env.NODE_NAME][-1].name == name
-          this.nodes_usage[steps.env.NODE_NAME][-1].end_time = this.get_local_time()
-          this.nodes_usage[steps.env.NODE_NAME][-1].status = build_result
+          assert usage_entry != null
+          assert usage_entry.name == name
+          usage_entry.end_time = this.get_local_time()
+          usage_entry.status = build_result
         }
       }
     }
