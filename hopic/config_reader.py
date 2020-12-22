@@ -410,7 +410,10 @@ def load_yaml_template(volume_vars, extension_installer, loader, node):
         if 'config' in cfg:
             cfg = cfg['config']
     elif isinstance(cfg, Generator):
-        cfg = list(cfg)
+        new_cfg = []
+        for value in cfg:
+            new_cfg.append(value)
+        cfg = new_cfg
 
     return cfg
 
