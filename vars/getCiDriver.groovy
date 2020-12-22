@@ -1429,6 +1429,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
                           // Prevent executing this variant again during the phase it really belongs too
                           final next_variant = next_variants.remove(variant)
+                          assert next_variant.run_on_change == 'always'
 
                           // Execute this variant's next phase already.
                           // Because the user asked for it, in order not to relinquish this node until we really have to.
