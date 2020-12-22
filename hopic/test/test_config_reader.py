@@ -126,6 +126,20 @@ def mock_yaml_plugin(monkeypatch):
                 'defaulted': defaulted_param,
             },)
 
+    class TestWrongReturnTemplate:
+        name = "wrong-return"
+
+        def load(self):
+            return self.wrong_return_template
+
+        @staticmethod
+        def wrong_return_template(
+            volume_vars : typing.Mapping[str, str],
+        ) -> typing.List[typing.Dict[str, typing.Any]]:
+            return [
+                {43: None},
+            ]
+
     def mock_entry_points():
         return {
             'hopic.plugins.yaml': (
@@ -134,6 +148,7 @@ def mock_yaml_plugin(monkeypatch):
                 TestSimpleTemplate(),
                 TestSequenceTemplate(),
                 TestWrongDefaultTemplate(),
+                TestWrongReturnTemplate(),
             )
         }
     monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
@@ -590,6 +605,15 @@ def test_template_sequence_with_type_mismatched_entry(mock_yaml_plugin):
                     - mooh
                     - false
                     - sheep
+        ''')), {'WORKSPACE': None})
+
+
+def test_template_wrong_return(mock_yaml_plugin):
+    with pytest.raises((ConfigurationError, TypeError), match=r"(?i)return value(?:\[.*?\])? must be .*?; got .*? instead"):
+        config_reader.read(_config_file(dedent('''\
+            phases:
+              test:
+                example: !template wrong-return
         ''')), {'WORKSPACE': None})
 
 

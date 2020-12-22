@@ -380,6 +380,9 @@ def load_yaml_template(volume_vars, extension_installer, loader, node):
 
     template_fn = ep.load()
     template_sig = inspect.signature(template_fn)
+    rt_type = template_sig.return_annotation
+    if rt_type is inspect.Signature.empty:
+        rt_type = typing.Any
 
     # Unwrap stacked decorators to get at the underlying function's annotations
     unwrapped = template_fn
@@ -389,9 +392,15 @@ def load_yaml_template(volume_vars, extension_installer, loader, node):
         and getattr(unwrapped, '__annotations__') is unwrapped.__wrapped__.__annotations__
     ):
         unwrapped = unwrapped.__wrapped__
+    template_globals = getattr(unwrapped, '__globals__', None)
 
-    props = match_template_props_to_signature(name, template_sig.parameters, props, globals=getattr(unwrapped, '__globals__', None))
+    props = match_template_props_to_signature(name, template_sig.parameters, props, globals=template_globals)
     cfg = template_fn(volume_vars, **props)
+
+    try:
+        typeguard.check_type(argname="return value", value=cfg, expected_type=rt_type, globals=template_globals)
+    except TypeError as exc:
+        raise ConfigurationError(f"Trying to instantiate template `{name}`: {exc}") from exc
 
     if isinstance(cfg, str):
         # Parse provided yaml without template substitution
