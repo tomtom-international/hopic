@@ -15,11 +15,15 @@
 import importlib
 import logging
 import os
-import re
 import subprocess
 import sys
 import tempfile
 from textwrap import dedent
+
+try:
+    from importlib import metadata
+except ImportError:
+    import importlib_metadata as metadata
 
 import click
 
@@ -82,11 +86,7 @@ def install_extensions_with_config(pip_cfg):
                 if not spec['with-extra-index']:
                     raise
 
-                versionstr = subprocess.check_output((sys.executable, "-m", "pip", "--version")).decode("UTF-8")
-                m = re.match(r"^pip (\d+\S*)", versionstr)
-                if not m:
-                    raise
-                versionstr = m.group(1)
+                versionstr = metadata.version("pip")
 
                 def try_int(s):
                     try:
