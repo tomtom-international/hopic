@@ -427,7 +427,8 @@ def load_yaml_template(volume_vars, extension_installer, loader, node):
             try:
                 typeguard.check_type(argname=f"value yielded from generator at index {idx}", value=value, expected_type=yielded_type, globals=template_globals)
             except TypeError as exc:
-                raise ConfigurationError(f"Trying to instantiate template `{name}`: {exc}") from exc
+                # Raise the exception from the yield statement that returned the last value instead of here
+                cfg.throw(ConfigurationError(f"Trying to instantiate template `{name}`: {exc}"))
 
             idx += 1
             new_cfg.append(value)
