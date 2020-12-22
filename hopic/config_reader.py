@@ -16,6 +16,7 @@ from .execution import echo_cmd
 
 from collections import OrderedDict
 from collections.abc import (
+        Generator,
         Mapping,
         Sequence,
     )
@@ -408,6 +409,8 @@ def load_yaml_template(volume_vars, extension_installer, loader, node):
         cfg = yaml.load(cfg, ordered_config_loader(volume_vars, extension_installer))
         if 'config' in cfg:
             cfg = cfg['config']
+    elif isinstance(cfg, Generator):
+        cfg = list(cfg)
 
     return cfg
 
