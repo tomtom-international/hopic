@@ -60,8 +60,6 @@ Pattern = type(re.compile(''))
 
 
 _interphase_dependent_meta = frozenset({
-    'archive',
-    'junit',
     'run-on-change',
     'stash',
     'worktrees',

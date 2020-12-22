@@ -822,9 +822,7 @@ def test_wait_on_full_previous_phase_dependency_multiple_definitions():
         "run-on-change: never",
         "run-on-change: only",
         "run-on-change: new-version-only",
-        "junit: [output/tests/**/*.xml]",
         "stash: {includes: test/**}",
-        "archive: {artifacts: [pattern: test/**]}",
         "worktrees: {doc/build/html: {commit-message: bla bla}}",
     ),
 )
