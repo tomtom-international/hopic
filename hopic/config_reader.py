@@ -909,6 +909,7 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
                 config_file=config,
             ))
             wait_on_full_previous_phase = None
+            run_on_change = None
             for cmd_idx, cmd in enumerate(phase[variant]):
                 for metakey, metaval in cmd.items():
                     if metakey in _interphase_dependent_meta:
@@ -938,6 +939,13 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
                             f"`{variant_node_label_phase[variant]}`.`{variant}`[{variant_node_label_idx[variant]}] ({variant_node_label[variant]!r})",
                             file=config,
                         )
+                if 'run-on-change' in cmd:
+                    if run_on_change is not None and cmd['run-on-change'] != run_on_change:
+                        raise ConfigurationError(
+                            f"`{phasename}`.`{variant}`[{cmd_idx}].`run-on-change` ({cmd['run-on-change']!r}) differs from that previously defined",
+                            file=config,
+                        )
+                    run_on_change = cmd['run-on-change']
                 if 'wait-on-full-previous-phase' in cmd:
                     if wait_on_full_previous_phase is not None:
                         raise ConfigurationError(
