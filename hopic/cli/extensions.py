@@ -86,6 +86,8 @@ def install_extensions_with_config(pip_cfg):
                 if not spec['with-extra-index']:
                     raise
 
+                # This is the first version that fixes https://github.com/pypa/pip/issues/4195
+                required_versionstr = "19.1"
                 versionstr = metadata.version("pip")
 
                 def try_int(s):
@@ -95,14 +97,14 @@ def install_extensions_with_config(pip_cfg):
                         return s
 
                 version = tuple(try_int(x) for x in versionstr.split("."))
-                # This is the first version that fixes https://github.com/pypa/pip/issues/4195
-                if version < (19, 1):
+                required_version = tuple(try_int(x) for x in required_versionstr.split("."))
+                if version < required_version:
                     log.error(
                         dedent(
                             """\
                             pip failed to install with error code %i while using an extra-index.
 
-                            The pip version available (%s) is older than 19.1 and may contain a bug related to usage of --extra-index-url.
+                            The pip version available (%s) is older than %s and may contain a bug related to usage of --extra-index-url.
 
                             Consider updating pip to a more recent version.
                             For example: %s -m pip install --upgrade pip
@@ -110,6 +112,7 @@ def install_extensions_with_config(pip_cfg):
                         ),
                         exc.returncode,
                         versionstr,
+                        required_versionstr,
                         sys.executable,
                     )
                 raise
