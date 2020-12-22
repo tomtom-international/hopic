@@ -22,6 +22,7 @@ import tempfile
 import urllib.parse
 from collections.abc import (
     Mapping,
+    Sequence,
 )
 
 import click
@@ -87,6 +88,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
     artifacts = []
     worktree_commits = {}
     variant_credentials = {}
+    extra_docker_run_args = []
     with DockerContainers() as volumes_from:
         # If the branch is not allowed to publish, skip the publish phase. If run_on_change is set to 'always', phase will be run anyway regardless of
         # this condition. For build phase, run_on_change is set to 'always' by default, so build will always happen.
@@ -170,6 +172,24 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                 image = cmd['image']
             except KeyError:
                 pass
+
+            cmd_extra_docker_run_args = cmd.get('extra-docker-args', '')
+            if cmd_extra_docker_run_args:
+                if not image:
+                    log.warning('`extra-docker-args` has no effect if no Docker image is configured')
+                else:
+                    for arg in cmd_extra_docker_run_args:
+                        value = cmd_extra_docker_run_args[arg]
+                        if isinstance(value, bool):
+                            if not value:
+                                log.warning('A "False" value for an `extra-docker-args` argument has no meaning and will be ignored')
+                            else:
+                                extra_docker_run_args.append(f'--{arg}')
+                        else:
+                            if (isinstance(value, Sequence) and not isinstance(value, str)):
+                                extra_docker_run_args.extend((f'--{arg}={v}' for v in value))
+                            else:
+                                extra_docker_run_args.append(f'--{arg}={value}')
 
             try:
                 docker_in_docker = cmd['docker-in-docker']
@@ -300,6 +320,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                         for volume_from in volumes_from:
                             docker_run += ['--volumes-from=' + volume_from]
 
+                        docker_run += extra_docker_run_args
                         docker_run.append(str(image))
                         final_cmd = docker_run + final_cmd
                     new_env = os.environ.copy()

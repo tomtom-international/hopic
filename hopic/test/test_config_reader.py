@@ -894,3 +894,25 @@ def test_wait_on_full_previous_phase_dependency_default_yes():
     assert 'wait-on-full-previous-phase' not in x_b
     assert y_b['wait-on-full-previous-phase'] is True
     assert 'wait-on-full-previous-phase' not in y_c
+
+
+def test_docker_run_extra_arguments_wrong_type(capfd):
+    with pytest.raises(ConfigurationError, match="`extra-docker-args` argument `hostname` for `v-one` should be a str, not a float"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    """\
+                    image:
+                      default: buildpack-deps:18.04
+
+                    phases:
+                      p-one:
+                        v-one:
+                          - extra-docker-args:
+                              hostname: 3.14
+                          - echo This build shall fail
+                    """
+                )
+            ),
+            {'WORKSPACE': None},
+        )
