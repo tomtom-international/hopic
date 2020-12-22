@@ -1393,7 +1393,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
             }
             // Skip creation of a stage for phases with no variants to execute
             if (variants.size() == 0) {
-              return
+              continue
             }
 
             steps.stage(phase) {
