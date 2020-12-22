@@ -980,7 +980,6 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
             if variant not in variant_node_label:
                 variant_node_label[variant] = None
                 variant_node_label_phase[variant] = phasename
-            variant_node_label.setdefault(variant, None)
             if (
                 wait_on_full_previous_phase is None
                 and previous_phase is not None
