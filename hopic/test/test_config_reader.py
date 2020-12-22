@@ -170,6 +170,26 @@ def mock_yaml_plugin(monkeypatch):
             yield from cmds
             yield "echo cleanup"
 
+    class TestBadGeneratorTemplate:
+        name = "bad-generator"
+
+        def load(self):
+            unwrapped = self.bad_generator_template
+            while (
+                hasattr(unwrapped, '__wrapped__')
+                and getattr(unwrapped.__wrapped__, '__annotations__', None) is not None
+                and getattr(unwrapped, '__annotations__') is unwrapped.__wrapped__.__annotations__
+            ):
+                unwrapped = unwrapped.__wrapped__
+            return unwrapped
+
+        @staticmethod
+        def bad_generator_template(
+            volume_vars : typing.Mapping[str, str],
+        ) -> typing.Generator[typing.Mapping[str, typing.Any], None, None]:
+            yield {"sh": ["ls"]}
+            yield False
+
     def mock_entry_points():
         return {
             'hopic.plugins.yaml': (
@@ -181,6 +201,7 @@ def mock_yaml_plugin(monkeypatch):
                 TestWrongReturnTemplate(),
                 TestNonGeneratorTemplate(),
                 TestGeneratorTemplate(),
+                TestBadGeneratorTemplate(),
             )
         }
     monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
@@ -673,6 +694,15 @@ def test_template_generator(mock_yaml_plugin):
         ["echo", "do something"],
         ["echo", "cleanup"],
     ]
+
+
+def test_bad_generator_template(mock_yaml_plugin):
+    with pytest.raises((ConfigurationError, TypeError), match=r"(?i)value yielded from generator\b.*?\bmust be (?:dict|\S*\bMapping); got bool instead"):
+        config_reader.read(_config_file(dedent('''\
+            phases:
+              test:
+                example: !template bad-generator
+        ''')), {'WORKSPACE': None})
 
 
 def test_nested_command_list_flattening():

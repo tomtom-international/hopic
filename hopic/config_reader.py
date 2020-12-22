@@ -410,8 +410,19 @@ def load_yaml_template(volume_vars, extension_installer, loader, node):
         if 'config' in cfg:
             cfg = cfg['config']
     elif isinstance(cfg, Generator):
+        yielded_type = typing.Any
+        if getattr(rt_type, "__origin__", None) in (typing.Generator, Generator):
+            rt_args = getattr(rt_type, "__args__", None)
+            if rt_args:
+                yielded_type = rt_args[0]
+
         new_cfg = []
-        for value in cfg:
+        for idx, value in enumerate(cfg):
+            try:
+                typeguard.check_type(argname=f"value yielded from generator at index {idx}", value=value, expected_type=yielded_type, globals=template_globals)
+            except TypeError as exc:
+                raise ConfigurationError(f"Trying to instantiate template `{name}`: {exc}") from exc
+
             new_cfg.append(value)
         cfg = new_cfg
 
