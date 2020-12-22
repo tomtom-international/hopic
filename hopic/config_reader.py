@@ -417,12 +417,19 @@ def load_yaml_template(volume_vars, extension_installer, loader, node):
                 yielded_type = rt_args[0]
 
         new_cfg = []
-        for idx, value in enumerate(cfg):
+        idx = 0
+        cfg = iter(cfg)
+        while True:
+            try:
+                value = next(cfg)
+            except StopIteration:
+                break
             try:
                 typeguard.check_type(argname=f"value yielded from generator at index {idx}", value=value, expected_type=yielded_type, globals=template_globals)
             except TypeError as exc:
                 raise ConfigurationError(f"Trying to instantiate template `{name}`: {exc}") from exc
 
+            idx += 1
             new_cfg.append(value)
         cfg = new_cfg
 
