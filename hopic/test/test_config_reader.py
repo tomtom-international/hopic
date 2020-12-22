@@ -851,27 +851,24 @@ def test_wait_on_full_previous_phase_dependency_violation(dep_option):
 
 
 def test_wait_on_full_previous_phase_dependency_run_on_change():
-    cfg = config_reader.read(
-        _config_file(
-            dedent(
-                """\
-                phases:
-                  x:
-                    a:
-                      - run-on-change: always
-                  y:
-                    a:
-                      - run-on-change: only
-                        wait-on-full-previous-phase: no
-                """
-            )
-        ),
-        {'WORKSPACE': None},
-    )
-    (x_a,) = cfg['phases']['x']['a']
-    (y_a,) = cfg['phases']['y']['a']
-    assert 'wait-on-full-previous-phase' not in x_a
-    assert y_a['wait-on-full-previous-phase'] is False
+    with pytest.raises(ConfigurationError, match=r"(?i)`wait-on-full-previous-phase` disabled but `y`.`a`.`run-on-change` set to a value other than always"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    """\
+                    phases:
+                      x:
+                        a:
+                          - run-on-change: always
+                      y:
+                        a:
+                          - run-on-change: only
+                            wait-on-full-previous-phase: no
+                    """
+                )
+            ),
+            {'WORKSPACE': None},
+        )
 
 
 def test_wait_on_full_previous_phase_dependency_default_yes():
