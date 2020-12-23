@@ -1034,6 +1034,12 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     }
   }
 
+  private def decorate_output(Closure closure) {
+    steps.ansiColor('xterm') {
+      return closure()
+    }
+  }
+
   private def print_node_usage() {
     def largest_name_size = this.nodes_usage.collect { it.value.collect { it.name }}.flatten().max { it.size() }.size()
     String printable_string = ""
@@ -1058,7 +1064,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     def default_node = buildParams.getOrDefault('default_node_expr', this.default_node_expr)
     def exclude_branches_filled_with_pr_branch_discovery = buildParams.getOrDefault('exclude_branches_filled_with_pr_branch_discovery', true)
 
-    steps.ansiColor('xterm') {
+    this.decorate_output {
       def (phases, is_publishable_change, submit_meta, additional_locks) = this.on_node(node_expr: default_node, name: "hopic-init") {
         return this.with_hopic { cmd ->
           def workspace = steps.pwd()
