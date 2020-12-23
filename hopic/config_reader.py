@@ -802,6 +802,10 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
                     raise ConfigurationError(
                         f"`extra-docker-args` argument `{k}` for `{variant}` should be a {allowed_options[k].__name__}, not a {type(v).__name__}",
                         file=config_file)
+                if isinstance(v, str) and ' ' in v:
+                    raise ConfigurationError(
+                        f"`extra-docker-args` argument `{k}` for `{variant}` contains whitespace, which is not permitted.",
+                        file=config_file)
 
     if 'environment' in cmd and 'sh' not in cmd:
         raise ConfigurationError(

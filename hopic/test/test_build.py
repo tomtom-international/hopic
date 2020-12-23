@@ -479,6 +479,27 @@ def test_docker_run_extra_arguments_forbidden_option(capfd):
         assert option in err.splitlines()[2], f'expected {option} in error message'
 
 
+def test_docker_run_extra_arguments_whitespace_in_option(capfd):
+    result = run_with_config(dedent('''\
+            image:
+              default: buildpack-deps:18.04
+
+            phases:
+              p-one:
+                v-one:
+                  - extra-docker-args:
+                      hostname: something --user root
+                  - echo This build shall fail
+            '''), ('build',),
+            )
+
+    assert result.exit_code != 0
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+    assert 'argument `hostname` for `v-one` contains whitespace, which is not permitted.' in err.splitlines()[0]
+
+
 def test_override_default_volume(monkeypatch):
     global_source = '/somewhere/over/the/rainbow'
     local_source = '/platform/nine/and/three/quarters'
