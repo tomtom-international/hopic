@@ -209,7 +209,7 @@ def restore_mtime_from_git(repo, files=None):
             # E.g. Python >= 3.3 and Linux kernel >= 2.6.22
             if os.utime in getattr(os, 'supports_follow_symlinks', set()):
                 os.utime(path, (mtime, mtime), follow_symlinks=False)
-        elif object_type == GitObjectType.symlink:
+        elif object_type == GitObjectType.gitlink:
             # Skip gitlinks: used by submodules, they don't exist as regular files
             pass
         elif object_type == GitObjectType.regular_file:
