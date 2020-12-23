@@ -1035,8 +1035,10 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   }
 
   private def decorate_output(Closure closure) {
-    steps.ansiColor('xterm') {
-      return closure()
+    steps.timestamps {
+      steps.ansiColor('xterm') {
+        return closure()
+      }
     }
   }
 
