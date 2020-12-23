@@ -6,7 +6,10 @@ method java.util.regex.MatchResult start
 method java.util.regex.MatchResult end
 method java.util.Map getOrDefault
 method org.jenkinsci.plugins.workflow.support.steps.build.RunWrapper getRawBuild
+method hudson.model.ParameterDefinition getName
+method hudson.model.ParametersDefinitionProperty getParameterDefinitions
 method hudson.model.Run delete
+method hudson.model.Run getParent
 staticMethod groovy.json.JsonOutput toJson java.lang.Object
 staticMethod org.codehaus.groovy.runtime.DefaultGroovyMethods getAt java.util.List java.util.Collection
 staticMethod org.codehaus.groovy.runtime.DefaultGroovyMethods getAt java.lang.Object java.lang.String
