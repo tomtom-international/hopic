@@ -52,27 +52,15 @@ properties([
       ),
   ]),
   parameters([
-    choice(name:        'HOPIC_VERBOSITY',
-           choices:      ['INFO', 'DEBUG'],
-           description:  'Verbosity level to execute Hopic at.'),
-    choice(name:         'GIT_VERBOSITY',
-           choices:      ['INFO', 'DEBUG'],
-           description:  'Verbosity level to execute Git commands at.'),
     choice(name: 'MODALITY',
            choices: 'NORMAL\nAUTO_MERGE'
              + (BRANCH_NAME =~ /^release\/\d+(?:\.\d+)?$/ ? '\nBUMP_VERSION' : ''),
            description: 'Modality of this execution of the pipeline.'),
-    booleanParam(defaultValue: false,
-                 description: 'Clean build',
-                 name: 'CLEAN'),
   ]),
-  disableConcurrentBuilds(),
 ])
 
 timeout(time: 10, unit: 'MINUTES') {
-  timestamps {
-    hopic.build(
-      clean: params.CLEAN || params.MODALITY != "NORMAL",
-    )
-  }
+  hopic.build(
+    clean: params.CLEAN || params.MODALITY != "NORMAL",
+  )
 }
