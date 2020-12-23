@@ -15,6 +15,7 @@
  */
 
 import groovy.json.JsonOutput
+import hudson.model.ParametersDefinitionProperty
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter;
 import org.jenkinsci.plugins.credentialsbinding.impl.CredentialNotFoundException
@@ -1040,7 +1041,19 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     List props = null
     try {
       props = steps.currentBuild.rawBuild.parent.properties.collect { k, v -> v }
-      return [props, null]
+
+      def non_param_props = []
+      def params = [:]
+      props.each {
+        if (it instanceof ParametersDefinitionProperty) {
+          it.parameterDefinitions.each {
+            params[it.name] = it
+          }
+        } else {
+          non_param_props << it
+        }
+      }
+      return [non_param_props, params]
     } catch (RejectedAccessException e) {
       return [props, null]
     }
@@ -1057,6 +1070,33 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       props.add(steps.disableConcurrentBuilds())
     }
 
+    if (params == null) {
+      steps.echo('\033[33m[warning] could not determine build parameters, will not add extra parameters\033[39m')
+    } else {
+      if (!params.containsKey('HOPIC_VERBOSITY')) {
+        params['HOPIC_VERBOSITY'] = steps.choice(
+          name:        'HOPIC_VERBOSITY',
+          description: 'Verbosity level to execute Hopic at.',
+          choices:     ['INFO', 'DEBUG'],
+        )
+      }
+      if (!params.containsKey('GIT_VERBOSITY')) {
+        params['GIT_VERBOSITY'] = steps.choice(
+          name:        'GIT_VERBOSITY',
+          description: 'Verbosity level to execute Hopic\'s Git commands at.',
+          choices:     ['INFO', 'DEBUG'],
+        )
+      }
+      if (!params.containsKey('CLEAN')) {
+        params['CLEAN'] = steps.booleanParam(
+          name:        'CLEAN',
+          description: 'Clean build',
+          defaultValue: false,
+        )
+      }
+
+      props.add(steps.parameters(params.values()))
+    }
     steps.properties(props)
   }
 
