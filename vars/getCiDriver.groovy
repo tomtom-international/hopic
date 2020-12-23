@@ -19,6 +19,7 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter;
 import org.jenkinsci.plugins.credentialsbinding.impl.CredentialNotFoundException
 import org.jenkinsci.plugins.scriptsecurity.sandbox.RejectedAccessException
+import org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty
 
 class ChangeRequest {
   protected steps
@@ -1034,6 +1035,31 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     }
   }
 
+  @NonCPS
+  private def determine_props() {
+    List props = null
+    try {
+      props = steps.currentBuild.rawBuild.parent.properties.collect { k, v -> v }
+      return [props, null]
+    } catch (RejectedAccessException e) {
+      return [props, null]
+    }
+  }
+
+  private def extend_build_properties() {
+    def (props, params) = determine_props()
+    if (props == null) {
+      steps.echo('\033[33m[warning] could not determine build properties, will not add extra properties\033[39m')
+      return
+    }
+
+    if (!props.any { it instanceof DisableConcurrentBuildsJobProperty }) {
+      props.add(steps.disableConcurrentBuilds())
+    }
+
+    steps.properties(props)
+  }
+
   private def decorate_output(Closure closure) {
     steps.timestamps {
       steps.ansiColor('xterm') {
@@ -1066,6 +1092,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     def default_node = buildParams.getOrDefault('default_node_expr', this.default_node_expr)
     def exclude_branches_filled_with_pr_branch_discovery = buildParams.getOrDefault('exclude_branches_filled_with_pr_branch_discovery', true)
 
+    this.extend_build_properties()
     this.decorate_output {
       def (phases, is_publishable_change, submit_meta, additional_locks) = this.on_node(node_expr: default_node, name: "hopic-init") {
         return this.with_hopic { cmd ->
