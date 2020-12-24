@@ -1036,6 +1036,16 @@ def getinfo(ctx, phase, variant, post_submit):
 
                 for cmd in curvariant:
                     var_info.update(append_meta_from_cmd(var_info, cmd, permitted_fields))
+
+                # mark empty variants as being a nop
+                if (
+                    len(curvariant) == 0
+                    or (
+                        len(curvariant) == 1
+                        and dict(curvariant[0]) == {"wait-on-full-previous-phase": False}
+                    )
+                ):
+                    var_info["nop"] = True
     click.echo(json.dumps(info, indent=4, separators=(',', ': '), cls=JSONEncoder))
 
 

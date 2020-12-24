@@ -1285,6 +1285,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
                 [
                   (variant): [
                     label: meta.getOrDefault('node-label', default_node),
+                    nop: meta.getOrDefault('nop', false),
                     run_on_change: meta.getOrDefault('run-on-change', 'always'),
                     wait_on_full_previous_phase: meta.getOrDefault('wait-on-full-previous-phase', true),
                   ]
@@ -1413,7 +1414,9 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
                         this.ensure_unstashed(variant)
 
-                        this.build_variant(phase, variant, cmd, workspace, artifactoryBuildInfo, hopic_extra_arguments)
+                        if (!meta.nop) {
+                          this.build_variant(phase, variant, cmd, workspace, artifactoryBuildInfo, hopic_extra_arguments)
+                        }
 
                         // Execute a string of uninterrupted phases with our current variant for which we don't need to wait on preceding phases
                         //
@@ -1433,7 +1436,9 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
                           // Execute this variant's next phase already.
                           // Because the user asked for it, in order not to relinquish this node until we really have to.
-                          this.build_variant(next_phase, variant, cmd, workspace, artifactoryBuildInfo, hopic_extra_arguments)
+                          if (!next_variant.nop) {
+                            this.build_variant(next_phase, variant, cmd, workspace, artifactoryBuildInfo, hopic_extra_arguments)
+                          }
                         }
                       }
                     }
