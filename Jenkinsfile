@@ -38,10 +38,8 @@ library(
   ]))
 def hopic = getCiDriver("git+${repo}@${version}")
 
-pipeline {
-  agent none
-
-  triggers {
+properties([
+  pipelineTriggers([
     parameterizedCron(''
       + (BRANCH_NAME =~ /^master$|^release\/\d+(?:\.\d+)?$/ ? '''
         # trigger build as AUTO_MERGE each 2 hours, on master and release branches only
@@ -51,40 +49,18 @@ pipeline {
         # Bump the version early on every Monday. Only does something if there are any bumpable changes since the last tagged version.
         H H(7-13) * * 1 % MODALITY=BUMP_VERSION
         ''' : '')
-      )
-  }
-
-  parameters {
-    choice(name:        'HOPIC_VERBOSITY',
-           choices:      ['INFO', 'DEBUG'],
-           description:  'Verbosity level to execute Hopic at.')
-    choice(name:         'GIT_VERBOSITY',
-           choices:      ['INFO', 'DEBUG'],
-           description:  'Verbosity level to execute Git commands at.')
+      ),
+  ]),
+  parameters([
     choice(name: 'MODALITY',
            choices: 'NORMAL\nAUTO_MERGE'
              + (BRANCH_NAME =~ /^release\/\d+(?:\.\d+)?$/ ? '\nBUMP_VERSION' : ''),
-           description: 'Modality of this execution of the pipeline.')
-    booleanParam(defaultValue: false,
-                 description: 'Clean build',
-                 name: 'CLEAN')
-  }
+           description: 'Modality of this execution of the pipeline.'),
+  ]),
+])
 
-  options {
-    timestamps()
-    disableConcurrentBuilds()
-    timeout(time: 10, unit: 'MINUTES')
-  }
-
-  stages {
-    stage("Commit Stage") {
-      steps {
-        script {
-          hopic.build(
-            clean: params.CLEAN || params.MODALITY != "NORMAL",
-          )
-        }
-      }
-    }
-  }
+timeout(time: 10, unit: 'MINUTES') {
+  hopic.build(
+    clean: params.CLEAN || params.MODALITY != "NORMAL",
+  )
 }
