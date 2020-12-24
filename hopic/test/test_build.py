@@ -1031,6 +1031,36 @@ def test_with_credentials_obfuscation(monkeypatch, capfd):
     assert result.exit_code == 0
 
 
+def test_with_missing_credentials_obfuscation(monkeypatch, capfd):
+    credential_id = 'test_credentialId'
+    project_name = 'test_project'
+
+    def get_credential_id(*_):
+        return None
+
+    monkeypatch.setattr(credentials, 'get_credential_by_id', get_credential_id)
+
+    result = run_with_config(dedent(f'''\
+                project-name: {project_name}
+                phases:
+                  build_and_test:
+                    clang-tidy:
+                      - with-credentials:
+                        - id: {credential_id}
+                          type: username-password
+                      - echo Command without credential to verify missing credential(s)
+                      - with-credentials:
+                        - id: {credential_id}
+                          type: username-password
+                      - echo $USERNAME $PASSWORD
+                '''), ('build',))
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    assert result.exit_code != 0
+
+
 def test_with_credentials_obfuscation_empty_credentials(monkeypatch, capfd):
     def get_credential_id(project_name_arg, cred_id):
         return '', ''

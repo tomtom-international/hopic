@@ -37,8 +37,6 @@ class MissingCredentialVarError(ClickException):
     exit_code = 34
 
     def __init__(self, credential_id, var_name):
+        super().__init__(f"credential '{credential_id}' not available when trying to expand variable '{var_name}'")
         self.credential_id = credential_id
         self.var_name      = var_name
-
-    def format_message(self):
-        return f"credential '{self.credential_id}' not available when trying to expand variable '{self.var_name}'"
