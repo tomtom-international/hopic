@@ -17,7 +17,7 @@
 Changelog
 =========
 
-1.28.0-9+g35820157
+1.28.0
 ======
 
 New features
@@ -25,6 +25,25 @@ New features
 
 * feat(templates): use 'typeguard' pkg to type check arguments to templates (#272)
 * feat(config): complain about templates' defaults not matching their own types (#273)
+* feat(groovy): log node usage at end of pipeline (#275)
+* feat(groovy): automatically add verbosity and clean parameters to jobs (#283)
+* feat(config): support generator template functions (#282)
+* feat(config): type check the results yielded from a generator template function (#282)
+
+Improvements
+------------
+
+* improvement: git clean sub modules and sub repositories too (#274)
+* improvement(logging): log version bumps at INFO level including original version (#276)                     
+* improvement(extensions): inform users when they might need to update pip (#281)             
+* improvement(config): check return value of templates agains their annotations (#282)
+* improvement(config): raise type error from yield statement in generator template (#282)
+
+Bug fixes
+---------
+
+* fix(groovy): keep a reference to the usage entry we're updating (broken by #275) (#278)                     
+* fix(credentials): don't encode for forms but for URLs (#280)
 
 Improvements
 ------------
