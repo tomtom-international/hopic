@@ -198,7 +198,8 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                     cred_vars = {name for key, name in creds.items() if key.endswith('-variable')}
                     for cred_var in cred_vars:
                         if cred_var in volume_vars:
-                            variant_credentials[cred_var] = volume_vars[cred_var]
+                            if not isinstance(volume_vars[cred_var], MissingCredentialVarError):
+                                variant_credentials[cred_var] = volume_vars[cred_var]
                         else:
                             volume_vars[cred_var] = MissingCredentialVarError(creds['id'], cred_var)
 
