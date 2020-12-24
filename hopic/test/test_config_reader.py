@@ -126,6 +126,70 @@ def mock_yaml_plugin(monkeypatch):
                 'defaulted': defaulted_param,
             },)
 
+    class TestWrongReturnTemplate:
+        name = "wrong-return"
+
+        def load(self):
+            return self.wrong_return_template
+
+        @staticmethod
+        def wrong_return_template(
+            volume_vars : typing.Mapping[str, str],
+        ) -> typing.List[typing.Dict[str, typing.Any]]:
+            return [
+                {43: None},
+            ]
+
+    class TestNonGeneratorTemplate:
+        name = "non-generator"
+
+        def load(self):
+            return self.non_generator_template
+
+        @staticmethod
+        def non_generator_template(
+            volume_vars : typing.Mapping[str, str],
+        ) -> typing.Generator:
+            return [
+                {"sh": ["ls"]},
+            ]
+
+    class TestGeneratorTemplate:
+        name = 'generator'
+
+        def load(self):
+            return self.generator_template
+
+        @staticmethod
+        def generator_template(
+            volume_vars : typing.Mapping[str, str],
+            *,
+            cmds: typing.List[str] = [],
+        ) -> typing.Generator:
+            yield "echo setup"
+            yield from cmds
+            yield "echo cleanup"
+
+    class TestBadGeneratorTemplate:
+        name = "bad-generator"
+
+        def load(self):
+            unwrapped = self.bad_generator_template
+            while (
+                hasattr(unwrapped, '__wrapped__')
+                and getattr(unwrapped.__wrapped__, '__annotations__', None) is not None
+                and getattr(unwrapped, '__annotations__') is unwrapped.__wrapped__.__annotations__
+            ):
+                unwrapped = unwrapped.__wrapped__
+            return unwrapped
+
+        @staticmethod
+        def bad_generator_template(
+            volume_vars : typing.Mapping[str, str],
+        ) -> typing.Generator[typing.Mapping[str, typing.Any], None, None]:
+            yield {"sh": ["ls"]}
+            yield False
+
     def mock_entry_points():
         return {
             'hopic.plugins.yaml': (
@@ -134,6 +198,10 @@ def mock_yaml_plugin(monkeypatch):
                 TestSimpleTemplate(),
                 TestSequenceTemplate(),
                 TestWrongDefaultTemplate(),
+                TestWrongReturnTemplate(),
+                TestNonGeneratorTemplate(),
+                TestGeneratorTemplate(),
+                TestBadGeneratorTemplate(),
             )
         }
     monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
@@ -590,6 +658,50 @@ def test_template_sequence_with_type_mismatched_entry(mock_yaml_plugin):
                     - mooh
                     - false
                     - sheep
+        ''')), {'WORKSPACE': None})
+
+
+def test_template_wrong_return(mock_yaml_plugin):
+    with pytest.raises((ConfigurationError, TypeError), match=r"(?i)return value(?:\[.*?\])? must be .*?; got .*? instead"):
+        config_reader.read(_config_file(dedent('''\
+            phases:
+              test:
+                example: !template wrong-return
+        ''')), {'WORKSPACE': None})
+
+
+def test_template_non_generator(mock_yaml_plugin):
+    with pytest.raises((ConfigurationError, TypeError), match=r"(?i)return value must be \S*\bGenerator; got list instead"):
+        config_reader.read(_config_file(dedent('''\
+            phases:
+              test:
+                example: !template non-generator
+        ''')), {'WORKSPACE': None})
+
+
+def test_template_generator(mock_yaml_plugin):
+    cfg = config_reader.read(_config_file(dedent('''\
+        phases:
+          test:
+            example: !template
+              name: generator
+              cmds:
+                - echo "do something"
+    ''')), {'WORKSPACE': None})
+    cmds = [cmd["sh"] for cmd in cfg["phases"]["test"]["example"]]
+    assert cmds == [
+        ["echo", "setup"],
+        ["echo", "do something"],
+        ["echo", "cleanup"],
+    ]
+
+
+def test_bad_generator_template(mock_yaml_plugin):
+    with pytest.raises((ConfigurationError, TypeError), match=r"(?i)value yielded from generator\b.*?\bmust be (?:dict|\S*\bMapping); got bool instead"):
+        config_reader.read(_config_file(dedent('''\
+            phases:
+              test:
+                example: !template bad-generator
         ''')), {'WORKSPACE': None})
 
 
