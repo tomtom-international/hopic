@@ -40,3 +40,11 @@ class MissingCredentialVarError(ClickException):
         super().__init__(f"credential '{credential_id}' not available when trying to expand variable '{var_name}'")
         self.credential_id = credential_id
         self.var_name      = var_name
+
+
+class UnknownPhaseError(ClickException):
+    exit_code = 35
+
+    def __init__(self, phase):
+        super().__init__(f"build does not contain phase(s): {', '.join(phase)}")
+        self.phase = phase
