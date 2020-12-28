@@ -17,6 +17,21 @@
 Changelog
 =========
 
+1.28.1
+======
+
+Improvements
+------------
+
+* add labels to all ci-driver build steps (#287)
+
+Bug fixes
+---------
+
+* fix: ensure base class of MissingCredentialVar is initialized (#286)
+* fix: do not pretend that a missing credential is a credential (#286)
+* fix(git_time): check for intended GitObjectType value (#285)
+
 1.28.0
 ======
 
