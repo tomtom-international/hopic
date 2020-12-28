@@ -38,7 +38,9 @@ class ChangeRequest {
   }
 
   protected def maySubmitImpl(target_commit, source_commit, allow_cache = true) {
-    return !line_split(steps.sh(script: 'LC_ALL=C.UTF-8 TZ=UTC git log ' + shell_quote(target_commit) + '..' + shell_quote(source_commit) + " --pretty='%H:%s' --reverse", returnStdout: true)
+    return !line_split(steps.sh(script: 'LC_ALL=C.UTF-8 TZ=UTC git log ' + shell_quote(target_commit) + '..' + shell_quote(source_commit) + " --pretty='%H:%s' --reverse",
+                                label: 'Hopic (internal): retrieving git log',
+                                returnStdout: true)
       .trim()).find { line ->
         if (!line) {
           return false
@@ -254,6 +256,7 @@ class BitbucketPullRequest extends ChangeRequest {
                                 + ' --change-request=' + shell_quote(change_request.getOrDefault('id', steps.env.CHANGE_ID))
                                 + ' --title=' + shell_quote(change_request.getOrDefault('title', steps.env.CHANGE_TITLE))
                                 + extra_params,
+                          label: 'Hopic: preparing source tree',
                           returnStdout: true)).findAll{it.size() > 0}
     if (output.size() <= 0) {
       return null
@@ -299,7 +302,9 @@ class BitbucketPullRequest extends ChangeRequest {
     if (!this.keyIds[key]) {
       // We could use java.security.MessageDigest instead of relying on a node. But that requires extra script approvals.
       assert steps.env.NODE_NAME != null, "notify_build_result must be executed on a node the first time"
-      this.keyIds[key] = steps.sh(script: "echo -n ${shell_quote(key)} | md5sum", returnStdout: true).substring(0, 32)
+      this.keyIds[key] = steps.sh(script: "echo -n ${shell_quote(key)} | md5sum",
+                                  label: 'Hopic (internal): generating unique build key',
+                                  returnStdout: true).substring(0, 32)
     }
     def keyid = this.keyIds[key]
 
@@ -342,7 +347,8 @@ class ModalityRequest extends ChangeRequest {
       full_cmd = "${prepare_cmd} bump-version"
     }
     def output = line_split(steps.sh(script: full_cmd,
-                          returnStdout: true)).findAll{it.size() > 0}
+                            label: 'Hopic: preparing modality change to ' + modality,
+                            returnStdout: true)).findAll{it.size() > 0}
     if (output.size() <= 0) {
       return null
     }
@@ -465,7 +471,9 @@ class CiDriver {
           // Split on the last '@' only
           def split = this.repo[4..-1].split('@')
           def (remote, ref) = [split[0..-2].join('@'), split[-1]]
-          def commit = line_split(steps.sh(script: "git ls-remote ${shell_quote(remote)}", returnStdout: true)).find { line ->
+          def commit = line_split(steps.sh(script: "git ls-remote ${shell_quote(remote)}",
+                                           label: 'Hopic (internal): finding latest Hopic commit',
+                                           returnStdout: true)).find { line ->
             def (hash, remote_ref) = line.split('\t')
             return (remote_ref == ref || remote_ref == "refs/heads/${ref}" || remote_ref == "refs/tags/${ref}")
           }
@@ -504,7 +512,9 @@ RUN pip install --no-cache-dir --upgrade ${shell_quote(this.repo)}
 EOF
 cp -p setup.py hopic/test/docker-images/python/
 docker build --build-arg=PYTHON_VERSION=3.6 --iidfile=${shell_quote(docker_src)}/id.txt hopic/test/docker-images/python
-""")
+""",
+                 label: 'Hopic: installing Hopic',
+)
         final imageId = steps.readFile("${docker_src}/id.txt").trim()
         this.docker_images[executor_identifier] = steps.docker.image(imageId)
       }
@@ -552,9 +562,11 @@ esac
 ''')
 
           return steps.withEnv(["GIT_ASKPASS=${askpass_program}"]) {
-            steps.sh(script: 'chmod 700 "${GIT_ASKPASS}"')
+            steps.sh(script: 'chmod 700 "${GIT_ASKPASS}"',
+                     label: 'Hopic (internal): mark helper script as executable')
             def r = closure()
-            steps.sh(script: 'rm "${GIT_ASKPASS}"')
+            steps.sh(script: 'rm "${GIT_ASKPASS}"',
+                     label: 'Hopic (internal): cleaning up')
             return r
           }
       }
@@ -650,7 +662,8 @@ esac
 #!/bin/sh
 echo ''' + shell_quote(steps.env[passphrase_var] ?: '') + '''
 ''')
-              steps.sh(script: "chmod 700 ${shell_quote(askpass_program)}")
+              steps.sh(script: "chmod 700 ${shell_quote(askpass_program)}",
+                       label: 'Hopic (internal): mark helper script as executable')
             },
             (ssh_program): {
               steps.writeFile(
@@ -670,7 +683,8 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 + (steps.env[username_var] != null ? ''' -l ''' + shell_quote(steps.env[username_var]) : '')
 + ''' -o StrictHostKeyChecking=no -o IdentitiesOnly=yes "$@"
 ''')
-              steps.sh(script: "chmod 700 ${shell_quote(ssh_program)}")
+              steps.sh(script: "chmod 700 ${shell_quote(ssh_program)}",
+                       label: 'Hopic (internal): mark helper script as executable')
             },
           ],
         ]
@@ -703,17 +717,19 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       throw e
     } finally {
       if (files) {
-        steps.sh('rm -f -- ' + files.collect{shell_quote(it.key)}.join(' '))
+        steps.sh(script: 'rm -f -- ' + files.collect{shell_quote(it.key)}.join(' '),
+                 label: 'Hopic (internal): cleaning up')
       }
     }
   }
 
-  private def subcommand_with_credentials(String cmd, String subcmd, credentials) {
+  private def subcommand_with_credentials(String cmd, String subcmd, credentials, String description) {
     this.with_credentials(credentials) { creds_info ->
       def white_listed_vars = creds_info*.white_listed_vars.flatten().findAll{it}
       steps.sh(script: cmd
         + white_listed_vars.collect{" --whitelisted-var=${shell_quote(it)}"}.join('')
-        + ' ' + subcmd)
+        + ' ' + subcmd,
+        label: description)
     }
   }
 
@@ -743,6 +759,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       this.target_commit = steps.sh(script: cmd
                                           + ' checkout-source-tree'
                                           + params,
+                                    label: 'Hopic: checking out source tree',
                                     returnStdout: true).trim()
       if (this.get_change() != null) {
         def submit_info = this.get_change().apply(cmd, steps.scm.userRemoteConfigs[0].url)
@@ -768,10 +785,12 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     }
 
     // Ensure any required extensions are available
-    steps.sh(script: "${cmd} install-extensions")
+    steps.sh(script: "${cmd} install-extensions",
+             label: 'Hopic: installing extensions')
 
     def code_dir_output = tmpdir + '/code-dir.txt'
-    if (steps.sh(script: 'LC_ALL=C.UTF-8 TZ=UTC git config --get hopic.code.dir > ' + shell_quote(code_dir_output), returnStatus: true) == 0) {
+    if (steps.sh(script: 'LC_ALL=C.UTF-8 TZ=UTC git config --get hopic.code.dir > ' + shell_quote(code_dir_output), returnStatus: true,
+                 label: 'Hopic (internal): retrieving Hopic workspace directory') == 0) {
       workspace = steps.readFile(code_dir_output).trim()
     }
 
@@ -823,6 +842,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       def may_publish = this.with_hopic { cmd ->
         return steps.sh(
             script: "${cmd} may-publish",
+            label: 'Hopic (internal): checking if changes may be published',
             returnStatus: true,
           ) == 0
       }
@@ -849,6 +869,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       steps.unstash(name)
       steps.sh(
           script: "${cmd} unbundle-worktrees --bundle=worktree-transfer.bundle",
+          label: 'Hopic (internal): unbundle worktrees'
         )
       this.worktree_bundles[name].nodes[executor_identifier] = true
     }
@@ -862,6 +883,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   public String[] get_additional_ci_lock_names(cmd) {
     def config = steps.readJSON(text: steps.sh(
       script: "${cmd} show-config",
+      label: 'Hopic (internal): retrieving additional CI lock names',
       returnStdout: true,
     ))
     return config.getOrDefault('ci-locks', []).collect { lock ->
@@ -1183,7 +1205,9 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           def scm = steps.checkout(steps.scm)
 
           // Don't trust Jenkin's scm.GIT_COMMIT because it sometimes lies
-          steps.env.GIT_COMMIT          = steps.sh(script: 'LC_ALL=C.UTF-8 TZ=UTC git rev-parse HEAD', returnStdout: true).trim()
+          steps.env.GIT_COMMIT          = steps.sh(script: 'LC_ALL=C.UTF-8 TZ=UTC git rev-parse HEAD',
+                                                   label: 'Hopic (internal): determine current commit (because Jenkins lies!)',
+                                                   returnStdout: true).trim()
           steps.env.GIT_COMMITTER_NAME  = scm.GIT_COMMITTER_NAME
           steps.env.GIT_COMMITTER_EMAIL = scm.GIT_COMMITTER_EMAIL
           steps.env.GIT_AUTHOR_NAME     = scm.GIT_AUTHOR_NAME
@@ -1197,9 +1221,11 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           // variants to execute (below) using the final config file.
           this.ensure_checkout(cmd, clean)
 
-          def phases = steps.readJSON(text: steps.sh(script: "${cmd} getinfo",
-              returnStdout: true))
-              .collect { phase, variants ->
+          def phases = steps.readJSON(text: steps.sh(
+              script: "${cmd} getinfo",
+              label: 'Hopic: retrieving Hopic execution graph',
+              returnStdout: true
+            )).collect { phase, variants ->
             [
               phase: phase,
               variants: variants.collect { variant, meta ->
@@ -1214,6 +1240,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
           def submit_meta = steps.readJSON(text: steps.sh(
               script: "${cmd} getinfo --post-submit",
+              label: 'Hopic (internal): running post submit',
               returnStdout: true,
             ))
 
@@ -1325,6 +1352,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
                           // Meta-data retrieval needs to take place on the executing node to ensure environment variable expansion happens properly
                           def meta = steps.readJSON(text: steps.sh(
                               script: "${cmd} getinfo --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant),
+                              label: "Hopic: retrieving configuration for phase '" + phase + "', variant '" + variant + "'",
                               returnStdout: true,
                             ))
 
@@ -1335,7 +1363,8 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
                                 'build'
                               + ' --phase=' + shell_quote(phase)
                               + ' --variant=' + shell_quote(variant)
-                              , meta.getOrDefault('with-credentials', []))
+                              , meta.getOrDefault('with-credentials', []),
+                              "Hopic: running build for phase '" + phase + "',  variant '" + variant + "'")
                           } catch(Exception e) {
                             error_occurred = true // Jenkins only sets its currentResult to Failure after all user code is executed
                             throw e
@@ -1382,7 +1411,9 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
                             if (stash_dir.startsWith('/')) {
                               def cwd = steps.pwd()
                               // We could use java.io.File and java.nio.file.Path relativize, but that requires extra script approvals.
-                              stash_dir = steps.sh(script: "realpath --relative-to=$cwd ${stash_dir}", returnStdout: true).trim()
+                              stash_dir = steps.sh(script: "realpath --relative-to=$cwd ${stash_dir}", 
+                                                   label: 'Hopic (internal): determine relative path to ' + stash_dir,
+                                                   returnStdout: true).trim()
                               if (stash_dir == '') {
                                 stash_dir = '.'
                               }
@@ -1418,7 +1449,8 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
                     this.subcommand_with_credentials(
                         cmd + hopic_extra_arguments,
                         'submit'
-                      , submit_meta.getOrDefault('with-credentials', []))
+                      , submit_meta.getOrDefault('with-credentials', []),
+                      'Hopic: submitting merge')
                   }
                 }
               }
@@ -1431,6 +1463,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           this.on_build_node { cmd ->
             def config = steps.readJSON(text: steps.sh(
                 script: "${cmd} show-config",
+                label: 'Hopic (internal): determine Artifactory promotion configuration',
                 returnStdout: true,
               ))
 

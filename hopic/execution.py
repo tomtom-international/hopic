@@ -30,7 +30,7 @@ def echo_cmd(fun, cmd, *args, dry_run=False, obfuscate=None, **kwargs):
     for word in cmd:
         if obfuscate is not None:
             for secret_name, secret in obfuscate.items():
-                if secret:
+                if secret and isinstance(secret, str):
                     word = word.replace(secret, f'${{{secret_name}}}')
         command_list.append(shlex.quote(word))
     log.info('%s%s', '' if dry_run else 'Executing: ',
