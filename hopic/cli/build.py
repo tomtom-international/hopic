@@ -184,7 +184,12 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                     if 'project-name' in cfg and creds['type'] == CredentialType.username_password and not (
                             creds['username-variable'] in ctx.obj.volume_vars
                             and creds['password-variable'] in ctx.obj.volume_vars):
-                        kcred = credentials.get_credential_by_id(cfg['project-name'], creds['id'])
+                        if ctx.obj.dry_run:
+                            # Use dummy values for dry runs instead of (potentially) asking the user
+                            kcred = (f'user_{id}', f'pass_{id}')
+                        else:
+                            kcred = credentials.get_credential_by_id(cfg['project-name'], creds['id'])
+
                         if kcred is not None:
                             username, password = kcred
                             if creds['encoding'] == CredentialEncoding.url:
