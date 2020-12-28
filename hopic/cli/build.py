@@ -54,6 +54,7 @@ from ..config_reader import (
 )
 from ..errors import (
     MissingCredentialVarError,
+    UnknownPhaseError,
 )
 from ..execution import echo_cmd_click as echo_cmd
 from ..git_time import (
@@ -431,9 +432,18 @@ def build(ctx, phase, variant, dry_run):
 
     hopic_git_info = HopicGitInfo.from_repo(ctx.obj.workspace)
 
+    unknown_phases = [phasename for phasename in phase if phasename not in ctx.obj.config['phases']]
+    if unknown_phases:
+        raise UnknownPhaseError(phase=unknown_phases)
+
     for phasename, curphase in ctx.obj.config['phases'].items():
         if phase and phasename not in phase:
             continue
+
+        for var in variant:
+            if var not in curphase:
+                log.warning(f"phase '{phasename}' does not contain variant '{var}'")
+
         for curvariant, cmds in curphase.items():
             if variant and curvariant not in variant:
                 continue
