@@ -171,10 +171,38 @@ phases:
     assert result.exit_code == 0
 
 
-def test_filtered_variants(monkeypatch):
+def test_filtered_non_existing_phase(monkeypatch, capfd):
+    expected = []
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        assert tuple(args) == expected.pop(0)
+
+    monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+    result = run_with_config(dedent('''\
+phases:
+  build:
+    a:
+      - build a
+  test:
+    a:
+      - test a
+  deploy:
+    a:
+      - deploy a
+'''), ('build', '--phase=build', '--phase=does-not-exist'))
+
+    _, err = capfd.readouterr()
+    sys.stderr.write(err)
+
+    assert "Error: build does not contain phase(s): does-not-exist" == err.splitlines()[0]
+    assert result.exit_code == 35
+
+
+def test_filtered_variants(monkeypatch, capfd):
     expected = [
         ('build', 'a'),
         ('build', 'c'),
+        ('build', 'd'),
         ('test', 'a'),
         ('test', 'c'),
     ]
@@ -192,6 +220,8 @@ phases:
       - build b
     c:
       - build c
+    d:
+      - build d
   test:
     b:
       - test b
@@ -199,7 +229,12 @@ phases:
       - test a
     c:
       - test c
-'''), ('build', '--variant=a', '--variant=c'))
+'''), ('build', '--variant=a', '--variant=c', '--variant=d'))
+    out, err = capfd.readouterr()
+    sys.stderr.write(out)
+    sys.stderr.write(err)
+
+    assert "warning: phase 'test' does not contain variant 'd'" == err.splitlines()[3]
     assert result.exit_code == 0
 
 
