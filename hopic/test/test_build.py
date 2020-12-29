@@ -888,6 +888,32 @@ phases:
     assert not expected
 
 
+def test_dry_run_does_not_ask_for_credentials(monkeypatch, capfd):
+    def get_credential_id(project_name_arg, cred_id):
+        assert False, "`get_credential_id` should not have been called in a dry run"
+
+    monkeypatch.setattr(credentials, 'get_credential_by_id', get_credential_id)
+
+    result = run_with_config(dedent('''\
+                project-name: dummy
+                phases:
+                  p1:
+                    v1:
+                      - with-credentials:
+                        - id: my-credentials
+                          type: username-password
+                      - sh -c 'echo $USERNAME $PASSWORD'
+                      - echo $USERNAME $PASSWORD
+                '''), ('build', '-n'))
+
+    assert result.exit_code == 0
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+    assert err.splitlines()[1] == "sh -c 'echo ${USERNAME} ${PASSWORD}'"
+    assert err.splitlines()[2] == "echo '${USERNAME}' '${PASSWORD}'"
+
+
 def test_config_recursive_template_build(monkeypatch):
     extra_index = 'https://test.pypi.org/simple/'
     pkg = 'pipeline-template'
