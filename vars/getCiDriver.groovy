@@ -74,6 +74,7 @@ class BitbucketPullRequest extends ChangeRequest {
   private restUrl = null
   private baseRestUrl = null
   private keyIds = [:]
+  private source_commit = null
 
   BitbucketPullRequest(steps, url, credentialsId) {
     super(steps)
@@ -239,10 +240,25 @@ class BitbucketPullRequest extends ChangeRequest {
       extra_params += ' --approved-by=' + shell_quote(approver)
     }
 
-    def source_refspec = steps.scm.userRemoteConfigs[0].refspec
-    def (remote_ref, local_ref) = source_refspec.tokenize(':')
-    if (remote_ref.startsWith('+'))
-      remote_ref = remote_ref.substring(1)
+    if (this.source_commit == null) {
+      def source_refspec = steps.scm.userRemoteConfigs[0].refspec
+      def (remote_ref, local_ref) = source_refspec.tokenize(':')
+      if (remote_ref.startsWith('+'))
+        remote_ref = remote_ref.substring(1)
+
+      // Pin to the head commit of the PR to ensure every node builds the same version, even when the PR gets updated while the build runs
+      def refs = line_split(
+        steps.sh(
+          script: "git ls-remote ${shell_quote(source_remote)}",
+          label: 'Hopic: finding last commit of PR',
+          returnStdout: true,
+        )
+      ).collectEntries { line ->
+        def (hash, ref) = line.split('\t')
+        [(ref): hash]
+      }
+      this.source_commit = refs[remote_ref] ?: refs["refs/heads/${remote_ref}"] ?: refs["refs/tags/${remote_ref}"]
+    }
     def cr_author = change_request.getOrDefault('author', [:]).getOrDefault('user', [:])
     def output = line_split(steps.sh(script: cmd
                                 + ' prepare-source-tree'
@@ -252,7 +268,7 @@ class BitbucketPullRequest extends ChangeRequest {
                                 + ' --commit-date=' + shell_quote(String.format("@%.3f", change_request.commit_time))
                                 + ' merge-change-request'
                                 + ' --source-remote=' + shell_quote(source_remote)
-                                + ' --source-ref=' + shell_quote(remote_ref)
+                                + ' --source-ref=' + shell_quote(this.source_commit)
                                 + ' --change-request=' + shell_quote(change_request.getOrDefault('id', steps.env.CHANGE_ID))
                                 + ' --title=' + shell_quote(change_request.getOrDefault('title', steps.env.CHANGE_TITLE))
                                 + extra_params,
