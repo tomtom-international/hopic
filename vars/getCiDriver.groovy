@@ -1373,10 +1373,13 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
                             // Make stash locations node-independent by making them relative to the Jenkins workspace
                             if (stash_dir.startsWith('/')) {
                               def cwd = steps.pwd()
-                              // We could use java.io.File and java.nio.file.Path relativize, but that requires extra script approvals.
-                              stash_dir = steps.sh(script: "realpath --relative-to=$cwd ${stash_dir}", 
-                                                   label: 'Hopic (internal): determine relative path to ' + stash_dir,
-                                                   returnStdout: true).trim()
+                              // This check, unlike relativize() below, doesn't depend on File() and thus doesn't require script approval
+                              if (stash_dir == cwd) {
+                                stash_dir = '.'
+                              } else {
+                                cwd = new File(cwd).toPath()
+                                stash_dir = cwd.relativize(new File(stash_dir).toPath()) as String
+                              }
                               if (stash_dir == '') {
                                 stash_dir = '.'
                               }
