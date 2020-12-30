@@ -1161,7 +1161,15 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   private def decorate_output(Closure closure) {
     steps.timestamps {
       steps.ansiColor('xterm') {
-        return closure()
+        if (steps.env.GIT_VERBOSITY != null
+         && steps.env.GIT_VERBOSITY.toUpperCase() == 'DEBUG'
+         && steps.env.GIT_PYTHON_TRACE == null) {
+          return steps.withEnv(['GIT_PYTHON_TRACE=full']) {
+            return closure()
+          }
+        } else {
+          return closure()
+        }
       }
     }
   }
