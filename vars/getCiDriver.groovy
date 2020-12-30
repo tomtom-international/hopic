@@ -1439,7 +1439,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
             ]
           }
           while (phases) {
-            final phase = phases.keySet()[0]
+            final phase = phases.keySet().first()
             def is_build_successful = steps.currentBuild.currentResult == 'SUCCESS'
             // Make sure steps exclusive to changes are skipped when a failure occurred during one of the previous phases.
             final variants = phases.remove(phase).findAll { variant, meta ->
