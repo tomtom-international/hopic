@@ -272,3 +272,54 @@ def test_embed_variants_cmd():
 
     assert 'test' in output
     assert 'test-variant' in output['test']
+
+
+def test_wait_on_full_previous_phase_dependency():
+    result = run_with_config(
+        dedent(
+            """\
+            phases:
+              x:
+                a:
+                  - touch sheep
+                b:
+                  - touch monkey
+              y:
+                a:
+                  - cat sheep
+                b:
+                  - wait-on-full-previous-phase: no
+                c:
+                  - touch pig
+            """
+        ),
+        ('getinfo',),
+    )
+
+    assert result.exit_code == 0
+    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
+
+    assert 'wait-on-full-previous-phase' in output['y']['b']
+    assert not output['y']['b']['wait-on-full-previous-phase']
+
+
+def test_mark_nops():
+    result = run_with_config(
+        dedent(
+            """\
+            phases:
+              x:
+                a: []
+              y:
+                a:
+                  - wait-on-full-previous-phase: no
+            """
+        ),
+        ('getinfo',),
+    )
+
+    assert result.exit_code == 0
+    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
+
+    assert output["x"]["a"]["nop"] is True
+    assert output["y"]["a"]["nop"] is True
