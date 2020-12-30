@@ -733,3 +733,164 @@ def test_nested_command_list_flattening():
         {"environment": {}, "sh": ["echo", "Tada!"]},
         {"environment": {}, "sh": ["echo", "Tada!"]},
     ]
+
+
+def test_wait_on_full_previous_phase_dependency_type_mismatch():
+    with pytest.raises(ConfigurationError, match=r"(?i)`wait-on-full-previous-phase` doesn't contain a boolean"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    """\
+                    phases:
+                      y:
+                        b:
+                          - wait-on-full-previous-phase: noo
+                    """
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_wait_on_full_previous_phase_dependency_without_previous_phase():
+    with pytest.raises(ConfigurationError, match=r"(?i)`wait-on-full-previous-phase` defined but there is no previous phase"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    """\
+                    phases:
+                      x:
+                        a:
+                          - wait-on-full-previous-phase: no
+                    """
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_wait_on_full_previous_phase_dependency_without_previous_variant():
+    with pytest.raises(ConfigurationError, match=r"(?i)`wait-on-full-previous-phase` disabled but previous phase `x` doesn't contain variant `c`"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    """\
+                    phases:
+                      x:
+                        a:
+                          - {dep_option}
+                        b:
+                          - echo monkey
+                      y:
+                        b:
+                          - wait-on-full-previous-phase: no
+                        c:
+                          - wait-on-full-previous-phase: no
+                    """
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_wait_on_full_previous_phase_dependency_multiple_definitions():
+    with pytest.raises(ConfigurationError, match=r"(?i)`wait-on-full-previous-phase` defined multiple times"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    """\
+                    phases:
+                      x:
+                        a:
+                          - {dep_option}
+                        b:
+                          - echo monkey
+                      y:
+                        b:
+                          - wait-on-full-previous-phase: no
+                          - wait-on-full-previous-phase: no
+                    """
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+@pytest.mark.parametrize(
+    "dep_option",
+    (
+        "run-on-change: never",
+        "run-on-change: only",
+        "run-on-change: new-version-only",
+        "stash: {includes: test/**}",
+        "worktrees: {doc/build/html: {commit-message: bla bla}}",
+    ),
+)
+def test_wait_on_full_previous_phase_dependency_violation(dep_option):
+    with pytest.raises(ConfigurationError, match=r"(?i)`wait-on-full-previous-phase` disabled but previous phase `x` uses dependency-creating options"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    f"""\
+                    phases:
+                      x:
+                        a:
+                          - {dep_option}
+                        b:
+                          - echo monkey
+                      y:
+                        b:
+                          - wait-on-full-previous-phase: no
+                    """
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_wait_on_full_previous_phase_dependency_run_on_change():
+    with pytest.raises(ConfigurationError, match=r"(?i)`wait-on-full-previous-phase` disabled but `y`.`a`.`run-on-change` set to a value other than always"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    """\
+                    phases:
+                      x:
+                        a:
+                          - run-on-change: always
+                      y:
+                        a:
+                          - run-on-change: only
+                            wait-on-full-previous-phase: no
+                    """
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_wait_on_full_previous_phase_dependency_default_yes():
+    cfg = config_reader.read(
+        _config_file(
+            dedent(
+                """\
+                phases:
+                  x:
+                    b:
+                      - touch monkey
+                  y:
+                    b:
+                      - cat monkey
+                    c:
+                      - touch pig
+                """
+            )
+        ),
+        {'WORKSPACE': None},
+    )
+    (x_b,) = cfg['phases']['x']['b']
+    (y_b,) = cfg['phases']['y']['b']
+    (y_c,) = cfg['phases']['y']['c']
+    assert 'wait-on-full-previous-phase' not in x_b
+    assert y_b['wait-on-full-previous-phase'] is True
+    assert 'wait-on-full-previous-phase' not in y_c
