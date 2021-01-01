@@ -17,6 +17,33 @@
 Changelog
 =========
 
+1.29.0
+======
+
+New features
+------------
+
+* feat(config): add option to avoid waiting on the full previous phase (#270)
+* feat: execute a variant's next phase in the current one if asked to (#270)
+* feat(groovy): detect and skip execution of empty NOP variants (#270)
+
+Improvements
+------------
+
+* improvement: provide information when build is called with unknown parameters (#289)
+* improvement: use the variant's name only as the parallel block's name (#270)
+* improvement(config): reject differing run-on-change settings in the same variant (#270)
+* improvement(groovy): log output from 'git' commands too at debug verbosity (#291)
+
+Bug fixes
+---------
+
+* fix: don't ask for credentials in a dry run (#288)
+* fix: restore java based path relativization (#290)
+* fix(groovy): ensure we build the same commit from the PR on every node (#292)
+* fix(groovy): use Iterable.first() instead of Iterable[0] (#293)
+* fix(groovy): add missing script-approval to determine job properties (#294)
+
 1.28.1
 ======
 
