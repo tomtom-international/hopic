@@ -58,6 +58,9 @@ class ChangeRequest {
     return this.maySubmitImpl(target_commit, source_commit, allow_cache)
   }
 
+  public void abort_if_changed() {
+  }
+
   public def apply(cmd, source_remote) {
     assert false : "Change request instance does not override apply()"
   }
@@ -238,6 +241,18 @@ class BitbucketPullRequest extends ChangeRequest {
       [(ref): hash]
     }
     return refs[remote_ref] ?: refs["refs/heads/${remote_ref}"] ?: refs["refs/tags/${remote_ref}"]
+  }
+
+  public void abort_if_changed(String source_remote) {
+    if (this.source_commit == null)
+      return
+
+    final current_commit = this.current_source_commit(source_remote)
+    if (this.source_commit != current_commit) {
+      steps.currentBuild.result = 'ABORTED'
+      steps.currentBuild.description = 'Aborted: build outdated; change request updated since start'
+      steps.error("this build is outdated. Its change request got updated to ${current_commit} (from ${this.source_commit}).")
+    }
   }
 
   public def apply(cmd, String source_remote) {
@@ -1484,6 +1499,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
               if (this.has_submittable_change()) {
                 steps.stage('submit') {
                   this.with_git_credentials() {
+                    this.get_change().abort_if_changed(steps.scm.userRemoteConfigs[0].url)
                     this.subcommand_with_credentials(
                         cmd + hopic_extra_arguments,
                         'submit'
