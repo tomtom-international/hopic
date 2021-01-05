@@ -58,6 +58,9 @@ class ChangeRequest {
     return this.maySubmitImpl(target_commit, source_commit, allow_cache)
   }
 
+  public void abort_if_changed() {
+  }
+
   public def apply(cmd, source_remote) {
     assert false : "Change request instance does not override apply()"
   }
@@ -219,7 +222,40 @@ class BitbucketPullRequest extends ChangeRequest {
     return cur_cr_info.canMerge
   }
 
-  public def apply(cmd, source_remote) {
+  private def current_source_commit(String source_remote) {
+    assert steps.env.NODE_NAME != null, "current_source_commit must be executed on a node"
+
+    def source_refspec = steps.scm.userRemoteConfigs[0].refspec
+    def (remote_ref, local_ref) = source_refspec.tokenize(':')
+    if (remote_ref.startsWith('+'))
+      remote_ref = remote_ref.substring(1)
+
+    def refs = line_split(
+      steps.sh(
+        script: "git ls-remote ${shell_quote(source_remote)}",
+        label: 'Hopic: finding last commit of PR',
+        returnStdout: true,
+      )
+    ).collectEntries { line ->
+      def (hash, ref) = line.split('\t')
+      [(ref): hash]
+    }
+    return refs[remote_ref] ?: refs["refs/heads/${remote_ref}"] ?: refs["refs/tags/${remote_ref}"]
+  }
+
+  public void abort_if_changed(String source_remote) {
+    if (this.source_commit == null)
+      return
+
+    final current_commit = this.current_source_commit(source_remote)
+    if (this.source_commit != current_commit) {
+      steps.currentBuild.result = 'ABORTED'
+      steps.currentBuild.description = 'Aborted: build outdated; change request updated since start'
+      steps.error("this build is outdated. Its change request got updated to ${current_commit} (from ${this.source_commit}).")
+    }
+  }
+
+  public def apply(cmd, String source_remote) {
     def change_request = this.get_info()
     def extra_params = ''
     if (change_request.containsKey('description')) {
@@ -241,23 +277,8 @@ class BitbucketPullRequest extends ChangeRequest {
     }
 
     if (this.source_commit == null) {
-      def source_refspec = steps.scm.userRemoteConfigs[0].refspec
-      def (remote_ref, local_ref) = source_refspec.tokenize(':')
-      if (remote_ref.startsWith('+'))
-        remote_ref = remote_ref.substring(1)
-
       // Pin to the head commit of the PR to ensure every node builds the same version, even when the PR gets updated while the build runs
-      def refs = line_split(
-        steps.sh(
-          script: "git ls-remote ${shell_quote(source_remote)}",
-          label: 'Hopic: finding last commit of PR',
-          returnStdout: true,
-        )
-      ).collectEntries { line ->
-        def (hash, ref) = line.split('\t')
-        [(ref): hash]
-      }
-      this.source_commit = refs[remote_ref] ?: refs["refs/heads/${remote_ref}"] ?: refs["refs/tags/${remote_ref}"]
+      this.source_commit = this.current_source_commit(source_remote)
     }
     def cr_author = change_request.getOrDefault('author', [:]).getOrDefault('user', [:])
     def output = line_split(steps.sh(script: cmd
@@ -1478,6 +1499,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
               if (this.has_submittable_change()) {
                 steps.stage('submit') {
                   this.with_git_credentials() {
+                    this.get_change().abort_if_changed(steps.scm.userRemoteConfigs[0].url)
                     this.subcommand_with_credentials(
                         cmd + hopic_extra_arguments,
                         'submit'
