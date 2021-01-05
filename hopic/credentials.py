@@ -17,6 +17,10 @@ import sys
 
 try:
     import keyring
+    import keyring.backends.kwallet
+    import keyring.backends.OS_X
+    import keyring.backends.SecretService
+    import keyring.credentials
     import netstruct
     from contextlib import closing
 
