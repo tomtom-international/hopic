@@ -17,6 +17,14 @@
 Changelog
 =========
 
+1.29.1
+======
+
+Bug fixes
+---------
+
+* fix(credentials): import the submodules of 'keyring' that we use (#296)
+
 1.29.0
 ======
 
