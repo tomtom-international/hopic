@@ -58,7 +58,7 @@ class ChangeRequest {
     return this.maySubmitImpl(target_commit, source_commit, allow_cache)
   }
 
-  public void abort_if_changed() {
+  public void abort_if_changed(String source_remote) {
   }
 
   public def apply(cmd, source_remote) {
