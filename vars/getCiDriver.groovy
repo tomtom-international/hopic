@@ -15,7 +15,6 @@
  */
 
 import groovy.json.JsonOutput
-import groovy.transform.TypeChecked
 import hudson.model.ParametersDefinitionProperty
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter;
@@ -23,7 +22,6 @@ import org.jenkinsci.plugins.credentialsbinding.impl.CredentialNotFoundException
 import org.jenkinsci.plugins.scriptsecurity.sandbox.RejectedAccessException
 import org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty
 
-@TypeChecked
 class ChangeRequest {
   protected steps
 
@@ -72,7 +70,6 @@ class ChangeRequest {
   }
 }
 
-@TypeChecked
 class BitbucketPullRequest extends ChangeRequest {
   private url
   private info = null
@@ -370,7 +367,6 @@ class BitbucketPullRequest extends ChangeRequest {
   }
 }
 
-@TypeChecked
 class ModalityRequest extends ChangeRequest {
   private modality
 
@@ -408,7 +404,6 @@ class ModalityRequest extends ChangeRequest {
   }
 }
 
-@TypeChecked
 class CiDriver {
   private repo
   private steps
@@ -933,7 +928,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
    * The build identifier is just the stringified build number for builds on branches.
    * For builds on pull requests it's the PR number plus build number on this PR.
    */
-  public Tuple2<String, String> get_build_id() {
+  public Tuple get_build_id() {
     def job_name = get_job_name()
     def branch = get_branch_name()
     String build_name = "${job_name}/${branch}".replaceAll(/\/|%2F/, ' :: ')
@@ -1106,7 +1101,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
   @NonCPS
   private def determine_props() {
-    def props = null
+    List props = null
     try {
       props = steps.currentBuild.rawBuild.parent.properties.collect { k, v -> v }
 
@@ -1574,7 +1569,6 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   * getCiDriver()
   */
 
-@TypeChecked
 def call(Map params = [:], String repo) {
   return new CiDriver(params, this, repo)
 }
