@@ -191,6 +191,7 @@ class BitbucketPullRequest extends ChangeRequest {
     return info
   }
 
+  @Override
   public def maySubmit(target_commit, source_commit, allow_cache = true) {
     if (!super.maySubmitImpl(target_commit, source_commit, allow_cache)) {
       return false
@@ -243,6 +244,7 @@ class BitbucketPullRequest extends ChangeRequest {
     return refs[remote_ref] ?: refs["refs/heads/${remote_ref}"] ?: refs["refs/tags/${remote_ref}"]
   }
 
+  @Override
   public void abort_if_changed(String source_remote) {
     if (this.source_commit == null)
       return
@@ -255,6 +257,7 @@ class BitbucketPullRequest extends ChangeRequest {
     }
   }
 
+  @Override
   public def apply(cmd, String source_remote) {
     def change_request = this.get_info()
     def extra_params = ''
@@ -307,6 +310,7 @@ class BitbucketPullRequest extends ChangeRequest {
     return rv
   }
 
+  @Override
   public def notify_build_result(String job_name, String branch, String commit, String result, boolean exclude_branches_filled_with_pr_branch_discovery) {
     def state = (result == 'STARTING'
         ? 'INPROGRESS'
@@ -371,6 +375,7 @@ class ModalityRequest extends ChangeRequest {
     this.modality = modality
   }
 
+  @Override
   public def apply(cmd, source_remote) {
     def author_time = steps.currentBuild.timeInMillis / 1000.0
     def commit_time = steps.currentBuild.startTimeInMillis / 1000.0
