@@ -311,7 +311,7 @@ version:
                 '--commit-date', f"@{_git_time}",
                 '--author-name', _author.name,
                 '--author-email', _author.email,
-                'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful'),
+                'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful', '--title', message),
         )
 
 
@@ -643,7 +643,7 @@ def test_run_on_change(monkeypatch, tmp_path, run_on_change, commit_message, exp
                 '--commit-date', f"@{_git_time}",
                 '--author-name', _author.name,
                 '--author-email', _author.email,
-                'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful'),
+                'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful', '--title', commit_message),
         ) if commit_message is not None else ()) + (
             ('build',),
         )
@@ -806,7 +806,7 @@ def test_post_submit(tmp_path, capfd, monkeypatch, commit_message, expected_vers
              '--commit-date', f"@{_git_time}",
              '--author-name', _author.name,
              '--author-email', _author.email,
-             'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful'),
+             'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful', '--title', commit_message),
             ('build',),
             prepare_subprocess_mock,
             ('submit',)
