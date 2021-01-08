@@ -265,7 +265,9 @@ def test_version_file_without_tag_and_bump(capfd, tmp_path):
     )
 
 
-def merge_conventional_bump(capfd, tmp_path, message, strict=False, on_every_change=True, target='master'):
+def merge_conventional_bump(capfd, tmp_path, message, strict=False, on_every_change=True, target='master', merge_message=None):
+    if merge_message is None:
+        merge_message = message
     toprepo = tmp_path / 'repo'
     with git.Repo.init(str(toprepo), expand_vars=False) as repo:
         with (toprepo / 'hopic-ci-config.yaml').open('w') as f:
@@ -311,7 +313,7 @@ version:
                 '--commit-date', f"@{_git_time}",
                 '--author-name', _author.name,
                 '--author-email', _author.email,
-                'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful', '--title', message),
+                'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful', '--title', merge_message),
         )
 
 
@@ -817,3 +819,21 @@ def test_post_submit(tmp_path, capfd, monkeypatch, commit_message, expected_vers
         if expected_version:
             repo.git.checkout('master')
             assert repo.git.describe() == expected_version
+
+
+@pytest.mark.parametrize('commit_message, merge_message, expected_version, strict', (
+    ('feat: initial test feature', 'feat: best feat ever', '0.1.0', True ),
+    ('initial test feature'      , 'best feat ever'      , '0.1.0', False),
+    ('feat: another feature'     , 'not conventional'    , '0.1.0', False),
+))
+def test_merge_commit_message_bump(capfd, tmp_path, commit_message, merge_message, expected_version, strict):
+    result = merge_conventional_bump(capfd, tmp_path, commit_message, strict=strict, merge_message=merge_message)
+    assert result.exit_code == 0
+
+
+@pytest.mark.parametrize('commit_message, merge_message, expected_version, strict', (
+    ('feat: a feature',       'fix: a fix',       '0.1.0', True),
+))
+def test_merge_commit_message_bump_error(capfd, tmp_path, commit_message, merge_message, expected_version, strict):
+    result = merge_conventional_bump(capfd, tmp_path, commit_message, strict=strict, merge_message=merge_message)
+    assert result.exit_code == 36
