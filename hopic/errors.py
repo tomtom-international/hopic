@@ -48,3 +48,11 @@ class UnknownPhaseError(ClickException):
     def __init__(self, phase):
         super().__init__(f"build does not contain phase(s): {', '.join(phase)}")
         self.phase = phase
+
+
+class VersionBumpMismatchError(ClickException):
+    exit_code = 36
+
+    def __init__(self, commit_version, merge_version):
+        super().__init__(f"Version bump for commit messages results in different version ({commit_version}) "
+                         f"than the version based on the merge message ({merge_version}).")

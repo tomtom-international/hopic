@@ -78,6 +78,7 @@ from yaml.error import YAMLError
 
 from .main import main
 from ..errors import (
+    VersionBumpMismatchError,
     VersioningError,
 )
 
@@ -438,10 +439,15 @@ def process_prepare_source_tree(
 
         bump = version_info['bump'].copy()
         bump.update(commit_params.pop('bump-override', {}))
+        merge_message = None
+        strict = bump.get('strict', False)
+        if 'message' in commit_params:
+            merge_message = parse_commit_message(commit_params['message'], policy=bump['policy'], strict=strict)
+
         source_commits = (
                 () if source_commit is None and base_commit is None
                 else [
-                    parse_commit_message(commit, policy=bump['policy'], strict=bump.get('strict', False))
+                    parse_commit_message(commit, policy=bump['policy'], strict=strict)
                     for commit in git.Commit.list_items(
                         repo,
                         (f"{base_commit}..{target_commit}"
@@ -492,6 +498,10 @@ def process_prepare_source_tree(
                             hash_prefix = ''
                         log.debug("%s[%-8s][%-4s][%-3s]: %s", hash_prefix, breaking, feat, fix, commit.full_subject)
                 new_version = ctx.obj.version.next_version_for_commits(source_commits)
+                if merge_message and strict:
+                    merge_commit_next_version = ctx.obj.version.next_version_for_commits([merge_message])
+                    if new_version != merge_commit_next_version:
+                        raise VersionBumpMismatchError(new_version, merge_commit_next_version)
             else:
                 raise NotImplementedError(f"unsupported version bumping policy {bump['policy']}")
 
