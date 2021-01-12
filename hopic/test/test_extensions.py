@@ -283,3 +283,93 @@ def test_invalid_template_name(capfd):
     sys.stdout.write(out)
     sys.stderr.write(err)
     assert "No YAML template named 'xyzzy' available (props={})" in err.strip()
+
+
+@pytest.mark.xfail
+def test_recursive_extension_installation_version_functionality(monkeypatch):
+    first_pkg = 'firstorder'
+    second_pkg = 'secondorder'
+
+    class FirstOrderTemplateFirst:
+        def __init__(self):
+            self.name = first_pkg
+
+        @staticmethod
+        def first_order_template_first_call(volume_vars):
+            return dedent(
+                f"""
+                pip:
+                  - packages:
+                    - {second_pkg}
+
+                phases:
+                  yaml-error:
+                    unknown:
+                      - echo Unknown template
+                """
+            )
+
+        def load(self):
+            return self.first_order_template_first_call
+
+    class FirstOrderTemplate:
+        def __init__(self):
+            self.name = first_pkg
+
+        @staticmethod
+        def first_order_template(volume_vars):
+            return dedent(
+                f"""
+                pip:
+                  - packages:
+                    - {second_pkg}
+
+                version:
+                  tag: true
+                  format: semver
+                  bump:
+                    policy: conventional-commits
+                    strict: yes
+
+                phases:
+                  phase-one:
+                    variant-one: !template {second_pkg}
+                """
+            )
+
+        def load(self):
+            return self.first_order_template
+
+    class SecondOrderTemplate:
+        name = second_pkg
+
+        @staticmethod
+        def second_order_template(volume_vars):
+            return "- echo $PUBLISH_VERSION"
+
+        def load(self):
+            return self.second_order_template
+
+    def mock_entry_points():
+        monkeypatch.setattr(metadata, 'entry_points', lambda: {'hopic.plugins.yaml': (FirstOrderTemplate(), SecondOrderTemplate())})
+        return {
+            'hopic.plugins.yaml': (FirstOrderTemplateFirst(),)
+        }
+
+    monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
+    monkeypatch.setattr(subprocess, 'check_call', lambda *args, **kwargs: None)
+
+    result, = run_with_config(
+        dedent(
+            f"""
+            pip:
+              - packages:
+                - {first_pkg}
+
+            config: !template {first_pkg}
+            """
+        ),
+        ('build', '--dry-run')
+    )
+
+    assert result.exit_code == 0
