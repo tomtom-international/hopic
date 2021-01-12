@@ -29,7 +29,7 @@ class ChangeRequest {
     this.steps = steps
   }
 
-  protected def shell_quote(word) {
+  protected String shell_quote(word) {
     return "'" + (word as String).replace("'", "'\\''") + "'"
   }
 
@@ -37,7 +37,7 @@ class ChangeRequest {
     return text.split('\\r?\\n') as ArrayList
   }
 
-  protected def maySubmitImpl(target_commit, source_commit, allow_cache = true) {
+  protected boolean maySubmitImpl(String target_commit, String source_commit, boolean allow_cache = true) {
     return !line_split(steps.sh(script: 'LC_ALL=C.UTF-8 TZ=UTC git log ' + shell_quote(target_commit) + '..' + shell_quote(source_commit) + " --pretty='%H:%s' --reverse",
                                 label: 'Hopic (internal): retrieving git log',
                                 returnStdout: true)
@@ -54,18 +54,18 @@ class ChangeRequest {
     }
   }
 
-  public def maySubmit(target_commit, source_commit, allow_cache = true) {
+  public boolean maySubmit(String target_commit, String source_commit, boolean allow_cache = true) {
     return this.maySubmitImpl(target_commit, source_commit, allow_cache)
   }
 
-  public void abort_if_changed() {
+  public void abort_if_changed(String source_remote) {
   }
 
-  public def apply(cmd, source_remote) {
+  public Map apply(String cmd, String source_remote) {
     assert false : "Change request instance does not override apply()"
   }
 
-  public def notify_build_result(String job_name, String branch, String commit, String result, boolean exclude_branches_filled_with_pr_branch_discovery) {
+  public void notify_build_result(String job_name, String branch, String commit, String result, boolean exclude_branches_filled_with_pr_branch_discovery) {
     // Default NOP
   }
 }
@@ -191,7 +191,8 @@ class BitbucketPullRequest extends ChangeRequest {
     return info
   }
 
-  public def maySubmit(target_commit, source_commit, allow_cache = true) {
+  @Override
+  public boolean maySubmit(String target_commit, String source_commit, boolean allow_cache = true) {
     if (!super.maySubmitImpl(target_commit, source_commit, allow_cache)) {
       return false
     }
@@ -243,6 +244,7 @@ class BitbucketPullRequest extends ChangeRequest {
     return refs[remote_ref] ?: refs["refs/heads/${remote_ref}"] ?: refs["refs/tags/${remote_ref}"]
   }
 
+  @Override
   public void abort_if_changed(String source_remote) {
     if (this.source_commit == null)
       return
@@ -255,7 +257,8 @@ class BitbucketPullRequest extends ChangeRequest {
     }
   }
 
-  public def apply(cmd, String source_remote) {
+  @Override
+  public Map apply(String cmd, String source_remote) {
     def change_request = this.get_info()
     def extra_params = ''
     if (change_request.containsKey('description')) {
@@ -307,7 +310,8 @@ class BitbucketPullRequest extends ChangeRequest {
     return rv
   }
 
-  public def notify_build_result(String job_name, String branch, String commit, String result, boolean exclude_branches_filled_with_pr_branch_discovery) {
+  @Override
+  public void notify_build_result(String job_name, String branch, String commit, String result, boolean exclude_branches_filled_with_pr_branch_discovery) {
     def state = (result == 'STARTING'
         ? 'INPROGRESS'
         : (result == 'SUCCESS' ? 'SUCCESSFUL' : 'FAILED')
@@ -371,7 +375,8 @@ class ModalityRequest extends ChangeRequest {
     this.modality = modality
   }
 
-  public def apply(cmd, source_remote) {
+  @Override
+  public Map apply(String cmd, String source_remote) {
     def author_time = steps.currentBuild.timeInMillis / 1000.0
     def commit_time = steps.currentBuild.startTimeInMillis / 1000.0
     def prepare_cmd = (cmd
@@ -420,7 +425,7 @@ class CiDriver {
 
   private final default_node_expr = "Linux && Docker"
 
-  CiDriver(Map params = [:], steps, repo) {
+  CiDriver(Map params = [:], steps, String repo) {
     this.repo = repo
     this.steps = steps
     this.change = params.change
@@ -1601,6 +1606,6 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   * getCiDriver()
   */
 
-def call(Map params = [:], repo) {
+def call(Map params = [:], String repo) {
   return new CiDriver(params, this, repo)
 }
