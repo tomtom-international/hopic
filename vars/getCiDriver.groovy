@@ -404,13 +404,20 @@ class ModalityRequest extends ChangeRequest {
   }
 }
 
+class NodeExecution {
+  String name
+  LocalDateTime end_time
+  LocalDateTime request_time
+  LocalDateTime start_time
+  String status
+}
+
 class CiDriver {
   private repo
   private steps
   private base_cmds          = [:]
   private cmds               = [:]
   private nodes              = [:]
-  private nodes_usage        = [:]
   private checkouts          = [:]
   private stashes            = [:]
   private worktree_bundles   = [:]
@@ -422,6 +429,7 @@ class CiDriver {
   private may_publish_result = null
   private config_file
   private bitbucket_api_credential_id  = null
+  private LinkedHashMap<String, NodeExecution[]> nodes_usage = [:]
 
   private final default_node_expr = "Linux && Docker"
 
@@ -938,6 +946,10 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     [build_name, build_identifier]
   }
 
+  public Map<String, NodeExecution[]> get_node_allocations() {
+    return this.nodes_usage
+  }
+
   /**
    * Unstash everything previously stashed on other nodes that we didn't yet unstash here.
    *
@@ -1077,10 +1089,10 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     def name = node_params.name
     def request_time = this.get_local_time()
     return steps.node(node_expr) {
-      def usage_entry = null
+      NodeExecution usage_entry
       if (name != null) {
-        this.nodes_usage.get(steps.env.NODE_NAME, []).add(name: name, request_time: request_time, start_time: this.get_local_time())
-        usage_entry = this.nodes_usage[steps.env.NODE_NAME][-1]
+        usage_entry = new NodeExecution(name: name, request_time: request_time, start_time: this.get_local_time())
+        this.nodes_usage.get(steps.env.NODE_NAME, []).add(usage_entry)
       }
       def build_result = 'SUCCESS'
       try {
@@ -1180,12 +1192,12 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   }
 
   private def print_node_usage() {
-    def largest_name_size = this.nodes_usage.collect { it.value.collect { it.name }}.flatten().max { it.size() }.size()
+    def largest_name_size = this.nodes_usage.collect { it.value.collect { it.name.size() }}.flatten().max { it }
     String printable_string = ""
     this.nodes_usage.each { node, allocation ->
       printable_string += "node: ${node}\n"
       allocation.each {
-        printable_string += String.format("  %-${largest_name_size}s request time %s start time: %s end time: %s status: %s\n",
+        printable_string += String.format("  %-${largest_name_size}s request time: %s start time: %s end time: %s status: %s\n",
           it.name,
           it.request_time.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
           it.start_time.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
