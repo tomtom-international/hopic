@@ -36,7 +36,7 @@ phases:
 
   publish:
     python:
-      - run-on-change: new-version-only
+      - run-on-change: only
         with-credentials:
           id: hopic-pypi
           type: username-password
