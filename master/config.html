@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    <title>Configuration &#8212; Hopic 1.29.3.dev13+ged8adaa documentation</title>
+    <title>Configuration &#8212; Hopic 1.29.3.dev144+gc1288fb7 documentation</title>
     <link rel="stylesheet" href="_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
     <link rel="stylesheet" type="text/css" href="_static/banner.css" />
@@ -34,7 +34,7 @@
         <li class="right" >
           <a href="intro.html" title="Introduction"
              accesskey="P">previous</a> |</li>
-        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.29.3.dev13+ged8adaa documentation</a> &#187;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.29.3.dev144+gc1288fb7 documentation</a> &#187;</li> 
       </ul>
     </div>  
 
@@ -914,7 +914,8 @@ It searches all to-merge commits for breaking changes, new features and fixes.
 If any of those are present it will bump, in order of precedence, the major, minor or patch number.</p>
 <p>The <code class="docutils literal notranslate"><span class="pre">version.bump.strict</span></code> option of this policy controls whether each commit message is required to parse as a valid Conventional Commit.
 If set to <code class="docutils literal notranslate"><span class="pre">false</span></code> invalidly formatted messages are just ignored and not taken into account to determine what to bump.
-Otherwise the merge will fail when encountering invalidly formatted messages.</p>
+Otherwise the merge will fail when encountering invalidly formatted messages.
+Additionally, if <code class="docutils literal notranslate"><span class="pre">version.bump.strict</span></code> is set to <code class="docutils literal notranslate"><span class="pre">true</span></code>, the merge-change-request <code class="docutils literal notranslate"><span class="pre">title</span></code> version bump is validated against the corresponding commit messages version bump and the merge will fail if the version bump mismatches.</p>
 <p>The <code class="docutils literal notranslate"><span class="pre">version.bump.reject-breaking-changes-on</span></code> and <code class="docutils literal notranslate"><span class="pre">version.bump.reject-new-features-on</span></code> options specify regular expressions matching branch names.
 Merges into these branches will be rejected if, respectively, they contain breaking changes or new features.
 The purpose of this is to prevent accidental inclusion of these kinds of changes into release branches.</p>
@@ -1443,7 +1444,7 @@ The command should output the part of the configuration file to standard output.
         <li class="right" >
           <a href="intro.html" title="Introduction"
              >previous</a> |</li>
-        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.29.3.dev13+ged8adaa documentation</a> &#187;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.29.3.dev144+gc1288fb7 documentation</a> &#187;</li> 
       </ul>
     </div>
     <div class="footer" role="contentinfo">

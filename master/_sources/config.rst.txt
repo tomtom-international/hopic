@@ -562,6 +562,7 @@ There are currently two version bumping policies available:
    The ``version.bump.strict`` option of this policy controls whether each commit message is required to parse as a valid Conventional Commit.
    If set to ``false`` invalidly formatted messages are just ignored and not taken into account to determine what to bump.
    Otherwise the merge will fail when encountering invalidly formatted messages.
+   Additionally, if ``version.bump.strict`` is set to ``true``, the merge-change-request ``title`` version bump is validated against the corresponding commit messages version bump and the merge will fail if the version bump mismatches.
 
    The ``version.bump.reject-breaking-changes-on`` and ``version.bump.reject-new-features-on`` options specify regular expressions matching branch names.
    Merges into these branches will be rejected if, respectively, they contain breaking changes or new features.
