@@ -856,6 +856,20 @@ Set this value to ``true`` to enable this option.
 .. literalinclude:: ../../examples/upload-on-fail.yaml
     :language: yaml
 
+Artifact allow-empty-archive
+-----------------------
+
+.. option:: allow-empty-archive
+
+Normally, a build fails if archiving returns zero artifacts. This option allows the archiving process to return
+nothing without failing the build. Instead, the archive step will simply throw a warning.
+Set this value to ``true`` to enable this option.
+
+**example:**
+
+.. literalinclude:: ../../examples/allow-empty-archive.yaml
+    :language: yaml
+
 Embed scripts
 -------------
 

@@ -992,6 +992,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           steps.archiveArtifacts(
               artifacts: pattern,
               fingerprint: meta.archive.getOrDefault('fingerprint', true),
+              allowEmptyArchive: meta.archive.getOrDefault('allow-empty-archive', false),
             )
         } else if (archiving_cfg == 'fingerprint') {
           steps.fingerprint(pattern)
