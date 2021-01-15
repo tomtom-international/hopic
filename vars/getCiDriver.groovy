@@ -1222,14 +1222,6 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
         error_occurred = true // Jenkins only sets its currentResult to Failure after all user code is executed
         throw e
       } finally {
-        if (meta.containsKey('junit')) {
-          def results = meta.junit
-          steps.dir(workspace) {
-            meta.junit.each { result ->
-              steps.junit(result)
-            }
-          }
-        }
         this.archive_artifacts_if_enabled(meta, workspace, error_occurred) { server_id ->
           if (!artifactoryBuildInfo.containsKey(server_id)) {
             def newBuildInfo = steps.Artifactory.newBuildInfo()
@@ -1239,6 +1231,14 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
             artifactoryBuildInfo[server_id] = newBuildInfo
           }
           return artifactoryBuildInfo[server_id]
+        }
+        if (meta.containsKey('junit')) {
+          def results = meta.junit
+          steps.dir(workspace) {
+            meta.junit.each { result ->
+              steps.junit(result)
+            }
+          }
         }
       }
 
