@@ -821,19 +821,22 @@ def test_post_submit(tmp_path, capfd, monkeypatch, commit_message, expected_vers
             assert repo.git.describe() == expected_version
 
 
-@pytest.mark.parametrize('commit_message, merge_message, expected_version, strict', (
-    ('feat: initial test feature', 'feat: best feat ever', '0.1.0', True ),
-    ('initial test feature'      , 'best feat ever'      , '0.1.0', False),
-    ('feat: another feature'     , 'not conventional'    , '0.1.0', False),
+@pytest.mark.parametrize('commit_message, merge_message, strict', (
+    ('feat: initial test feature', 'feat: best feat ever', True ),
+    ('chore: some work'          , 'chore: pr title'     , True ),
+    ('initial test feature'      , 'best feat ever'      , False),
+    ('feat: another feature'     , 'not conventional'    , False),
 ))
-def test_merge_commit_message_bump(capfd, tmp_path, commit_message, merge_message, expected_version, strict):
+def test_merge_commit_message_bump(capfd, tmp_path, commit_message, merge_message, strict):
     result = merge_conventional_bump(capfd, tmp_path, commit_message, strict=strict, merge_message=merge_message)
     assert result.exit_code == 0
 
 
-@pytest.mark.parametrize('commit_message, merge_message, expected_version, strict', (
-    ('feat: a feature',       'fix: a fix',       '0.1.0', True),
+@pytest.mark.parametrize('commit_message, merge_message, source_version, merge_version, strict', (
+    ('feat: a feature',       'fix: a fix'      , '0.1.0', '0.0.1', True),
+    ('fix: some fix',         'refactor: change', '0.0.1', '0.0.0', True),
 ))
-def test_merge_commit_message_bump_error(capfd, tmp_path, commit_message, merge_message, expected_version, strict):
+def test_merge_commit_message_bump_error(capfd, tmp_path, commit_message, merge_message, source_version, merge_version, strict):
     result = merge_conventional_bump(capfd, tmp_path, commit_message, strict=strict, merge_message=merge_message)
     assert result.exit_code == 36
+    assert f"The PR title results in version {merge_version} while the git commit messages result in version {source_version}" in result.stderr
