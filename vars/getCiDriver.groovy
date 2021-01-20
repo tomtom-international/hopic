@@ -429,7 +429,7 @@ class CiDriver {
   private may_publish_result = null
   private config_file
   private bitbucket_api_credential_id  = null
-  private LinkedHashMap<String, NodeExecution[]> nodes_usage = [:]
+  private LinkedHashMap<String, LinkedHashMap<Integer, NodeExecution[]>> nodes_usage = [:]
 
   private final default_node_expr = "Linux && Docker"
 
@@ -946,7 +946,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     [build_name, build_identifier]
   }
 
-  public Map<String, NodeExecution[]> get_node_allocations() {
+  public Map<String, Map<Integer, NodeExecution[]>> get_node_allocations() {
     return this.nodes_usage
   }
 
@@ -1092,7 +1092,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       NodeExecution usage_entry
       if (exec_name != null) {
         usage_entry = new NodeExecution(exec_name: exec_name, request_time: request_time.toString(), start_time: this.get_local_time().toString())
-        this.nodes_usage.get(steps.env.NODE_NAME, []).add(usage_entry)
+        this.nodes_usage.get(steps.env.NODE_NAME, [:]).get(steps.env.EXECUTOR_NUMBER as Integer, []).add(usage_entry)
       }
       def build_result = 'SUCCESS'
       try {
@@ -1192,19 +1192,26 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   }
 
   private def print_node_usage() {
-    def largest_name_size = this.nodes_usage.collect { it.value.collect { it.exec_name }}.flatten().max { it.size() }.size()
+    def largest_name_size = this.nodes_usage.collect { it.value.collect { it.value.collect { it.exec_name }}}.flatten().max { it.size() }.size()
     String printable_string = ""
-    this.nodes_usage.each { node, allocation ->
+    this.nodes_usage.each { node, executor ->
       printable_string += "node: ${node}\n"
-      allocation.each {
-        printable_string += String.format("  %-${largest_name_size}s request time: %s start time: %s end time: %s status: %s\n",
-          it.exec_name,
-          LocalDateTime.parse(it.request_time).format(DateTimeFormatter.ofPattern("HH:mm:ss")),
-          LocalDateTime.parse(it.start_time).format(DateTimeFormatter.ofPattern("HH:mm:ss")),
-          LocalDateTime.parse(it.end_time).format(DateTimeFormatter.ofPattern("HH:mm:ss")),
-          it.status
-        )
-      }
+        def nesting_spaces = 2
+        executor.each { executor_number, allocation ->
+          if (executor.size() > 1) {
+            printable_string += "  executor number: ${executor_number}\n"
+            nesting_spaces = 4
+          }
+          allocation.each {
+            printable_string += String.format("${' '.multiply(nesting_spaces)}%-${largest_name_size}s request time: %s start time: %s end time: %s status: %s\n",
+              it.exec_name,
+              LocalDateTime.parse(it.request_time).format(DateTimeFormatter.ofPattern("HH:mm:ss")),
+              LocalDateTime.parse(it.start_time).format(DateTimeFormatter.ofPattern("HH:mm:ss")),
+              LocalDateTime.parse(it.end_time).format(DateTimeFormatter.ofPattern("HH:mm:ss")),
+              it.status
+            )
+          }
+        }
       printable_string += "\n"
     }
     steps.print(printable_string.trim())
