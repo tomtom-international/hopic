@@ -406,9 +406,9 @@ class ModalityRequest extends ChangeRequest {
 
 class NodeExecution {
   String exec_name
-  LocalDateTime end_time
-  LocalDateTime request_time
-  LocalDateTime start_time
+  String end_time     // A date-time without a time-zone in the ISO-8601 calendar system
+  String request_time // A date-time without a time-zone in the ISO-8601 calendar system
+  String start_time   // A date-time without a time-zone in the ISO-8601 calendar system
   String status
 }
 
@@ -1091,7 +1091,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     return steps.node(node_expr) {
       NodeExecution usage_entry
       if (exec_name != null) {
-        usage_entry = new NodeExecution(exec_name: exec_name, request_time: request_time, start_time: this.get_local_time())
+        usage_entry = new NodeExecution(exec_name: exec_name, request_time: request_time.toString(), start_time: this.get_local_time().toString())
         this.nodes_usage.get(steps.env.NODE_NAME, []).add(usage_entry)
       }
       def build_result = 'SUCCESS'
@@ -1104,7 +1104,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
         if (exec_name != null) {
           assert usage_entry != null
           assert usage_entry.exec_name == exec_name
-          usage_entry.end_time = this.get_local_time()
+          usage_entry.end_time = this.get_local_time().toString()
           usage_entry.status = build_result
         }
       }
@@ -1199,9 +1199,9 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       allocation.each {
         printable_string += String.format("  %-${largest_name_size}s request time: %s start time: %s end time: %s status: %s\n",
           it.exec_name,
-          it.request_time.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
-          it.start_time.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
-          it.end_time.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
+          LocalDateTime.parse(it.request_time).format(DateTimeFormatter.ofPattern("HH:mm:ss")),
+          LocalDateTime.parse(it.start_time).format(DateTimeFormatter.ofPattern("HH:mm:ss")),
+          LocalDateTime.parse(it.end_time).format(DateTimeFormatter.ofPattern("HH:mm:ss")),
           it.status
         )
       }
