@@ -404,13 +404,20 @@ class ModalityRequest extends ChangeRequest {
   }
 }
 
+class NodeExecution {
+  String exec_name
+  LocalDateTime end_time
+  LocalDateTime request_time
+  LocalDateTime start_time
+  String status
+}
+
 class CiDriver {
   private repo
   private steps
   private base_cmds          = [:]
   private cmds               = [:]
   private nodes              = [:]
-  private nodes_usage        = [:]
   private checkouts          = [:]
   private stashes            = [:]
   private worktree_bundles   = [:]
@@ -422,6 +429,7 @@ class CiDriver {
   private may_publish_result = null
   private config_file
   private bitbucket_api_credential_id  = null
+  private LinkedHashMap<String, NodeExecution[]> nodes_usage = [:]
 
   private final default_node_expr = "Linux && Docker"
 
@@ -938,6 +946,10 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     [build_name, build_identifier]
   }
 
+  public Map<String, NodeExecution[]> get_node_allocations() {
+    return this.nodes_usage
+  }
+
   /**
    * Unstash everything previously stashed on other nodes that we didn't yet unstash here.
    *
@@ -1032,7 +1044,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
         ?: this.nodes.collect { variant, node -> node }.join(" || ")
         ?: params.getOrDefault('default_node_expr', this.default_node_expr)
       )
-    return this.on_node([node_expr: node_expr, name: params.name]) {
+    return this.on_node([node_expr: node_expr, exec_name: params.name]) {
       return this.with_hopic { cmd ->
         this.ensure_checkout(cmd, params.getOrDefault('clean', false))
         this.ensure_unstashed()
@@ -1074,13 +1086,13 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
   private def on_node(Map node_params = [:], Closure closure) {
     def node_expr = node_params.getOrDefault("node_expr", this.default_node_expr)
-    def name = node_params.name
+    def exec_name = node_params.exec_name
     def request_time = this.get_local_time()
     return steps.node(node_expr) {
-      def usage_entry = null
-      if (name != null) {
-        this.nodes_usage.get(steps.env.NODE_NAME, []).add(name: name, request_time: request_time, start_time: this.get_local_time())
-        usage_entry = this.nodes_usage[steps.env.NODE_NAME][-1]
+      NodeExecution usage_entry
+      if (exec_name != null) {
+        usage_entry = new NodeExecution(exec_name: exec_name, request_time: request_time, start_time: this.get_local_time())
+        this.nodes_usage.get(steps.env.NODE_NAME, []).add(usage_entry)
       }
       def build_result = 'SUCCESS'
       try {
@@ -1089,9 +1101,9 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
         build_result = this.determine_error_build_result(e)
         throw e
       } finally {
-        if (name != null) {
+        if (exec_name != null) {
           assert usage_entry != null
-          assert usage_entry.name == name
+          assert usage_entry.exec_name == exec_name
           usage_entry.end_time = this.get_local_time()
           usage_entry.status = build_result
         }
@@ -1180,13 +1192,13 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   }
 
   private def print_node_usage() {
-    def largest_name_size = this.nodes_usage.collect { it.value.collect { it.name }}.flatten().max { it.size() }.size()
+    def largest_name_size = this.nodes_usage.collect { it.value.collect { it.exec_name }}.flatten().max { it.size() }.size()
     String printable_string = ""
     this.nodes_usage.each { node, allocation ->
       printable_string += "node: ${node}\n"
       allocation.each {
-        printable_string += String.format("  %-${largest_name_size}s request time %s start time: %s end time: %s status: %s\n",
-          it.name,
+        printable_string += String.format("  %-${largest_name_size}s request time: %s start time: %s end time: %s status: %s\n",
+          it.exec_name,
           it.request_time.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
           it.start_time.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
           it.end_time.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
@@ -1296,7 +1308,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
     this.extend_build_properties()
     this.decorate_output {
-      def (phases, is_publishable_change, submit_meta, additional_locks) = this.on_node(node_expr: default_node, name: "hopic-init") {
+      def (phases, is_publishable_change, submit_meta, additional_locks) = this.on_node(node_expr: default_node, exec_name: "hopic-init") {
         return this.with_hopic { cmd ->
           def workspace = steps.pwd()
 
@@ -1454,7 +1466,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
                   if (this.nodes.containsKey(variant)) {
                     label = this.nodes[variant]
                   }
-                  this.on_node(node_expr: label, name: "${phase}-${variant}") {
+                  this.on_node(node_expr: label, exec_name: "${phase}-${variant}") {
                     with_workspace_for_variant(variant) {
                       this.with_hopic(variant) { cmd ->
                         // If working with multiple executors on this node, uniquely identify this node by variant
