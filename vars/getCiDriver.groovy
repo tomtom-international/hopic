@@ -1192,7 +1192,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   }
 
   private def print_node_usage() {
-    def largest_name_size = this.nodes_usage.collect { it.value.collect { it.value.collect { it.exec_name }}}.flatten().max { it.size() }.size()
+    def largest_name_size = this.nodes_usage.collect { it.value.collect { it.value.collect { it.exec_name.size() }}}.flatten().max { it }
     String printable_string = ""
     this.nodes_usage.each { node, executor ->
       printable_string += "node: ${node}\n"
