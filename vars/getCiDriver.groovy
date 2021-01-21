@@ -16,8 +16,7 @@
 
 import groovy.json.JsonOutput
 import hudson.model.ParametersDefinitionProperty
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter;
+import java.text.SimpleDateFormat
 import org.jenkinsci.plugins.credentialsbinding.impl.CredentialNotFoundException
 import org.jenkinsci.plugins.scriptsecurity.sandbox.RejectedAccessException
 import org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty
@@ -406,9 +405,9 @@ class ModalityRequest extends ChangeRequest {
 
 class NodeExecution {
   String exec_name
-  LocalDateTime end_time
-  LocalDateTime request_time
-  LocalDateTime start_time
+  long end_time     // unix epoch time
+  long request_time // unix epoch time
+  long start_time   // unix epoch time 
   String status
 }
 
@@ -429,7 +428,7 @@ class CiDriver {
   private may_publish_result = null
   private config_file
   private bitbucket_api_credential_id  = null
-  private LinkedHashMap<String, NodeExecution[]> nodes_usage = [:]
+  private LinkedHashMap<String, LinkedHashMap<Integer, NodeExecution[]>> nodes_usage = [:]
 
   private final default_node_expr = "Linux && Docker"
 
@@ -946,7 +945,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     [build_name, build_identifier]
   }
 
-  public Map<String, NodeExecution[]> get_node_allocations() {
+  public Map<String, Map<Integer, NodeExecution[]>> get_node_allocations() {
     return this.nodes_usage
   }
 
@@ -1080,19 +1079,19 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     return e.getClass() == org.jenkinsci.plugins.workflow.steps.FlowInterruptedException ? 'ABORTED' : 'FAILURE'
   }
 
-  private LocalDateTime get_local_time() {
-    return LocalDateTime.now()
+  private long get_unix_epoch_time() {
+    return System.currentTimeMillis()
   }
 
   private def on_node(Map node_params = [:], Closure closure) {
     def node_expr = node_params.getOrDefault("node_expr", this.default_node_expr)
     def exec_name = node_params.exec_name
-    def request_time = this.get_local_time()
+    def request_time = this.get_unix_epoch_time()
     return steps.node(node_expr) {
       NodeExecution usage_entry
       if (exec_name != null) {
-        usage_entry = new NodeExecution(exec_name: exec_name, request_time: request_time, start_time: this.get_local_time())
-        this.nodes_usage.get(steps.env.NODE_NAME, []).add(usage_entry)
+        usage_entry = new NodeExecution(exec_name: exec_name, request_time: request_time, start_time: this.get_unix_epoch_time())
+        this.nodes_usage.get(steps.env.NODE_NAME, [:]).get(steps.env.EXECUTOR_NUMBER as Integer, []).add(usage_entry)
       }
       def build_result = 'SUCCESS'
       try {
@@ -1104,8 +1103,8 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
         if (exec_name != null) {
           assert usage_entry != null
           assert usage_entry.exec_name == exec_name
-          usage_entry.end_time = this.get_local_time()
-          usage_entry.status = build_result
+          usage_entry.end_time = this.get_unix_epoch_time()
+          usage_entry.status = steps.currentBuild.currentResult != 'SUCCESS' ? steps.currentBuild.currentResult : build_result
         }
       }
     }
@@ -1191,20 +1190,31 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     }
   }
 
+  private epoch_to_UTC_time(long time) {
+    return new Date(time)
+  }
+
   private def print_node_usage() {
-    def largest_name_size = this.nodes_usage.collect { it.value.collect { it.exec_name }}.flatten().max { it.size() }.size()
+    def largest_name_size = this.nodes_usage.collect { it.value.collect { it.value.collect { it.exec_name.size() }}}.flatten().max { it }
     String printable_string = ""
-    this.nodes_usage.each { node, allocation ->
+    this.nodes_usage.each { node, executor ->
       printable_string += "node: ${node}\n"
-      allocation.each {
-        printable_string += String.format("  %-${largest_name_size}s request time: %s start time: %s end time: %s status: %s\n",
-          it.exec_name,
-          it.request_time.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
-          it.start_time.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
-          it.end_time.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
-          it.status
-        )
-      }
+        def nesting_spaces = 2
+        executor.each { executor_number, allocation ->
+          if (executor.size() > 1) {
+            printable_string += "  executor number: ${executor_number}\n"
+            nesting_spaces = 4
+          }
+          allocation.each {
+            printable_string += String.format("${' '.multiply(nesting_spaces)}%-${largest_name_size}s request time: %s start time: %s end time: %s status: %s\n",
+              it.exec_name,
+              new SimpleDateFormat("HH:mm:ss").format(epoch_to_UTC_time(it.request_time)),
+              new SimpleDateFormat("HH:mm:ss").format(epoch_to_UTC_time(it.start_time)),
+              new SimpleDateFormat("HH:mm:ss").format(epoch_to_UTC_time(it.end_time)),
+              it.status
+            )
+          }
+        }
       printable_string += "\n"
     }
     steps.print(printable_string.trim())
