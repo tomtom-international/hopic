@@ -16,8 +16,7 @@
 
 import groovy.json.JsonOutput
 import hudson.model.ParametersDefinitionProperty
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter;
+import java.text.SimpleDateFormat
 import org.jenkinsci.plugins.credentialsbinding.impl.CredentialNotFoundException
 import org.jenkinsci.plugins.scriptsecurity.sandbox.RejectedAccessException
 import org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty
@@ -406,9 +405,9 @@ class ModalityRequest extends ChangeRequest {
 
 class NodeExecution {
   String exec_name
-  String end_time     // A date-time without a time-zone in the ISO-8601 calendar system
-  String request_time // A date-time without a time-zone in the ISO-8601 calendar system
-  String start_time   // A date-time without a time-zone in the ISO-8601 calendar system
+  long end_time     // unix epoch time
+  long request_time // unix epoch time
+  long start_time   // unix epoch time 
   String status
 }
 
@@ -1080,18 +1079,18 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     return e.getClass() == org.jenkinsci.plugins.workflow.steps.FlowInterruptedException ? 'ABORTED' : 'FAILURE'
   }
 
-  private LocalDateTime get_local_time() {
-    return LocalDateTime.now()
+  private long get_unix_epoch_time() {
+    return System.currentTimeMillis()
   }
 
   private def on_node(Map node_params = [:], Closure closure) {
     def node_expr = node_params.getOrDefault("node_expr", this.default_node_expr)
     def exec_name = node_params.exec_name
-    def request_time = this.get_local_time()
+    def request_time = this.get_unix_epoch_time()
     return steps.node(node_expr) {
       NodeExecution usage_entry
       if (exec_name != null) {
-        usage_entry = new NodeExecution(exec_name: exec_name, request_time: request_time.toString(), start_time: this.get_local_time().toString())
+        usage_entry = new NodeExecution(exec_name: exec_name, request_time: request_time, start_time: this.get_unix_epoch_time())
         this.nodes_usage.get(steps.env.NODE_NAME, [:]).get(steps.env.EXECUTOR_NUMBER as Integer, []).add(usage_entry)
       }
       def build_result = 'SUCCESS'
@@ -1104,7 +1103,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
         if (exec_name != null) {
           assert usage_entry != null
           assert usage_entry.exec_name == exec_name
-          usage_entry.end_time = this.get_local_time().toString()
+          usage_entry.end_time = this.get_unix_epoch_time()
           usage_entry.status = build_result
         }
       }
@@ -1191,6 +1190,10 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     }
   }
 
+  private epoch_to_UTC_time(long time) {
+    return new Date(time)
+  }
+
   private def print_node_usage() {
     def largest_name_size = this.nodes_usage.collect { it.value.collect { it.value.collect { it.exec_name.size() }}}.flatten().max { it }
     String printable_string = ""
@@ -1205,9 +1208,9 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           allocation.each {
             printable_string += String.format("${' '.multiply(nesting_spaces)}%-${largest_name_size}s request time: %s start time: %s end time: %s status: %s\n",
               it.exec_name,
-              LocalDateTime.parse(it.request_time).format(DateTimeFormatter.ofPattern("HH:mm:ss")),
-              LocalDateTime.parse(it.start_time).format(DateTimeFormatter.ofPattern("HH:mm:ss")),
-              LocalDateTime.parse(it.end_time).format(DateTimeFormatter.ofPattern("HH:mm:ss")),
+              new SimpleDateFormat("HH:mm:ss").format(epoch_to_UTC_time(it.request_time)),
+              new SimpleDateFormat("HH:mm:ss").format(epoch_to_UTC_time(it.start_time)),
+              new SimpleDateFormat("HH:mm:ss").format(epoch_to_UTC_time(it.end_time)),
               it.status
             )
           }
