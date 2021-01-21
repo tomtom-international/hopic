@@ -1104,7 +1104,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           assert usage_entry != null
           assert usage_entry.exec_name == exec_name
           usage_entry.end_time = this.get_unix_epoch_time()
-          usage_entry.status = build_result
+          usage_entry.status = steps.currentBuild.currentResult != 'SUCCESS' ? steps.currentBuild.currentResult : build_result
         }
       }
     }
