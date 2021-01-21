@@ -11,7 +11,7 @@ image: !image-from-ivy-manifest
 volumes:
   - source: ${CT_DEVENV_HOME}
     target: /tools/devenv
-    read-only: yes
+    read-only: true
   - ~/.ccache:~/.ccache:rw
   - ~/.ivy2:~/.ivy2:rw
   - .:/code/ci-config:ro
