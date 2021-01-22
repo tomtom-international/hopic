@@ -1,0 +1,7 @@
+phases:
+  build:
+    example:
+      - archive:
+          artifacts:
+            doesnotexist.txt
+          allow-empty-archive: true
