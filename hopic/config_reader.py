@@ -35,6 +35,7 @@ import os
 import re
 import shlex
 import subprocess
+from textwrap import dedent
 import typeguard
 import typing
 try:
@@ -765,6 +766,46 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
 
         if cmd_key == 'volumes-from':
             cmd[cmd_key] = expand_docker_volumes_from(volume_vars, cmd[cmd_key])
+
+        if cmd_key == 'extra-docker-args':
+            args = cmd[cmd_key]
+            if not isinstance(args, Mapping):
+                raise ConfigurationError(
+                    f"`extra-docker-args` member of `{variant}` should be a Mapping, not a {type(cmd[cmd_key]).__name__}",
+                    file=config_file)
+
+            allowed_options = {
+                'device': typing.Sequence[str],
+                'add-host': typing.Sequence[str],
+                'hostname': str,
+                'entrypoint': str,
+                'dns': str,
+                'init': bool,
+            }
+            disallowed_options = args.keys() - allowed_options
+            if disallowed_options != set():
+                raise ConfigurationError(dedent('''
+                    `extra-docker-args` member of `{}` contains one or more options that are not allowed:
+                      {}
+                    Allowed options:
+                      {}
+                    '''.format(
+                         variant,
+                         ', '.join(disallowed_options),
+                         ', '.join(allowed_options)
+                    )),
+                    file=config_file)
+            for k, v in args.items():
+                try:
+                    typeguard.check_type(argname=k, value=v, expected_type=allowed_options[k])
+                except TypeError:
+                    raise ConfigurationError(
+                        f"`extra-docker-args` argument `{k}` for `{variant}` should be a {allowed_options[k].__name__}, not a {type(v).__name__}",
+                        file=config_file)
+                if isinstance(v, str) and ' ' in v:
+                    raise ConfigurationError(
+                        f"`extra-docker-args` argument `{k}` for `{variant}` contains whitespace, which is not permitted.",
+                        file=config_file)
 
     if 'environment' in cmd and 'sh' not in cmd:
         raise ConfigurationError(

@@ -367,6 +367,39 @@ The result will be to use the ``hub.docker.com/tomtom/python:3.6.5`` image by de
 The ``PyPy`` build will instead use the ``hub.docker.com/tomtom/pypy:3.6.5`` image.
 I.e. for that build the image name is overridden from that used in the Ivy manifest, while still using the version from it.
 
+Extra Docker arguments
+----------------------
+
+.. option:: extra-docker-args
+
+There is a limited subset of ``docker run`` arguments that can be specified for a variant:
+
+``add-host``
+    This options accepts one value or a list of values.
+    Translates into ``docker run`` argument ``--add-host=<value>``, allowing the user to add a custom DNS entry to the container.
+    If a list is provided, the option shall be expanded to multiple ``--add-host`` arguments, e.g. ``--add-host=<list-item-1> --add-host=<list-item-2>``.
+
+``device``
+    This options accepts one value or a list of values.
+    Translates into ``docker run`` argument ``--device=<value>``, allowing the user to forward a device from the host machine to the container.
+    If a list is provided, the option shall be expanded to multiple ``--device`` arguments.
+
+``dns``
+    Translates into ``docker run`` argument ``--dns=<value>``, allowing the user to specify custom DNS servers to be used in the container.
+
+``entrypoint``
+    Translates into ``docker run`` argument ``--entrypoint=<value>``, allowing the user to override the entrypoint as defined in the Docker image.
+
+``hostname``
+    Translates into ``docker run`` argument ``--hostname=<value>``, allowing the user to specify the hostname that the container shall use.
+
+``init``
+    This option only accepts boolean value ``True``.
+    When provided, this translates into ``docker run`` argument ``--init``, which adds an init daemon to the container.
+
+.. literalinclude:: ../../examples/docker-extra-args.yaml
+    :language: yaml
+
 Docker in Docker
 ----------------
 
