@@ -1,0 +1,136 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>Hotfix Version Requirements &#8212; Hopic 1.29.3.dev24+g9e11954c documentation</title>
+    <link rel="stylesheet" href="_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" type="text/css" href="_static/banner.css" />
+    
+    <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="_static/language_data.js"></script>
+    
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Contributing" href="CONTRIBUTING.html" />
+    <link rel="prev" title="Configuration" href="config.html" /> 
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="CONTRIBUTING.html" title="Contributing"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="config.html" title="Configuration"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.29.3.dev24+g9e11954c documentation</a> &#187;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="hotfix-version-requirements">
+<h1>Hotfix Version Requirements<a class="headerlink" href="#hotfix-version-requirements" title="Permalink to this headline">¶</a></h1>
+<p>The key words “MUST”, “MUST NOT”, “REQUIRED”, “SHALL”, “SHALL
+NOT”, “SHOULD”, “SHOULD NOT”, “RECOMMENDED”,  “MAY”, and
+“OPTIONAL” in this document are to be interpreted as described in
+<span class="target" id="index-0"></span><a class="rfc reference external" href="https://tools.ietf.org/html/rfc2119.html"><strong>RFC 2119</strong></a>.</p>
+<div class="section" id="restrictions">
+<h2>Restrictions<a class="headerlink" href="#restrictions" title="Permalink to this headline">¶</a></h2>
+<ul>
+<li><p class="first">Hotfix branches <em>MUST NOT</em> contain any breaking changes or new features</p>
+</li>
+<li><p class="first">Hotfix branches <em>SHOULD NOT</em> contain any changes other than <em>urgent</em> bug fixes</p>
+</li>
+<li><p class="first">Hotfix bug fixes <em>MUST</em> use the <code class="docutils literal notranslate"><span class="pre">fix</span></code> conventional commit tag</p>
+</li>
+<li><p class="first">Hotfix branches <em>MUST</em> have an identifier unique to the version they’re based on</p>
+<p>This could be “customername” if and only if there is no more than a single hotfix branch for that customer on that version.</p>
+</li>
+</ul>
+</div>
+<div class="section" id="requirements">
+<h2>Requirements<a class="headerlink" href="#requirements" title="Permalink to this headline">¶</a></h2>
+<p>A hotfix version:</p>
+<ul class="simple">
+<li><em>MUST</em> always compare as coming <em>after</em> the version it’s based on and <em>before</em> any next released version</li>
+<li><em>MUST</em> always compare as coming after any previous hotfix version, with the same identifier, it’s directly based on</li>
+</ul>
+<p>In order to address these requirements, for semver 1 and 2, the following format of a hotfix version is prescribed:</p>
+<p>Given a base version <code class="docutils literal notranslate"><span class="pre">X.Y.Z</span></code> that the hotfix is based on a hotfix version is formatted as <code class="docutils literal notranslate"><span class="pre">X.Y.${Z</span> <span class="pre">+</span> <span class="pre">1}-hotfix.${ID}.${N}</span></code>.</p>
+<ul class="simple">
+<li><dl class="first docutils">
+<dt><code class="docutils literal notranslate"><span class="pre">ID</span></code> represents an alpha-numeric identifier that should be unique and is determined based on configuration.</dt>
+<dd><ul class="first last">
+<li><code class="docutils literal notranslate"><span class="pre">ID</span></code> <em>MUST</em> start with a letter (<code class="docutils literal notranslate"><span class="pre">[a-zA-Z]</span></code>) and <em>MUST</em> end with an alphanumeric character (<code class="docutils literal notranslate"><span class="pre">[a-zA-Z0-9]</span></code>) and <em>MAY</em> contain hyphens (<code class="docutils literal notranslate"><span class="pre">[-a-zA-Z0-9]</span></code>)</li>
+<li>In order to prevent compatibility problems <code class="docutils literal notranslate"><span class="pre">ID</span></code> <em>MUST NOT</em> have any of these forms <code class="docutils literal notranslate"><span class="pre">^(a|b|rc|alpha|beta)-?[0-9]+$</span></code></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><code class="docutils literal notranslate"><span class="pre">N</span></code> is a monotonically increasing integer</li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">N</span></code> <em>MAY</em> be determined by the commit distance through the first parent of the hotfix change to the base version.
+<code class="docutils literal notranslate"><span class="pre">N</span></code> <em>MAY</em> alternatively be the direct successor of the hotfix produced immediately before (0 for the first, 1, 2, 3, etc.).
+Consumers <em>SHOULD NOT</em> rely on the absolute value of <code class="docutils literal notranslate"><span class="pre">N</span></code> and <em>SHOULD</em> instead only use it to derive a total order for all versions that share the same identifier.</p>
+<p>As a default, in absence of configuration, <code class="docutils literal notranslate"><span class="pre">ID</span></code> <em>SHOULD</em> be derived from the commit hash of the direct descendent of the base version.
+If there are multiple such direct descendants, the one reachable through the left-most (usually first) parents <em>MUST</em> be used.
+If and only if <code class="docutils literal notranslate"><span class="pre">ID</span></code> is constructed directly from that commit hash (derived or in full) it <em>MUST</em> be formatted as <code class="docutils literal notranslate"><span class="pre">g${PREFIX_OF_COMMIT_HASH}</span></code>.</p>
+<p><em>If</em> <code class="docutils literal notranslate"><span class="pre">ID</span></code> is _not_ constructed from (a prefix of) the aforementioned commit hash it <em>MUST NOT</em> match the regex <code class="docutils literal notranslate"><span class="pre">/^g[0-9a-fA-F]+$/</span></code> to prevent ambiguity.</p>
+<p>It <em>SHOULD</em> be possible to configure <code class="docutils literal notranslate"><span class="pre">ID</span></code> to be derived from the name of the hotfix branch.
+This <em>MAY</em> be accomplished by a configurable regex.
+If such a regex is used the implementation <em>SHOULD</em> reject duplicating of the base version in the <code class="docutils literal notranslate"><span class="pre">ID</span></code> field.</p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h3>Versions</h3>
+<ul>
+    <li><a href="../master/index.html">master</a></li>
+    <li><a href="../release_0/index.html">release/0</a></li>
+    <li><a href="hotfix.html">release/1</a></li>
+</ul>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="CONTRIBUTING.html" title="Contributing"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="config.html" title="Configuration"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.29.3.dev24+g9e11954c documentation</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2021 - 2020, TomTom N.V..
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.8.5.
+    </div>
+  </body>
+</html>
