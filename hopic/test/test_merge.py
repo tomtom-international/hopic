@@ -118,7 +118,8 @@ phases:
     assert str(base_commit) in autosquashed_commits
 
 
-def hopic_config_subdir_version_file_tester(capfd, config_dir, hopic_config, version_file, version_input, expected_version, tmp_path, expect_tag=True):
+def hopic_config_subdir_version_file_tester(capfd, config_dir, hopic_config, version_file, version_input, expected_version,
+                                            tmp_path, expect_tag=True, commit_message='feat: add something useful', version_change=None):
     toprepo = tmp_path / 'repo'
     with git.Repo.init(str(toprepo), expand_vars=False) as repo:
         if not os.path.exists(toprepo / config_dir):
@@ -141,7 +142,11 @@ def hopic_config_subdir_version_file_tester(capfd, config_dir, hopic_config, ver
         with (toprepo / 'something.txt').open('w') as f:
             f.write('usable')
         repo.index.add(('something.txt',))
-        repo.index.commit(message='feat: add something useful', **_commitargs)
+        if version_change:
+            with (toprepo / version_file).open('w') as f:
+                f.write(version_change)
+            repo.index.add((version_file,))
+        repo.index.commit(message=commit_message, **_commitargs)
 
     # Successful checkout and build
     result = run(
@@ -840,3 +845,29 @@ def test_merge_commit_message_bump_error(capfd, tmp_path, commit_message, merge_
     result = merge_conventional_bump(capfd, tmp_path, commit_message, strict=strict, merge_message=merge_message)
     assert result.exit_code == 36
     assert f"The PR title results in version {merge_version} while the git commit messages result in version {source_version}" in result.stderr
+
+
+def test_version_bump_during_commit(capfd, tmp_path):
+    version = "0.0.3"
+    version_change = "0.1.0"
+    commit_message = "fix: some awesome fix"
+    commit_version = "0.1.1"
+    version_file = "revision_test.txt"
+    config_dir = ""
+    test_repo = hopic_config_subdir_version_file_tester(capfd,
+                                                        config_dir,
+                                                        dedent(f"""\
+                                                            version:
+                                                                file: {version_file}
+                                                                tag:  true
+                                                                bump: patch
+                                                                format: semver"""),
+                                                        version_file,
+                                                        dedent(f"""\
+                                                            version={version}"""),
+                                                        commit_version,
+                                                        tmp_path,
+                                                        version_change=f"version={version_change}",
+                                                        commit_message=commit_message)
+    with (test_repo / config_dir / version_file).open('r') as f:
+        assert f.read() == "version=0.1.1"
