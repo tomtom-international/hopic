@@ -411,6 +411,13 @@ class NodeExecution {
   String status
 }
 
+class LockWaitingTime {
+  String lock_name
+  Long acquire_time // unix epoch time (in ms) (can be null)
+  long release_time // unix epoch time (in ms)
+  long request_time // unix epoch time (in ms)
+}
+
 class CiDriver {
   private repo
   private steps
@@ -429,6 +436,7 @@ class CiDriver {
   private config_file
   private bitbucket_api_credential_id  = null
   private LinkedHashMap<String, LinkedHashMap<Integer, NodeExecution[]>> nodes_usage = [:]
+  private ArrayList<LockWaitingTime> lock_times = []
 
   private final default_node_expr = "Linux && Docker"
 
@@ -949,6 +957,11 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     return this.nodes_usage
   }
 
+
+  public AbstractList<LockWaitingTime> get_lock_metrics() {
+    return this.lock_times
+  }
+
   /**
    * Unstash everything previously stashed on other nodes that we didn't yet unstash here.
    *
@@ -1326,8 +1339,18 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
         }
       }
 
-      return lock_closure {
-        return closure()
+      def acquire_time = null
+      def lock_request_time = this.get_unix_epoch_time()
+      try {
+        return lock_closure {
+          acquire_time = this.get_unix_epoch_time()
+          return closure()
+        }
+      } finally {
+        def lock_release_time = this.get_unix_epoch_time()
+        ([lock_name] + additional_locks).each {
+          this.lock_times.add(new LockWaitingTime(lock_name: it, acquire_time: acquire_time, request_time: lock_request_time, release_time: lock_release_time))
+        }
       }
     }
   }
