@@ -405,10 +405,17 @@ class ModalityRequest extends ChangeRequest {
 
 class NodeExecution {
   String exec_name
-  long end_time     // unix epoch time
-  long request_time // unix epoch time
-  long start_time   // unix epoch time 
+  long end_time     // unix epoch time (in ms)
+  long request_time // unix epoch time (in ms)
+  long start_time   // unix epoch time (in ms)
   String status
+}
+
+class LockWaitingTime {
+  String lock_name
+  Long acquire_time // unix epoch time (in ms) (can be null)
+  long release_time // unix epoch time (in ms)
+  long request_time // unix epoch time (in ms)
 }
 
 class CiDriver {
@@ -429,6 +436,7 @@ class CiDriver {
   private config_file
   private bitbucket_api_credential_id  = null
   private LinkedHashMap<String, LinkedHashMap<Integer, NodeExecution[]>> nodes_usage = [:]
+  private ArrayList<LockWaitingTime> lock_times = []
 
   private final default_node_expr = "Linux && Docker"
 
@@ -949,6 +957,11 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     return this.nodes_usage
   }
 
+
+  public AbstractList<LockWaitingTime> get_lock_metrics() {
+    return this.lock_times
+  }
+
   /**
    * Unstash everything previously stashed on other nodes that we didn't yet unstash here.
    *
@@ -1312,6 +1325,36 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     }
   }
 
+  private def with_locks(lock_name, additional_locks = []) {
+    return { closure ->
+      def lock_closure = { locked_closure ->
+        if (additional_locks.size()) {
+          steps.lock(resource: lock_name, extra: additional_locks.collect{['resource': it]}) {
+            locked_closure()
+          }
+        } else {
+          steps.lock(lock_name) {
+            locked_closure()
+          }
+        }
+      }
+
+      def acquire_time = null
+      def lock_request_time = this.get_unix_epoch_time()
+      try {
+        return lock_closure {
+          acquire_time = this.get_unix_epoch_time()
+          return closure()
+        }
+      } finally {
+        def lock_release_time = this.get_unix_epoch_time()
+        ([lock_name] + additional_locks).each {
+          this.lock_times.add(new LockWaitingTime(lock_name: it, acquire_time: acquire_time, request_time: lock_request_time, release_time: lock_release_time))
+        }
+      }
+    }
+  }
+
   public def build(Map buildParams = [:]) {
     def clean = buildParams.getOrDefault('clean', false)
     def default_node = buildParams.getOrDefault('default_node_expr', this.default_node_expr)
@@ -1393,27 +1436,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       }
 
       // NOP as default
-      def lock_if_necessary = { closure -> closure() }
-
-      if (is_publishable_change) {
-        lock_if_necessary = { closure ->
-          def lock_closure = { locked_closure ->
-              if (additional_locks.size()) {
-                steps.lock(resource: get_lock_name(), extra: additional_locks.collect{['resource': it]}) {
-                  locked_closure()
-                }
-              } else {
-                steps.lock(get_lock_name()) {
-                  locked_closure()
-                }
-              }
-            }
-
-          return lock_closure {
-            return closure()
-          }
-        }
-      }
+      def lock_if_necessary = is_publishable_change ? this.with_locks(get_lock_name(), additional_locks) : { closure -> closure() }
 
       def artifactoryBuildInfo = [:]
       def hopic_extra_arguments = is_publishable_change ? ' --publishable-version': ''
