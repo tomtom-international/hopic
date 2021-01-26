@@ -758,7 +758,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       params += ' --ignore-initial-submodule-checkout-failure'
     }
 
-    def target_ref = this.target_commit ?: get_branch_name()
+    def target_ref = get_branch_name()
     if (!target_ref) {
       steps.println('\033[36m[info] target branch is not specified; using GIT_COMMIT.\033[39m')
       target_ref = steps.env.GIT_COMMIT
