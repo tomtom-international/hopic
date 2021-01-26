@@ -17,6 +17,51 @@
 Changelog
 =========
 
+1.30.0
+======
+
+New features
+------------
+
+* feat: add version check for pull request title (#300)
+* feat: expose node allocation timings via an interface (#302)
+* feat: add more detailed information to build info metrics (#309)
+* feat: introduce allow-empty-archive (#307)
+* feat: allow extra 'docker run' args to be specified per variant (#284)
+
+Improvements
+------------
+
+* improvement(versioning): log 'git describe' form of failed-to-parse git version (#301)
+* improvement: set human-friendly error for unknown VERSION (#266)
+
+Documentation improvements
+--------------------------
+
+* docs: requirements for the version format to support a hotfix process (#308)
+
+Bug fixes
+---------
+
+* fix: use only simple types on node information interface (#309)
+* fix: handle all build status values of Jenkins (#309)
+* fix: run archive before junit (#307)
+
+1.29.2
+======
+
+Improvements
+------------
+
+* improvement(groovy): mark methods that override something from the base as such (#299)
+
+Bug fixes
+---------
+
+* fix(groovy): abort before submitting a changed PR (#295)
+* fix: align abort_if_changed method signature (#297)
+* fix(groovy): annotate and align method signatures between base and derived (#299)
+
 1.29.1
 ======
 
