@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 - 2020 TomTom N.V. (https://tomtom.com)
+ * Copyright (c) 2018 - 2021 TomTom N.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -774,6 +774,9 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
     params += ' --target-remote=' + shell_quote(steps.scm.userRemoteConfigs[0].url)
     params += ' --target-ref='    + shell_quote(target_ref)
+    if (this.target_commit) {
+      params += ' --target-commit=' + shell_quote(this.target_commit)
+    }
 
     steps.env.GIT_COMMIT = this.with_git_credentials() {
       this.target_commit = steps.sh(script: cmd
