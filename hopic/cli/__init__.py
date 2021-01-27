@@ -1,4 +1,4 @@
-# Copyright (c) 2018 - 2020 TomTom N.V.
+# Copyright (c) 2018 - 2021 TomTom N.V.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -73,11 +73,18 @@ import shlex
 import shutil
 import subprocess
 import sys
+from typing import (
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
 from textwrap import dedent
 from yaml.error import YAMLError
 
 from .main import main
 from ..errors import (
+    CommitAncestorMismatchError,
     VersionBumpMismatchError,
     VersioningError,
 )
@@ -146,7 +153,17 @@ def may_publish(ctx):
     ctx.exit(0 if is_publish_branch(ctx) else 1)
 
 
-def checkout_tree(tree, remote, ref, clean=False, remote_name='origin', allow_submodule_checkout_failure=False, clean_config=[]):
+def checkout_tree(
+    tree,
+    remote,
+    ref,
+    *,
+    commit: Optional[str] = None,
+    clean: bool = False,
+    remote_name: str = 'origin',
+    allow_submodule_checkout_failure: bool = False,
+    clean_config: Union[List, Tuple] = (),
+):
     try:
         repo = git.Repo(tree)
         # Cleanup potential existing submodules to avoid conflicts in PR's where submodules are added
@@ -190,7 +207,13 @@ def checkout_tree(tree, remote, ref, clean=False, remote_name='origin', allow_su
             pass
         origin = repo.create_remote(remote_name, remote)
 
-        commit = origin.fetch(ref, tags=True)[0].commit
+        fetch_info, *_ = origin.fetch(ref, tags=True)
+
+        if commit is not None and repo.is_ancestor(commit, fetch_info.commit):
+            raise CommitAncestorMismatchError(commit, fetch_info.commit, ref)
+
+        commit = repo.commit(commit) if commit else fetch_info.commit
+
         repo.head.reference = commit
         repo.head.reset(index=True, working_tree=True)
         # Remove potentially moved submodules
@@ -259,18 +282,35 @@ def clean_repo(repo, clean_config=[]):
 @main.command()
 @click.option('--target-remote'     , metavar='<url>')
 @click.option('--target-ref'        , metavar='<ref>')
+@click.option('--target-commit'     , metavar='<commit>')
 @click.option('--clean/--no-clean'  , default=False, help='''Clean workspace of non-tracked files''')
 @click.option('--ignore-initial-submodule-checkout-failure/--no-ignore-initial-submodule-checkout-failure',
               default=False, help='''Ignore git submodule errors during initial checkout''')
 @click.pass_context
-def checkout_source_tree(ctx, target_remote, target_ref, clean, ignore_initial_submodule_checkout_failure):
+def checkout_source_tree(
+    ctx,
+    target_remote,
+    target_ref,
+    target_commit,
+    clean,
+    ignore_initial_submodule_checkout_failure,
+):
     """
     Checks out a source tree of the specified remote's ref to the workspace.
     """
 
     workspace = ctx.obj.workspace
     # Check out specified repository
-    click.echo(checkout_tree(workspace, target_remote, target_ref, clean, allow_submodule_checkout_failure=ignore_initial_submodule_checkout_failure))
+    click.echo(
+        checkout_tree(
+            workspace,
+            target_remote,
+            target_ref,
+            commit=target_commit,
+            clean=clean,
+            allow_submodule_checkout_failure=ignore_initial_submodule_checkout_failure,
+        )
+    )
 
     try:
         ctx.obj.config = read_config(determine_config_file_name(ctx), ctx.obj.volume_vars)
@@ -336,8 +376,14 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean, ignore_initial_s
         cfg.set_value('hopic.code', 'cfg-ref', target_ref)
         cfg.set_value('hopic.code', 'cfg-clean', str(clean))
 
-    checkout_tree(ctx.obj.code_dir, git_cfg.get('remote', target_remote), git_cfg.get('ref', target_ref),
-                  clean, clean_config=ctx.obj.config['clean'])
+    checkout_tree(
+        ctx.obj.code_dir,
+        git_cfg.get("remote", target_remote),
+        git_cfg.get("ref", target_ref),
+        commit=target_commit,
+        clean=clean,
+        clean_config=ctx.obj.config["clean"],
+    )
 
 
 @main.group()
@@ -420,11 +466,17 @@ def process_prepare_source_tree(
                 except (KeyError, TypeError):
                     code_remote = cfg.get_value('hopic.code', 'cfg-remote')
                 try:
-                    code_commit = ctx.obj.config['scm']['git']['ref']
+                    code_ref = ctx.obj.config["scm"]["git"]["ref"]
                 except (KeyError, TypeError):
-                    code_commit = cfg.get_value('hopic.code', 'cfg-ref')
+                    code_ref = cfg.get_value("hopic.code", "cfg-ref")
 
-            checkout_tree(ctx.obj.code_dir, code_remote, code_commit, code_clean, clean_config=ctx.obj.config['clean'])
+            checkout_tree(
+                ctx.obj.code_dir,
+                code_remote,
+                code_ref,
+                clean=code_clean,
+                clean_config=ctx.obj.config["clean"],
+            )
 
         version_info = ctx.obj.config['version']
 
@@ -1088,7 +1140,12 @@ def unbundle_worktrees(ctx, bundle):
 
             subdir = worktrees[ref]
             log.debug("Checkout worktree '%s' to '%s' (proposed branch '%s')", subdir, commit, ref)
-            checkout_tree(os.path.join(ctx.obj.workspace, subdir), bundle, ref, remote_name='bundle')
+            checkout_tree(
+                os.path.join(ctx.obj.workspace, subdir),
+                bundle,
+                ref,
+                remote_name="bundle",
+            )
             refspecs.append(f"{commit}:{ref}")
 
         # Eliminate duplicate pushes to the same ref and replace it by a single push to the _last_ specified object
