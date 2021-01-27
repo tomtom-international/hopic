@@ -1255,6 +1255,14 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
   private void build_variant(String phase, String variant, String cmd, String workspace, Map artifactoryBuildInfo, String hopic_extra_arguments) {
     steps.stage("${phase}-${variant}") {
+      // Interruption point (just after potentially lengthy node acquisition):
+      // abort PR builds that got changed since the start of this build
+      if (this.has_change()) {
+        this.with_git_credentials() {
+          this.get_change().abort_if_changed(steps.scm.userRemoteConfigs[0].url)
+        }
+      }
+
       // Meta-data retrieval needs to take place on the executing node to ensure environment variable expansion happens properly
       def meta = steps.readJSON(text: steps.sh(
           script: "${cmd} getinfo --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant),
@@ -1340,6 +1348,14 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
             includes: 'worktree-transfer.bundle',
           )
         this.worktree_bundles[name] = [nodes: [(executor_identifier): true]]
+      }
+
+      // Interruption point (just before node release potentially followed by lengthy node acquisition):
+      // abort PR builds that got changed since the start of this build
+      if (this.has_change()) {
+        this.with_git_credentials() {
+          this.get_change().abort_if_changed(steps.scm.userRemoteConfigs[0].url)
+        }
       }
     }
   }
