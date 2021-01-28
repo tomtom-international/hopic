@@ -900,14 +900,29 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     return "${repo_name}/${branch}"
   }
 
+  private boolean is_new_version() {
+    def version = this.get_submit_version()
+    if (version != null && version ==~ /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:[-0-9a-zA-Z]+(?:\.[-0-9a-zA-Z])*))(?:\+(?:[-0-9a-zA-Z]+(?:\.[-0-9a-zA-Z])*))?$/) {
+      // Pre-release versions are not new versions
+      return false
+    }
+    return true
+  }
+
   public String[] get_additional_ci_lock_names(cmd) {
     def config = steps.readJSON(text: steps.sh(
       script: "${cmd} show-config",
       label: 'Hopic (internal): retrieving additional CI lock names',
       returnStdout: true,
     ))
-    return config.getOrDefault('ci-locks', []).collect { lock ->
-      get_repo_name_and_branch(lock['repo-name'], lock['branch'])
+    return config.getOrDefault('ci-locks', []).findAll { lock ->
+      if (lock['lock-on-change'] == 'always' || 
+        (lock['lock-on-change'] == 'new-version-only' && this.is_new_version())) {
+          return true
+        }
+        return false
+    }.collect { lock ->
+      return get_repo_name_and_branch(lock['repo-name'], lock['branch'])
     }
   }
 
@@ -1459,13 +1474,8 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
                     // Don't have enough information to determine whether this is a submittable change: assume it is
                     return true
                   }
-                  if (run_on_change == 'new-version-only') {
-                    def version = this.get_submit_version()
-                    if (version != null
-                     && version ==~ /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:[-0-9a-zA-Z]+(?:\.[-0-9a-zA-Z])*))(?:\+(?:[-0-9a-zA-Z]+(?:\.[-0-9a-zA-Z])*))?$/) {
-                      // Pre-release versions are not new versions, skip
-                      return false
-                    }
+                  if (run_on_change == 'new-version-only' && !this.is_new_version()) {
+                    return false
                   }
                   return is_publishable_change
                 }
