@@ -365,7 +365,6 @@ def process_prepare_source_tree(
             commit_date,
         ):
     with git.Repo(ctx.obj.workspace) as repo:
-        pre_merge_version = ctx.obj.version
         if author_name is None or author_email is None:
             # This relies on /etc/passwd entries as a fallback, which might contain the info we need
             # for the current UID. Hence the conditional.
@@ -500,17 +499,16 @@ def process_prepare_source_tree(
                         log.debug("%s[%-8s][%-4s][%-3s]: %s", hash_prefix, breaking, feat, fix, commit.full_subject)
                 new_version = ctx.obj.version.next_version_for_commits(source_commits)
                 if merge_message and strict:
-                    merge_commit_next_version = pre_merge_version.next_version_for_commits([merge_message])
-                    source_commit_next_version = pre_merge_version.next_version_for_commits(source_commits)
-                    if source_commit_next_version != merge_commit_next_version:
-                        raise VersionBumpMismatchError(source_commit_next_version.pure_version(), merge_commit_next_version.pure_version())
+                    merge_commit_next_version = ctx.obj.version.next_version_for_commits([merge_message])
+                    if new_version != merge_commit_next_version:
+                        raise VersionBumpMismatchError(new_version, merge_commit_next_version)
             else:
                 raise NotImplementedError(f"unsupported version bumping policy {bump['policy']}")
 
             assert new_version >= ctx.obj.version, "the new version should be more recent than the old one"
 
             if new_version != ctx.obj.version:
-                log.info("bumped version to: %s (from %s)", click.style(str(new_version), fg='blue'), click.style(str(pre_merge_version), fg='blue'))
+                log.info("bumped version to: %s (from %s)", click.style(str(new_version), fg='blue'), click.style(str(ctx.obj.version), fg='blue'))
                 version_bumped = True
                 ctx.obj.version = new_version
 

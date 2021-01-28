@@ -54,5 +54,5 @@ class VersionBumpMismatchError(ClickException):
     exit_code = 36
 
     def __init__(self, commit_version, merge_version):
-        super().__init__(f"The PR title results in version {merge_version} while the git commit messages result in version {commit_version}, "
-                         "please align the PR title tag with the most significant commit message's tag.")
+        super().__init__(f"Version bump for commit messages results in different version ({commit_version}) "
+                         f"than the version based on the merge message ({merge_version}).")
