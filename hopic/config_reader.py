@@ -102,6 +102,21 @@ class RunOnChange(str, Enum):
     default = always
 
 
+class LockOnChange(str, Enum):
+    """
+    The :option:`lock-on-change` option allows you to specify when additional locks needs to be acquired.
+    The value of this option can be one of:
+    """
+    always           = 'always'
+    """Additional lock will always be acquired. (Default if not specified)."""
+    never            = 'never'
+    """Additional lock will never be acquired"""
+    new_version_only = 'new-version-only'
+    """Additional lock will only be acquired when the version was bumped and is to be submitted in the current execution."""
+
+    default = always
+
+
 class CredentialType(str, Enum):
     username_password = 'username-password'
     file              = 'file'
@@ -905,13 +920,27 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
     ci_locks = cfg.setdefault('ci-locks', [])
     if not isinstance(ci_locks, Sequence):
         raise ConfigurationError(f"`ci-locks` doesn't contain a sequence but a {type(ci_locks).__name__}", file=config)
+    ci_locks_argument_mapping = {
+        'branch'        : {'type': str },
+        'repo-name'     : {'type': str },
+        'lock-on-change': {'type': LockOnChange, 'default': LockOnChange.default},
+    }
     for lock_properties in ci_locks:
-        for property in ['branch', 'repo-name']:
+        for property, argument_spec in ci_locks_argument_mapping.items():
             if property not in lock_properties:
-                raise ConfigurationError(f"`ci-locks` {lock_properties} doesn't contain a {property}", file=config)
-            if not isinstance(lock_properties[property], str):
-                raise ConfigurationError(f"`ci-locks` {lock_properties} has an invalid attribute {property}, "
-                                         f"expected a string but got a {type(lock_properties[property])}", file=config)
+                if 'default' in argument_spec:
+                    lock_properties[property] = argument_spec['type'](argument_spec['default'])
+                else:
+                    raise ConfigurationError(f"`ci-locks` {lock_properties} doesn't contain a {property}", file=config)
+
+            msg = f'`ci-locks` {lock_properties} has an invalid attribute "{property}", expected %s, but got a {type(lock_properties[property]).__name__}'
+            if issubclass(ci_locks_argument_mapping[property]['type'], Enum):
+                try:
+                    isinstance(argument_spec['type'](lock_properties[property]), argument_spec['type'])
+                except ValueError:
+                    raise ConfigurationError(msg % ("one of " + ", ".join(f'"{x}"' for x in LockOnChange)))
+            elif not isinstance(lock_properties[property], argument_spec['type']):
+                raise ConfigurationError(msg % f"a {argument_spec['type'].__name__}")
 
     valid_image_types = (_basic_image_types, Mapping)
     image = cfg.setdefault('image', OrderedDict())

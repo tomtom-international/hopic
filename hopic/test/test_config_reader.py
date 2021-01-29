@@ -916,3 +916,38 @@ def test_docker_run_extra_arguments_wrong_type(capfd):
             ),
             {'WORKSPACE': None},
         )
+
+
+def test_ci_locks():
+    cfg = config_reader.read(_config_file(dedent('''\
+        ci-locks:
+            - branch: master
+              repo-name: FICTIONAL/some-lock
+            - branch: master
+              repo-name: FICTIONAL/some-other-lock
+              lock-on-change: never
+    ''')), {'WORKSPACE': None})
+    ci_locks = cfg['ci-locks']
+    assert isinstance(ci_locks, list)
+    assert ci_locks[0]['lock-on-change'] == 'always'
+    assert ci_locks[1]['lock-on-change'] == 'never'
+
+
+def test_ci_locks_wrong_lock_on_change_value():
+    with pytest.raises(ConfigurationError, match='has an invalid attribute "lock-on-change", expected one of'):
+        config_reader.read(_config_file(dedent('''\
+            ci-locks:
+            - branch: master
+              repo-name: FICTIONAL/some-other-lock
+              lock-on-change: never123
+        ''')), {'WORKSPACE': None})
+
+
+def test_ci_locks_wrong_branch_value():
+    with pytest.raises(ConfigurationError, match='has an invalid attribute "branch", expected a str, but got a list'):
+        config_reader.read(_config_file(dedent('''\
+            ci-locks:
+            - branch:
+              - master
+              repo-name: FICTIONAL/some-other-lock
+        ''')), {'WORKSPACE': None})

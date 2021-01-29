@@ -177,6 +177,12 @@ This assumes that the other git repo's are protected with a named lock while mer
 ``repo-name``
     Target git repo-name that needs to be protected
 
+``lock-on-change`` (optional)
+    Specifies when additional lock is acquired. Can only be one of the following values:
+     - *always* (default)
+     - *never*
+     - *new-version-only* (only acquire lock when version is bumped)
+
 The named lock that Hopic will acquire is formatted as ``repo-name``/``branch``
 If all merge checks pass and Hopic is going to submit the merge, all specified addition locks will be acquired at the beginning of a build, alongside the repository's own lock.
 
