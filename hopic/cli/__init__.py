@@ -442,7 +442,17 @@ def process_prepare_source_tree(
         merge_message = None
         strict = bump.get('strict', False)
         if 'message' in commit_params:
-            merge_message = parse_commit_message(commit_params['message'], policy=bump['policy'], strict=strict)
+            try:
+                merge_message = parse_commit_message(commit_params['message'], policy=bump['policy'], strict=strict)
+            except Exception as e:
+                if bump['policy'] == 'conventional-commits':
+                    log.error(
+                        "The pull request title could not be parsed as a conventional commit.\n"
+                        "Parsing the PR title failed due to:\n%s",
+                        "".join(f" - {problem}\n" for problem in str(e).split('\n'))
+                    )
+                    ctx.exit(1)
+                raise
 
         source_commits = (
                 () if source_commit is None and base_commit is None

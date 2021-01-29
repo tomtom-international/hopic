@@ -385,8 +385,8 @@ the same purpose, so you'll have to migrate.
 
 
 def test_merge_conventional_broken_feat(capfd, tmp_path):
-    with pytest.raises(RuntimeError):
-        merge_conventional_bump(capfd, tmp_path, message='feat add something useful', strict=True)
+    result = merge_conventional_bump(capfd, tmp_path, message='feat add something useful', strict=True)
+    assert result.exit_code != 0
 
 
 def test_merge_conventional_feat_bump_not_on_change(capfd, tmp_path):
