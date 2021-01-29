@@ -900,9 +900,13 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     return "${repo_name}/${branch}"
   }
 
+  public static version_is_prerelease(final String version) {
+    return version ==~ /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:[-0-9a-zA-Z]+(?:\.[-0-9a-zA-Z])*))(?:\+(?:[-0-9a-zA-Z]+(?:\.[-0-9a-zA-Z])*))?$/
+  }
+
   private boolean is_new_version() {
     def version = this.get_submit_version()
-    if (version != null && version ==~ /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:[-0-9a-zA-Z]+(?:\.[-0-9a-zA-Z])*))(?:\+(?:[-0-9a-zA-Z]+(?:\.[-0-9a-zA-Z])*))?$/) {
+    if (version != null && CiDriver.version_is_prerelease(version)) {
       // Pre-release versions are not new versions
       return false
     }
