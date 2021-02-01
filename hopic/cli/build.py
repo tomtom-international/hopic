@@ -149,7 +149,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                     # Force clean builds when we don't know how to discover changed files
                     for subdir, worktree in worktrees.items():
                         if 'changed-files' not in worktree:
-                            with git.Repo(os.path.join(ctx.obj.workspace, subdir)) as repo:
+                            with git.Repo(ctx.obj.workspace / subdir) as repo:
                                 clean_output = repo.git.clean('-xd', subdir, force=True)
                                 if clean_output:
                                     log.info('%s', clean_output)
@@ -162,7 +162,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                 pass
 
             try:
-                scoped_volumes = expand_docker_volume_spec(ctx.obj.volume_vars['CFGDIR'],
+                scoped_volumes = expand_docker_volume_spec(ctx.obj.config_dir,
                                                            ctx.obj.volume_vars, cmd['volumes'],
                                                            add_defaults=False)
                 volumes.update(scoped_volumes)
@@ -236,7 +236,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
             except KeyError:
                 continue
 
-            volume_vars['WORKSPACE'] = '/code' if image is not None else ctx.obj.code_dir
+            volume_vars['WORKSPACE'] = '/code' if image is not None else str(ctx.obj.code_dir)
 
             env = (dict(
                 HOME            = '/home/sandbox',              # noqa: E251 "unexpected spaces around '='"
@@ -372,7 +372,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                             pass
 
             for subdir, worktree in worktrees.items():
-                with git.Repo(os.path.join(ctx.obj.workspace, subdir)) as repo:
+                with git.Repo(ctx.obj.workspace / subdir) as repo:
                     worktree_commits.setdefault(subdir, [
                         str(repo.head.commit),
                         str(repo.head.commit),
@@ -430,13 +430,13 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                         repo.create_head(worktree_ref, submit_commit)
                     bundle_commits.append(f"{base_commit}..{worktree_ref}")
                     refspecs.append(f"{submit_commit}:{worktree_ref}")
-                repo.git.bundle('create', os.path.join(ctx.obj.workspace, 'worktree-transfer.bundle'), *bundle_commits)
+                repo.git.bundle('create', ctx.obj.workspace / 'worktree-transfer.bundle', *bundle_commits)
 
                 git_cfg.set_value(section, 'refspecs', ' '.join(shlex.quote(refspec) for refspec in refspecs))
 
         # Post-processing to make these artifacts as reproducible as possible
         for artifact in artifacts:
-            binary_normalize.normalize(os.path.join(ctx.obj.code_dir, artifact), source_date_epoch=ctx.obj.source_date_epoch)
+            binary_normalize.normalize(ctx.obj.code_dir / artifact, source_date_epoch=ctx.obj.source_date_epoch)
 
 
 @click.command()

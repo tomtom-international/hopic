@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 from pathlib import Path
 import re
 import subprocess
@@ -63,8 +62,8 @@ def determine_config_file_name(ctx, workspace: Optional[Path] = None):
                 ):
             if workspace is None:
                 workspace = ctx.obj.workspace
-            fname = os.path.join(workspace, fname)
-            if os.path.isfile(fname):
+            fname = workspace / fname
+            if fname.is_file():
                 return fname
         raise
 

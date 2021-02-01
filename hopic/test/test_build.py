@@ -1007,7 +1007,7 @@ def test_dry_run_build(capfd, monkeypatch):
         ['[dry-run] would execute:'],
         ['generate doc/build/html/output.txt'],
         template_build_command,
-        ['docker run', './test/dir:/tmp', 'test-image:42.42 invalid command a'],
+        ['docker run', '/test/dir:/tmp', 'test-image:42.42 invalid command a'],
         ['invalid command b'],
     ]
 

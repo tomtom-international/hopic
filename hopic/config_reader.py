@@ -32,6 +32,7 @@ import io
 import json
 import logging
 import os
+from pathlib import Path
 import re
 import shlex
 import subprocess
@@ -530,8 +531,8 @@ def expand_docker_volume_spec(config_dir, volume_vars, volume_specs, add_default
 
             # Make relative paths relative to the configuration directory.
             # Absolute paths will be absolute
-            source = os.path.join(config_dir, source)
-            volume['source'] = source
+            source = config_dir / source
+            volume['source'] = str(source)
 
         # Expand target specification resolved on the guest side
         if 'target' in volume:
@@ -938,10 +939,11 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
         file_close = True
 
     try:
-        config_dir = os.path.dirname(config)
+        config = Path(config)
+        config_dir = config.parent
 
         volume_vars = volume_vars.copy()
-        volume_vars['CFGDIR'] = config_dir
+        volume_vars['CFGDIR'] = str(config_dir)
 
         cfg = install_top_level_extensions(f, config, extension_installer, volume_vars)
         f.seek(0)
