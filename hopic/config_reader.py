@@ -1,4 +1,4 @@
-# Copyright (c) 2018 - 2020 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2018 - 2021 TomTom N.V. (https://tomtom.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -707,8 +707,19 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
                 raise ConfigurationError(
                         f"'run-on-change' member's value of {cmd['run-on-change']!r} is not among the valid options ({', '.join(RunOnChange)})",
                         file=config_file) from exc
-        if cmd_key in ('archive', 'fingerprint') and isinstance(cmd[cmd_key], (OrderedDict, dict)) and 'artifacts' in cmd[cmd_key]:
-            artifacts = cmd[cmd_key]['artifacts']
+        if cmd_key in ('archive', 'fingerprint'):
+            if not isinstance(cmd[cmd_key], (OrderedDict, dict)):
+                raise ConfigurationError(
+                    f"'{phase}.{variant}.{cmd_key}' member is not a mapping",
+                    file=config_file,
+                )
+            try:
+                artifacts = cmd[cmd_key]['artifacts']
+            except KeyError:
+                raise ConfigurationError(
+                    f"'{phase}.{variant}.{cmd_key}' lacks the mandatory 'artifacts' member",
+                    file=config_file,
+                )
 
             # Convert single artifact string to list of single artifact specification
             if isinstance(artifacts, str):
@@ -725,13 +736,29 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
                 for artifact in artifacts:
                     artifact.setdefault('target', target)
 
+            for artifact_idx, artifact in enumerate(artifacts):
+                try:
+                    pattern = artifact["pattern"]
+                except KeyError:
+                    raise ConfigurationError(
+                        f"'{phase}.{variant}.{cmd_key}[{artifact_idx}]' lacks the mandatory 'pattern' member",
+                        file=config_file,
+                    )
+                if not isinstance(pattern, str):
+                    raise ConfigurationError(
+                        f"'{phase}.{variant}.{cmd_key}[{artifact_idx}].pattern' is not a string but a `{type(pattern).__name__}",
+                        file=config_file,
+                    )
+
             cmd[cmd_key]['artifacts'] = artifacts
 
             if 'allow-empty-archive' in cmd[cmd_key]:
                 if 'allow-missing' in cmd[cmd_key]:
                     raise ConfigurationError(
                         "'allow-empty-archive' and 'allow-missing' are not allowed in the same "
-                        "Archive configuration, use only 'allow-missing'")
+                        "Archive configuration, use only 'allow-missing'",
+                        file=config_file,
+                    )
 
                 allow_empty_archive = cmd[cmd_key]['allow-empty-archive']
                 cmd[cmd_key].pop('allow-empty-archive')
@@ -739,7 +766,9 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
 
             if 'allow-missing' in cmd[cmd_key] and not isinstance(cmd[cmd_key]['allow-missing'], bool):
                 raise ConfigurationError(
-                        f"'allow-missing' should be a boolean, not a {type(cmd[cmd_key]['allow-missing']).__name__}")
+                    f"'allow-missing' should be a boolean, not a {type(cmd[cmd_key]['allow-missing']).__name__}",
+                    file=config_file,
+                )
         if cmd_key == 'junit':
             if isinstance(cmd[cmd_key], list):
                 cmd[cmd_key] = OrderedDict([('test-results', cmd[cmd_key])])
@@ -747,15 +776,23 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
                 cmd[cmd_key] = OrderedDict([('test-results', [cmd[cmd_key]])])
 
             try:
-                artifacts = cmd[cmd_key]['test-results']
+                test_results = cmd[cmd_key]['test-results']
             except KeyError:
-                raise ConfigurationError("JUnit configuration did not contain mandatory field 'test-results'")
-            else:
-                if isinstance(artifacts, str):
-                    cmd[cmd_key]['test-results'] = [artifacts]
-                if 'allow-missing' in cmd[cmd_key] and not isinstance(cmd[cmd_key]['allow-missing'], bool):
-                    raise ConfigurationError(
-                        f"'allow-missing' should be a boolean, not a {type(cmd[cmd_key]['allow-missing']).__name__}")
+                raise ConfigurationError("JUnit configuration did not contain mandatory field 'test-results'", file=config_file)
+            if isinstance(test_results, str):
+                test_results = cmd[cmd_key]['test-results'] = [test_results]
+            try:
+                typeguard.check_type(argname=f"{phase}.{variant}.{cmd_key}.test-results", value=test_results, expected_type=typing.Sequence[str])
+            except TypeError as exc:
+                raise ConfigurationError(
+                    "'{phase}.{variant}.{cmd_key}.test-results' member is not a list of file pattern strings",
+                    file=config_file,
+                ) from exc
+            if 'allow-missing' in cmd[cmd_key] and not isinstance(cmd[cmd_key]['allow-missing'], bool):
+                raise ConfigurationError(
+                    f"'allow-missing' should be a boolean, not a {type(cmd[cmd_key]['allow-missing']).__name__}",
+                    file=config_file,
+                )
         if cmd_key == 'with-credentials':
             if isinstance(cmd[cmd_key], str):
                 cmd[cmd_key] = OrderedDict([('id', cmd[cmd_key])])

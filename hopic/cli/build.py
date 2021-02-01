@@ -1,4 +1,4 @@
-# Copyright (c) 2018 - 2020 TomTom N.V.
+# Copyright (c) 2018 - 2021 TomTom N.V.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -138,7 +138,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                     ):
                 try:
                     artifacts.extend(expand_vars(volume_vars, (
-                        artifact['pattern'] for artifact in cmd[artifact_key]['artifacts'] if 'pattern' in artifact)))
+                        artifact['pattern'] for artifact in cmd[artifact_key]['artifacts'])))
                 except (KeyError, TypeError):
                     pass
 

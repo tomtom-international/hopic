@@ -1,4 +1,4 @@
-# Copyright (c) 2020 - 2020 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2020 - 2021 TomTom N.V. (https://tomtom.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -1029,3 +1029,75 @@ def test_junit_allow_missing_not_boolean():
                      test-results: doesnotexist.txt
                      allow-missing: 'true'
         ''')), {'WORKSPACE': None})
+
+
+def test_archive_type_mismatch():
+    with pytest.raises(ConfigurationError, match=r"member is not a mapping"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    '''\
+                    phases:
+                      test:
+                        example:
+                          - archive: null
+                    '''
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_archive_missing_artifacts():
+    with pytest.raises(ConfigurationError, match=r"lacks the mandatory 'artifacts' member"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    '''\
+                    phases:
+                      test:
+                        example:
+                          - archive: {}
+                    '''
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_archive_artifacts_missing_pattern():
+    with pytest.raises(ConfigurationError, match=r"lacks the mandatory 'pattern' member"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    '''\
+                    phases:
+                      test:
+                        example:
+                          - archive:
+                              artifacts:
+                                - {}
+                    '''
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_archive_artifacts_pattern_type_mismatch():
+    with pytest.raises(ConfigurationError, match=r"pattern' is not a string"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    '''\
+                    phases:
+                      test:
+                        example:
+                          - archive:
+                              artifacts:
+                                - pattern: null
+                    '''
+                )
+            ),
+            {'WORKSPACE': None},
+        )
