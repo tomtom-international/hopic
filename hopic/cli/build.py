@@ -138,7 +138,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                     ):
                 try:
                     artifacts.extend(expand_vars(volume_vars, (
-                        artifact['pattern'] for artifact in cmd[artifact_key]['artifacts'])))
+                        artifact['pattern'].replace("(*)", "*") for artifact in cmd[artifact_key]['artifacts'])))
                 except (KeyError, TypeError):
                     pass
 
@@ -435,8 +435,9 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                 git_cfg.set_value(section, 'refspecs', ' '.join(shlex.quote(refspec) for refspec in refspecs))
 
         # Post-processing to make these artifacts as reproducible as possible
-        for artifact in artifacts:
-            binary_normalize.normalize(ctx.obj.code_dir / artifact, source_date_epoch=ctx.obj.source_date_epoch)
+        for artifact_pattern in artifacts:
+            for artifact in ctx.obj.code_dir.glob(artifact_pattern):
+                binary_normalize.normalize(artifact, source_date_epoch=ctx.obj.source_date_epoch)
 
 
 @click.command()

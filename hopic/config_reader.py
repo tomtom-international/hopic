@@ -750,6 +750,14 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
                         f"'{phase}.{variant}.{cmd_key}[{artifact_idx}].pattern' is not a string but a `{type(pattern).__name__}",
                         file=config_file,
                     )
+                try:
+                    for _ in Path(os.path.devnull).glob(pattern.replace("(*)", "*")):
+                        break
+                except ValueError as exc:
+                    raise ConfigurationError(
+                        f"'{phase}.{variant}.{cmd_key}[{artifact_idx}].pattern' value of {pattern!r} is not a valid glob pattern: {exc}",
+                        file=config_file,
+                    ) from exc
 
             cmd[cmd_key]['artifacts'] = artifacts
 
@@ -794,6 +802,15 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
                     f"'allow-missing' should be a boolean, not a {type(cmd[cmd_key]['allow-missing']).__name__}",
                     file=config_file,
                 )
+            for pattern_idx, pattern in enumerate(test_results):
+                try:
+                    for _ in Path(os.path.devnull).glob(pattern):
+                        break
+                except ValueError as exc:
+                    raise ConfigurationError(
+                        f"'{phase}.{variant}.{cmd_key}[{pattern_idx}]' value of {pattern!r} is not a valid glob pattern: {exc}",
+                        file=config_file,
+                    ) from exc
         if cmd_key == 'with-credentials':
             if isinstance(cmd[cmd_key], str):
                 cmd[cmd_key] = OrderedDict([('id', cmd[cmd_key])])
