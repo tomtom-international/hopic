@@ -209,7 +209,7 @@ def checkout_tree(
 
         fetch_info, *_ = origin.fetch(ref, tags=True)
 
-        if commit is not None and repo.is_ancestor(commit, fetch_info.commit):
+        if commit is not None and not repo.is_ancestor(commit, fetch_info.commit):
             raise CommitAncestorMismatchError(commit, fetch_info.commit, ref)
 
         commit = repo.commit(commit) if commit else fetch_info.commit
