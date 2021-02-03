@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from textwrap import dedent
+
 from click import ClickException
 
 

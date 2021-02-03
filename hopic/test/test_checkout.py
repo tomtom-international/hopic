@@ -305,8 +305,29 @@ def test_checkout_non_head_commit(capfd, tmp_path):
         repo.index.add((str(dummy.relative_to(toprepo)),))
         repo.index.commit(message="Subsequent dummy commit", **_commitargs)
 
-    # checkout-source-tree should be successful
     result = run(
         ("checkout-source-tree", "--target-remote", str(toprepo), "--target-ref", "master", "--target-commit", str(first_commit)),
     )
     assert result.exit_code == 0
+
+
+def test_reject_checkout_out_of_branch_commit(capfd, tmp_path):
+    toprepo = tmp_path / "repo"
+    dummy = toprepo / "dummy.txt"
+    first_content = "Lalalala!\n"
+    with git.Repo.init(toprepo, expand_vars=False) as repo:
+        dummy.write_text(first_content)
+        repo.index.add((str(dummy.relative_to(toprepo)),))
+        first_commit = repo.index.commit(message="Initial dummy commit", **_commitargs)
+
+        dummy.write_text("Mooh!\n")
+        repo.index.add((str(dummy.relative_to(toprepo)),))
+        final_commit = repo.index.commit(message="Subsequent dummy commit", **_commitargs)
+        repo.heads.master.commit = first_commit
+        repo.head.reference = repo.heads.master
+        repo.head.reset(index=True, working_tree=True)
+
+    result = run(
+        ("checkout-source-tree", "--target-remote", str(toprepo), "--target-ref", "master", "--target-commit", str(final_commit)),
+    )
+    assert result.exit_code == 37
