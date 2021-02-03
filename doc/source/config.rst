@@ -809,6 +809,21 @@ For more information about this feature see: https://www.tutorialspoint.com/jenk
 .. literalinclude:: ../../examples/junit.yaml
     :language: yaml
 
+JUnit allow-missing
+-----------------
+
+.. option:: allow-missing
+
+Normally, a build fails if none of the specified JUnit XML files are found.
+Setting this option's value to true allows the build to continue even if no JUnit XML files were found.
+When this option is specified, JUnit configuration must contain also a ``test-results`` option which specifies
+which XML files to be uploaded.
+
+**example:**
+
+.. literalinclude:: ../../examples/allow-missing-junit.yaml
+    :language: yaml
+
 Artifact Archiving
 ------------------
 
@@ -896,9 +911,16 @@ Set this value to ``true`` to enable this option.
     :language: yaml
 
 Artifact allow-empty-archive
------------------------
+----------------------------
 
-.. option:: allow-empty-archive
+.. note:: ``allow-empty-archive`` is a deprecated name for the ``allow-missing`` option.
+Avoid its use as it will be removed in the next release.
+Enabling both ``allow-empty-archive`` and  ``allow-missing`` will result in a configuration error.
+
+Artifact allow-missing
+----------------------
+
+.. option:: allow-missing
 
 Normally, a build fails if archiving returns zero artifacts. This option allows the archiving process to return
 nothing without failing the build. Instead, the archive step will simply throw a warning.
@@ -906,7 +928,7 @@ Set this value to ``true`` to enable this option.
 
 **example:**
 
-.. literalinclude:: ../../examples/allow-empty-archive.yaml
+.. literalinclude:: ../../examples/allow-missing-archive.yaml
     :language: yaml
 
 Embed scripts

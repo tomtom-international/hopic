@@ -4,4 +4,4 @@ phases:
       - archive:
           artifacts:
             doesnotexist.txt
-          allow-empty-archive: true
+          allow-missing: true

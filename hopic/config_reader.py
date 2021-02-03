@@ -726,9 +726,36 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
                     artifact.setdefault('target', target)
 
             cmd[cmd_key]['artifacts'] = artifacts
+
+            if 'allow-empty-archive' in cmd[cmd_key]:
+                if 'allow-missing' in cmd[cmd_key]:
+                    raise ConfigurationError(
+                        "'allow-empty-archive' and 'allow-missing' are not allowed in the same "
+                        "Archive configuration, use only 'allow-missing'")
+
+                allow_empty_archive = cmd[cmd_key]['allow-empty-archive']
+                cmd[cmd_key].pop('allow-empty-archive')
+                cmd[cmd_key]['allow-missing'] = allow_empty_archive
+
+            if 'allow-missing' in cmd[cmd_key] and not isinstance(cmd[cmd_key]['allow-missing'], bool):
+                raise ConfigurationError(
+                        f"'allow-missing' should be a boolean, not a {type(cmd[cmd_key]['allow-missing']).__name__}")
         if cmd_key == 'junit':
+            if isinstance(cmd[cmd_key], list):
+                cmd[cmd_key] = OrderedDict([('test-results', cmd[cmd_key])])
             if isinstance(cmd[cmd_key], str):
-                cmd[cmd_key] = [cmd[cmd_key]]
+                cmd[cmd_key] = OrderedDict([('test-results', [cmd[cmd_key]])])
+
+            try:
+                artifacts = cmd[cmd_key]['test-results']
+            except KeyError:
+                raise ConfigurationError("JUnit configuration did not contain mandatory field 'test-results'")
+            else:
+                if isinstance(artifacts, str):
+                    cmd[cmd_key]['test-results'] = [artifacts]
+                if 'allow-missing' in cmd[cmd_key] and not isinstance(cmd[cmd_key]['allow-missing'], bool):
+                    raise ConfigurationError(
+                        f"'allow-missing' should be a boolean, not a {type(cmd[cmd_key]['allow-missing']).__name__}")
         if cmd_key == 'with-credentials':
             if isinstance(cmd[cmd_key], str):
                 cmd[cmd_key] = OrderedDict([('id', cmd[cmd_key])])

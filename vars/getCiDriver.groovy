@@ -1035,7 +1035,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           steps.archiveArtifacts(
               artifacts: pattern,
               fingerprint: meta.archive.getOrDefault('fingerprint', true),
-              allowEmptyArchive: meta.archive.getOrDefault('allow-empty-archive', false),
+              allowEmptyArchive: meta.archive.getOrDefault('allow-missing', false),
             )
         } else if (archiving_cfg == 'fingerprint') {
           steps.fingerprint(pattern)
@@ -1287,10 +1287,11 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           return artifactoryBuildInfo[server_id]
         }
         if (meta.containsKey('junit')) {
-          def results = meta.junit
           steps.dir(workspace) {
-            meta.junit.each { result ->
-              steps.junit(result)
+            meta.junit['test-results'].each { result ->
+              steps.junit(
+                testResults: result,
+                allowEmptyResults: meta.junit.getOrDefault('allow-missing', false))
             }
           }
         }
