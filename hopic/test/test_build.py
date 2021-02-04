@@ -89,8 +89,17 @@ def run_with_config(config, *args, files={}, env=None, monkeypatch_injector=Monk
                     f.write('dirty')
                 repo.index.add(('dirty_file'))  # do not commit to create the dirty state
         for arg in args:
-            with monkeypatch_injector:
+            orig_main = hopic_cli.main
+
+            def mock_main(*args, **kwargs):
+                with monkeypatch_injector:
+                    return orig_main(*args, **kwargs)
+
+            try:
+                hopic_cli.main = mock_main
                 result = runner.invoke(hopic_cli, arg)
+            finally:
+                hopic_cli.main = orig_main
 
             if result.stdout_bytes:
                 print(result.stdout, end='')
@@ -323,7 +332,14 @@ phases:
     assert not expected
 
 
-def test_docker_run_arguments(monkeypatch, tmp_path):
+@pytest.mark.parametrize('expect_forward_tty, has_stderr, has_stdin, has_stdout', (
+    (True,   True , True , True),
+    (False,  True , True , False),
+    (False,  True , False, True),
+    (False,  False, True , False),
+    (False,  False, False, False),
+))
+def test_docker_run_arguments(monkeypatch, tmp_path, expect_forward_tty, has_stderr, has_stdin, has_stdout):
     expected_image_command = [
         ('buildpack-deps:18.04', './a.sh'),
     ]
@@ -336,7 +352,7 @@ def test_docker_run_arguments(monkeypatch, tmp_path):
 
     def mock_check_call(args, *popenargs, **kwargs):
         expected_docker_args = [
-            '--cap-add=SYS_PTRACE', '--rm', '--tty', '--volume=/etc/passwd:/etc/passwd:ro',
+            '--cap-add=SYS_PTRACE', '--rm', '--volume=/etc/passwd:/etc/passwd:ro',
             '--volume=/etc/group:/etc/group:ro', '--workdir=/code',
             f"--volume={os.getcwd()}:/code",
             f"--env=SOURCE_DATE_EPOCH={_source_date_epoch}",
@@ -347,6 +363,8 @@ def test_docker_run_arguments(monkeypatch, tmp_path):
             f"--group-add={MockDockerSockStat.st_gid}",
             re.compile(r'^--cidfile=.*'),
         ]
+        if expect_forward_tty:
+            expected_docker_args += ['--tty']
 
         assert args[0] == 'docker'
         assert args[1] == 'run'
@@ -369,6 +387,9 @@ def test_docker_run_arguments(monkeypatch, tmp_path):
         old_os_stat = os.stat
         monkeypatch.setattr(os, 'stat', lambda path: MockDockerSockStat() if path == '/var/run/docker.sock' else old_os_stat(path))
         monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+        monkeypatch.setattr(sys.stderr, 'isatty', lambda: has_stderr)
+        monkeypatch.setattr(sys.stdin, 'isatty', lambda: has_stdin)
+        monkeypatch.setattr(sys.stdout, 'isatty', lambda: has_stdout)
 
     result = run_with_config('''\
 image:

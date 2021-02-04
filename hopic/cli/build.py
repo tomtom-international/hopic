@@ -18,6 +18,7 @@ import shlex
 import signal
 import stat
 import subprocess
+import sys
 import tempfile
 import urllib.parse
 from collections.abc import (
@@ -292,7 +293,6 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                                       '--rm',
                                       f"--cidfile={cidfile}",
                                       '--net=host',
-                                      '--tty',
                                       '--cap-add=SYS_PTRACE',
                                       f"--tmpfs={final_env['HOME']}:exec,uid={uid},gid={gid}",
                                       f"--user={uid}:{gid}",
@@ -300,6 +300,9 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                                       ] + [
                                           f"--env={k}={v}" for k, v in final_env.items()
                                       ]
+
+                        if all(hasattr(fd, 'isatty') and fd.isatty() for fd in [sys.stderr, sys.stdout, sys.stdin]):
+                            docker_run += ['--tty']
 
                         if docker_in_docker:
                             try:
