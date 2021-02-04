@@ -380,7 +380,6 @@ def checkout_source_tree(
         ctx.obj.code_dir,
         git_cfg.get("remote", target_remote),
         git_cfg.get("ref", target_ref),
-        commit=target_commit,
         clean=clean,
         clean_config=ctx.obj.config["clean"],
     )
