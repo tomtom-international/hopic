@@ -1506,6 +1506,9 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
               },
             ]
           }
+          // Clear the target commit hash that we determined outside of 'lock_if_necessary' because the target branch
+          // may have moved forward while we didn't hold the lock.
+          this.target_commit = null
           while (phases) {
             final phase = phases.keySet().first()
             def is_build_successful = steps.currentBuild.currentResult == 'SUCCESS'
