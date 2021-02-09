@@ -951,3 +951,81 @@ def test_ci_locks_wrong_branch_value():
               - master
               repo-name: FICTIONAL/some-other-lock
         ''')), {'WORKSPACE': None})
+
+
+def test_mutiple_options_on_archive():
+    with pytest.raises(ConfigurationError, match=r"are not allowed in the same Archive configuration, use only 'allow-missing"):
+        config_reader.read(_config_file(dedent('''\
+            phases:
+              build:
+                example:
+                  - archive:
+                     artifacts: doesnotexist.txt
+                     allow-missing: true
+                     allow-empty-archive: true
+        ''')), {'WORKSPACE': None})
+
+
+def test_allow_empty_archive_empty_variant_removed():
+    cfg = config_reader.read(_config_file(dedent('''\
+            phases:
+              build:
+                example:
+                  - archive:
+                     artifacts: doesnotexist.txt
+                     allow-empty-archive: true
+        ''')), {'WORKSPACE': None})
+
+    out = cfg['phases']['build']['example'][0]['archive']
+    assert 'allow-missing' in out
+    assert type(out['allow-missing']) is bool
+    assert 'allow-empty-archive' not in out
+
+
+def test_archive_allow_missing_not_boolean():
+    with pytest.raises(ConfigurationError, match=r"'allow-missing' should be a boolean, not a str"):
+        config_reader.read(_config_file(dedent('''\
+            phases:
+              build:
+                example:
+                  - archive:
+                     artifacts: doesnotexist.txt
+                     allow-missing: 'true'
+        ''')), {'WORKSPACE': None})
+
+
+def test_allow_empty_junit():
+    with pytest.raises(ConfigurationError, match=r"JUnit configuration did not contain mandatory field 'test-results'"):
+        config_reader.read(_config_file(dedent('''\
+            phases:
+              build:
+                example:
+                  - junit:
+                     test: doesnotexist.txt
+                     allow-missing: true
+        ''')), {'WORKSPACE': None})
+
+
+def test_generated_config_has_test_results():
+    cfg = config_reader.read(_config_file(dedent('''\
+            phases:
+              build:
+                example:
+                  - junit:
+                     doesnotexistjunitresult.xml
+        ''')), {'WORKSPACE': None})
+
+    out = cfg['phases']['build']['example'][0]['junit']
+    assert 'test-results' in out
+
+
+def test_junit_allow_missing_not_boolean():
+    with pytest.raises(ConfigurationError, match=r"'allow-missing' should be a boolean, not a str"):
+        config_reader.read(_config_file(dedent('''\
+            phases:
+              build:
+                example:
+                  - junit:
+                     test-results: doesnotexist.txt
+                     allow-missing: 'true'
+        ''')), {'WORKSPACE': None})

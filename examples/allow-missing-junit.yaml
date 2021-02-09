@@ -1,0 +1,7 @@
+phases:
+  build:
+    example:
+      - junit:
+          test-results: 
+            doesnotexistjunitresult.xml
+          allow-missing: true
