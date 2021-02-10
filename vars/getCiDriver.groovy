@@ -308,8 +308,13 @@ class BitbucketPullRequest extends ChangeRequest {
       }
       msg += '\033[39m'
     }
+
+    // trim() that doesn't strip \033
+    while (msg && msg[0] == '\n')
+      msg = msg[1..-1]
+
     if (msg) {
-      steps.println(msg.trim())
+      steps.println(msg)
       steps.currentBuild.result = 'ABORTED'
       if (!cur_cr_info.canMerge) {
         steps.currentBuild.description = "No longer submitting: Bitbucket merge criteria no longer met"
