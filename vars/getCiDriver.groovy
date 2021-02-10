@@ -254,6 +254,71 @@ class BitbucketPullRequest extends ChangeRequest {
       steps.currentBuild.description = 'Aborted: build outdated; change request updated since start'
       steps.error("this build is outdated. Its change request got updated to ${current_commit} (from ${this.source_commit}).")
     }
+
+    if (!this.info
+      // we don't care about builds that weren't going to be merged anyway
+     || !this.info.canMerge)
+      return
+
+    final old_cr_info = this.info
+    def cur_cr_info = this.get_info(/* allow_cache=*/ false)
+
+    // Ignore the current INPROGRESS build from the merge vetoes
+    if (!cur_cr_info.canMerge
+     && cur_cr_info.vetoes.size() == 1
+     && cur_cr_info.vetoes[0].summaryMessage == 'Not all required builds are successful yet') {
+      cur_cr_info.canMerge = true
+      cur_cr_info.vetoes.remove(0)
+    }
+
+    String msg = ''
+    if (!cur_cr_info.canMerge) {
+      msg += '\n\033[33m[warning] no longer submitting because the BitBucket merge criteria are no longer met\033[39m'
+      if (cur_cr_info.vetoes) {
+        msg += '\n\033[36m[info] the following merge condition(s) are not met:'
+        cur_cr_info.vetoes.each { veto ->
+          if (veto.summaryMessage) {
+            msg += "\n[info] summary: ${veto.summaryMessage}"
+            if (veto.detailedMessage) {
+              msg += "\n[info]   details: ${veto.detailedMessage}"
+            }
+          }
+        }
+        msg += '\033[39m'
+      }
+    }
+    final String old_title = old_cr_info.getOrDefault('title', steps.env.CHANGE_TITLE)
+    final String cur_title = cur_cr_info.getOrDefault('title', steps.env.CHANGE_TITLE)
+    if (cur_title.trim() != old_title.trim()) {
+      msg += '\n\033[33m[warning] no longer submitting because the change request\'s title changed\033[39m'
+      msg += "\n\033[36m[info] old title: '${old_title}'"
+      msg +=         "\n[info] new title: '${cur_title}'\033[39m"
+    }
+    final String old_description = old_cr_info.containsKey('description') ? old_cr_info.description.trim() : null
+    final String cur_description = cur_cr_info.containsKey('description') ? cur_cr_info.description.trim() : null
+    if (cur_description != old_description) {
+      msg += '\n\033[33m[warning] no longer submitting because the change request\'s description changed\033[39m'
+      msg += '\n\033[36m[info] old description:'
+      line_split(old_description).each { line ->
+        msg += "\n[info]     ${line}"
+      }
+      msg += '\n[info] new description:'
+      line_split(cur_description).each { line ->
+        msg += "\n[info]     ${line}"
+      }
+      msg += '\033[39m'
+    }
+    if (msg) {
+      steps.println(msg.trim())
+      steps.currentBuild.result = 'ABORTED'
+      if (!cur_cr_info.canMerge) {
+        steps.currentBuild.description = "No longer submitting: Bitbucket merge criteria no longer met"
+        steps.error("This build is outdated. Merge criteria of its change request are no longer met.")
+      } else {
+        steps.currentBuild.description = "No longer submitting: change request's metadata changed since start"
+        steps.error("This build is outdated. Metadata of its change request changed.")
+      }
+    }
   }
 
   @Override
