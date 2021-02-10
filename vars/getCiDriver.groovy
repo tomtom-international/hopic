@@ -299,12 +299,20 @@ class BitbucketPullRequest extends ChangeRequest {
     if (cur_description != old_description) {
       msg += '\n\033[33m[warning] no longer submitting because the change request\'s description changed\033[39m'
       msg += '\n\033[36m[info] old description:'
-      line_split(old_description).each { line ->
-        msg += "\n[info]     ${line}"
+      if (old_description == null) {
+        msg += ' null'
+      } else {
+        line_split(old_description).each { line ->
+          msg += "\n[info]     ${line}"
+        }
       }
       msg += '\n[info] new description:'
-      line_split(cur_description).each { line ->
-        msg += "\n[info]     ${line}"
+      if (cur_description == null) {
+        msg += ' null'
+      } else {
+        line_split(cur_description).each { line ->
+          msg += "\n[info]     ${line}"
+        }
       }
       msg += '\033[39m'
     }
