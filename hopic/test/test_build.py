@@ -1,4 +1,4 @@
-# Copyright (c) 2019 - 2020 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2019 - 2021 TomTom N.V. (https://tomtom.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -888,7 +888,7 @@ def test_version_variables_content(capfd, init_version, build, commit_count, dir
     sys.stderr.write(err)
 
     # Length needs to match the length of a commit hash of `git describe`
-    commit_hash = str(result.commit)[:7]
+    commit_hash = str(result.commit)[:14]
 
     expected_version = expected_version.format(commit=commit_hash, timestamp='19700108000000')
     expected_pure_version = expected_pure_version.format(commit=commit_hash, timestamp='19700108000000')

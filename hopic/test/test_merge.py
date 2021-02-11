@@ -1,4 +1,4 @@
-# Copyright (c) 2019 - 2020 TomTom N.V.
+# Copyright (c) 2019 - 2021 TomTom N.V.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -694,7 +694,7 @@ def test_run_publish_version(monkeypatch, tmp_path, init_version, submittable_ve
 
     expected_publish_version = init_version
     if not submittable_version:
-        expected_publish_version += f"-{str(base_commit)[0:7]}"
+        expected_publish_version += f"-{str(base_commit)[0:14]}"
     if version_build:
         expected_publish_version += f"+{version_build}"
 
