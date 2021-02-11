@@ -264,11 +264,15 @@ class BitbucketPullRequest extends ChangeRequest {
     def cur_cr_info = this.get_info(/* allow_cache=*/ false)
 
     // Ignore the current INPROGRESS build from the merge vetoes
-    if (!cur_cr_info.canMerge
-     && cur_cr_info.vetoes.size() == 1
-     && cur_cr_info.vetoes[0].summaryMessage == 'Not all required builds are successful yet') {
-      cur_cr_info.canMerge = true
-      cur_cr_info.vetoes.remove(0)
+    for (int i = cur_cr_info.getOrDefault('vetoes', []).size() - 1; i >= 0; i--) {
+      if (cur_cr_info.vetoes[i].summaryMessage == 'Not all required builds are successful yet') {
+        if (!cur_cr_info.canMerge
+         && cur_cr_info.vetoes.size() == 1) {
+          cur_cr_info.canMerge = true
+        }
+        cur_cr_info.vetoes.remove(i)
+        break
+      }
     }
 
     String msg = ''
