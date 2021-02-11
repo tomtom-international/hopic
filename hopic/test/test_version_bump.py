@@ -1,4 +1,4 @@
-# Copyright (c) 2020 - 2020 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2020 - 2021 TomTom N.V. (https://tomtom.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -212,5 +212,5 @@ def test_bump_skipped_when_no_bumpable_commits(monkeypatch, tmp_path):
 
     assert result.exit_code == 0
     assert result.stdout == ''
-    assert ("error: Version bumping requested, but the version policy 'conventional-commits' decided not to bump from '0.0.1-1+gee3642c'"
+    assert ("error: Version bumping requested, but the version policy 'conventional-commits' decided not to bump from '0.0.1-1+gee3642c057a2af'"
             in result.stderr.splitlines())

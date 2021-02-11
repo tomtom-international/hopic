@@ -1,4 +1,4 @@
-# Copyright (c) 2018 - 2020 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2018 - 2021 TomTom N.V. (https://tomtom.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ from datetime import (
 from enum import Enum, unique
 import os
 import logging
+import math
 import sys
 
 from dateutil.tz import (
@@ -101,13 +102,18 @@ def determine_source_date(workspace):
             repo.close()
 
 
+_max_git_objects = 100e6
+_git_abbrev_len = math.ceil(math.log2(_max_git_objects) / 2)
+
+
 def determine_git_version(repo):
     """
     Determines the current version of a git repository based on its tags.
     """
 
     return GitVersion.from_description(
-            repo.git.describe(tags=True, long=True, dirty=True, always=True))
+        repo.git.describe(tags=True, long=True, dirty=True, always=True, abbrev=_git_abbrev_len),
+    )
 
 
 def determine_version(version_info, config_dir, code_dir=None):
