@@ -56,6 +56,7 @@ from ..config_reader import (
 )
 from ..errors import (
     MissingCredentialVarError,
+    MissingFileError,
     UnknownPhaseError,
 )
 from ..execution import echo_cmd_click as echo_cmd
@@ -86,7 +87,9 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
     if hopic_git_info.submit_ref is not None:
         volume_vars['GIT_BRANCH'] = hopic_git_info.submit_ref
 
-    artifacts = []
+    mandatory_artifacts = []
+    mandatory_junit = []
+    optional_artifacts = []
     worktree_commits = {}
     variant_credentials = {}
     extra_docker_run_args = []
@@ -137,10 +140,25 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                         'fingerprint',
                     ):
                 try:
-                    artifacts.extend(expand_vars(volume_vars, (
-                        artifact['pattern'].replace("(*)", "*") for artifact in cmd[artifact_key]['artifacts'])))
+                    opt = cmd[artifact_key]
                 except (KeyError, TypeError):
                     pass
+                else:
+                    if artifact_key == "junit":
+                        new_artifacts = opt["test-results"]
+                    else:
+                        new_artifacts = (artifact["pattern"].replace("(*)", "*") for artifact in opt["artifacts"])
+                    if opt["allow-missing"]:
+                        optional_artifacts.extend(new_artifacts)
+                    else:
+                        mandatory_artifacts.extend(new_artifacts)
+            try:
+                junit = cmd["junit"]
+            except (KeyError, TypeError):
+                pass
+            else:
+                if not junit["allow-missing"]:
+                    mandatory_junit.extend(junit["test-results"])
 
             if not ctx.obj.dry_run:
                 try:
@@ -435,9 +453,25 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                 git_cfg.set_value(section, 'refspecs', ' '.join(shlex.quote(refspec) for refspec in refspecs))
 
         # Post-processing to make these artifacts as reproducible as possible
-        for artifact_pattern in artifacts:
+        for artifact_pattern in optional_artifacts:
             for artifact in ctx.obj.code_dir.glob(artifact_pattern):
                 binary_normalize.normalize(artifact, source_date_epoch=ctx.obj.source_date_epoch)
+
+        pattern_matched = False
+        for pattern in mandatory_artifacts:
+            for artifact in ctx.obj.code_dir.glob(pattern):
+                pattern_matched = True
+                binary_normalize.normalize(artifact, source_date_epoch=ctx.obj.source_date_epoch)
+        if mandatory_artifacts and not pattern_matched:
+            raise MissingFileError(f"none of these mandatory artifact patterns matched a file: {mandatory_artifacts}")
+
+        pattern_matched = False
+        for pattern in mandatory_junit:
+            for _ in ctx.obj.code_dir.glob(pattern):
+                pattern_matched = True
+                break
+        if mandatory_junit and not pattern_matched:
+            raise MissingFileError(f"none of these mandatory junit patterns matched a file: {mandatory_junit}")
 
 
 @click.command()

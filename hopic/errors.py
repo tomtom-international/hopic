@@ -81,3 +81,7 @@ class CommitAncestorMismatchError(ClickException):
 
     def __str__(self):
         return self.format_message()
+
+
+class MissingFileError(ClickException):
+    exit_code = 38

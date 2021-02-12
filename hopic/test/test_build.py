@@ -1334,3 +1334,78 @@ def test_normalize_artifacts(capfd):
     sys.stdout.write(out)
     sys.stderr.write(err)
     assert out == "959ba292674303dc82e926f7a5e4a839135b2c5ebd6e68759c095c2160548e44 *archive.tar.gz\n", "archive's hash should not depend on build time"
+
+
+@pytest.mark.parametrize("archive_key", (
+    "archive",
+    "fingerprint",
+    "junit",
+))
+def test_complain_about_missing_artifacts(capfd, archive_key):
+    result = run_with_config(
+        dedent(
+            f"""\
+            phases:
+              a:
+                x:
+                  - {archive_key}:
+                      {'test-results' if archive_key == 'junit' else 'artifacts'}: {archive_key}-doesnotexist.txt
+            """
+        ),
+        ('build',),
+    )
+
+    assert result.exit_code == 38
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+    assert re.search(r"\b[Nn]one of these mandatory .*? patterns matched a file\b", err)
+    assert f"{archive_key}-doesnotexist.txt" in err
+
+
+@pytest.mark.parametrize("archive_key", (
+    "archive",
+    "fingerprint",
+    "junit",
+))
+def test_accept_present_artifacts(archive_key):
+    result = run_with_config(
+        dedent(
+            f"""\
+            phases:
+              a:
+                x:
+                  - {archive_key}:
+                      {'test-results' if archive_key == 'junit' else 'artifacts'}: {archive_key}-exists.txt
+                    sh: touch {archive_key}-exists.txt
+            """
+        ),
+        ('build',),
+    )
+
+    assert result.exit_code == 0
+
+
+@pytest.mark.parametrize("archive_key", (
+    "archive",
+    "fingerprint",
+))
+def test_permit_missing_artifacts(archive_key):
+    result = run_with_config(
+        dedent(
+            f"""\
+            phases:
+              a:
+                x:
+                  - {archive_key}:
+                      artifacts: {archive_key}-doesnotexist.txt
+                      allow-missing: yes
+                    junit:
+                      test-results: junit-doesnotexist.xml
+                      allow-missing: yes
+            """
+        ),
+        ('build',),
+    )
+
+    assert result.exit_code == 0
