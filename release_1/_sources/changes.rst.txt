@@ -1,5 +1,5 @@
 ..
-   Copyright (c) 2019 - 2020 TomTom N.V. (https://tomtom.com)
+   Copyright (c) 2019 - 2021 TomTom N.V. (https://tomtom.com)
    
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -16,6 +16,53 @@
 =========
 Changelog
 =========
+
+1.33.0-9+g0cb502df46aa65
+======
+
+New features
+------------
+
+* feat: add allow-missing for junit and archive config (#325)
+* feat: increase abbreviated commit hash' length in version number to 14 nibbles (#328)
+* feat(groovy): abort submits when BitBucket PR state changed since the start (#327)
+
+1.32.0
+======
+
+New features
+------------
+
+* feat(checkout): support checking out a specific commit of the target branch (#316)
+
+Improvements
+------------
+
+* improvement(groovy): abort early when a build's PR changed since build started (#315)
+
+Bug fixes
+---------
+
+* fix(groovy): ensure to build the same commit of the target branch on all nodes (#316)
+* fix(checkout): don't try to check out the same commit on the configured repo too (#323)
+* fix(groovy): only pin target branch to commits obtained while holding merge lock (#324)
+* fix: only run docker with tty when stdout is a terminal (#321)
+
+1.31.0
+======
+
+New features
+------------
+
+* feat: expose ci lock timings (#313)
+* feat: add lock-on-change to ci-locks config (#319)
+* feat: expose has_prerelease function from cidriver (#319)
+
+Improvements
+------------
+
+* refactor(groovy): extract taking a resource lock to new function (#313)
+* improvement: log a more helpful error for invalid merge commit message (#312)
 
 1.30.0
 ======
