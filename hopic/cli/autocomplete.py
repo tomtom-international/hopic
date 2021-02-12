@@ -1,4 +1,4 @@
-# Copyright (c) 2018 - 2020 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2018 - 2021 TomTom N.V. (https://tomtom.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,6 +13,11 @@
 # limitations under the License.
 
 import os
+from pathlib import Path
+
+from .utils import (
+    determine_config_file_name,
+)
 
 from ..config_reader import (
         expand_vars,
@@ -30,12 +35,19 @@ def _option_from_args(args, option):
 
 
 def _config_from_args(args):
-    config = os.path.expanduser(
-        expand_vars(
-            os.environ,
-            _option_from_args(args, '--config'),
-        ))
-    return read_config(config, {})
+    workspace = _option_from_args(args, "--workspace")
+    if workspace is not None:
+        workspace = Path(workspace)
+    config = _option_from_args(args, "--config")
+    if config is not None:
+        config = Path(expand_vars(os.environ, config)).expanduser()
+        if workspace is None:
+            workspace = config.parent
+    else:
+        if workspace is None:
+            workspace = Path.cwd()
+        config = determine_config_file_name(None, workspace=workspace)
+    return read_config(config, {'WORKSPACE': str(workspace)})
 
 
 def phase_from_config(ctx, args, incomplete):

@@ -1,4 +1,4 @@
-# Copyright (c) 2018 - 2020 TomTom N.V.
+# Copyright (c) 2018 - 2021 TomTom N.V.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,9 +13,11 @@
 # limitations under the License.
 
 import os
+from pathlib import Path
 import re
 import subprocess
 import sys
+from typing import Optional
 
 import click
 
@@ -49,7 +51,7 @@ def is_publish_branch(ctx, hopic_git_info=None):
     return publish_branch_pattern.match(hopic_git_info.submit_ref)
 
 
-def determine_config_file_name(ctx):
+def determine_config_file_name(ctx, workspace: Optional[Path] = None):
     """
     Determines the location of the config file, possibly falling back to a default.
     """
@@ -59,7 +61,9 @@ def determine_config_file_name(ctx):
         for fname in (
                     'hopic-ci-config.yaml',
                 ):
-            fname = os.path.join(ctx.obj.workspace, fname)
+            if workspace is None:
+                workspace = ctx.obj.workspace
+            fname = os.path.join(workspace, fname)
             if os.path.isfile(fname):
                 return fname
         raise
