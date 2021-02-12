@@ -1307,3 +1307,30 @@ def test_version_variable_with_undetermined_version(capfd, version_config, expec
     sys.stderr.write(err)
     assert out.splitlines()[0] == 'VERSION='
     assert re.search(expected_msg, err, re.MULTILINE)
+
+
+def test_normalize_artifacts(capfd):
+    result = run_with_config(
+        dedent(
+            """\
+            phases:
+              a:
+                x:
+                  - archive:
+                      artifacts: archive.tar.gz
+                  - mkdir -p include/something src
+                  - touch include/something/here.hpp src/here.cpp
+                  - tar czf archive.tar.gz include src
+              b:
+                x:
+                  - sha256sum -b archive.tar.gz
+            """
+        ),
+        ('build',),
+    )
+
+    assert result.exit_code == 0
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+    assert out == "959ba292674303dc82e926f7a5e4a839135b2c5ebd6e68759c095c2160548e44 *archive.tar.gz\n", "archive's hash should not depend on build time"
