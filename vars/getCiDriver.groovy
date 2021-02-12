@@ -262,6 +262,8 @@ class BitbucketPullRequest extends ChangeRequest {
 
     final old_cr_info = this.info
     def cur_cr_info = this.get_info(/* allow_cache=*/ false)
+    // keep the cache intact as it's used to generate merge commit messages
+    this.info = old_cr_info
 
     // Ignore the current INPROGRESS build from the merge vetoes
     for (int i = cur_cr_info.getOrDefault('vetoes', []).size() - 1; i >= 0; i--) {
