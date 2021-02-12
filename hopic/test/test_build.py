@@ -1285,15 +1285,15 @@ def test_with_credentials_obfuscation_empty_credentials(monkeypatch, capfd):
     assert out.splitlines()[0] == ' '
 
 
-@pytest.mark.parametrize('version_param', (
+@pytest.mark.parametrize('version_config, expected_msg', (
     ('tag: true', r"^Error: Failed to determine the current version from Git tag\."),
     ('file: version.txt', r"^Error: Failed to determine the current version from file\."),
     ('bump: false', r"^Error: Failed to determine the current version\."),
 ))
-def test_version_variable_with_undetermined_version(capfd, version_param):
+def test_version_variable_with_undetermined_version(capfd, version_config, expected_msg):
     result = run_with_config(dedent(f'''\
                 version:
-                  {version_param[0]}
+                  {version_config}
                 phases:
                   phase-one:
                     variant-one:
@@ -1306,4 +1306,4 @@ def test_version_variable_with_undetermined_version(capfd, version_param):
     sys.stdout.write(out)
     sys.stderr.write(err)
     assert out.splitlines()[0] == 'VERSION='
-    assert re.search(version_param[1], err, re.MULTILINE)
+    assert re.search(expected_msg, err, re.MULTILINE)
