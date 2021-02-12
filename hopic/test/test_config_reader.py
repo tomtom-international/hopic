@@ -985,7 +985,7 @@ def test_allow_empty_archive_empty_variant_removed():
 
 
 def test_archive_allow_missing_not_boolean():
-    with pytest.raises(ConfigurationError, match=r"'allow-missing' should be a boolean, not a str"):
+    with pytest.raises(ConfigurationError, match=r"'build.example.archive.allow-missing' should be a boolean, not a str"):
         config_reader.read(_config_file(dedent('''\
             phases:
               build:
@@ -1022,7 +1022,7 @@ def test_generated_config_has_test_results():
 
 
 def test_junit_allow_missing_not_boolean():
-    with pytest.raises(ConfigurationError, match=r"'allow-missing' should be a boolean, not a str"):
+    with pytest.raises(ConfigurationError, match=r"'build.example.junit.allow-missing' should be a boolean, not a str"):
         config_reader.read(_config_file(dedent('''\
             phases:
               build:

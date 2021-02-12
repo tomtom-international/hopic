@@ -773,9 +773,10 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
                 cmd[cmd_key].pop('allow-empty-archive')
                 cmd[cmd_key]['allow-missing'] = allow_empty_archive
 
-            if 'allow-missing' in cmd[cmd_key] and not isinstance(cmd[cmd_key]['allow-missing'], bool):
+            allow_missing = cmd[cmd_key].setdefault("allow-missing", False)
+            if not isinstance(allow_missing, bool):
                 raise ConfigurationError(
-                    f"'allow-missing' should be a boolean, not a {type(cmd[cmd_key]['allow-missing']).__name__}",
+                    f"'{phase}.{variant}.{cmd_key}.allow-missing' should be a boolean, not a {type(allow_missing).__name__}",
                     file=config_file,
                 )
         if cmd_key == 'junit':
@@ -797,9 +798,10 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
                     "'{phase}.{variant}.{cmd_key}.test-results' member is not a list of file pattern strings",
                     file=config_file,
                 ) from exc
-            if 'allow-missing' in cmd[cmd_key] and not isinstance(cmd[cmd_key]['allow-missing'], bool):
+            allow_missing = cmd[cmd_key].setdefault("allow-missing", False)
+            if not isinstance(allow_missing, bool):
                 raise ConfigurationError(
-                    f"'allow-missing' should be a boolean, not a {type(cmd[cmd_key]['allow-missing']).__name__}",
+                    f"'{phase}.{variant}.{cmd_key}.allow-missing' should be a boolean, not a {type(allow_missing).__name__}",
                     file=config_file,
                 )
             for pattern_idx, pattern in enumerate(test_results):
