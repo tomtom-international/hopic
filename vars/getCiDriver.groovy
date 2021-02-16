@@ -73,15 +73,17 @@ class BitbucketPullRequest extends ChangeRequest {
   private url
   private info = null
   private credentialsId
+  private refspec
   private restUrl = null
   private baseRestUrl = null
   private keyIds = [:]
   private source_commit = null
 
-  BitbucketPullRequest(steps, url, credentialsId) {
+  BitbucketPullRequest(steps, url, credentialsId, refspec) {
     super(steps)
     this.url = url
     this.credentialsId = credentialsId
+    this.refspec = refspec
 
     if (this.url != null) {
       this.restUrl = url
@@ -224,9 +226,7 @@ class BitbucketPullRequest extends ChangeRequest {
 
   private def current_source_commit(String source_remote) {
     assert steps.env.NODE_NAME != null, "current_source_commit must be executed on a node"
-
-    def source_refspec = steps.scm.userRemoteConfigs[0].refspec
-    def (remote_ref, local_ref) = source_refspec.tokenize(':')
+    def (remote_ref, local_ref) = this.refspec.tokenize(':')
     if (remote_ref.startsWith('+'))
       remote_ref = remote_ref.substring(1)
 
@@ -509,6 +509,7 @@ class CiDriver {
   private cmds               = [:]
   private nodes              = [:]
   private checkouts          = [:]
+  private scm                = [:]
   private stashes            = [:]
   private worktree_bundles   = [:]
   private submit_version     = null
@@ -530,6 +531,11 @@ class CiDriver {
     this.change = params.change
     this.config_file = params.config
     this.bitbucket_api_credential_id = params.getOrDefault('bb_api_cred_id', 'tt_service_account_creds')
+    this.scm = [
+      credentialsId: steps.scm.userRemoteConfigs[0].credentialsId,
+      refspec: steps.scm.userRemoteConfigs[0].refspec,
+      url: steps.scm.userRemoteConfigs[0].url,
+    ]
   }
 
   private def get_change() {
@@ -537,7 +543,7 @@ class CiDriver {
       if (steps.env.CHANGE_URL != null
        && steps.env.CHANGE_URL.contains('/pull-requests/'))
       {
-        def httpServiceCredential = steps.scm.userRemoteConfigs[0].credentialsId
+        def httpServiceCredential = this.scm.credentialsId
         try {
           steps.withCredentials([steps.usernamePassword(
               credentialsId: httpServiceCredential,
@@ -557,7 +563,7 @@ class CiDriver {
             httpServiceCredential = this.bitbucket_api_credential_id
           }
         }
-        this.change = new BitbucketPullRequest(steps, steps.env.CHANGE_URL, httpServiceCredential)
+        this.change = new BitbucketPullRequest(steps, steps.env.CHANGE_URL, httpServiceCredential, this.scm.refspec)
       }
       // FIXME: Don't rely on hard-coded build parameter, externalize this instead.
       else if (steps.params.MODALITY != null && steps.params.MODALITY != "NORMAL")
@@ -650,7 +656,7 @@ ${shell_quote(venv)}/bin/python -m pip install ${shell_quote(this.repo)}
     // Ensure
     try {
       steps.withCredentials([steps.usernamePassword(
-          credentialsId: steps.scm.userRemoteConfigs[0].credentialsId,
+          credentialsId: this.scm.credentialsId,
           usernameVariable: 'USERNAME',
           passwordVariable: 'PASSWORD',
           )]) {
@@ -677,7 +683,7 @@ esac
     } catch (CredentialNotFoundException e1) {
       try {
         return this.with_credentials([[
-          id: steps.scm.userRemoteConfigs[0].credentialsId,
+          id: this.scm.credentialsId,
           type: 'ssh-key',
           'ssh-command-variable': 'GIT_SSH'
         ]]) {
@@ -856,7 +862,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       target_ref = steps.env.GIT_COMMIT
     }
 
-    params += ' --target-remote=' + shell_quote(steps.scm.userRemoteConfigs[0].url)
+    params += ' --target-remote=' + shell_quote(this.scm.url)
     params += ' --target-ref='    + shell_quote(target_ref)
     if (this.target_commit) {
       params += ' --target-commit=' + shell_quote(this.target_commit)
@@ -869,7 +875,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
                                     label: 'Hopic: checking out source tree',
                                     returnStdout: true).trim()
       if (this.get_change() != null) {
-        def submit_info = this.get_change().apply(cmd, steps.scm.userRemoteConfigs[0].url)
+        def submit_info = this.get_change().apply(cmd, this.scm.url)
         if (submit_info == null)
         {
           // Marking the build as ABORTED _before_ deleting it to prevent an exception from reincarnating it
@@ -963,7 +969,6 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
    */
   private def ensure_checkout(String cmd, clean = false, String variant = null) {
     assert steps.env.NODE_NAME != null, "ensure_checkout must be executed on a node"
-
     String executor_identifier = get_executor_identifier(variant)
 
     if (!this.checkouts.containsKey(executor_identifier)) {
@@ -1028,7 +1033,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
    * @return a lock name unique to the target repository
    */
   public String get_lock_name() {
-    def repo_url  = steps.scm.userRemoteConfigs[0].url
+    def repo_url  = this.scm.url
     def repo_name = repo_url.tokenize('/')[-2..-1].join('/') - ~/\.git$/ // "${project}/${repo}"
     get_repo_name_and_branch(repo_name)
   }
@@ -1163,6 +1168,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
         ?: this.nodes.collect { variant, node -> node }.join(" || ")
         ?: params.getOrDefault('default_node_expr', this.default_node_expr)
       )
+
     return this.on_node([node_expr: node_expr, exec_name: params.name]) {
       return this.with_hopic { cmd ->
         this.ensure_checkout(cmd, params.getOrDefault('clean', false))
@@ -1346,7 +1352,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       // abort PR builds that got changed since the start of this build
       if (this.has_change()) {
         this.with_git_credentials() {
-          this.get_change().abort_if_changed(steps.scm.userRemoteConfigs[0].url)
+          this.get_change().abort_if_changed(this.scm.url)
         }
       }
 
@@ -1442,7 +1448,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       // abort PR builds that got changed since the start of this build
       if (this.has_change()) {
         this.with_git_credentials() {
-          this.get_change().abort_if_changed(steps.scm.userRemoteConfigs[0].url)
+          this.get_change().abort_if_changed(this.scm.url)
         }
       }
     }
@@ -1671,7 +1677,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
               if (this.has_submittable_change()) {
                 steps.stage('submit') {
                   this.with_git_credentials() {
-                    this.get_change().abort_if_changed(steps.scm.userRemoteConfigs[0].url)
+                    this.get_change().abort_if_changed(this.scm.url)
                     this.subcommand_with_credentials(
                         cmd + hopic_extra_arguments,
                         'submit'
