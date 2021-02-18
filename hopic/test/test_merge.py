@@ -24,6 +24,7 @@ import sys
 from textwrap import dedent
 
 from .. import credentials
+from ..cli import utils
 
 _git_time = f"{42 * 365 * 24 * 3600} +0000"
 _author = git.Actor('Bob Tester', 'bob@example.net')
@@ -837,3 +838,64 @@ def test_merge_commit_message_bump(capfd, tmp_path, commit_message, merge_messag
 def test_merge_commit_message_bump_error(capfd, tmp_path, commit_message, merge_message, expected_version, strict):
     result = merge_conventional_bump(capfd, tmp_path, commit_message, strict=strict, merge_message=merge_message)
     assert result.exit_code == 36
+
+
+@pytest.mark.parametrize('note_mismatch', (
+    False,
+    True
+))
+def test_merge_branch_twice(tmp_path, monkeypatch, note_mismatch):
+    toprepo = tmp_path / 'repo'
+    with git.Repo.init(toprepo, expand_vars=False) as repo:
+        with open(toprepo / 'hopic-ci-config.yaml', 'w') as f:
+            f.write(dedent('''\
+                version:
+                  bump: no
+                '''))
+        repo.index.add(('hopic-ci-config.yaml',))
+        base_commit = repo.index.commit(message='Initial commit', **_commitargs)
+        repo.head.reference = repo.create_head('feat/branch', base_commit)
+        assert not repo.head.is_detached
+        repo.head.reset(index=True, working_tree=True)
+
+        # Some change
+        with open(toprepo / 'something.txt', 'w') as f:
+            f.write('usable')
+        repo.index.add(('something.txt',))
+        repo.index.commit(message='feat: add something useful', **_commitargs)
+
+    monkeypatch.setenv('GIT_COMMITTER_NAME' , 'My Name is Nobody')
+    monkeypatch.setenv('GIT_COMMITTER_EMAIL', 'nobody@example.com')
+    checkout_and_merge = (
+        ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master', '--target-commit', str(base_commit)),
+        ('prepare-source-tree',
+            '--author-name', _author.name,
+            '--author-email', _author.email,
+            '--author-date', f"@{_git_time}",
+            '--commit-date', f"@{_git_time}",
+            'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'feat/branch'),
+    )
+
+    result = run(*checkout_and_merge, ('submit',),)
+    assert result.exit_code == 0
+
+    with git.Repo(toprepo, expand_vars=False) as repo:
+        note = repo.git.notes('show', 'master', ref='hopic/master')
+        assert re.match(
+                r'^Committed-by: Hopic.*\nWith Python version: .*\nAnd with these installed packages:\n.*\bhopic\b',
+                note, flags=re.DOTALL | re.MULTILINE,
+            )
+
+    assert result.exit_code == 0
+
+    if note_mismatch:
+        monkeypatch.setattr(utils, 'get_package_version', lambda package: '42.42.42')
+
+    result = run(*checkout_and_merge)
+
+    if note_mismatch:
+        assert result.exit_code == 39
+        assert result.exception is not None
+    else:
+        assert result.exit_code == 0
+        assert result.exception is None

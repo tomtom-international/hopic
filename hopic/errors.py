@@ -85,3 +85,30 @@ class CommitAncestorMismatchError(ClickException):
 
 class MissingFileError(ClickException):
     exit_code = 38
+
+
+class GitNotesMismatchError(ClickException):
+    exit_code = 39
+
+    def __init__(self, object, new_note, existing_note):
+        super().__init__(
+            dedent(
+                """\
+                attempting to add a different note to object '{self.object}' which already had a Hopic note
+                new note:
+                {self.new_note}
+
+                existing note:
+                {self.existing_note}
+                """
+            )
+        )
+        self.object = object
+        self.new_note = new_note
+        self.existing_note = existing_note
+
+    def format_message(self):
+        return self.message.format(self=self)
+
+    def __str__(self):
+        return self.format_message()
