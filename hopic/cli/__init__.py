@@ -161,6 +161,7 @@ def checkout_tree(
     commit: Optional[str] = None,
     clean: bool = False,
     remote_name: str = 'origin',
+    tags: bool = True,
     allow_submodule_checkout_failure: bool = False,
     clean_config: Union[List, Tuple] = (),
 ):
@@ -195,9 +196,9 @@ def checkout_tree(
             cfg.set_value('color', 'ui', 'always')
             cfg.set_value('hopic.code', 'cfg-clean', str(clean))
 
-        tags = repo.tags
-        if tags:
-            repo.delete_tag(*repo.tags)
+        clean_tags = tags and repo.tags
+        if clean_tags:
+            repo.delete_tag(*clean_tags)
 
         try:
             # Delete, instead of update, existing remotes.
@@ -207,7 +208,7 @@ def checkout_tree(
             pass
         origin = repo.create_remote(remote_name, remote)
 
-        fetch_info, *_ = origin.fetch(ref, tags=True)
+        fetch_info, *_ = origin.fetch(ref, tags=tags)
 
         if commit is not None and not repo.is_ancestor(commit, fetch_info.commit):
             raise CommitAncestorMismatchError(commit, fetch_info.commit, ref)
@@ -1154,6 +1155,7 @@ def unbundle_worktrees(ctx, bundle):
                 bundle,
                 ref,
                 remote_name="bundle",
+                tags=False,
             )
             refspecs.append(f"{commit}:{ref}")
 
