@@ -17,7 +17,7 @@
 Changelog
 =========
 
-1.33.0-9+g0cb502df46aa65
+1.33.0
 ======
 
 New features
@@ -26,6 +26,12 @@ New features
 * feat: add allow-missing for junit and archive config (#325)
 * feat: increase abbreviated commit hash' length in version number to 14 nibbles (#328)
 * feat(groovy): abort submits when BitBucket PR state changed since the start (#327)
+
+Bug fixes
+---------
+
+* fix(groovy): restore BB PR metadata to avoid altering the msg during a build (#330)
+* fix(autocomplete): load default config file as well during autocompletion (#331)
 
 1.32.0
 ======
