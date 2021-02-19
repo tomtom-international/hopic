@@ -26,12 +26,22 @@ New features
 * feat: add allow-missing for junit and archive config (#325)
 * feat: increase abbreviated commit hash' length in version number to 14 nibbles (#328)
 * feat(groovy): abort submits when BitBucket PR state changed since the start (#327)
+* feat(config): add new default config file location .ci/hopic-ci-config.yaml (#336)
+
+Improvements
+------------
+
+* improvement(config): type check member options of archive/fingerprint/junit (#329)
+* improvement(archival): process Ant-style ``dir/**/subdir/*`` glob patterns (#329)
+* improvement(build): detect and complain about declared-but-missing artifacts (#329)
 
 Bug fixes
 ---------
 
 * fix(groovy): restore BB PR metadata to avoid altering the msg during a build (#330)
 * fix(autocomplete): load default config file as well during autocompletion (#331)
+* fix: avoid using specific versions of typeguard (#333)
+* fix(unbundle): don't delete tags we cannot fetch again (#335)
 
 1.32.0
 ======
