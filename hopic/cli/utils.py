@@ -58,7 +58,8 @@ def determine_config_file_name(ctx, workspace: Optional[Path] = None):
         return ctx.obj.config_file
     except (click.BadParameter, AttributeError):
         for fname in (
-                    'hopic-ci-config.yaml',
+                    Path("hopic-ci-config.yaml"),
+                    Path(".ci/hopic-ci-config.yaml"),
                 ):
             if workspace is None:
                 workspace = ctx.obj.workspace
