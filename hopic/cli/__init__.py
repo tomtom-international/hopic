@@ -67,6 +67,7 @@ from io import (
 import json
 import logging
 import os
+from pathlib import Path
 import platform
 import re
 import shlex
@@ -333,7 +334,7 @@ def checkout_source_tree(
 
             for subdir, ref in worktrees.items():
                 try:
-                    os.remove(os.path.join(workspace, subdir, '.git'))
+                    os.remove(workspace / subdir / '.git')
                 except (OSError, IOError):
                     pass
                 clean_output = repo.git.clean('-xd', subdir, force=True)
@@ -349,10 +350,10 @@ def checkout_source_tree(
         return
 
     code_dir_re = re.compile(r'^code(?:-\d+)$')
-    code_dirs = sorted(dir for dir in os.listdir(workspace) if code_dir_re.match(dir))
+    code_dirs = sorted(Path(dir) for dir in os.listdir(workspace) if code_dir_re.match(dir))
     for dir in code_dirs:
         try:
-            with git.Repo(os.path.join(workspace, dir)):
+            with git.Repo(workspace / dir):
                 pass
         except (git.InvalidGitRepositoryError, git.NoSuchPathError):
             pass
@@ -362,17 +363,17 @@ def checkout_source_tree(
     else:
         seq = 0
         while True:
-            dir = ('code' if seq == 0 else f"code-{seq:03}")
+            dir = Path('code' if seq == 0 else f"code-{seq:03}")
             seq += 1
             if dir not in code_dirs:
                 code_dir = dir
                 break
 
     # Check out configured repository and mark it as the code directory of this one
-    ctx.obj.code_dir = os.path.join(workspace, code_dir)
+    ctx.obj.code_dir = workspace / code_dir
     with git.Repo(workspace) as repo, repo.config_writer() as cfg:
         cfg.remove_section('hopic.code')
-        cfg.set_value('hopic.code', 'dir', code_dir)
+        cfg.set_value('hopic.code', 'dir', str(code_dir))
         cfg.set_value('hopic.code', 'cfg-remote', target_remote)
         cfg.set_value('hopic.code', 'cfg-ref', target_ref)
         cfg.set_value('hopic.code', 'cfg-clean', str(clean))
@@ -451,7 +452,8 @@ def process_prepare_source_tree(
         try:
             config_file = determine_config_file_name(ctx)
             ctx.obj.config = read_config(config_file, ctx.obj.volume_vars)
-            ctx.obj.volume_vars['CFGDIR'] = ctx.obj.config_dir = os.path.dirname(config_file)
+            ctx.obj.config_dir = config_file.parent
+            ctx.obj.volume_vars['CFGDIR'] = str(ctx.obj.config_dir)
         except (click.BadParameter, KeyError, TypeError, OSError, IOError, YAMLError):
             pass
 
@@ -575,7 +577,7 @@ def process_prepare_source_tree(
                 ctx.obj.version = new_version
 
                 if 'file' in version_info:
-                    replace_version(os.path.join(ctx.obj.config_dir, version_info['file']), ctx.obj.version)
+                    replace_version(ctx.obj.config_dir / version_info['file'], ctx.obj.version)
                     repo.index.add((relative_version_file,))
                     if bump_message is not None:
                         commit_params.setdefault('message', bump_message)
@@ -709,7 +711,7 @@ def process_prepare_source_tree(
             log.debug("bumped post-submit version to: %s", click.style(str(after_submit_version), fg='blue'))
 
             new_version_file = StringIO()
-            replace_version(os.path.join(ctx.obj.config_dir, version_info['file']), after_submit_version, outfile=new_version_file)
+            replace_version(ctx.obj.config_dir / version_info['file'], after_submit_version, outfile=new_version_file)
             new_version_file = new_version_file.getvalue().encode(sys.getdefaultencoding())
 
             old_version_blob = submit_commit.tree[relative_version_file]
@@ -1151,7 +1153,7 @@ def unbundle_worktrees(ctx, bundle):
             subdir = worktrees[ref]
             log.debug("Checkout worktree '%s' to '%s' (proposed branch '%s')", subdir, commit, ref)
             checkout_tree(
-                os.path.join(ctx.obj.workspace, subdir),
+                ctx.obj.workspace / subdir,
                 bundle,
                 ref,
                 remote_name="bundle",

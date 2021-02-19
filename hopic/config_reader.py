@@ -1,4 +1,4 @@
-# Copyright (c) 2018 - 2020 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2018 - 2021 TomTom N.V. (https://tomtom.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -32,6 +32,7 @@ import io
 import json
 import logging
 import os
+from pathlib import Path
 import re
 import shlex
 import subprocess
@@ -530,8 +531,8 @@ def expand_docker_volume_spec(config_dir, volume_vars, volume_specs, add_default
 
             # Make relative paths relative to the configuration directory.
             # Absolute paths will be absolute
-            source = os.path.join(config_dir, source)
-            volume['source'] = source
+            source = config_dir / source
+            volume['source'] = str(source)
 
         # Expand target specification resolved on the guest side
         if 'target' in volume:
@@ -707,8 +708,19 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
                 raise ConfigurationError(
                         f"'run-on-change' member's value of {cmd['run-on-change']!r} is not among the valid options ({', '.join(RunOnChange)})",
                         file=config_file) from exc
-        if cmd_key in ('archive', 'fingerprint') and isinstance(cmd[cmd_key], (OrderedDict, dict)) and 'artifacts' in cmd[cmd_key]:
-            artifacts = cmd[cmd_key]['artifacts']
+        if cmd_key in ('archive', 'fingerprint'):
+            if not isinstance(cmd[cmd_key], (OrderedDict, dict)):
+                raise ConfigurationError(
+                    f"'{phase}.{variant}.{cmd_key}' member is not a mapping",
+                    file=config_file,
+                )
+            try:
+                artifacts = cmd[cmd_key]['artifacts']
+            except KeyError:
+                raise ConfigurationError(
+                    f"'{phase}.{variant}.{cmd_key}' lacks the mandatory 'artifacts' member",
+                    file=config_file,
+                )
 
             # Convert single artifact string to list of single artifact specification
             if isinstance(artifacts, str):
@@ -725,21 +737,48 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
                 for artifact in artifacts:
                     artifact.setdefault('target', target)
 
+            for artifact_idx, artifact in enumerate(artifacts):
+                try:
+                    pattern = artifact["pattern"]
+                except KeyError:
+                    raise ConfigurationError(
+                        f"'{phase}.{variant}.{cmd_key}[{artifact_idx}]' lacks the mandatory 'pattern' member",
+                        file=config_file,
+                    )
+                if not isinstance(pattern, str):
+                    raise ConfigurationError(
+                        f"'{phase}.{variant}.{cmd_key}[{artifact_idx}].pattern' is not a string but a `{type(pattern).__name__}",
+                        file=config_file,
+                    )
+                try:
+                    for _ in Path(os.path.devnull).glob(pattern.replace("(*)", "*")):
+                        break
+                except ValueError as exc:
+                    raise ConfigurationError(
+                        f"'{phase}.{variant}.{cmd_key}[{artifact_idx}].pattern' value of {pattern!r} is not a valid glob pattern: {exc}",
+                        file=config_file,
+                    ) from exc
+
             cmd[cmd_key]['artifacts'] = artifacts
 
             if 'allow-empty-archive' in cmd[cmd_key]:
                 if 'allow-missing' in cmd[cmd_key]:
                     raise ConfigurationError(
                         "'allow-empty-archive' and 'allow-missing' are not allowed in the same "
-                        "Archive configuration, use only 'allow-missing'")
+                        "Archive configuration, use only 'allow-missing'",
+                        file=config_file,
+                    )
 
                 allow_empty_archive = cmd[cmd_key]['allow-empty-archive']
                 cmd[cmd_key].pop('allow-empty-archive')
                 cmd[cmd_key]['allow-missing'] = allow_empty_archive
 
-            if 'allow-missing' in cmd[cmd_key] and not isinstance(cmd[cmd_key]['allow-missing'], bool):
+            allow_missing = cmd[cmd_key].setdefault("allow-missing", False)
+            if not isinstance(allow_missing, bool):
                 raise ConfigurationError(
-                        f"'allow-missing' should be a boolean, not a {type(cmd[cmd_key]['allow-missing']).__name__}")
+                    f"'{phase}.{variant}.{cmd_key}.allow-missing' should be a boolean, not a {type(allow_missing).__name__}",
+                    file=config_file,
+                )
         if cmd_key == 'junit':
             if isinstance(cmd[cmd_key], list):
                 cmd[cmd_key] = OrderedDict([('test-results', cmd[cmd_key])])
@@ -747,15 +786,33 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
                 cmd[cmd_key] = OrderedDict([('test-results', [cmd[cmd_key]])])
 
             try:
-                artifacts = cmd[cmd_key]['test-results']
+                test_results = cmd[cmd_key]['test-results']
             except KeyError:
-                raise ConfigurationError("JUnit configuration did not contain mandatory field 'test-results'")
-            else:
-                if isinstance(artifacts, str):
-                    cmd[cmd_key]['test-results'] = [artifacts]
-                if 'allow-missing' in cmd[cmd_key] and not isinstance(cmd[cmd_key]['allow-missing'], bool):
+                raise ConfigurationError("JUnit configuration did not contain mandatory field 'test-results'", file=config_file)
+            if isinstance(test_results, str):
+                test_results = cmd[cmd_key]['test-results'] = [test_results]
+            try:
+                typeguard.check_type(argname=f"{phase}.{variant}.{cmd_key}.test-results", value=test_results, expected_type=typing.Sequence[str])
+            except TypeError as exc:
+                raise ConfigurationError(
+                    "'{phase}.{variant}.{cmd_key}.test-results' member is not a list of file pattern strings",
+                    file=config_file,
+                ) from exc
+            allow_missing = cmd[cmd_key].setdefault("allow-missing", False)
+            if not isinstance(allow_missing, bool):
+                raise ConfigurationError(
+                    f"'{phase}.{variant}.{cmd_key}.allow-missing' should be a boolean, not a {type(allow_missing).__name__}",
+                    file=config_file,
+                )
+            for pattern_idx, pattern in enumerate(test_results):
+                try:
+                    for _ in Path(os.path.devnull).glob(pattern):
+                        break
+                except ValueError as exc:
                     raise ConfigurationError(
-                        f"'allow-missing' should be a boolean, not a {type(cmd[cmd_key]['allow-missing']).__name__}")
+                        f"'{phase}.{variant}.{cmd_key}[{pattern_idx}]' value of {pattern!r} is not a valid glob pattern: {exc}",
+                        file=config_file,
+                    ) from exc
         if cmd_key == 'with-credentials':
             if isinstance(cmd[cmd_key], str):
                 cmd[cmd_key] = OrderedDict([('id', cmd[cmd_key])])
@@ -901,10 +958,11 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
         file_close = True
 
     try:
-        config_dir = os.path.dirname(config)
+        config = Path(config)
+        config_dir = config.parent
 
         volume_vars = volume_vars.copy()
-        volume_vars['CFGDIR'] = config_dir
+        volume_vars['CFGDIR'] = str(config_dir)
 
         cfg = install_top_level_extensions(f, config, extension_installer, volume_vars)
         f.seek(0)

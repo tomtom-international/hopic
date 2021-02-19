@@ -1122,7 +1122,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           steps.archiveArtifacts(
               artifacts: pattern,
               fingerprint: meta.archive.getOrDefault('fingerprint', true),
-              allowEmptyArchive: meta.archive.getOrDefault('allow-missing', false),
+              allowEmptyArchive: meta.archive['allow-missing']
             )
         } else if (archiving_cfg == 'fingerprint') {
           steps.fingerprint(pattern)
@@ -1386,7 +1386,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
             meta.junit['test-results'].each { result ->
               steps.junit(
                 testResults: result,
-                allowEmptyResults: meta.junit.getOrDefault('allow-missing', false))
+                allowEmptyResults: meta.junit['allow-missing'])
             }
           }
         }

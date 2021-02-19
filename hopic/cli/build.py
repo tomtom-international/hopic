@@ -1,4 +1,4 @@
-# Copyright (c) 2018 - 2020 TomTom N.V.
+# Copyright (c) 2018 - 2021 TomTom N.V.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -56,6 +56,7 @@ from ..config_reader import (
 )
 from ..errors import (
     MissingCredentialVarError,
+    MissingFileError,
     UnknownPhaseError,
 )
 from ..execution import echo_cmd_click as echo_cmd
@@ -86,7 +87,9 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
     if hopic_git_info.submit_ref is not None:
         volume_vars['GIT_BRANCH'] = hopic_git_info.submit_ref
 
-    artifacts = []
+    mandatory_artifacts = []
+    mandatory_junit = []
+    optional_artifacts = []
     worktree_commits = {}
     variant_credentials = {}
     extra_docker_run_args = []
@@ -137,10 +140,25 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                         'fingerprint',
                     ):
                 try:
-                    artifacts.extend(expand_vars(volume_vars, (
-                        artifact['pattern'] for artifact in cmd[artifact_key]['artifacts'] if 'pattern' in artifact)))
+                    opt = cmd[artifact_key]
                 except (KeyError, TypeError):
                     pass
+                else:
+                    if artifact_key == "junit":
+                        new_artifacts = opt["test-results"]
+                    else:
+                        new_artifacts = (artifact["pattern"].replace("(*)", "*") for artifact in opt["artifacts"])
+                    if opt["allow-missing"]:
+                        optional_artifacts.extend(new_artifacts)
+                    else:
+                        mandatory_artifacts.extend(new_artifacts)
+            try:
+                junit = cmd["junit"]
+            except (KeyError, TypeError):
+                pass
+            else:
+                if not junit["allow-missing"]:
+                    mandatory_junit.extend(junit["test-results"])
 
             if not ctx.obj.dry_run:
                 try:
@@ -149,7 +167,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                     # Force clean builds when we don't know how to discover changed files
                     for subdir, worktree in worktrees.items():
                         if 'changed-files' not in worktree:
-                            with git.Repo(os.path.join(ctx.obj.workspace, subdir)) as repo:
+                            with git.Repo(ctx.obj.workspace / subdir) as repo:
                                 clean_output = repo.git.clean('-xd', subdir, force=True)
                                 if clean_output:
                                     log.info('%s', clean_output)
@@ -162,7 +180,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                 pass
 
             try:
-                scoped_volumes = expand_docker_volume_spec(ctx.obj.volume_vars['CFGDIR'],
+                scoped_volumes = expand_docker_volume_spec(ctx.obj.config_dir,
                                                            ctx.obj.volume_vars, cmd['volumes'],
                                                            add_defaults=False)
                 volumes.update(scoped_volumes)
@@ -236,7 +254,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
             except KeyError:
                 continue
 
-            volume_vars['WORKSPACE'] = '/code' if image is not None else ctx.obj.code_dir
+            volume_vars['WORKSPACE'] = '/code' if image is not None else str(ctx.obj.code_dir)
 
             env = (dict(
                 HOME            = '/home/sandbox',              # noqa: E251 "unexpected spaces around '='"
@@ -372,7 +390,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                             pass
 
             for subdir, worktree in worktrees.items():
-                with git.Repo(os.path.join(ctx.obj.workspace, subdir)) as repo:
+                with git.Repo(ctx.obj.workspace / subdir) as repo:
                     worktree_commits.setdefault(subdir, [
                         str(repo.head.commit),
                         str(repo.head.commit),
@@ -430,13 +448,30 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                         repo.create_head(worktree_ref, submit_commit)
                     bundle_commits.append(f"{base_commit}..{worktree_ref}")
                     refspecs.append(f"{submit_commit}:{worktree_ref}")
-                repo.git.bundle('create', os.path.join(ctx.obj.workspace, 'worktree-transfer.bundle'), *bundle_commits)
+                repo.git.bundle('create', ctx.obj.workspace / 'worktree-transfer.bundle', *bundle_commits)
 
                 git_cfg.set_value(section, 'refspecs', ' '.join(shlex.quote(refspec) for refspec in refspecs))
 
         # Post-processing to make these artifacts as reproducible as possible
-        for artifact in artifacts:
-            binary_normalize.normalize(os.path.join(ctx.obj.code_dir, artifact), source_date_epoch=ctx.obj.source_date_epoch)
+        for artifact_pattern in optional_artifacts:
+            for artifact in ctx.obj.code_dir.glob(artifact_pattern):
+                binary_normalize.normalize(artifact, source_date_epoch=ctx.obj.source_date_epoch)
+
+        pattern_matched = False
+        for pattern in mandatory_artifacts:
+            for artifact in ctx.obj.code_dir.glob(pattern):
+                pattern_matched = True
+                binary_normalize.normalize(artifact, source_date_epoch=ctx.obj.source_date_epoch)
+        if mandatory_artifacts and not pattern_matched:
+            raise MissingFileError(f"none of these mandatory artifact patterns matched a file: {mandatory_artifacts}")
+
+        pattern_matched = False
+        for pattern in mandatory_junit:
+            for _ in ctx.obj.code_dir.glob(pattern):
+                pattern_matched = True
+                break
+        if mandatory_junit and not pattern_matched:
+            raise MissingFileError(f"none of these mandatory junit patterns matched a file: {mandatory_junit}")
 
 
 @click.command()

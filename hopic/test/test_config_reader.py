@@ -1,4 +1,4 @@
-# Copyright (c) 2020 - 2020 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2020 - 2021 TomTom N.V. (https://tomtom.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,6 +13,8 @@
 # limitations under the License.
 
 from io import StringIO
+import json
+import re
 from textwrap import dedent
 import typing
 
@@ -983,7 +985,7 @@ def test_allow_empty_archive_empty_variant_removed():
 
 
 def test_archive_allow_missing_not_boolean():
-    with pytest.raises(ConfigurationError, match=r"'allow-missing' should be a boolean, not a str"):
+    with pytest.raises(ConfigurationError, match=r"'build.example.archive.allow-missing' should be a boolean, not a str"):
         config_reader.read(_config_file(dedent('''\
             phases:
               build:
@@ -1020,7 +1022,7 @@ def test_generated_config_has_test_results():
 
 
 def test_junit_allow_missing_not_boolean():
-    with pytest.raises(ConfigurationError, match=r"'allow-missing' should be a boolean, not a str"):
+    with pytest.raises(ConfigurationError, match=r"'build.example.junit.allow-missing' should be a boolean, not a str"):
         config_reader.read(_config_file(dedent('''\
             phases:
               build:
@@ -1029,3 +1031,119 @@ def test_junit_allow_missing_not_boolean():
                      test-results: doesnotexist.txt
                      allow-missing: 'true'
         ''')), {'WORKSPACE': None})
+
+
+def test_archive_type_mismatch():
+    with pytest.raises(ConfigurationError, match=r"member is not a mapping"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    '''\
+                    phases:
+                      test:
+                        example:
+                          - archive: null
+                    '''
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_archive_missing_artifacts():
+    with pytest.raises(ConfigurationError, match=r"lacks the mandatory 'artifacts' member"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    '''\
+                    phases:
+                      test:
+                        example:
+                          - archive: {}
+                    '''
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_archive_artifacts_missing_pattern():
+    with pytest.raises(ConfigurationError, match=r"lacks the mandatory 'pattern' member"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    '''\
+                    phases:
+                      test:
+                        example:
+                          - archive:
+                              artifacts:
+                                - {}
+                    '''
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_archive_artifacts_pattern_type_mismatch():
+    with pytest.raises(ConfigurationError, match=r"pattern' is not a string"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    '''\
+                    phases:
+                      test:
+                        example:
+                          - archive:
+                              artifacts:
+                                - pattern: null
+                    '''
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+@pytest.mark.parametrize('pattern', (
+    "**/a**",
+    "**/a(*)(*)",
+))
+def test_archive_artifacts_pattern_invalid_double_star(pattern):
+    with pytest.raises(
+        ConfigurationError,
+        match=fr"pattern' value of '{re.escape(pattern)}' is not a valid glob pattern: .*? '\*\*' can only be an entire path component",
+    ):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    f"""\
+                    phases:
+                      test:
+                        example:
+                          - archive:
+                              artifacts:
+                                - pattern: {json.dumps(pattern)}
+                    """
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_junit_pattern_invalid_double_star():
+    with pytest.raises(ConfigurationError, match=r"value of '.*?' is not a valid glob pattern: .*? '\*\*' can only be an entire path component"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    '''\
+                    phases:
+                      test:
+                        example:
+                          - junit:
+                            - "**/a**"
+                    '''
+                )
+            ),
+            {'WORKSPACE': None},
+        )

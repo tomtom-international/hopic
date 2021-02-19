@@ -1007,7 +1007,7 @@ def test_dry_run_build(capfd, monkeypatch):
         ['[dry-run] would execute:'],
         ['generate doc/build/html/output.txt'],
         template_build_command,
-        ['docker run', './test/dir:/tmp', 'test-image:42.42 invalid command a'],
+        ['docker run', '/test/dir:/tmp', 'test-image:42.42 invalid command a'],
         ['invalid command b'],
     ]
 
@@ -1285,15 +1285,15 @@ def test_with_credentials_obfuscation_empty_credentials(monkeypatch, capfd):
     assert out.splitlines()[0] == ' '
 
 
-@pytest.mark.parametrize('version_param', (
+@pytest.mark.parametrize('version_config, expected_msg', (
     ('tag: true', r"^Error: Failed to determine the current version from Git tag\."),
     ('file: version.txt', r"^Error: Failed to determine the current version from file\."),
     ('bump: false', r"^Error: Failed to determine the current version\."),
 ))
-def test_version_variable_with_undetermined_version(capfd, version_param):
+def test_version_variable_with_undetermined_version(capfd, version_config, expected_msg):
     result = run_with_config(dedent(f'''\
                 version:
-                  {version_param[0]}
+                  {version_config}
                 phases:
                   phase-one:
                     variant-one:
@@ -1306,4 +1306,106 @@ def test_version_variable_with_undetermined_version(capfd, version_param):
     sys.stdout.write(out)
     sys.stderr.write(err)
     assert out.splitlines()[0] == 'VERSION='
-    assert re.search(version_param[1], err, re.MULTILINE)
+    assert re.search(expected_msg, err, re.MULTILINE)
+
+
+def test_normalize_artifacts(capfd):
+    result = run_with_config(
+        dedent(
+            """\
+            phases:
+              a:
+                x:
+                  - archive:
+                      artifacts: archive.tar.gz
+                  - mkdir -p include/something src
+                  - touch include/something/here.hpp src/here.cpp
+                  - tar czf archive.tar.gz include src
+              b:
+                x:
+                  - sha256sum -b archive.tar.gz
+            """
+        ),
+        ('build',),
+    )
+
+    assert result.exit_code == 0
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+    assert out == "959ba292674303dc82e926f7a5e4a839135b2c5ebd6e68759c095c2160548e44 *archive.tar.gz\n", "archive's hash should not depend on build time"
+
+
+@pytest.mark.parametrize("archive_key", (
+    "archive",
+    "fingerprint",
+    "junit",
+))
+def test_complain_about_missing_artifacts(capfd, archive_key):
+    result = run_with_config(
+        dedent(
+            f"""\
+            phases:
+              a:
+                x:
+                  - {archive_key}:
+                      {'test-results' if archive_key == 'junit' else 'artifacts'}: {archive_key}-doesnotexist.txt
+            """
+        ),
+        ('build',),
+    )
+
+    assert result.exit_code == 38
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+    assert re.search(r"\b[Nn]one of these mandatory .*? patterns matched a file\b", err)
+    assert f"{archive_key}-doesnotexist.txt" in err
+
+
+@pytest.mark.parametrize("archive_key", (
+    "archive",
+    "fingerprint",
+    "junit",
+))
+def test_accept_present_artifacts(archive_key):
+    result = run_with_config(
+        dedent(
+            f"""\
+            phases:
+              a:
+                x:
+                  - {archive_key}:
+                      {'test-results' if archive_key == 'junit' else 'artifacts'}: {archive_key}-exists.txt
+                    sh: touch {archive_key}-exists.txt
+            """
+        ),
+        ('build',),
+    )
+
+    assert result.exit_code == 0
+
+
+@pytest.mark.parametrize("archive_key", (
+    "archive",
+    "fingerprint",
+))
+def test_permit_missing_artifacts(archive_key):
+    result = run_with_config(
+        dedent(
+            f"""\
+            phases:
+              a:
+                x:
+                  - {archive_key}:
+                      artifacts: {archive_key}-doesnotexist.txt
+                      allow-missing: yes
+                    junit:
+                      test-results: junit-doesnotexist.xml
+                      allow-missing: yes
+            """
+        ),
+        ('build',),
+    )
+
+    assert result.exit_code == 0
