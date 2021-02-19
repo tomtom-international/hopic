@@ -86,6 +86,7 @@ from yaml.error import YAMLError
 from .main import main
 from ..errors import (
     CommitAncestorMismatchError,
+    GitNotesMismatchError,
     VersionBumpMismatchError,
     VersioningError,
 )
@@ -612,21 +613,30 @@ def process_prepare_source_tree(
                     env['GIT_AUTHOR_DATE'] = commit_params['author_date']
                 if 'commit_date' in commit_params:
                     env['GIT_COMMITTER_DATE'] = commit_params['commit_date']
-                repo.git.notes(
+
+                hopic_commit_version = f"Committed-by: Hopic {utils.get_package_version(PACKAGE)}"
+                notes_message = dedent(f"""\
+                {hopic_commit_version}
+
+                With Python version: {platform.python_version()}
+
+                And with these installed packages:
+                {pkgs}
+                """)
+
+                try:
+                    notes = repo.git.notes('show', submit_commit.hexsha, ref=notes_ref)
+                    if hopic_commit_version not in notes:
+                        raise GitNotesMismatchError(submit_commit.hexsha, notes_message, notes)
+                except git.GitCommandError:
+                    notes = None
+
+                if notes is None:
+                    repo.git.notes(
                         'add', submit_commit.hexsha,
-                        '--message=' + dedent("""\
-                        Committed-by: Hopic {version}
-
-                        With Python version: {python_version}
-
-                        And with these installed packages:
-                        {pkgs}
-                        """).format(
-                            pkgs=pkgs,
-                            version=get_package_version(PACKAGE),
-                            python_version=platform.python_version(),
-                        ),
+                        '--message=' + notes_message,
                         ref=notes_ref, env=env)
+
                 notes_ref = f"{repo.commit(notes_ref)}:refs/notes/hopic/{target_ref}"
         else:
             submit_commit = repo.head.commit
