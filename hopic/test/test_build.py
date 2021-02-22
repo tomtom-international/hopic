@@ -36,6 +36,10 @@ import signal
 import stat
 import subprocess
 import sys
+from typing import (
+    Mapping,
+    Optional,
+)
 
 _source_date_epoch = 7 * 24 * 3600
 _git_time = f"{_source_date_epoch} +0000"
@@ -65,52 +69,67 @@ class MonkeypatchInjector:
             return self.monkeypatch_context.__exit__(exc_type, exc_val, exc_tb)
 
 
-def run_with_config(config, *args, files={}, env=None, monkeypatch_injector=MonkeypatchInjector(), init_version='0.0.0', commit_count=0, dirty=False, tag=True):
+def run_with_config(
+    config,
+    *args,
+    files: Mapping = {},
+    env: Optional[Mapping[str, str]] = None,
+    monkeypatch_injector=MonkeypatchInjector(),
+    init_version: str = '0.0.0',
+    commit_count: int = 0,
+    dirty: bool = False,
+    tag: bool = True,
+    umask: int = 0o022,
+):
     runner = CliRunner(mix_stderr=False, env=env)
     commit = None
-    with runner.isolated_filesystem():
-        with git.Repo.init() as repo:
-            with open('hopic-ci-config.yaml', 'w') as f:
-                f.write(config)
-            for fname, (content, on_file_created_callback) in files.items():
-                if '/' in fname and not os.path.exists(os.path.dirname(fname)):
-                    os.makedirs(os.path.dirname(fname))
-                with open(fname, 'w') as f:
-                    f.write(content)
-                on_file_created_callback()
-            repo.index.add(('hopic-ci-config.yaml',) + tuple(files.keys()))
-            commit = repo.index.commit(message='Initial commit', **_commitargs)
-            if tag:
-                repo.create_tag(init_version)
-            for i in range(commit_count):
-                commit = repo.index.commit(message=f"Some commit {i}", **_commitargs)
-            if dirty:
-                with open('dirty_file', 'w') as f:
-                    f.write('dirty')
-                repo.index.add(('dirty_file'))  # do not commit to create the dirty state
-        for arg in args:
-            orig_main = hopic_cli.main
+    umask = os.umask(umask)
+    try:
+        with runner.isolated_filesystem():
+            with git.Repo.init() as repo:
+                with open('hopic-ci-config.yaml', 'w') as f:
+                    f.write(config)
+                for fname, (content, on_file_created_callback) in files.items():
+                    if '/' in fname and not os.path.exists(os.path.dirname(fname)):
+                        os.makedirs(os.path.dirname(fname))
+                    with open(fname, 'w') as f:
+                        f.write(content)
+                    on_file_created_callback()
+                repo.index.add(('hopic-ci-config.yaml',) + tuple(files.keys()))
+                commit = repo.index.commit(message='Initial commit', **_commitargs)
+                if tag:
+                    repo.create_tag(init_version)
+                for i in range(commit_count):
+                    commit = repo.index.commit(message=f"Some commit {i}", **_commitargs)
+                if dirty:
+                    with open('dirty_file', 'w') as f:
+                        f.write('dirty')
+                    repo.index.add(('dirty_file'))  # do not commit to create the dirty state
+            for arg in args:
+                orig_main = hopic_cli.main
 
-            def mock_main(*args, **kwargs):
-                with monkeypatch_injector:
-                    return orig_main(*args, **kwargs)
+                def mock_main(*args, **kwargs):
+                    with monkeypatch_injector:
+                        return orig_main(*args, **kwargs)
 
-            try:
-                hopic_cli.main = mock_main
-                result = runner.invoke(hopic_cli, arg)
-            finally:
-                hopic_cli.main = orig_main
+                try:
+                    hopic_cli.main = mock_main
+                    result = runner.invoke(hopic_cli, arg)
+                finally:
+                    hopic_cli.main = orig_main
 
-            if result.stdout_bytes:
-                print(result.stdout, end='')
-            if result.stderr_bytes:
-                print(result.stderr, end='', file=sys.stderr)
+                if result.stdout_bytes:
+                    print(result.stdout, end='')
+                if result.stderr_bytes:
+                    print(result.stderr, end='', file=sys.stderr)
 
-            if result.exception is not None and not isinstance(result.exception, SystemExit):
-                raise result.exception
+                if result.exception is not None and not isinstance(result.exception, SystemExit):
+                    raise result.exception
 
-            if result.exit_code != 0:
-                return result
+                if result.exit_code != 0:
+                    return result
+    finally:
+        os.umask(umask)
 
     result.commit = commit
     return result
