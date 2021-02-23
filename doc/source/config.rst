@@ -183,6 +183,10 @@ This assumes that the other git repo's are protected with a named lock while mer
      - *never*
      - *new-version-only* (only acquire lock when version is bumped)
 
+``from-phase-onward`` (optional)
+    Acquire the lock only at the start of the specified phase
+    By default it would be acquired at the start of the build instead.
+
 The named lock that Hopic will acquire is formatted as ``repo-name``/``branch``
 If all merge checks pass and Hopic is going to submit the merge, all specified addition locks will be acquired at the beginning of a build, alongside the repository's own lock.
 
