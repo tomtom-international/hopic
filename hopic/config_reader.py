@@ -1160,14 +1160,13 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
                     f"referenced phase in ci-locks ({ci_lock['from-phase-onward']}) doesn't exist",
                     file=config,
                 )
-            else:
-                for variant_name, variant in cfg['phases'][ci_lock['from-phase-onward']].items():
-                    if any('wait-on-full-previous-phase' in item and not item['wait-on-full-previous-phase'] for item in variant):
-                        raise ConfigurationError(
-                            f"referenced phase in ci-locks ({ci_lock['from-phase-onward']}) "
-                            f"refers to variant ({variant_name}) that has wait-on-full-previous-phase disabled",
-                            file=config,
-                        )
+            for variant_name, variant in cfg['phases'][ci_lock['from-phase-onward']].items():
+                if any('wait-on-full-previous-phase' in item and not item['wait-on-full-previous-phase'] for item in variant):
+                    raise ConfigurationError(
+                        f"referenced phase in ci-locks ({ci_lock['from-phase-onward']}) "
+                        f"refers to variant ({variant_name}) that has wait-on-full-previous-phase disabled",
+                        file=config,
+                    )
 
         lock_id = ci_lock['repo-name'] + ci_lock['branch']
         if lock_id in lock_names:
