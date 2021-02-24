@@ -866,6 +866,7 @@ def test_merge_branch_twice(tmp_path, monkeypatch, note_mismatch):
 
     monkeypatch.setenv('GIT_COMMITTER_NAME' , 'My Name is Nobody')
     monkeypatch.setenv('GIT_COMMITTER_EMAIL', 'nobody@example.com')
+    monkeypatch.setattr(utils, 'installed_pkgs', lambda : 'hopic==42.42.42\nhopic-dep==0.0.0\n')
     checkout_and_merge = (
         ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master', '--target-commit', str(base_commit)),
         ('prepare-source-tree',
