@@ -615,14 +615,17 @@ def process_prepare_source_tree(
                     env['GIT_COMMITTER_DATE'] = commit_params['commit_date']
 
                 hopic_commit_version = f"Committed-by: Hopic {utils.get_package_version(PACKAGE)}"
-                notes_message = dedent(f"""\
+                notes_message = dedent("""\
                 {hopic_commit_version}
 
-                With Python version: {platform.python_version()}
+                With Python version: {python_version}
 
                 And with these installed packages:
                 {pkgs}
-                """)
+                """).format(
+                    hopic_commit_version=hopic_commit_version,
+                    pkgs=pkgs,
+                    python_version=platform.python_version())
 
                 try:
                     notes = repo.git.notes('show', submit_commit.hexsha, ref=notes_ref)
