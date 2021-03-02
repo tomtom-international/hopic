@@ -1147,3 +1147,107 @@ def test_junit_pattern_invalid_double_star():
             ),
             {'WORKSPACE': None},
         )
+
+
+def test_ci_locks_reference_invalid_phase():
+    with pytest.raises(ConfigurationError, match=r"referenced phase in ci-locks \(non-existing-phase\) doesn't exist"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    '''\
+                    ci-locks:
+                        - branch: branch
+                          repo-name: repo
+                          from-phase-onward: non-existing-phase
+
+                    phases:
+                      existing-phase:
+                        example:
+                          - echo 'test'
+                    '''
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_ci_locks_reference_wait_on_full_previous_phase_variant():
+    with pytest.raises(ConfigurationError, match=r"referenced phase in ci-locks \(phase-2\) refers to variant \(wait-on-full-previous-phase-variant\) "
+                                                 r"that has wait-on-full-previous-phase disabled"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    '''\
+                    ci-locks:
+                        - branch: branch
+                          repo-name: repo
+                          from-phase-onward: phase-2
+
+                    phases:
+                      phase-1:
+                        example:
+                          - echo 'test'
+
+                        wait-on-full-previous-phase-variant:
+                          - echo 'disable waiting on previous phase'
+
+                      phase-2:
+                        example:
+                          - echo 'test'
+
+                        wait-on-full-previous-phase-variant:
+                          - wait-on-full-previous-phase: no
+
+                    '''
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_ci_locks_duplicate_identifier():
+    with pytest.raises(ConfigurationError, match=r"ci-lock with repo-name 'repo' and branch 'branch' already exists, "
+                                                 r"this would lead to a deadlock"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    '''\
+                    ci-locks:
+                        - branch: branch
+                          repo-name: repo
+                          from-phase-onward: phase-1
+                        - branch: branch
+                          repo-name: repo
+
+                    phases:
+                      phase-1:
+                        example:
+                          - echo 'test'
+                    '''
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_ci_locks_on_phase_forward():
+    cfg = config_reader.read(
+        _config_file(
+            dedent(
+                '''\
+                ci-locks:
+                  - branch: branch
+                    repo-name: repo
+                    from-phase-onward: phase-1
+
+                phases:
+                  phase-1:
+                    example:
+                      - echo 'test'
+                '''
+            )
+        ),
+        {'WORKSPACE': None},
+    )
+    out = cfg['ci-locks'][0]
+    assert 'from-phase-onward' in out

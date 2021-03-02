@@ -1005,21 +1005,35 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     return true
   }
 
-  public String[] get_additional_ci_lock_names(cmd) {
+  private Map get_ci_locks(cmd, is_publishable_change) {
+    def locks = ['global': [], 'from-phase': [:]]
+    if (!is_publishable_change) {
+      return locks
+    } else {
+      locks['global'].push(this.get_lock_name())
+    }
     def config = steps.readJSON(text: steps.sh(
       script: "${cmd} show-config",
       label: 'Hopic (internal): retrieving additional CI lock names',
       returnStdout: true,
     ))
-    return config.getOrDefault('ci-locks', []).findAll { lock ->
+    def all_locks = config.getOrDefault('ci-locks', []).findAll { lock ->
       if (lock['lock-on-change'] == 'always' || 
         (lock['lock-on-change'] == 'new-version-only' && this.is_new_version())) {
           return true
         }
         return false
-    }.collect { lock ->
-      return get_repo_name_and_branch(lock['repo-name'], lock['branch'])
     }
+
+    all_locks.each { lock ->
+      def lock_name = get_repo_name_and_branch(lock['repo-name'], lock['branch'])
+      if (lock.containsKey('from-phase-onward')) {
+        locks['from-phase'].get(lock['from-phase-onward'], []).push(lock_name)
+      } else {
+        locks['global'].push(lock_name)
+      }
+    }
+    return locks
   }
 
   /**
@@ -1454,31 +1468,139 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     }
   }
 
-  private def with_locks(lock_name, additional_locks = []) {
+  private def with_locks(List<String> lock_names) {
     return { closure ->
-      def lock_closure = { locked_closure ->
-        if (additional_locks.size()) {
-          steps.lock(resource: lock_name, extra: additional_locks.collect{['resource': it]}) {
-            locked_closure()
+      if (lock_names.size()) {
+        def lock_closure = { locked_closure ->
+          if (lock_names.size() > 1) {
+            steps.lock(resource: lock_names[0], extra: lock_names[1..-1].collect{['resource': it]}) {
+              locked_closure()
+            }
+          } else {
+            steps.lock(lock_names[0]) {
+              locked_closure()
+            }
           }
-        } else {
-          steps.lock(lock_name) {
-            locked_closure()
+        }
+
+        def acquire_time = null
+        def lock_request_time = this.get_unix_epoch_time()
+        try {
+          return lock_closure {
+            acquire_time = this.get_unix_epoch_time()
+            return closure()
           }
+        } finally {
+          def lock_release_time = this.get_unix_epoch_time()
+          lock_names.each {
+            this.lock_times.add(new LockWaitingTime(lock_name: it, acquire_time: acquire_time, request_time: lock_request_time, release_time: lock_release_time))
+          }
+        }
+      } else {
+        // NOP as default 
+        closure()
+      }
+    }
+  }
+
+  private def build_phases(phases, clean, artifactoryBuildInfo, hopic_extra_arguments, submit_meta, from_phases_locks, previous_phase_locks = []) {
+    if (!phases) {
+      return submit_if_needed(submit_meta, hopic_extra_arguments)
+    }
+    def build_phases_func = { locks ->
+      build_phases(phases, clean, artifactoryBuildInfo, hopic_extra_arguments, submit_meta, from_phases_locks, locks ?: previous_phase_locks)
+    }
+    def is_build_successful = steps.currentBuild.currentResult == 'SUCCESS'
+    final phase = phases.keySet().first()
+    // Make sure steps exclusive to changes are skipped when a failure occurred during one of the previous phases.
+    final variants = phases.remove(phase).findAll { variant, meta ->
+      def run_on_change = meta.run_on_change
+      if (run_on_change == 'only' || run_on_change == 'new-version-only') {
+        // run_on_change variants should not be executed for unstable builds 
+        if (!is_build_successful) {
+          steps.println("Skipping variant ${variant} in ${phase} because build is not successful")
+          return false
         }
       }
+      return true
+    }
 
-      def acquire_time = null
-      def lock_request_time = this.get_unix_epoch_time()
-      try {
-        return lock_closure {
-          acquire_time = this.get_unix_epoch_time()
-          return closure()
+    def current_phase_locks = is_build_successful ? from_phases_locks.getOrDefault(phase, []) + previous_phase_locks : []
+    // Skip creation of a stage for phases with no variants to execute
+    if (variants.size() != 0) {
+      def lock_phase_onward_if_necessary = this.with_locks(current_phase_locks)
+      lock_phase_onward_if_necessary {
+        steps.stage(phase) {
+          def stepsForBuilding = variants.collectEntries { variant, meta ->
+            def label = meta.label
+            [ (variant): {
+              if (this.nodes.containsKey(variant)) {
+                label = this.nodes[variant]
+              }
+              this.on_node(node_expr: label, exec_name: "${phase}-${variant}") {
+                with_workspace_for_variant(variant) {
+                  this.with_hopic(variant) { cmd ->
+                    // If working with multiple executors on this node, uniquely identify this node by variant
+                    // to ensure the correct workspace.
+                    final workspace = this.ensure_checkout(cmd, clean, variant)
+                    this.pin_variant_to_current_node(variant)
+
+                    this.ensure_unstashed(variant)
+
+                    if (!meta.nop) {
+                      this.build_variant(phase, variant, cmd, workspace, artifactoryBuildInfo, hopic_extra_arguments)
+                    }
+
+                    // Execute a string of uninterrupted phases with our current variant for which we don't need to wait on preceding phases
+                    //
+                    // Using a regular for loop because we need to break out of it early and .takeWhile doesn't work with closures defined in CPS context
+                    for (next_phase in phases.keySet()) {
+                      final next_variants = phases[next_phase]
+
+                      if (!next_variants.containsKey(variant)
+                      // comparing against 'false' directly because we want to reject 'null' too
+                      || next_variants[variant].wait_on_full_previous_phase != false) {
+                        break
+                      }
+
+                      // Prevent executing this variant again during the phase it really belongs too
+                      final next_variant = next_variants.remove(variant)
+                      assert next_variant.run_on_change == 'always'
+
+                      // Execute this variant's next phase already.
+                      // Because the user asked for it, in order not to relinquish this node until we really have to.
+                      if (!next_variant.nop) {
+                        this.build_variant(next_phase, variant, cmd, workspace, artifactoryBuildInfo, hopic_extra_arguments)
+                      }
+                    }
+                  }
+                }
+              }
+            }]
+          }
+          steps.parallel stepsForBuilding
         }
-      } finally {
-        def lock_release_time = this.get_unix_epoch_time()
-        ([lock_name] + additional_locks).each {
-          this.lock_times.add(new LockWaitingTime(lock_name: it, acquire_time: acquire_time, request_time: lock_request_time, release_time: lock_release_time))
+        build_phases_func()
+      }
+    } else {
+      build_phases_func(current_phase_locks)
+    }
+  }
+
+  private def submit_if_needed(submit_meta, hopic_extra_arguments) {
+    if (this.may_submit_result != false) {
+      this.on_build_node(node_expr: submit_meta['node-label'], name: 'submit') { cmd ->
+        if (this.has_submittable_change()) {
+          steps.stage('submit') {
+            this.with_git_credentials() {
+              this.get_change().abort_if_changed(this.scm.url)
+              this.subcommand_with_credentials(
+                  cmd + hopic_extra_arguments,
+                  'submit'
+                , submit_meta.getOrDefault('with-credentials', []),
+                'Hopic: submitting merge')
+            }
+          }
         }
       }
     }
@@ -1491,7 +1613,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
     this.extend_build_properties()
     this.decorate_output {
-      def (phases, is_publishable_change, submit_meta, additional_locks) = this.on_node(node_expr: default_node, exec_name: "hopic-init") {
+      def (phases, is_publishable_change, submit_meta, locks) = this.on_node(node_expr: default_node, exec_name: "hopic-init") {
         return this.with_hopic { cmd ->
           def workspace = steps.pwd()
 
@@ -1560,12 +1682,11 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
             this.change.notify_build_result(get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, 'STARTING', exclude_branches_filled_with_pr_branch_discovery)
           }
 
-          return [phases, is_publishable, submit_meta, is_publishable ? get_additional_ci_lock_names(cmd) : []]
+          return [phases, is_publishable, submit_meta, get_ci_locks(cmd, is_publishable)]
         }
       }
 
-      // NOP as default
-      def lock_if_necessary = is_publishable_change ? this.with_locks(get_lock_name(), additional_locks) : { closure -> closure() }
+      def lock_if_necessary = this.with_locks(locks.global)
 
       def artifactoryBuildInfo = [:]
       def hopic_extra_arguments = is_publishable_change ? ' --publishable-version': ''
@@ -1600,94 +1721,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           // Clear the target commit hash that we determined outside of 'lock_if_necessary' because the target branch
           // may have moved forward while we didn't hold the lock.
           this.target_commit = null
-          while (phases) {
-            final phase = phases.keySet().first()
-            def is_build_successful = steps.currentBuild.currentResult == 'SUCCESS'
-            // Make sure steps exclusive to changes are skipped when a failure occurred during one of the previous phases.
-            final variants = phases.remove(phase).findAll { variant, meta ->
-              def run_on_change = meta.run_on_change
-
-              if (run_on_change == 'only' || run_on_change == 'new-version-only') {
-                if (!is_build_successful) {
-                  steps.println("Skipping variant ${variant} in ${phase} because build is not successful")
-                  return false
-                }
-              }
-              return true
-            }
-            // Skip creation of a stage for phases with no variants to execute
-            if (variants.size() == 0) {
-              continue
-            }
-
-            steps.stage(phase) {
-              def stepsForBuilding = variants.collectEntries { variant, meta ->
-                def label = meta.label
-                [ (variant): {
-                  if (this.nodes.containsKey(variant)) {
-                    label = this.nodes[variant]
-                  }
-                  this.on_node(node_expr: label, exec_name: "${phase}-${variant}") {
-                    with_workspace_for_variant(variant) {
-                      this.with_hopic(variant) { cmd ->
-                        // If working with multiple executors on this node, uniquely identify this node by variant
-                        // to ensure the correct workspace.
-                        final workspace = this.ensure_checkout(cmd, clean, variant)
-                        this.pin_variant_to_current_node(variant)
-
-                        this.ensure_unstashed(variant)
-
-                        if (!meta.nop) {
-                          this.build_variant(phase, variant, cmd, workspace, artifactoryBuildInfo, hopic_extra_arguments)
-                        }
-
-                        // Execute a string of uninterrupted phases with our current variant for which we don't need to wait on preceding phases
-                        //
-                        // Using a regular for loop because we need to break out of it early and .takeWhile doesn't work with closures defined in CPS context
-                        for (next_phase in phases.keySet()) {
-                          final next_variants = phases[next_phase]
-
-                          if (!next_variants.containsKey(variant)
-                           // comparing against 'false' directly because we want to reject 'null' too
-                           || next_variants[variant].wait_on_full_previous_phase != false) {
-                            break
-                          }
-
-                          // Prevent executing this variant again during the phase it really belongs too
-                          final next_variant = next_variants.remove(variant)
-                          assert next_variant.run_on_change == 'always'
-
-                          // Execute this variant's next phase already.
-                          // Because the user asked for it, in order not to relinquish this node until we really have to.
-                          if (!next_variant.nop) {
-                            this.build_variant(next_phase, variant, cmd, workspace, artifactoryBuildInfo, hopic_extra_arguments)
-                          }
-                        }
-                      }
-                    }
-                  }
-                }]
-              }
-              steps.parallel stepsForBuilding
-            }
-          }
-
-          if (this.may_submit_result != false) {
-            this.on_build_node(node_expr: submit_meta['node-label'], name: 'submit') { cmd ->
-              if (this.has_submittable_change()) {
-                steps.stage('submit') {
-                  this.with_git_credentials() {
-                    this.get_change().abort_if_changed(this.scm.url)
-                    this.subcommand_with_credentials(
-                        cmd + hopic_extra_arguments,
-                        'submit'
-                      , submit_meta.getOrDefault('with-credentials', []),
-                      'Hopic: submitting merge')
-                  }
-                }
-              }
-            }
-          }
+          this.build_phases(phases, clean, artifactoryBuildInfo, hopic_extra_arguments, submit_meta, locks['from-phase'])
         }
 
         if (artifactoryBuildInfo) {

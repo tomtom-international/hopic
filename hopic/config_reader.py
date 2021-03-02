@@ -1006,17 +1006,20 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
     if not isinstance(ci_locks, Sequence):
         raise ConfigurationError(f"`ci-locks` doesn't contain a sequence but a {type(ci_locks).__name__}", file=config)
     ci_locks_argument_mapping = {
-        'branch'        : {'type': str },
-        'repo-name'     : {'type': str },
-        'lock-on-change': {'type': LockOnChange, 'default': LockOnChange.default},
+        'branch'           : {'type': str },
+        'repo-name'        : {'type': str },
+        'lock-on-change'   : {'type': LockOnChange, 'default': LockOnChange.default},
+        'from-phase-onward': {'type': str, 'optional': True }
     }
     for lock_properties in ci_locks:
         for property, argument_spec in ci_locks_argument_mapping.items():
             if property not in lock_properties:
                 if 'default' in argument_spec:
                     lock_properties[property] = argument_spec['type'](argument_spec['default'])
-                else:
+                elif not argument_spec.get('optional', False):
                     raise ConfigurationError(f"`ci-locks` {lock_properties} doesn't contain a {property}", file=config)
+                else:
+                    continue
 
             msg = f'`ci-locks` {lock_properties} has an invalid attribute "{property}", expected %s, but got a {type(lock_properties[property]).__name__}'
             if issubclass(ci_locks_argument_mapping[property]['type'], Enum):
@@ -1148,6 +1151,31 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
                     phase[variant].insert(0, OrderedDict())
                 phase[variant][0]['wait-on-full-previous-phase'] = True
         previous_phase = phasename
+
+    lock_names = []
+    for ci_lock in ci_locks:
+        if 'from-phase-onward' in ci_lock:
+            if ci_lock['from-phase-onward'] not in cfg['phases']:
+                raise ConfigurationError(
+                    f"referenced phase in ci-locks ({ci_lock['from-phase-onward']}) doesn't exist",
+                    file=config,
+                )
+            for variant_name, variant in cfg['phases'][ci_lock['from-phase-onward']].items():
+                if any('wait-on-full-previous-phase' in item and not item['wait-on-full-previous-phase'] for item in variant):
+                    raise ConfigurationError(
+                        f"referenced phase in ci-locks ({ci_lock['from-phase-onward']}) "
+                        f"refers to variant ({variant_name}) that has wait-on-full-previous-phase disabled",
+                        file=config,
+                    )
+
+        lock_id = ci_lock['repo-name'] + ci_lock['branch']
+        if lock_id in lock_names:
+            raise ConfigurationError(
+                f"ci-lock with repo-name '{ci_lock['repo-name']}' and branch '{ci_lock['branch']}' already exists, "
+                "this would lead to a deadlock",
+                file=config,
+            )
+        lock_names.append(ci_lock['repo-name'] + ci_lock['branch'])
 
     post_submit = cfg.setdefault('post-submit', OrderedDict())
     if not isinstance(post_submit, Mapping):
