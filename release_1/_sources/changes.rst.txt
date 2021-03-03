@@ -17,6 +17,31 @@
 Changelog
 =========
 
+1.34.0-6+gb9667e79c74262
+======
+
+New features
+------------
+
+* feat(groovy): allow taking additional locks only from specified phase onward (#338)
+
+1.33.2
+======
+
+Bug fixes
+---------
+
+* fix: remove indentation in git notes message (#339)
+
+1.33.1
+======
+
+Bug fixes
+---------
+
+* fix: cache static jenkins SCM properties (#332)
+* fix: avoid adding duplicate notes to same commit (#332)
+
 1.33.0
 ======
 
