@@ -74,6 +74,10 @@ phases:
         worktrees:
           doc/build/html:
             commit-message: "Update documentation for ${VERSION}"
+        with-credentials:
+          id: ssh_svc_bitbucket_access
+          type: ssh-key
+          ssh-command-variable: GIT_SSH
         sh: >
           sh -x -c ':
           && find doc/build/html -maxdepth 1 -not -path doc/build/html -not -name .git\* -exec rm -v -r "{}" +
