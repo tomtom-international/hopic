@@ -1349,17 +1349,20 @@ def test_normalize_artifacts(capfd, run_with_config):
     result = run_with_config(
         dedent(
             """\
+            version:
+              tag: true
+
             phases:
               a:
                 x:
                   - archive:
-                      artifacts: archive.tar.gz
+                      artifacts: archive-${PURE_VERSION}.tar.gz
                   - mkdir -p include/something src
                   - touch include/something/here.hpp src/here.cpp
-                  - tar czf archive.tar.gz include src
+                  - tar czf archive-${PURE_VERSION}.tar.gz include src
               b:
                 x:
-                  - sha256sum -b archive.tar.gz
+                  - sha256sum -b archive-${PURE_VERSION}.tar.gz
             """
         ),
         ('build',),
@@ -1369,7 +1372,7 @@ def test_normalize_artifacts(capfd, run_with_config):
     out, err = capfd.readouterr()
     sys.stdout.write(out)
     sys.stderr.write(err)
-    assert out == "959ba292674303dc82e926f7a5e4a839135b2c5ebd6e68759c095c2160548e44 *archive.tar.gz\n", "archive's hash should not depend on build time"
+    assert out == "959ba292674303dc82e926f7a5e4a839135b2c5ebd6e68759c095c2160548e44 *archive-0.0.0.tar.gz\n", "archive's hash should not depend on build time"
 
 
 @pytest.mark.parametrize("archive_key", (
