@@ -458,6 +458,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                 binary_normalize.normalize(artifact, source_date_epoch=ctx.obj.source_date_epoch)
 
         pattern_matched = False
+        mandatory_artifacts = [expand_vars(volume_vars, exp) for exp in mandatory_artifacts]
         for pattern in mandatory_artifacts:
             for artifact in ctx.obj.code_dir.glob(pattern):
                 pattern_matched = True
@@ -466,6 +467,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
             raise MissingFileError(f"none of these mandatory artifact patterns matched a file: {mandatory_artifacts}")
 
         pattern_matched = False
+        mandatory_junit = [expand_vars(volume_vars, exp) for exp in mandatory_junit]
         for pattern in mandatory_junit:
             for _ in ctx.obj.code_dir.glob(pattern):
                 pattern_matched = True
