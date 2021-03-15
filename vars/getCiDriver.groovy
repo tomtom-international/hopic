@@ -1590,16 +1590,21 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   private def submit_if_needed(submit_meta, hopic_extra_arguments) {
     if (this.may_submit_result != false) {
       this.on_build_node(node_expr: submit_meta['node-label'], name: 'submit') { cmd ->
-        if (this.has_submittable_change()) {
-          steps.stage('submit') {
-            this.with_git_credentials() {
-              this.get_change().abort_if_changed(this.scm.url)
-              this.subcommand_with_credentials(
-                  cmd + hopic_extra_arguments,
-                  'submit'
-                , submit_meta.getOrDefault('with-credentials', []),
-                'Hopic: submitting merge')
-            }
+        if (!this.has_submittable_change()) {
+          // Prevent reporting 'submit' as having run as we didn't actually do anything
+          def usage_entry = this.nodes_usage[steps.env.NODE_NAME][steps.env.EXECUTOR_NUMBER as Integer].pop()
+          assert usage_entry.exec_name == 'submit'
+          return
+        }
+
+        steps.stage('submit') {
+          this.with_git_credentials() {
+            this.get_change().abort_if_changed(this.scm.url)
+            this.subcommand_with_credentials(
+                cmd + hopic_extra_arguments,
+                'submit'
+              , submit_meta.getOrDefault('with-credentials', []),
+              'Hopic: submitting merge')
           }
         }
       }
