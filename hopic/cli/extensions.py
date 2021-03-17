@@ -27,7 +27,10 @@ except ImportError:
 
 import click
 
-from ..config_reader import read as read_config
+from ..config_reader import (
+    get_entry_points,
+    read as read_config,
+)
 from ..execution import echo_cmd_click as echo_cmd
 from .utils import (
         determine_config_file_name,
@@ -119,3 +122,4 @@ def install_extensions_with_config(pip_cfg):
 
     # Ensure newly installed packages can be imported
     importlib.invalidate_caches()
+    get_entry_points.cache_clear()
