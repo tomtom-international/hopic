@@ -17,13 +17,6 @@ import json
 import re
 from textwrap import dedent
 import typing
-
-try:
-    # Python >= 3.8
-    from importlib import metadata
-except ImportError:
-    import importlib_metadata as metadata
-
 import pytest
 
 from .. import config_reader
@@ -194,7 +187,8 @@ def mock_yaml_plugin(monkeypatch):
 
     def mock_entry_points():
         return {
-            'hopic.plugins.yaml': (
+            ep.name: ep
+            for ep in [
                 TestTemplate(),
                 TestKwargTemplate(),
                 TestSimpleTemplate(),
@@ -204,9 +198,10 @@ def mock_yaml_plugin(monkeypatch):
                 TestNonGeneratorTemplate(),
                 TestGeneratorTemplate(),
                 TestBadGeneratorTemplate(),
-            )
+            ]
         }
-    monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
+
+    monkeypatch.setattr(config_reader, 'get_entry_points', mock_entry_points)
 
 
 @pytest.mark.parametrize('version_build', (
