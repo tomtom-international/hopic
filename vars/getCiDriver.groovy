@@ -1468,7 +1468,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     }
   }
 
-  private def with_locks(List<String> lock_names) {
+  public def with_locks(List<String> lock_names) {
     return { closure ->
       if (lock_names.size()) {
         def lock_closure = { locked_closure ->
