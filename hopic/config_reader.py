@@ -22,6 +22,7 @@ from collections.abc import (
     )
 from enum import Enum
 import errno
+from functools import lru_cache
 try:
     # Python >= 3.8
     from importlib import metadata
@@ -387,6 +388,11 @@ def match_template_props_to_signature(
     return new_params
 
 
+@lru_cache()
+def get_entry_points():
+    return {ep.name: ep for ep in metadata.entry_points().get('hopic.plugins.yaml', ())}
+
+
 def load_yaml_template(volume_vars, extension_installer, loader, node):
     if node.id == 'scalar':
         props = {}
@@ -395,13 +401,11 @@ def load_yaml_template(volume_vars, extension_installer, loader, node):
         props = loader.construct_mapping(node, deep=True)
         name = props.pop('name')
 
-    for ep in metadata.entry_points().get('hopic.plugins.yaml', ()):
-        if ep.name == name:
-            break
-    else:
-        raise TemplateNotFoundError(name=name, props=props)
+    try:
+        template_fn = get_entry_points()[name].load()
+    except KeyError as exc:
+        raise TemplateNotFoundError(name=name, props=props) from exc
 
-    template_fn = ep.load()
     template_sig = inspect.signature(template_fn)
     rt_type = template_sig.return_annotation
     if rt_type is inspect.Signature.empty:
