@@ -19,6 +19,7 @@ Helper functionality for Hopic templates.
 import sys
 from typing import (
     Any,
+    Iterable,
     List,
     Mapping,
     Tuple,
@@ -26,19 +27,20 @@ from typing import (
 )
 
 
-def _kebabify(name: str):
+def _kebabify(name: str) -> str:
     """Convert from snake_case to kebab-case"""
     return name.replace("_", "-")
 
 
-def _name_to_arg(name):
+def _name_to_arg(name: str) -> str:
     if len(name) == 1:
+        assert name not in ("_", "-")
         return f"-{name}"
     else:
         return f"--{_kebabify(name)}"
 
 
-def _kwarg_to_arg(name, value):
+def _kwarg_to_arg(name: str, value: Any) -> Iterable[str]:
     if value is True:
         return [_name_to_arg(name)]
     elif value is not False and value is not None:
@@ -47,7 +49,7 @@ def _kwarg_to_arg(name, value):
         return []
 
 
-def _kwargs_to_args(**kwargs: Mapping[str, Any]):
+def _kwargs_to_args(**kwargs: Any) -> Iterable[str]:
     for key, val in kwargs.items():
         if isinstance(val, (list, tuple)):
             for subval in val:
