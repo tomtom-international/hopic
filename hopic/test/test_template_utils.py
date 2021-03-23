@@ -23,9 +23,9 @@ from hopic.template.utils import (
 
 def test_args_only():
     assert command("cmd") == ("cmd",)
-    assert command("cmd", 1) == ("cmd", "--", "1")
-    assert command("cmd", "a") == ("cmd", "--", "a")
-    assert command("cmd", 1, 2, 3, "a", "b", "c") == ("cmd", "--", "1", "2", "3", "a", "b", "c")
+    assert command("cmd", 1) == ("cmd", "1")
+    assert command("cmd", "a") == ("cmd", "a")
+    assert command("cmd", 1, 2, 3, "a", "b", "c") == ("cmd", "1", "2", "3", "a", "b", "c")
 
 
 def test_bool_kwargs_only():
@@ -50,17 +50,20 @@ def test_str_coercion():
         "cmd",
         *("--include", "somewhere/else.txt"),
         *("--include", "some/other/place.txt"),
-        "--",
         "over/here.txt",
     )
 
-    assert command("cmd", 0, arg=1, args=(2, True)) == ("cmd", "--arg", "1", "--args", "2", "--args", "--", "0")
+    assert command("cmd", 0, arg=1, args=(2, True)) == ("cmd", "--arg", "1", "--args", "2", "--args", "0")
+
+
+def test_opt_like_args():
+    assert command("cmd", Path("-cons.txt"), Path("+pros.txt"), evaluate=True) == ("cmd", "--evaluate", "--", "-cons.txt", "+pros.txt")
 
 
 def test_list_command():
-    assert command(("git", "add"), Path("a.txt"), Path("b.txt"), u=True) == ("git", "add", "-u", "--", "a.txt", "b.txt")
+    assert command(("git", "add"), Path("a.txt"), Path("b.txt"), u=True) == ("git", "add", "-u", "a.txt", "b.txt")
 
 
 def test_module_command():
-    assert module_command(__name__, 1, 2, verbose=True) == (sys.executable, "-m", "hopic.test.test_template_utils", "--verbose", "--", "1", "2")
-    assert module_command((__name__, "sub"), 1, verbose=True) == (sys.executable, "-m", "hopic.test.test_template_utils", "sub", "--verbose", "--", "1")
+    assert module_command(__name__, 1, 2, verbose=True) == (sys.executable, "-m", "hopic.test.test_template_utils", "--verbose", "1", "2")
+    assert module_command((__name__, "sub"), 1, verbose=True) == (sys.executable, "-m", "hopic.test.test_template_utils", "sub", "--verbose", "1")
