@@ -42,11 +42,10 @@ def _name_to_arg(name: str) -> str:
 
 def _kwarg_to_arg(name: str, value: Any) -> Iterable[str]:
     if value is True:
-        return [_name_to_arg(name)]
+        yield _name_to_arg(name)
     elif value is not False and value is not None:
-        return [_name_to_arg(name), str(value)]
-    else:
-        return []
+        yield _name_to_arg(name)
+        yield str(value)
 
 
 def _kwargs_to_args(**kwargs: Any) -> Iterable[str]:
