@@ -22,7 +22,6 @@ from typing import (
     Any,
     Iterable,
     List,
-    Mapping,
     Tuple,
     Union,
 )
