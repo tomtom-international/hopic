@@ -16,6 +16,7 @@
 Helper functionality for Hopic templates.
 """
 
+from collections.abc import Sequence
 import sys
 from typing import (
     Any,
@@ -50,7 +51,7 @@ def _kwarg_to_arg(name: str, value: Any) -> Iterable[str]:
 
 def _kwargs_to_args(**kwargs: Any) -> Iterable[str]:
     for key, val in kwargs.items():
-        if isinstance(val, (list, tuple)):
+        if not isinstance(val, str) and isinstance(val, Sequence):
             for subval in val:
                 yield from _kwarg_to_arg(key, subval)
         else:
