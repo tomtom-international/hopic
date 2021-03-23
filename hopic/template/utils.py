@@ -58,9 +58,9 @@ def _kwargs_to_args(**kwargs: Mapping[str, Any]):
 
 def command(
     # NOTE: the_command_list param name is chosen to decrease probability of clashing with 'kwargs'
-    the_command_list: Union[str, List[str], Tuple[str]],
-    *args: Union[List[Any], Tuple[Any]],
-    **kwargs: Mapping[str, Any],
+    the_command_list: Union[str, List[str], Tuple[str, ...]],
+    *args: Any,
+    **kwargs: Any,
 ):
     """
     Constructs an argument list from a Pythonic set of arguments and keyword arguments for executing
@@ -79,9 +79,9 @@ def command(
 
 def module_command(
     # NOTE: the_module_and_command param name is chosen to decrease probability of clashing with 'kwargs'
-    the_module_and_command: Union[str, List[str], Tuple[str]],
-    *args: Union[List[Any], Tuple[Any]],
-    **kwargs: Mapping[str, Any],
+    the_module_and_command: Union[str, List[str], Tuple[str, ...]],
+    *args: Any,
+    **kwargs: Any,
 ):
     """
     Constructs an argument list from a Pythonic set of arguments and keyword arguments for executing
