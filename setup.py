@@ -37,6 +37,7 @@ setup(
     packages=(
         'hopic',
         'hopic.cli',
+        'hopic.template',
     ),
     python_requires='>=3.6.5',
     install_requires=(
