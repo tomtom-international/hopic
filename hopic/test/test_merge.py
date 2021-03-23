@@ -536,6 +536,63 @@ def test_modality_merge_has_all_parents(tmp_path, monkeypatch):
             )
 
 
+def test_modality_merge_commit_message(tmp_path, monkeypatch):
+    toprepo = tmp_path / 'repo'
+    with git.Repo.init(toprepo, expand_vars=False) as repo:
+        with open(toprepo / 'hopic-ci-config.yaml', 'w') as f:
+            f.write(dedent('''\
+                version:
+                  format: semver
+                  tag: true
+                  bump:
+                    policy: conventional-commits
+                    strict: yes
+
+                modality-source-preparation:
+                  AUTO_MERGE:
+                    - git fetch origin release/0
+                    - sh: git merge --no-commit --no-ff FETCH_HEAD
+                      changed-files: []
+                      commit-message: "Merge branch 'release/0'"
+                '''))
+
+        repo.index.add(('hopic-ci-config.yaml',))
+        base_commit = repo.index.commit(message='Initial commit', **_commitargs)
+        repo.create_tag('0.0.0')
+
+        # Main branch moves on
+        with (toprepo / 'A.txt').open('w') as f:
+            f.write('A')
+        repo.index.add(('A.txt',))
+        repo.index.commit(message='feat: add A', **_commitargs)
+
+        # release branch from just before the main branch's HEAD
+        repo.head.reference = repo.create_head('release/0', base_commit)
+        assert not repo.head.is_detached
+        repo.head.reset(index=True, working_tree=True)
+
+        # Some change
+        with open(toprepo / 'something.txt', 'w') as f:
+            f.write('usable')
+        repo.index.add(('something.txt',))
+        repo.index.commit(message='feat: add something useful', **_commitargs)
+
+    monkeypatch.setenv('GIT_COMMITTER_NAME' , 'My Name is Nobody')
+    monkeypatch.setenv('GIT_COMMITTER_EMAIL', 'nobody@example.com')
+    result = run(
+            ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'),
+            ('prepare-source-tree',
+                '--author-name', _author.name,
+                '--author-email', _author.email,
+                '--author-date', f"@{_git_time}",
+                '--commit-date', f"@{_git_time}",
+                'apply-modality-change', 'AUTO_MERGE'),
+            ('submit',),
+        )
+
+    assert result.exit_code == 0
+
+
 def test_separate_modality_change(tmp_path):
     """It should be possible to apply modality changes without requiring to perform a checkout-source-tree first.
 

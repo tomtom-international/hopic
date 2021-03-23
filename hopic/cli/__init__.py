@@ -494,20 +494,7 @@ def process_prepare_source_tree(
 
         bump = version_info['bump'].copy()
         bump.update(commit_params.pop('bump-override', {}))
-        merge_message = None
         strict = bump.get('strict', False)
-        if 'message' in commit_params:
-            try:
-                merge_message = parse_commit_message(commit_params['message'], policy=bump['policy'], strict=strict)
-            except Exception as e:
-                if bump['policy'] == 'conventional-commits':
-                    log.error(
-                        "The pull request title could not be parsed as a conventional commit.\n"
-                        "Parsing the PR title failed due to:\n%s",
-                        "".join(f" - {problem}\n" for problem in str(e).split('\n'))
-                    )
-                    ctx.exit(1)
-                raise
 
         source_commits = (
                 () if source_commit is None and base_commit is None
@@ -563,10 +550,6 @@ def process_prepare_source_tree(
                             hash_prefix = ''
                         log.debug("%s[%-8s][%-4s][%-3s]: %s", hash_prefix, breaking, feat, fix, commit.full_subject)
                 new_version = ctx.obj.version.next_version_for_commits(source_commits)
-                if merge_message and strict:
-                    merge_commit_next_version = ctx.obj.version.next_version_for_commits([merge_message])
-                    if new_version != merge_commit_next_version:
-                        raise VersionBumpMismatchError(new_version, merge_commit_next_version)
             else:
                 raise NotImplementedError(f"unsupported version bumping policy {bump['policy']}")
 
@@ -773,6 +756,7 @@ def process_prepare_source_tree(
 
 
 @prepare_source_tree.command()
+@click.pass_context
 # git
 @click.option('--source-remote' , metavar='<url>', help='<source> remote to merge into <target>')
 @click.option('--source-ref'    , metavar='<ref>', help='ref of <source> remote to merge into <target>')
@@ -781,6 +765,7 @@ def process_prepare_source_tree(
 @click.option('--description'   , metavar='<description>'          , help='''Change request description to incorporate in merge commit message's body''')
 @click.option('--approved-by'   , metavar='<approver>'             , help='''Name of approving reviewer (can be provided multiple times).''', multiple=True)
 def merge_change_request(
+            ctx,
             source_remote,
             source_ref,
             change_request,
@@ -885,6 +870,35 @@ def merge_change_request(
         if approvers:
             msg += '\n'.join(f"Acked-by: {approver}" for approver in approvers) + u'\n'
         msg += f'Merged-by: Hopic {get_package_version(PACKAGE)}\n'
+
+        bump = ctx.obj.config['version']['bump']
+        strict = bump.get('strict', False)
+        try:
+            merge_commit = parse_commit_message(msg, policy=bump['policy'], strict=strict)
+        except Exception as e:
+            if bump['policy'] == 'conventional-commits':
+                log.error(
+                    "The pull request title could not be parsed as a conventional commit.\n"
+                    "Parsing the PR title failed due to:\n%s",
+                    "".join(f" - {problem}\n" for problem in str(e).split('\n'))
+                )
+                ctx.exit(1)
+            raise
+
+        if bump['policy'] in ('conventional-commits',) and strict and bump['on-every-change']:
+            source_commits = ([
+                parse_commit_message(commit, policy=bump['policy'], strict=False)
+                for commit in git.Commit.list_items(
+                    repo,
+                    (f"{repo.head.commit}..{source_commit}"),
+                    first_parent=bump.get('first-parent', True),
+                    no_merges=bump.get('no-merges', True),
+                )])
+            new_version = ctx.obj.version.next_version_for_commits(source_commits)
+            merge_commit_next_version = ctx.obj.version.next_version_for_commits([merge_commit])
+            if new_version != merge_commit_next_version:
+                raise VersionBumpMismatchError(new_version, merge_commit_next_version)
+
         return {
                 'message': msg,
                 'parent_commits': (
