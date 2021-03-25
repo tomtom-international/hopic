@@ -87,6 +87,13 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
     if hopic_git_info.submit_ref is not None:
         volume_vars['GIT_BRANCH'] = hopic_git_info.submit_ref
 
+    # Hack to represent an empty commit list
+    volume_vars["SOURCE_COMMITS"] = volume_vars["AUTOSQUASHED_COMMITS"] = "HEAD..HEAD"
+    if hopic_git_info.target_commit and hopic_git_info.source_commit:
+        volume_vars["AUTOSQUASHED_COMMITS"] = volume_vars["SOURCE_COMMITS"] = f"{hopic_git_info.target_commit}..{hopic_git_info.source_commit}"
+    if hopic_git_info.target_commit and hopic_git_info.autosquashed_commit:
+        volume_vars["AUTOSQUASHED_COMMITS"] = f"{hopic_git_info.target_commit}..{hopic_git_info.autosquashed_commit}"
+
     mandatory_artifacts = []
     mandatory_junit = []
     optional_artifacts = []

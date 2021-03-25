@@ -34,19 +34,46 @@ _commitargs = dict(
     )
 
 
-def test_autosquash_base(capfd, run_hopic):
+@pytest.mark.parametrize("variable", (
+    "AUTOSQUASHED_COMMIT",
+    "AUTOSQUASHED_COMMITS",
+    "SOURCE_COMMIT",
+    "SOURCE_COMMITS",
+))
+def test_autosquash_base(capfd, run_hopic, variable):
     with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
         with (run_hopic.toprepo / 'hopic-ci-config.yaml').open('w') as f:
-            f.write('''\
-version:
-  bump: no
+            f.write(
+                dedent(
+                    """\
+                    version:
+                      bump: no
 
-phases:
-  build:
-    test:
-      - foreach: AUTOSQUASHED_COMMIT
-        sh: git log -1 --format=%P ${AUTOSQUASHED_COMMIT}
-''')
+                    phases:
+                      build:
+                        test:
+                    """
+                )
+            )
+            if variable.endswith("S"):
+                f.write(
+                    dedent(
+                        f"""\
+                        #
+                              - sh: git log --format=%P ${{{variable}}}
+                        """
+                    )
+                )
+            else:
+                f.write(
+                    dedent(
+                        f"""\
+                        #
+                              - foreach: {variable}
+                                sh: git log -1 --format=%P ${{{variable}}}
+                        """
+                    )
+                )
         repo.index.add(('hopic-ci-config.yaml',))
         base_commit = repo.index.commit(message='Initial commit', **_commitargs)
 
@@ -87,9 +114,9 @@ phases:
     sys.stderr.write(err)
 
     build_out = ''.join(out.splitlines(keepends=True)[2:])
-    autosquashed_commits = build_out.split()
-    assert str(final_commit) not in autosquashed_commits
-    assert str(base_commit) in autosquashed_commits
+    commits = build_out.split()
+    assert str(final_commit) not in commits
+    assert str(base_commit) in commits
 
 
 def hopic_config_subdir_version_file_tester(capfd, config_dir, hopic_config, version_file, version_input, expected_version, run_hopic, expect_tag=True):
