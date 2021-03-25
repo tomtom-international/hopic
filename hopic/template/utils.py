@@ -33,6 +33,8 @@ def _kebabify(name: str) -> str:
 
 
 def _name_to_arg(name: str) -> str:
+    if name.startswith("_") and len(name) > 1:
+        name = name[1:]
     if len(name) == 1:
         assert name not in ("_", "-")
         return f"-{name}"
