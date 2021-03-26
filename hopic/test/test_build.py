@@ -20,6 +20,7 @@ from .. import credentials
 from .. import config_reader
 from ..cli import extensions
 
+from datetime import datetime
 from textwrap import dedent
 from typing import Pattern
 try:
@@ -34,6 +35,9 @@ import signal
 import stat
 import subprocess
 import sys
+
+from dateutil.parser import parse as parse_date
+from dateutil.tz import tzutc
 
 
 def test_missing_manifest(run_hopic):
@@ -1431,3 +1435,35 @@ def test_permit_missing_artifacts(run_hopic, archive_key):
     )
 
     assert result.exit_code == 0
+
+
+def test_build_times(capfd, run_hopic):
+    expected_time = datetime.utcfromtimestamp(int(source_date_epoch)).replace(tzinfo=tzutc())
+    expected_duration = 42 * 60 + 42.42
+
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(
+            """\
+            phases:
+              a:
+                x:
+                  - echo ${GIT_COMMIT_TIME} ${BUILD_DURATION}
+            """
+        ),
+        env=dict(
+            SOURCE_DATE_EPOCH=str(source_date_epoch + expected_duration),
+        ),
+    )
+
+    assert result.exit_code == 0
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    git_commit_time, duration = out.split()
+    git_commit_time = parse_date(git_commit_time)
+    duration = float(duration)
+
+    assert git_commit_time == expected_time
+    assert duration == expected_duration
