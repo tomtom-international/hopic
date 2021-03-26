@@ -92,6 +92,10 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
     # RFC 3339 formatted (strict subset of ISO 8601)
     volume_vars["GIT_COMMIT_TIME"] = f"{git_commit_time:%Y-%m-%dT%H:%M:%S.%f%z}"
 
+    volume_vars["BUILD_NAME"] = os.environ.get("BUILD_NAME", "unknown")
+    volume_vars["BUILD_NUMBER"] = os.environ.get("BUILD_NUMBER", "NaN")
+    volume_vars["BUILD_URL"] = os.environ.get("BUILD_URL", "")
+
     # Hack to represent an empty commit list
     volume_vars["SOURCE_COMMITS"] = volume_vars["AUTOSQUASHED_COMMITS"] = "HEAD..HEAD"
     if hopic_git_info.target_commit and hopic_git_info.source_commit:

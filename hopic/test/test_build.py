@@ -1467,3 +1467,44 @@ def test_build_times(capfd, run_hopic):
 
     assert git_commit_time == expected_time
     assert duration == expected_duration
+
+
+def test_build_identifiers(capfd, run_hopic):
+    repo = "something"
+    branch = "release/1"
+    pr_number = 123
+    job_build_number = 42
+
+    expected_build_name = f"{repo}/{branch}"
+    expected_build_number = f"PR-{pr_number} {job_build_number}"
+    expected_build_url = f"https://some-where-jenkins.example.com/job/{repo}/job/PR-{pr_number}/{job_build_number}/"
+
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(
+            """\
+            phases:
+              a:
+                x:
+                  - echo ${BUILD_NAME}
+                  - echo ${BUILD_NUMBER}
+                  - echo ${BUILD_URL}
+            """
+        ),
+        env=dict(
+            BUILD_NAME=expected_build_name,
+            BUILD_NUMBER=expected_build_number,
+            BUILD_URL=expected_build_url,
+        ),
+    )
+
+    assert result.exit_code == 0
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    build_name, build_number, build_url = out.splitlines()
+
+    assert build_name == expected_build_name
+    assert build_number == expected_build_number
+    assert build_url == expected_build_url
