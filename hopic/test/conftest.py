@@ -1,4 +1,4 @@
-# Copyright (c) 2020 - 2020 TomTom N.V.
+# Copyright (c) 2020 - 2021 TomTom N.V.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,11 @@ from pathlib import (
     Path,
     PurePath,
 )
-import typing
+from typing import (
+    AbstractSet,
+    Optional,
+    Union,
+)
 
 try:
     # Python >= 3.8
@@ -44,10 +48,10 @@ def pip_freeze_constant(monkeypatch):
 
 
 def _data_file_paths(
-    datadir: typing.Union[str, PurePath],
+    datadir: Union[str, PurePath],
     *,
     recurse: bool = False,
-    suffices: typing.Optional[typing.AbstractSet[str]] = None,
+    suffices: Optional[AbstractSet[str]] = None,
 ):
     for entry in datadir.iterdir():
         if recurse and entry.is_dir():
@@ -64,7 +68,7 @@ def _data_file_paths(
 
 
 def _data_file_path_id(
-    datadir: typing.Union[str, PurePath],
+    datadir: Union[str, PurePath],
     name,
 ):
     try:
