@@ -957,3 +957,35 @@ def test_merge_branch_twice(tmp_path, monkeypatch, note_mismatch):
     else:
         assert result.exit_code == 0
         assert result.exception is None
+
+
+def test_add_hopic_config_file(tmp_path):
+    toprepo = tmp_path / 'repo'
+    with git.Repo.init(str(toprepo), expand_vars=False) as repo:
+        with open(toprepo / 'something.txt', 'w') as f:
+            f.write('usable')
+        repo.index.add(('something.txt',))
+        base_commit = repo.index.commit(message='Initial commit', **_commitargs)
+
+        # PR branch
+        repo.head.reference = repo.create_head('something-useful', base_commit)
+        assert not repo.head.is_detached
+        repo.head.reset(index=True, working_tree=True)
+
+        with (toprepo / 'hopic-ci-config.yaml').open('w') as f:
+            f.write(dedent('''\
+                version:
+                    bump: no
+                '''))
+
+        repo.index.add(('hopic-ci-config.yaml',))
+        repo.index.commit(message='chore: add hopic config file', **_commitargs)
+
+    # Successful checkout and build
+    result = run(
+            ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'),
+            ('prepare-source-tree', '--author-name', _author.name, '--author-email', _author.email,
+                'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful'),
+            ('build',),
+        )
+    assert result.exit_code == 0
