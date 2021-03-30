@@ -1,4 +1,4 @@
-# Copyright (c) 2020 - 2021 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2020 - 2021 TomTom N.V.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,21 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from io import StringIO
 import json
 import re
 from textwrap import dedent
 import typing
+
 import pytest
 
+from . import config_file
 from .. import config_reader
 from ..errors import ConfigurationError
-
-
-def _config_file(s: str):
-    f = StringIO(s)
-    f.name = 'test-hopic-config.yaml'
-    return f
 
 
 @pytest.fixture
@@ -236,7 +231,8 @@ def test_version_build_non_semver():
 def test_environment_without_cmd():
     with pytest.raises(ConfigurationError, match=r"set 'environment' member .* doesn't have 'sh'"):
         config_reader.read(
-            _config_file(
+            config_file(
+                "test-hopic-config.yaml",
                 dedent(
                     '''\
                     phases:
@@ -253,7 +249,8 @@ def test_environment_without_cmd():
 def test_environment_type_mismatch():
     with pytest.raises(ConfigurationError, match=r"`environment\['sheep'\]` is not a string"):
         config_reader.read(
-            _config_file(
+            config_file(
+                "test-hopic-config.yaml",
                 dedent(
                     '''\
                     phases:
@@ -272,7 +269,8 @@ def test_environment_type_mismatch():
 
 def test_environment_from_prefix():
     cfg = config_reader.read(
-        _config_file(
+        config_file(
+            "test-hopic-config.yaml",
             dedent(
                 '''\
                 phases:
@@ -292,7 +290,8 @@ def test_environment_from_prefix():
 def test_node_label_type_mismatch():
     with pytest.raises(ConfigurationError, match=r"`node-label` .*? string .*? bool"):
         config_reader.read(
-            _config_file(
+            config_file(
+                "test-hopic-config.yaml",
                 dedent(
                     '''\
                     phases:
@@ -309,7 +308,8 @@ def test_node_label_type_mismatch():
 def test_node_label_mismatch():
     with pytest.raises(ConfigurationError, match=r"`node-label` .*?\bdiffers from .*?\bprevious.*?\bdefined"):
         config_reader.read(
-            _config_file(
+            config_file(
+                "test-hopic-config.yaml",
                 dedent(
                     '''\
                     phases:
@@ -329,7 +329,8 @@ def test_node_label_mismatch():
 def test_node_label_mismatch_single_phase():
     with pytest.raises(ConfigurationError, match=r"`node-label` .*?\bdiffers from .*?\bprevious.*?\bdefined"):
         config_reader.read(
-            _config_file(
+            config_file(
+                "test-hopic-config.yaml",
                 dedent(
                     '''\
                     phases:
@@ -347,7 +348,8 @@ def test_node_label_mismatch_single_phase():
 def test_node_label_default_override():
     with pytest.raises(ConfigurationError, match=r"`node-label` .*?\boverride default"):
         config_reader.read(
-            _config_file(
+            config_file(
+                "test-hopic-config.yaml",
                 dedent(
                     '''\
                     phases:
@@ -366,7 +368,8 @@ def test_node_label_default_override():
 def test_post_submit_node_label_mismatch():
     with pytest.raises(ConfigurationError, match=r"`node-label` .*?\bdiffers from .*?\bprevious.*?\bdefined"):
         config_reader.read(
-            _config_file(
+            config_file(
+                "test-hopic-config.yaml",
                 dedent(
                     '''\
                     post-submit:
@@ -383,7 +386,8 @@ def test_post_submit_node_label_mismatch():
 
 def test_node_label_match():
     config_reader.read(
-        _config_file(
+        config_file(
+            "test-hopic-config.yaml",
             dedent(
                 '''\
                 phases:
@@ -402,7 +406,8 @@ def test_node_label_match():
 
 def test_post_submit_node_label_match():
     config_reader.read(
-        _config_file(
+        config_file(
+            "test-hopic-config.yaml",
             dedent(
                 '''\
                 post-submit:
@@ -419,45 +424,77 @@ def test_post_submit_node_label_match():
 
 def test_template_reserved_param(mock_yaml_plugin):
     with pytest.raises(ConfigurationError, match=r'(?i)trying to use reserved keyword `volume-vars` to instantiate template `.*?`'):
-        config_reader.read(_config_file(dedent('''\
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    '''\
             phases:
               test:
                 example: !template
                   name: example
                   required-param: PIPE
                   volume-vars: {}
-        ''')), {'WORKSPACE': None})
+                    '''
+                )
+            ),
+            {'WORKSPACE': None}
+        )
 
 
 def test_template_missing_param(mock_yaml_plugin):
     with pytest.raises(ConfigurationError, match=r'(?i)trying to instantiate template `.*?` without required parameter'):
-        config_reader.read(_config_file(dedent('''\
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    '''\
             phases:
               test:
                 example: !template "example"
-        ''')), {'WORKSPACE': None})
+                    '''
+                )
+            ),
+            {'WORKSPACE': None}
+        )
 
 
 def test_template_mismatched_param_simple_type(mock_yaml_plugin):
     with pytest.raises(ConfigurationError, match=r'(?i)trying to instantiate template `.*?`: type of required-param must be str; got bool instead'):
-        config_reader.read(_config_file(dedent('''\
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    '''\
             phases:
               test:
                 example: !template
                   name: example
                   required-param: yes
-        ''')), {'WORKSPACE': None})
+                    '''
+                )
+            ),
+            {'WORKSPACE': None}
+        )
 
 
 def test_template_mismatched_param_optional_type(mock_yaml_plugin):
     with pytest.raises(ConfigurationError, match=r'(?i)trying to instantiate template `.*?`: type of optional-param must be .*?; got bool instead'):
-        config_reader.read(_config_file(dedent('''\
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    '''\
             phases:
               test:
                 example: !template
                   name: example
                   optional-param: yes
-        ''')), {'WORKSPACE': None})
+                    '''
+                )
+            ),
+            {'WORKSPACE': None}
+        )
 
 
 def test_template_snake_param(mock_yaml_plugin):
@@ -465,60 +502,100 @@ def test_template_snake_param(mock_yaml_plugin):
         ConfigurationError,
         match=r'(?i)trying to instantiate template `.*?` with unexpected parameter `required_param`.*? mean `required-param`',
     ):
-        config_reader.read(_config_file(dedent('''\
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    '''\
             phases:
               test:
                 example: !template
                   name: example
                   required_param: PIPE
-        ''')), {'WORKSPACE': None})
+                    '''
+                )
+            ),
+            {'WORKSPACE': None}
+        )
 
 
 def test_template_unknown_param(mock_yaml_plugin):
     with pytest.raises(ConfigurationError, match=r'(?i)trying to instantiate template `.*?` with unexpected parameter `unknown-param`'):
-        config_reader.read(_config_file(dedent('''\
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    '''\
             phases:
               test:
                 example: !template
                   name: example
                   unknown-param: 42
-        ''')), {'WORKSPACE': None})
+                    '''
+                )
+            ),
+            {'WORKSPACE': None}
+        )
 
 
 def test_template_without_optional_param(mock_yaml_plugin):
-    cfg = config_reader.read(_config_file(dedent('''\
+    cfg = config_reader.read(
+        config_file(
+            "test-hopic-config.yaml",
+            dedent(
+                '''\
         phases:
           test:
             example: !template
               name: example
               required-param: PIPE
-    ''')), {'WORKSPACE': None})
+                '''
+            )
+        ),
+        {'WORKSPACE': None}
+    )
     out, = cfg['phases']['test']['example']
     assert 'optional' not in out
 
 
 def test_template_with_explicitly_null_param(mock_yaml_plugin):
-    cfg = config_reader.read(_config_file(dedent('''\
+    cfg = config_reader.read(
+        config_file(
+            "test-hopic-config.yaml",
+            dedent(
+                '''\
         phases:
           test:
             example: !template
               name: example
               required-param: PIPE
               optional-param: null
-    ''')), {'WORKSPACE': None})
+                '''
+            )
+        ),
+        {'WORKSPACE': None}
+    )
     out, = cfg['phases']['test']['example']
     assert 'optional' not in out
 
 
 def test_template_with_optional_param(mock_yaml_plugin):
-    cfg = config_reader.read(_config_file(dedent('''\
+    cfg = config_reader.read(
+        config_file(
+            "test-hopic-config.yaml",
+            dedent(
+                '''\
         phases:
           test:
             example: !template
               name: example
               required-param: PIPE
               optional-param: Have you ever seen the rain?
-    ''')), {'WORKSPACE': None})
+                '''
+            )
+        ),
+        {'WORKSPACE': None}
+    )
     out, = cfg['phases']['test']['example']
     assert 'optional' in out
     assert out['optional'] == 'Have you ever seen the rain?'
@@ -529,99 +606,171 @@ def test_template_kwargs_required_snake_param(mock_yaml_plugin):
         ConfigurationError,
         match=r'(?i)trying to instantiate template `.*?` with unexpected parameter `required_param`.*? mean `required-param`',
     ):
-        config_reader.read(_config_file(dedent('''\
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    '''\
             phases:
               test:
                 example: !template
                   name: kwarg
                   required_param: PIPE
-        ''')), {'WORKSPACE': None})
+                    '''
+                )
+            ),
+            {'WORKSPACE': None}
+        )
 
 
 def test_template_kwargs_snake_param_in_kwarg(mock_yaml_plugin):
-    cfg = config_reader.read(_config_file(dedent('''\
+    cfg = config_reader.read(
+        config_file(
+            "test-hopic-config.yaml",
+            dedent(
+                '''\
         phases:
           test:
             example: !template
               name: kwarg
               required-param: PIPE
               something_extra-that_is-ridiculous: yes
-    ''')), {'WORKSPACE': None})
+                '''
+            )
+        ),
+        {'WORKSPACE': None}
+    )
     out, = cfg['phases']['test']['example']
     assert out['kwargs'] == {'something_extra-that_is-ridiculous': True}
 
 
 def test_template_kwargs_missing_param(mock_yaml_plugin):
     with pytest.raises(ConfigurationError, match=r'(?i)trying to instantiate template `.*?` without required parameter'):
-        config_reader.read(_config_file(dedent('''\
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    '''\
             phases:
               test:
                 example: !template "kwarg"
-        ''')), {'WORKSPACE': None})
+                    '''
+                )
+            ),
+            {'WORKSPACE': None}
+        )
 
 
 def test_template_kwargs_type_mismatch(mock_yaml_plugin):
     with pytest.raises(ConfigurationError, match=r'(?i)trying to instantiate template `.*?`: type of required-param must be str; got NoneType instead'):
-        config_reader.read(_config_file(dedent('''\
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    '''\
             phases:
               test:
                 example: !template
                   name: kwarg
                   required-param: null
-        ''')), {'WORKSPACE': None})
+                    '''
+                )
+            ),
+            {'WORKSPACE': None}
+        )
 
 
 def test_template_simple_unknown_param(mock_yaml_plugin):
     with pytest.raises(ConfigurationError, match=r'(?i)trying to instantiate template `.*?` with unexpected parameter `unknown-param`'):
-        config_reader.read(_config_file(dedent('''\
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    '''\
             phases:
               test:
                 example: !template
                   name: simple
                   unknown-param: 42
-        ''')), {'WORKSPACE': None})
+                    '''
+                )
+            ),
+            {'WORKSPACE': None}
+        )
 
 
 def test_template_simple_without_param(mock_yaml_plugin):
-    cfg = config_reader.read(_config_file(dedent('''\
+    cfg = config_reader.read(
+        config_file(
+            "test-hopic-config.yaml",
+            dedent(
+                '''\
         phases:
           test:
             example: !template "simple"
-    ''')), {'WORKSPACE': None})
+                '''
+            )
+        ),
+        {'WORKSPACE': None}
+    )
     out = cfg['phases']['test']['example']
     assert out == []
 
 
 def test_template_sequence_without_param(mock_yaml_plugin):
-    cfg = config_reader.read(_config_file(dedent('''\
+    cfg = config_reader.read(
+        config_file(
+            "test-hopic-config.yaml",
+            dedent(
+                '''\
         phases:
           test:
             example: !template "sequence"
-    ''')), {'WORKSPACE': None})
+                '''
+            )
+        ),
+        {'WORKSPACE': None}
+    )
     out = cfg['phases']['test']['example'][0]['sequence']
     assert out == []
 
 
 def test_template_with_wrong_default(mock_yaml_plugin):
     with pytest.raises(ConfigurationError, match=r'(?i)\bwrong default of parameter for template `.*?`: type of defaulted-param must be str; got .*? instead'):
-        config_reader.read(_config_file(dedent('''\
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    '''\
             phases:
               test:
                 example: !template
                   name: wrong-default
                   defaulted-param: mooh
-        ''')), {'WORKSPACE': None})
+                    '''
+                )
+            ),
+            {'WORKSPACE': None}
+        )
 
 
 def test_template_sequence_with_single_entry(mock_yaml_plugin):
-    cfg = config_reader.read(_config_file(dedent('''\
+    cfg = config_reader.read(
+        config_file(
+            "test-hopic-config.yaml",
+            dedent(
+                '''\
         phases:
           test:
             example: !template
               name: "sequence"
               sequence:
                 - mooh
-    ''')), {'WORKSPACE': None})
+                '''
+            )
+        ),
+        {'WORKSPACE': None}
+    )
     out = cfg['phases']['test']['example'][0]['sequence']
     assert out == ['mooh']
 
@@ -629,7 +778,8 @@ def test_template_sequence_with_single_entry(mock_yaml_plugin):
 def test_template_sequence_with_str_instead_of_list(mock_yaml_plugin):
     with pytest.raises(ConfigurationError, match=r'(?i)trying to instantiate template `.*?`: type of sequence must be\b.*?\blist; got str instead'):
         config_reader.read(
-            _config_file(
+            config_file(
+                "test-hopic-config.yaml",
                 dedent(
                     """\
                     phases:
@@ -646,7 +796,11 @@ def test_template_sequence_with_str_instead_of_list(mock_yaml_plugin):
 
 def test_template_sequence_with_type_mismatched_entry(mock_yaml_plugin):
     with pytest.raises(ConfigurationError, match=r'(?i)trying to instantiate template `.*?`: type of sequence\[1\] must be str; got bool instead'):
-        config_reader.read(_config_file(dedent('''\
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    '''\
             phases:
               test:
                 example: !template
@@ -655,36 +809,64 @@ def test_template_sequence_with_type_mismatched_entry(mock_yaml_plugin):
                     - mooh
                     - false
                     - sheep
-        ''')), {'WORKSPACE': None})
+                    '''
+                )
+            ),
+            {'WORKSPACE': None}
+        )
 
 
 def test_template_wrong_return(mock_yaml_plugin):
     with pytest.raises((ConfigurationError, TypeError), match=r"(?i)return value(?:\[.*?\])? must be .*?; got .*? instead"):
-        config_reader.read(_config_file(dedent('''\
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    '''\
             phases:
               test:
                 example: !template wrong-return
-        ''')), {'WORKSPACE': None})
+                    '''
+                )
+            ),
+            {'WORKSPACE': None}
+        )
 
 
 def test_template_non_generator(mock_yaml_plugin):
     with pytest.raises((ConfigurationError, TypeError), match=r"(?i)return value must be \S*\bGenerator; got list instead"):
-        config_reader.read(_config_file(dedent('''\
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    '''\
             phases:
               test:
                 example: !template non-generator
-        ''')), {'WORKSPACE': None})
+                    '''
+                )
+            ),
+            {'WORKSPACE': None}
+        )
 
 
 def test_template_generator(mock_yaml_plugin):
-    cfg = config_reader.read(_config_file(dedent('''\
+    cfg = config_reader.read(
+        config_file(
+            "test-hopic-config.yaml",
+            dedent(
+                '''\
         phases:
           test:
             example: !template
               name: generator
               cmds:
                 - echo "do something"
-    ''')), {'WORKSPACE': None})
+                '''
+            )
+        ),
+        {'WORKSPACE': None}
+    )
     cmds = [cmd["sh"] for cmd in cfg["phases"]["test"]["example"]]
     assert cmds == [
         ["echo", "setup"],
@@ -695,16 +877,25 @@ def test_template_generator(mock_yaml_plugin):
 
 def test_bad_generator_template(mock_yaml_plugin):
     with pytest.raises((ConfigurationError, TypeError), match=r"(?i)value yielded from generator\b.*?\bmust be (?:dict|\S*\bMapping); got bool instead"):
-        config_reader.read(_config_file(dedent('''\
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    '''\
             phases:
               test:
                 example: !template bad-generator
-        ''')), {'WORKSPACE': None})
+                    '''
+                )
+            ),
+            {'WORKSPACE': None}
+        )
 
 
 def test_nested_command_list_flattening():
     cfg = config_reader.read(
-        _config_file(
+        config_file(
+            "test-hopic-config.yaml",
             dedent(
                 """\
                 phases:
@@ -735,7 +926,8 @@ def test_nested_command_list_flattening():
 def test_wait_on_full_previous_phase_dependency_type_mismatch():
     with pytest.raises(ConfigurationError, match=r"(?i)`wait-on-full-previous-phase` doesn't contain a boolean"):
         config_reader.read(
-            _config_file(
+            config_file(
+                "test-hopic-config.yaml",
                 dedent(
                     """\
                     phases:
@@ -752,7 +944,8 @@ def test_wait_on_full_previous_phase_dependency_type_mismatch():
 def test_wait_on_full_previous_phase_dependency_without_previous_phase():
     with pytest.raises(ConfigurationError, match=r"(?i)`wait-on-full-previous-phase` defined but there is no previous phase"):
         config_reader.read(
-            _config_file(
+            config_file(
+                "test-hopic-config.yaml",
                 dedent(
                     """\
                     phases:
@@ -769,7 +962,8 @@ def test_wait_on_full_previous_phase_dependency_without_previous_phase():
 def test_wait_on_full_previous_phase_dependency_without_previous_variant():
     with pytest.raises(ConfigurationError, match=r"(?i)`wait-on-full-previous-phase` disabled but previous phase `x` doesn't contain variant `c`"):
         config_reader.read(
-            _config_file(
+            config_file(
+                "test-hopic-config.yaml",
                 dedent(
                     """\
                     phases:
@@ -793,7 +987,8 @@ def test_wait_on_full_previous_phase_dependency_without_previous_variant():
 def test_wait_on_full_previous_phase_dependency_multiple_definitions():
     with pytest.raises(ConfigurationError, match=r"(?i)`wait-on-full-previous-phase` defined multiple times"):
         config_reader.read(
-            _config_file(
+            config_file(
+                "test-hopic-config.yaml",
                 dedent(
                     """\
                     phases:
@@ -826,7 +1021,8 @@ def test_wait_on_full_previous_phase_dependency_multiple_definitions():
 def test_wait_on_full_previous_phase_dependency_violation(dep_option):
     with pytest.raises(ConfigurationError, match=r"(?i)`wait-on-full-previous-phase` disabled but previous phase `x` uses dependency-creating options"):
         config_reader.read(
-            _config_file(
+            config_file(
+                "test-hopic-config.yaml",
                 dedent(
                     f"""\
                     phases:
@@ -848,7 +1044,8 @@ def test_wait_on_full_previous_phase_dependency_violation(dep_option):
 def test_wait_on_full_previous_phase_dependency_run_on_change():
     with pytest.raises(ConfigurationError, match=r"(?i)`wait-on-full-previous-phase` disabled but `y`.`a`.`run-on-change` set to a value other than always"):
         config_reader.read(
-            _config_file(
+            config_file(
+                "test-hopic-config.yaml",
                 dedent(
                     """\
                     phases:
@@ -868,7 +1065,8 @@ def test_wait_on_full_previous_phase_dependency_run_on_change():
 
 def test_wait_on_full_previous_phase_dependency_default_yes():
     cfg = config_reader.read(
-        _config_file(
+        config_file(
+            "test-hopic-config.yaml",
             dedent(
                 """\
                 phases:
@@ -896,7 +1094,8 @@ def test_wait_on_full_previous_phase_dependency_default_yes():
 def test_docker_run_extra_arguments_wrong_type(capfd):
     with pytest.raises(ConfigurationError, match="`extra-docker-args` argument `hostname` for `v-one` should be a str, not a float"):
         config_reader.read(
-            _config_file(
+            config_file(
+                "test-hopic-config.yaml",
                 dedent(
                     """\
                     image:
@@ -916,14 +1115,22 @@ def test_docker_run_extra_arguments_wrong_type(capfd):
 
 
 def test_ci_locks():
-    cfg = config_reader.read(_config_file(dedent('''\
+    cfg = config_reader.read(
+        config_file(
+            "test-hopic-config.yaml",
+            dedent(
+                '''\
         ci-locks:
             - branch: master
               repo-name: FICTIONAL/some-lock
             - branch: master
               repo-name: FICTIONAL/some-other-lock
               lock-on-change: never
-    ''')), {'WORKSPACE': None})
+                '''
+            )
+        ),
+        {'WORKSPACE': None}
+    )
     ci_locks = cfg['ci-locks']
     assert isinstance(ci_locks, list)
     assert ci_locks[0]['lock-on-change'] == 'always'
@@ -932,27 +1139,47 @@ def test_ci_locks():
 
 def test_ci_locks_wrong_lock_on_change_value():
     with pytest.raises(ConfigurationError, match='has an invalid attribute "lock-on-change", expected one of'):
-        config_reader.read(_config_file(dedent('''\
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    '''\
             ci-locks:
             - branch: master
               repo-name: FICTIONAL/some-other-lock
               lock-on-change: never123
-        ''')), {'WORKSPACE': None})
+                    '''
+                )
+            ),
+            {'WORKSPACE': None}
+        )
 
 
 def test_ci_locks_wrong_branch_value():
     with pytest.raises(ConfigurationError, match='has an invalid attribute "branch", expected a str, but got a list'):
-        config_reader.read(_config_file(dedent('''\
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    '''\
             ci-locks:
             - branch:
               - master
               repo-name: FICTIONAL/some-other-lock
-        ''')), {'WORKSPACE': None})
+                    '''
+                )
+            ),
+            {'WORKSPACE': None}
+        )
 
 
 def test_mutiple_options_on_archive():
     with pytest.raises(ConfigurationError, match=r"are not allowed in the same Archive configuration, use only 'allow-missing"):
-        config_reader.read(_config_file(dedent('''\
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    '''\
             phases:
               build:
                 example:
@@ -960,18 +1187,30 @@ def test_mutiple_options_on_archive():
                      artifacts: doesnotexist.txt
                      allow-missing: true
                      allow-empty-archive: true
-        ''')), {'WORKSPACE': None})
+                    '''
+                )
+            ),
+            {'WORKSPACE': None}
+        )
 
 
 def test_allow_empty_archive_empty_variant_removed():
-    cfg = config_reader.read(_config_file(dedent('''\
+    cfg = config_reader.read(
+        config_file(
+            "test-hopic-config.yaml",
+            dedent(
+                '''\
             phases:
               build:
                 example:
                   - archive:
                      artifacts: doesnotexist.txt
                      allow-empty-archive: true
-        ''')), {'WORKSPACE': None})
+                '''
+            )
+        ),
+        {'WORKSPACE': None}
+    )
 
     out = cfg['phases']['build']['example'][0]['archive']
     assert 'allow-missing' in out
@@ -981,36 +1220,60 @@ def test_allow_empty_archive_empty_variant_removed():
 
 def test_archive_allow_missing_not_boolean():
     with pytest.raises(ConfigurationError, match=r"'build.example.archive.allow-missing' should be a boolean, not a str"):
-        config_reader.read(_config_file(dedent('''\
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    '''\
             phases:
               build:
                 example:
                   - archive:
                      artifacts: doesnotexist.txt
                      allow-missing: 'true'
-        ''')), {'WORKSPACE': None})
+                    '''
+                )
+            ),
+            {'WORKSPACE': None}
+        )
 
 
 def test_allow_empty_junit():
     with pytest.raises(ConfigurationError, match=r"JUnit configuration did not contain mandatory field 'test-results'"):
-        config_reader.read(_config_file(dedent('''\
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    '''\
             phases:
               build:
                 example:
                   - junit:
                      test: doesnotexist.txt
                      allow-missing: true
-        ''')), {'WORKSPACE': None})
+                    '''
+                )
+            ),
+            {'WORKSPACE': None}
+        )
 
 
 def test_generated_config_has_test_results():
-    cfg = config_reader.read(_config_file(dedent('''\
+    cfg = config_reader.read(
+        config_file(
+            "test-hopic-config.yaml",
+            dedent(
+                '''\
             phases:
               build:
                 example:
                   - junit:
                      doesnotexistjunitresult.xml
-        ''')), {'WORKSPACE': None})
+                '''
+            )
+        ),
+        {'WORKSPACE': None}
+    )
 
     out = cfg['phases']['build']['example'][0]['junit']
     assert 'test-results' in out
@@ -1018,20 +1281,29 @@ def test_generated_config_has_test_results():
 
 def test_junit_allow_missing_not_boolean():
     with pytest.raises(ConfigurationError, match=r"'build.example.junit.allow-missing' should be a boolean, not a str"):
-        config_reader.read(_config_file(dedent('''\
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    '''\
             phases:
               build:
                 example:
                   - junit:
                      test-results: doesnotexist.txt
                      allow-missing: 'true'
-        ''')), {'WORKSPACE': None})
+                    '''
+                )
+            ),
+            {'WORKSPACE': None}
+        )
 
 
 def test_archive_type_mismatch():
     with pytest.raises(ConfigurationError, match=r"member is not a mapping"):
         config_reader.read(
-            _config_file(
+            config_file(
+                "test-hopic-config.yaml",
                 dedent(
                     '''\
                     phases:
@@ -1048,7 +1320,8 @@ def test_archive_type_mismatch():
 def test_archive_missing_artifacts():
     with pytest.raises(ConfigurationError, match=r"lacks the mandatory 'artifacts' member"):
         config_reader.read(
-            _config_file(
+            config_file(
+                "test-hopic-config.yaml",
                 dedent(
                     '''\
                     phases:
@@ -1065,7 +1338,8 @@ def test_archive_missing_artifacts():
 def test_archive_artifacts_missing_pattern():
     with pytest.raises(ConfigurationError, match=r"lacks the mandatory 'pattern' member"):
         config_reader.read(
-            _config_file(
+            config_file(
+                "test-hopic-config.yaml",
                 dedent(
                     '''\
                     phases:
@@ -1084,7 +1358,8 @@ def test_archive_artifacts_missing_pattern():
 def test_archive_artifacts_pattern_type_mismatch():
     with pytest.raises(ConfigurationError, match=r"pattern' is not a string"):
         config_reader.read(
-            _config_file(
+            config_file(
+                "test-hopic-config.yaml",
                 dedent(
                     '''\
                     phases:
@@ -1110,7 +1385,8 @@ def test_archive_artifacts_pattern_invalid_double_star(pattern):
         match=fr"pattern' value of '{re.escape(pattern)}' is not a valid glob pattern: .*? '\*\*' can only be an entire path component",
     ):
         config_reader.read(
-            _config_file(
+            config_file(
+                "test-hopic-config.yaml",
                 dedent(
                     f"""\
                     phases:
@@ -1129,7 +1405,8 @@ def test_archive_artifacts_pattern_invalid_double_star(pattern):
 def test_junit_pattern_invalid_double_star():
     with pytest.raises(ConfigurationError, match=r"value of '.*?' is not a valid glob pattern: .*? '\*\*' can only be an entire path component"):
         config_reader.read(
-            _config_file(
+            config_file(
+                "test-hopic-config.yaml",
                 dedent(
                     '''\
                     phases:
@@ -1147,7 +1424,8 @@ def test_junit_pattern_invalid_double_star():
 def test_ci_locks_reference_invalid_phase():
     with pytest.raises(ConfigurationError, match=r"referenced phase in ci-locks \(non-existing-phase\) doesn't exist"):
         config_reader.read(
-            _config_file(
+            config_file(
+                "test-hopic-config.yaml",
                 dedent(
                     '''\
                     ci-locks:
@@ -1170,7 +1448,8 @@ def test_ci_locks_reference_wait_on_full_previous_phase_variant():
     with pytest.raises(ConfigurationError, match=r"referenced phase in ci-locks \(phase-2\) refers to variant \(wait-on-full-previous-phase-variant\) "
                                                  r"that has wait-on-full-previous-phase disabled"):
         config_reader.read(
-            _config_file(
+            config_file(
+                "test-hopic-config.yaml",
                 dedent(
                     '''\
                     ci-locks:
@@ -1204,7 +1483,8 @@ def test_ci_locks_duplicate_identifier():
     with pytest.raises(ConfigurationError, match=r"ci-lock with repo-name 'repo' and branch 'branch' already exists, "
                                                  r"this would lead to a deadlock"):
         config_reader.read(
-            _config_file(
+            config_file(
+                "test-hopic-config.yaml",
                 dedent(
                     '''\
                     ci-locks:
@@ -1227,7 +1507,8 @@ def test_ci_locks_duplicate_identifier():
 
 def test_ci_locks_on_phase_forward():
     cfg = config_reader.read(
-        _config_file(
+        config_file(
+            "test-hopic-config.yaml",
             dedent(
                 '''\
                 ci-locks:
