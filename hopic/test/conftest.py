@@ -157,11 +157,11 @@ def run_hopic(monkeypatch, tmp_path):
                     if result.exception is not None and not isinstance(result.exception, SystemExit):
                         raise result.exception
 
-                    if result.exit_code != 0:
-                        return result
+                    result.commit = commit
+                    yield result
 
-            result.commit = commit
-            return result
+                    if result.exit_code != 0:
+                        return
         finally:
             os.umask(umask)
 

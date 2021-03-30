@@ -25,7 +25,7 @@ def test_order(run_hopic):
     The order of phase/variant combinations must be the same in the output JSON as in the config.
     """
 
-    result = run_hopic(
+    (result,) = run_hopic(
         ("getinfo",),
         config='''\
 phases:
@@ -59,7 +59,7 @@ def test_variants_without_metadata(run_hopic):
     Phase/variant combinations without meta data should still appear in the output JSON.
     """
 
-    result = run_hopic(
+    (result,) = run_hopic(
         ("getinfo",),
         config='''\
 phases:
@@ -94,7 +94,7 @@ phases:
 
 
 def test_with_credentials_format(run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("getinfo",),
         config=dedent(
             '''\
@@ -125,7 +125,7 @@ def test_with_credentials_format(run_hopic):
 
 def test_embed_variants_file(run_hopic):
     generate_script_path = "generate-variants.py"
-    result = run_hopic(
+    (result,) = run_hopic(
         ("getinfo",),
         config=dedent(
             f'''\
@@ -163,7 +163,7 @@ def test_embed_variants_file(run_hopic):
 
 def test_embed_variants_non_existing_file(run_hopic):
     generate_script_path = "generate-variants.py"
-    result = run_hopic(
+    (result,) = run_hopic(
         ("getinfo",),
         config=dedent(
             f'''\
@@ -188,7 +188,7 @@ def test_embed_variants_non_existing_file(run_hopic):
 
 def test_embed_variants_error_in_file(run_hopic):
     generate_script_path = "generate-variants.py"
-    result = run_hopic(
+    (result,) = run_hopic(
         ("getinfo",),
         config=dedent(
             f'''\
@@ -226,7 +226,7 @@ def test_embed_variants_error_in_file(run_hopic):
 def test_embed_variants_script_with_arguments(run_hopic):
     generate_script_path = "generate-variants.py"
     generate_script_args = 'argument-variant'
-    result = run_hopic(
+    (result,) = run_hopic(
         ("getinfo",),
         config=dedent(
             f'''\
@@ -262,7 +262,7 @@ def test_embed_variants_cmd(run_hopic):
     cmd = dedent("'printf \"%s\"'" % '''test-variant:\n
   - Bob the builder''')
 
-    result = run_hopic(
+    (result,) = run_hopic(
         ("getinfo",),
         config=dedent(
             f'''\
@@ -281,7 +281,7 @@ def test_embed_variants_cmd(run_hopic):
 
 
 def test_wait_on_full_previous_phase_dependency(run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("getinfo",),
         config=dedent(
             """\
@@ -310,7 +310,7 @@ def test_wait_on_full_previous_phase_dependency(run_hopic):
 
 
 def test_mark_nops(run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("getinfo",),
         config=dedent(
             """\

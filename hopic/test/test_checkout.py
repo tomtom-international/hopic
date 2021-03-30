@@ -58,7 +58,7 @@ phases:
         repo.index.commit(message='Initial commit', **commitargs)
 
     # Successful checkout and build
-    result = run_hopic(
+    (_, result) = run_hopic(
             ('checkout-source-tree', '--clean', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'),
             ('build',),
         )
@@ -72,10 +72,10 @@ phases:
 
     # Expected failure
     with pytest.raises(git.GitCommandError, match=r'(?is)submodule.*repository.*\bdoes not exist\b'):
-        result = run_hopic(('checkout-source-tree', '--clean', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'))
+        (_,) = run_hopic(('checkout-source-tree', '--clean', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'))
 
     # Ignore submodule failure only
-    result = run_hopic(
+    (result,) = run_hopic(
         ('checkout-source-tree', '--clean', '--ignore-initial-submodule-checkout-failure', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'),
     )
     assert result.exit_code == 0
@@ -92,11 +92,11 @@ def test_clean_checkout_in_non_empty_dir(capfd, run_hopic, tmp_path):
 
     # Verify first that a checkout without --clean fails
     with pytest.raises(git.GitCommandError, match=r'(?is).*\bfatal:\s+destination\s+path\b.*\bexists\b.*\bnot\b.*\bempty\s+directory\b'):
-        run_hopic(('--workspace', non_empty_dir, 'checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'))
+        (_,) = run_hopic(('--workspace', non_empty_dir, 'checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'))
     assert garbage_file.exists()
 
     # Now notice the difference and expect it to succeed with --clean
-    clean_result = run_hopic(
+    (clean_result,) = run_hopic(
         ('--workspace', non_empty_dir, 'checkout-source-tree', '--clean', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'),
     )
     assert clean_result.exit_code == 0
@@ -111,7 +111,7 @@ def test_checkout_in_newly_initialized_repo(capfd, run_hopic, tmp_path):
     with git.Repo.init(new_init_repo, expand_vars=False):
         pass
 
-    result = run_hopic(('--workspace', new_init_repo, 'checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'))
+    (result,) = run_hopic(('--workspace', new_init_repo, 'checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'))
     assert result.exit_code == 0
 
 
@@ -136,7 +136,7 @@ nothing to see here
         repo.index.add(('hopic-ci-config.yaml',))
         repo.index.commit(message='Initial commit', **commitargs)
         commit = list(repo.iter_commits('master', max_count=1))[0]
-        result = run_hopic(
+        (result,) = run_hopic(
             ('--workspace', run_hopic.toprepo, 'checkout-source-tree', '--clean', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'),
         )
         assert result.exit_code == 0
@@ -166,7 +166,7 @@ nothing to see here
         repo.index.add(('hopic-ci-config.yaml',))
         repo.index.commit(message='Initial commit', **commitargs)
         commit = list(repo.iter_commits('master', max_count=1))[0]
-        result = run_hopic(
+        (result,) = run_hopic(
             ('--workspace', run_hopic.toprepo, 'checkout-source-tree', '--clean', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'),
         )
         assert result.exit_code == 0
@@ -202,7 +202,7 @@ nothing to see here
         repo.index.add(('hopic-ci-config.yaml',))
         repo.index.commit(message='Initial commit', **commitargs)
         commit = list(repo.iter_commits('master', max_count=1))[0]
-        result = run_hopic(
+        (result,) = run_hopic(
             ('--workspace', run_hopic.toprepo, 'checkout-source-tree', '--clean', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'),
         )
         assert result.exit_code == 0
@@ -233,7 +233,7 @@ clean:
 
         repo.index.add(('hopic-ci-config.yaml',))
         repo.index.commit(message='Initial commit', **commitargs)
-        result = run_hopic(
+        (result,) = run_hopic(
             ('--workspace', run_hopic.toprepo, 'checkout-source-tree', '--clean', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'),
         )
         assert result.exit_code == 0
@@ -264,7 +264,7 @@ def test_handle_syntax_error_in_optional_hopic_file(capfd, run_hopic):
         repo.index.commit(message='Commit incorrect hopic file', **_commitargs)
 
     # checkout-source-tree should be successful
-    result = run_hopic(
+    (result,) = run_hopic(
             ('checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'),
         )
     assert result.exit_code == 0
@@ -282,7 +282,7 @@ def test_checkout_non_head_commit(capfd, run_hopic):
         repo.index.add((str(dummy.relative_to(run_hopic.toprepo)),))
         repo.index.commit(message="Subsequent dummy commit", **_commitargs)
 
-    result = run_hopic(
+    (result,) = run_hopic(
         ("checkout-source-tree", "--target-remote", run_hopic.toprepo, "--target-ref", "master", "--target-commit", first_commit),
     )
     assert result.exit_code == 0
@@ -303,7 +303,7 @@ def test_reject_checkout_out_of_branch_commit(capfd, run_hopic):
         repo.head.reference = repo.heads.master
         repo.head.reset(index=True, working_tree=True)
 
-    result = run_hopic(
+    (result,) = run_hopic(
         ("checkout-source-tree", "--target-remote", run_hopic.toprepo, "--target-ref", "master", "--target-commit", final_commit),
     )
     assert result.exit_code == 37

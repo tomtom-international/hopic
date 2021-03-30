@@ -74,7 +74,7 @@ phases:
         repo.index.commit(message='fixup! feat: add something useful', **_commitargs)
 
     # Successful checkout and build
-    result = run_hopic(
+    (*_, result) = run_hopic(
             ('checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'),
             ('prepare-source-tree', '--author-name', _author.name, '--author-email', _author.email,
                 'merge-change-request', '--source-remote', run_hopic.toprepo, '--source-ref', 'something-useful'),
@@ -117,7 +117,7 @@ def hopic_config_subdir_version_file_tester(capfd, config_dir, hopic_config, ver
         repo.index.commit(message='feat: add something useful', **_commitargs)
 
     # Successful checkout and build
-    result = run_hopic(
+    (*_, result) = run_hopic(
         ('--workspace', './', '--config', os.path.join(config_dir, 'hopic-ci-config.yaml'),
          'checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'),
         ('--workspace', './', '--config', os.path.join(config_dir, 'hopic-ci-config.yaml'),
@@ -278,7 +278,7 @@ version:
         print(repo.git.log(format='fuller', color=True, stat=True), file=sys.stderr)
 
     # Successful checkout and build
-    return run_hopic(
+    (*_, result) = run_hopic(
             ('checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', target),
             ('prepare-source-tree',
                 '--author-date', f"@{_git_time}",
@@ -287,6 +287,7 @@ version:
                 '--author-email', _author.email,
                 'merge-change-request', '--source-remote', run_hopic.toprepo, '--source-ref', 'something-useful', '--title', merge_message),
         )
+    return result
 
 
 def test_merge_conventional_refactor_no_bump(capfd, run_hopic):
@@ -429,19 +430,20 @@ phases:
     repo.git.submodule(('add', subrepo, 'moved_subrepo'))
     repo.index.commit(message='Move submodule', **_commitargs)
 
-    result = run_hopic(('--workspace', run_hopic.toprepo, 'checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'))
+    (result,) = run_hopic(('--workspace', run_hopic.toprepo, 'checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'))
     assert result.exit_code == 0
     assert (run_hopic.toprepo / 'subrepo_test' / 'dummy.txt').is_file()
     assert not (run_hopic.toprepo / 'moved_subrepo' / 'dummy.txt').is_file()
 
-    result = run_hopic(('--workspace', run_hopic.toprepo, 'prepare-source-tree', '--author-name', _author.name, '--author-email', _author.email,
-                  'merge-change-request', '--source-remote', run_hopic.toprepo, '--source-ref', 'move_submodule_branch'))
+    (result,) = run_hopic(
+        ('--workspace', run_hopic.toprepo, 'prepare-source-tree', '--author-name', _author.name, '--author-email', _author.email,
+         'merge-change-request', '--source-remote', run_hopic.toprepo, '--source-ref', 'move_submodule_branch'))
     assert result.exit_code == 0
     assert not (run_hopic.toprepo / 'subrepo_test' / 'dummy.txt').is_file()
     assert (run_hopic.toprepo / 'moved_subrepo' / 'dummy.txt').is_file()
 
     # Do checkout of master again to fake build retrigger of an PR
-    result = run_hopic(('--workspace', run_hopic.toprepo, 'checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'))
+    (result,) = run_hopic(('--workspace', run_hopic.toprepo, 'checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'))
     assert result.exit_code == 0
     assert (run_hopic.toprepo / 'subrepo_test' / 'dummy.txt').is_file()
     assert not (run_hopic.toprepo / 'moved_subrepo' / 'dummy.txt').is_file()
@@ -483,7 +485,7 @@ def test_modality_merge_has_all_parents(run_hopic, monkeypatch):
 
     monkeypatch.setenv('GIT_COMMITTER_NAME' , 'My Name is Nobody')
     monkeypatch.setenv('GIT_COMMITTER_EMAIL', 'nobody@example.com')
-    result = run_hopic(
+    (*_, result) = run_hopic(
             ('checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'),
             ('prepare-source-tree',
                 '--author-name', _author.name,
@@ -547,7 +549,7 @@ def test_modality_merge_commit_message(run_hopic, monkeypatch):
 
     monkeypatch.setenv('GIT_COMMITTER_NAME' , 'My Name is Nobody')
     monkeypatch.setenv('GIT_COMMITTER_EMAIL', 'nobody@example.com')
-    result = run_hopic(
+    (*_, result) = run_hopic(
             ('checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'),
             ('prepare-source-tree',
                 '--author-name', _author.name,
@@ -582,7 +584,7 @@ def test_separate_modality_change(run_hopic):
         repo.index.add(('hopic-ci-config.yaml',))
         base_commit = repo.index.commit(message='Initial commit', **_commitargs)
 
-    result = run_hopic(
+    (result,) = run_hopic(
             ('--workspace', run_hopic.toprepo,
                 'prepare-source-tree',
                 '--author-name', _author.name,
@@ -673,7 +675,7 @@ def test_run_on_change(monkeypatch, run_hopic, run_on_change, commit_message, ex
         ) if commit_message is not None else ()) + (
             ('build',),
         )
-    result = run_hopic(*cmds)
+    (*_, result) = run_hopic(*cmds)
 
     assert result.exit_code == 0
     assert not expected
@@ -738,7 +740,7 @@ def test_run_publish_version(monkeypatch, run_hopic, init_version, submittable_v
             ('--publishable-version', 'build') if submittable_version else
             ('build',),
         )
-    result = run_hopic(*cmds)
+    (*_, result) = run_hopic(*cmds)
 
     assert result.exit_code == 0
     assert not expected
@@ -821,7 +823,7 @@ def test_post_submit(run_hopic, capfd, monkeypatch, commit_message, expected_ver
 
             monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
 
-        hopic_result = run_hopic(
+        (*_, hopic_result) = run_hopic(
             ('checkout-source-tree',
              '--target-remote', run_hopic.toprepo,
              '--target-ref', 'master',),
@@ -897,7 +899,7 @@ def test_merge_branch_twice(run_hopic, monkeypatch, note_mismatch):
             'merge-change-request', '--source-remote', run_hopic.toprepo, '--source-ref', 'feat/branch'),
     )
 
-    result = run_hopic(*checkout_and_merge, ('submit',),)
+    (*_, result) = run_hopic(*checkout_and_merge, ('submit',),)
     assert result.exit_code == 0
 
     with git.Repo(run_hopic.toprepo, expand_vars=False) as repo:
@@ -912,7 +914,7 @@ def test_merge_branch_twice(run_hopic, monkeypatch, note_mismatch):
     if note_mismatch:
         monkeypatch.setattr(utils, 'get_package_version', lambda package: '42.42.42')
 
-    result = run_hopic(*checkout_and_merge)
+    (*_, result) = run_hopic(*checkout_and_merge)
 
     if note_mismatch:
         assert result.exit_code == 39
@@ -944,7 +946,7 @@ def test_add_hopic_config_file(run_hopic):
         repo.index.commit(message='chore: add hopic config file', **_commitargs)
 
     # Successful checkout and build
-    result = run_hopic(
+    (*_, result) = run_hopic(
             ('checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'),
             ('prepare-source-tree', '--author-name', _author.name, '--author-email', _author.email,
                 'merge-change-request', '--source-remote', run_hopic.toprepo, '--source-ref', 'something-useful'),

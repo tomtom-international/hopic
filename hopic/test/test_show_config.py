@@ -27,7 +27,7 @@ from . import config_file
 
 
 def test_image_from_manifest(run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("show-config",),
         config='''\
 image: !image-from-ivy-manifest
@@ -54,7 +54,7 @@ image: !image-from-ivy-manifest
 
 def test_image_from_cfgdir_relative_manifest(run_hopic):
     cfg_file = ".ci/some-special-config/hopic-ci-config.yaml"
-    result = run_hopic(
+    (result,) = run_hopic(
         ("--config", cfg_file, "show-config"),
         config=config_file(
             cfg_file,
@@ -83,7 +83,7 @@ image: !image-from-ivy-manifest
 
 
 def test_default_image(run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("show-config",),
         config='''\
 image: example
@@ -95,7 +95,7 @@ image: example
 
 
 def test_default_image_type_error(capfd, run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("show-config",),
         config='''\
 image: yes
@@ -112,7 +112,7 @@ image: yes
 
 
 def test_image_type_error(capfd, run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("show-config",),
         config='''\
 image:
@@ -134,7 +134,7 @@ image:
 
 
 def test_image_in_variant_type_error(capfd, run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("show-config",),
         config='''\
 phases:
@@ -159,7 +159,7 @@ phases:
 
 
 def test_bad_version_config(capfd, run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("show-config",),
         config='''\
 version: patch
@@ -176,7 +176,7 @@ version: patch
 
 
 def test_default_version_bumping_config(capfd, run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("show-config",),
         config='''\
 {}
@@ -189,7 +189,7 @@ def test_default_version_bumping_config(capfd, run_hopic):
 
 
 def test_default_version_bumping_backwards_compatible_policy(capfd, run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("show-config",),
         config='''\
 version:
@@ -204,7 +204,7 @@ version:
 
 
 def test_disabled_version_bumping(capfd, run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("show-config",),
         config='''\
 version:
@@ -219,7 +219,7 @@ version:
 
 
 def test_default_conventional_bumping(capfd, run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("show-config",),
         config='''\
 version:
@@ -255,7 +255,7 @@ def test_default_workspace_is_repo_toplevel(capfd, run_hopic):
     """This checks whether the default workspace, when a --config option is given but not a --workspace option,
     is the toplevel directory of the repository the --config file resides in."""
     cfg_file = ".ci/some-special-config/hopic-ci-config.yaml"
-    result = run_hopic(
+    (result,) = run_hopic(
         ("--config", cfg_file, "show-config"),
         config=config_file(
             cfg_file,
@@ -278,7 +278,7 @@ volumes:
     (".ci/hopic-ci-config.yaml", ".ci", "hopic-ci-config.yaml"),
 ))
 def test_default_paths(capfd, run_hopic, cfg_file, subdir, name):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("show-config",),
         config=config_file(
             cfg_file,
@@ -300,7 +300,7 @@ def test_default_paths(capfd, run_hopic, cfg_file, subdir, name):
 
 
 def test_default_volume_mapping_set(run_hopic):
-    result = run_hopic(("show-config",), config="")
+    (result,) = run_hopic(("show-config",), config="")
     assert result.exit_code == 0
     output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
     volumes = output['volumes']
@@ -309,7 +309,7 @@ def test_default_volume_mapping_set(run_hopic):
 
 
 def test_delete_volumes_from_default_set(run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("show-config",),
         config=dedent(
             '''\
@@ -330,7 +330,7 @@ def test_delete_volumes_from_default_set(run_hopic):
 
 
 def test_disallow_phase_name_reuse(capfd, run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("show-config",),
         config='''\
 phases:
@@ -352,7 +352,7 @@ phases:
 
 
 def test_reject_sequence_in_phase(capfd, run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("show-config",),
         config='''\
 phases:
@@ -371,7 +371,7 @@ phases:
 
 
 def test_reject_mapping_in_variant(capfd, run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("show-config",),
         config='''\
 phases:
@@ -392,14 +392,14 @@ phases:
 
 
 def test_devnull_config(run_hopic):
-    result = run_hopic(("--config", os.devnull, "show-config"))
+    (result,) = run_hopic(("--config", os.devnull, "show-config"))
     assert result.exit_code == 0
     output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
     assert output
 
 
 def test_global_config_block(run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("show-config",),
         config=dedent(
                                 """\
@@ -424,7 +424,7 @@ def test_global_config_block(run_hopic):
 
 
 def test_post_submit_type_error(capfd, run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("show-config",),
         config=dedent(
             """\
@@ -444,7 +444,7 @@ def test_post_submit_type_error(capfd, run_hopic):
 
 
 def test_post_submit_forbidden_field(capfd, run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("show-config",),
         config=dedent(
             """\
@@ -466,7 +466,7 @@ def test_post_submit_forbidden_field(capfd, run_hopic):
 
 
 def test_post_submit(run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("show-config",),
         config=dedent(
             """\
@@ -481,7 +481,7 @@ def test_post_submit(run_hopic):
 
 
 def test_config_is_mapping_failure(capfd, run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("show-config",),
         config=dedent(
             """\
@@ -501,5 +501,5 @@ def test_config_is_mapping_failure(capfd, run_hopic):
 
 
 def test_config_is_mapping_empty(run_hopic):
-    result = run_hopic(("show-config",), config="")
+    (result,) = run_hopic(("show-config",), config="")
     assert result.exit_code == 0

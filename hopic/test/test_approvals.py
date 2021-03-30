@@ -64,7 +64,7 @@ phases:
 
 
 def _perform_merge(run_hopic, repo, approvals):
-    result = run_hopic(
+    (*_, result) = run_hopic(
             ('-v', 'DEBUG', 'checkout-source-tree', '--target-remote', repo.working_dir, '--target-ref', 'master'),
             ('prepare-source-tree',
                 '--author-name', 'Damièn Evelopér',

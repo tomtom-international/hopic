@@ -48,7 +48,7 @@ _commitargs = dict(
 
 def test_missing_manifest(run_hopic):
     with pytest.raises(FileNotFoundError, match=r'(?:i).*\bivy manifest\b.*/dependency_manifest.xml\b'):
-        run_hopic(
+        (_,) = run_hopic(
             ("build",),
             config='''\
 image: !image-from-ivy-manifest {}
@@ -73,7 +73,7 @@ def test_all_phases_and_variants(monkeypatch, run_hopic):
         assert tuple(args) == expected.pop(0)
 
     monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config=dedent('''\
 phases:
@@ -102,7 +102,7 @@ def test_filtered_phases(monkeypatch, run_hopic):
         assert tuple(args) == expected.pop(0)
 
     monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build", "--phase=build", "--phase=test"),
         config=dedent('''\
 phases:
@@ -127,7 +127,7 @@ def test_filtered_non_existing_phase(monkeypatch, capfd, run_hopic):
         assert tuple(args) == expected.pop(0)
 
     monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build", "--phase=build", "--phase=does-not-exist"),
         config=dedent('''\
 phases:
@@ -163,7 +163,7 @@ def test_filtered_variants(monkeypatch, capfd, run_hopic):
         assert tuple(args) == expected.pop(0)
 
     monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build", "--variant=a", "--variant=c", "--variant=d"),
         config=dedent('''\
 phases:
@@ -199,7 +199,7 @@ def test_global_image(monkeypatch, run_hopic):
         assert tuple(args[-2:]) == ('buildpack-deps:18.04', './a.sh')
 
     monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config='''\
 image: buildpack-deps:18.04
@@ -224,7 +224,7 @@ def test_default_image(monkeypatch, run_hopic):
         assert tuple(args[-2:]) == expected.pop(0)
 
     monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config='''\
 image:
@@ -261,7 +261,7 @@ def test_null_image(monkeypatch, run_hopic):
         assert cmd == expected_call['cmd']
 
     monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config='''\
 image:
@@ -342,7 +342,7 @@ def test_docker_run_arguments(run_hopic, expect_forward_tty, has_stderr, has_std
         monkeypatch.setattr(sys.stdin, 'isatty', lambda: has_stdin)
         monkeypatch.setattr(sys.stdout, 'isatty', lambda: has_stdout)
 
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config='''\
 image:
@@ -410,7 +410,7 @@ def test_docker_run_extra_arguments(capfd, monkeypatch, run_hopic, extra_docker_
 
     monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
     config_lines = ''.join([f'{10 * " "}{line}\n' for line in extra_docker_run_args['config-lines']])
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config=dedent('''\
         image:
@@ -438,7 +438,7 @@ def test_docker_run_extra_arguments(capfd, monkeypatch, run_hopic, extra_docker_
 
 
 def test_docker_run_extra_arguments_forbidden_option(capfd, run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config=dedent('''\
             phases:
@@ -463,7 +463,7 @@ def test_docker_run_extra_arguments_forbidden_option(capfd, run_hopic):
 
 
 def test_docker_run_extra_arguments_whitespace_in_option(capfd, run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config=dedent(
             '''\
@@ -503,7 +503,7 @@ def test_override_default_volume(run_hopic):
         monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
         monkeypatch.setattr(os, 'makedirs', lambda _: None)
 
-    result = run_hopic(
+    (result,) = run_hopic(
         ('build',),
         config=dedent(
             f"""\
@@ -546,7 +546,7 @@ def test_image_override_per_phase(monkeypatch, run_hopic):
         assert tuple(args[-2:]) == expected.pop(0)
 
     monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config=dedent('''\
             image:
@@ -600,7 +600,7 @@ def test_image_override_per_step(monkeypatch, run_hopic):
             assert args == expectation
 
     monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config=dedent('''\
             image: buildpack-deps:18.04
@@ -655,7 +655,7 @@ def test_docker_terminated(monkeypatch, run_hopic, signum):
     if old_handler == signal.default_int_handler:
         signal.signal(signum, old_handler)
     try:
-        result = run_hopic(
+        (result,) = run_hopic(
             ("build",),
             config=dedent('''\
             image: buildpack-deps:18.04
@@ -675,7 +675,7 @@ def test_docker_terminated(monkeypatch, run_hopic, signum):
 
 @docker
 def test_container_with_env_var(run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config=dedent('''\
             image: buildpack-deps:18.04
@@ -696,7 +696,7 @@ def test_container_with_env_var(run_hopic):
 
 @docker
 def test_container_without_env_var(run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config=dedent('''\
             image: buildpack-deps:18.04
@@ -715,7 +715,7 @@ def test_container_without_env_var(run_hopic):
 
 
 def test_command_with_source_date_epoch(capfd, run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config='''\
 phases:
@@ -730,7 +730,7 @@ phases:
 
 
 def test_command_with_deleted_env_var(capfd, run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config=dedent(
             '''\
@@ -747,7 +747,7 @@ def test_command_with_deleted_env_var(capfd, run_hopic):
 
 
 def test_command_with_branch_and_commit(capfd, run_hopic):
-    result = run_hopic(
+    (_, result) = run_hopic(
         ("checkout-source-tree", "--clean", "--target-remote", ".", "--target-ref", "master"),
         ("build",),
         config=dedent('''\
@@ -770,7 +770,7 @@ def test_command_with_branch_and_commit(capfd, run_hopic):
 
 
 def test_empty_variant(run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config=dedent('''\
         phases:
@@ -793,7 +793,7 @@ def test_embed_variants(monkeypatch, run_hopic):
         assert tuple(args) == expected.pop(0)
 
     monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config=dedent(f'''\
                 phases:
@@ -820,7 +820,7 @@ def test_embed_variants(monkeypatch, run_hopic):
 def test_embed_variants_syntax_error(capfd, run_hopic):
     generate_script_path = "generate-variants.py"
 
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config=dedent(f'''\
                 phases:
@@ -860,7 +860,7 @@ def test_version_variables_content(
     expected_pure_version,
     expected_debversion,
 ):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config=dedent(f"""\
                 version:
@@ -908,7 +908,7 @@ def test_execute_list(monkeypatch, run_hopic):
         assert tuple(args) == ('echo', "an argument, with spaces and ' quotes", 'and-another-without')
 
     monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config=dedent('''\
                 phases:
@@ -933,7 +933,7 @@ def test_with_credentials_keyring_variable_names(monkeypatch, run_hopic, capfd):
 
     monkeypatch.setattr(credentials, 'get_credential_by_id', get_credential_id)
 
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config=dedent(f'''\
                 project-name: {project_name}
@@ -986,7 +986,7 @@ def test_with_credentials_with_url_encoding(monkeypatch, run_hopic, capfd, usern
 
     monkeypatch.setattr(credentials, 'get_credential_by_id', get_credential_id)
 
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config=dedent(f'''\
                 project-name: {project_name}
@@ -1033,7 +1033,7 @@ def test_dry_run_build(capfd, monkeypatch, run_hopic):
     mock_install_extensions.callback = lambda: 0
     monkeypatch.setattr(extensions, 'install_extensions', mock_install_extensions)
 
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build", "--dry-run"),
         config=dedent('''\
 pip:
@@ -1078,7 +1078,7 @@ def test_dry_run_does_not_ask_for_credentials(monkeypatch, capfd, run_hopic):
 
     monkeypatch.setattr(credentials, 'get_credential_by_id', get_credential_id)
 
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build", "-n"),
         config=dedent('''\
                 project-name: dummy
@@ -1150,7 +1150,7 @@ def test_config_recursive_template_build(monkeypatch, run_hopic):
 
     monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
 
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config=dedent(f"""\
                 pip:
@@ -1196,7 +1196,7 @@ def test_build_list_yaml_template(monkeypatch, run_hopic):
 
     monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
 
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config=dedent(f"""\
                 pip:
@@ -1227,7 +1227,7 @@ def test_with_credentials_obfuscation(monkeypatch, capfd, run_hopic):
 
     monkeypatch.setattr(credentials, 'get_credential_by_id', get_credential_id)
 
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config=dedent(f'''\
                 project-name: {project_name}
@@ -1258,7 +1258,7 @@ def test_with_missing_credentials_obfuscation(monkeypatch, capfd, run_hopic):
 
     monkeypatch.setattr(credentials, 'get_credential_by_id', get_credential_id)
 
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config=dedent(f'''\
                 project-name: {project_name}
@@ -1288,7 +1288,7 @@ def test_with_credentials_obfuscation_empty_credentials(monkeypatch, capfd, run_
 
     monkeypatch.setattr(credentials, 'get_credential_by_id', get_credential_id)
 
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config=dedent('''\
                 project-name: dummy
@@ -1315,7 +1315,7 @@ def test_with_credentials_obfuscation_empty_credentials(monkeypatch, capfd, run_
     ('bump: false', r"^Error: Failed to determine the current version\."),
 ))
 def test_version_variable_with_undetermined_version(capfd, run_hopic, version_config, expected_msg):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config=dedent(f'''\
                 version:
@@ -1338,7 +1338,7 @@ def test_version_variable_with_undetermined_version(capfd, run_hopic, version_co
 
 
 def test_normalize_artifacts(capfd, run_hopic):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config=dedent(
             """\
@@ -1374,7 +1374,7 @@ def test_normalize_artifacts(capfd, run_hopic):
     "junit",
 ))
 def test_complain_about_missing_artifacts(capfd, run_hopic, archive_key):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config=dedent(
             f"""\
@@ -1401,7 +1401,7 @@ def test_complain_about_missing_artifacts(capfd, run_hopic, archive_key):
     "junit",
 ))
 def test_accept_present_artifacts(run_hopic, archive_key):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config=dedent(
             f"""\
@@ -1423,7 +1423,7 @@ def test_accept_present_artifacts(run_hopic, archive_key):
     "fingerprint",
 ))
 def test_permit_missing_artifacts(run_hopic, archive_key):
-    result = run_hopic(
+    (result,) = run_hopic(
         ("build",),
         config=dedent(
             f"""\
