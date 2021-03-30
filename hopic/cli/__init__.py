@@ -449,8 +449,9 @@ def process_prepare_source_tree(
         base_commit = commit_params.pop('base_commit', None)
         bump_message = commit_params.pop('bump_message', None)
 
-        # Re-read config to ensure any changes introduced by 'change_applicator' are taken into account
-        read_config_to_click_context()
+        # Re-read config when it was not read already to ensure any changes introduced by 'change_applicator' are taken into account
+        if not commit_params.pop('config_parsed', False):
+            read_config_to_click_context()
 
         # Ensure any required extensions are available
         extensions.install_extensions.callback()
@@ -906,6 +907,7 @@ def merge_change_request(
                 raise VersionBumpMismatchError(new_version, merge_commit_next_version)
 
         return {
+                'config_parsed': True,
                 'message': msg,
                 'parent_commits': (
                     repo.head.commit,
