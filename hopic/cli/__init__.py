@@ -450,13 +450,7 @@ def process_prepare_source_tree(
         bump_message = commit_params.pop('bump_message', None)
 
         # Re-read config to ensure any changes introduced by 'change_applicator' are taken into account
-        try:
-            config_file = determine_config_file_name(ctx)
-            ctx.obj.config = read_config(config_file, ctx.obj.volume_vars)
-            ctx.obj.config_dir = config_file.parent
-            ctx.obj.volume_vars['CFGDIR'] = str(ctx.obj.config_dir)
-        except (click.BadParameter, KeyError, TypeError, OSError, IOError, YAMLError):
-            pass
+        read_config_to_click_context()
 
         # Ensure any required extensions are available
         extensions.install_extensions.callback()
@@ -755,6 +749,17 @@ def process_prepare_source_tree(
             click.echo(ctx.obj.version)
 
 
+@click.pass_context
+def read_config_to_click_context(ctx):
+    try:
+        config_file = determine_config_file_name(ctx)
+        ctx.obj.config = read_config(config_file, ctx.obj.volume_vars)
+        ctx.obj.config_dir = config_file.parent
+        ctx.obj.volume_vars['CFGDIR'] = str(ctx.obj.config_dir)
+    except (click.BadParameter, KeyError, TypeError, OSError, IOError, YAMLError):
+        pass
+
+
 @prepare_source_tree.command()
 @click.pass_context
 # git
@@ -871,6 +876,7 @@ def merge_change_request(
             msg += '\n'.join(f"Acked-by: {approver}" for approver in approvers) + u'\n'
         msg += f'Merged-by: Hopic {get_package_version(PACKAGE)}\n'
 
+        read_config_to_click_context()
         bump = ctx.obj.config['version']['bump']
         strict = bump.get('strict', False)
         try:
