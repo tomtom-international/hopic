@@ -478,9 +478,6 @@ def process_prepare_source_tree(
 
         version_info = ctx.obj.config['version']
 
-        # Re-read version to ensure that the version policy in the reloaded configuration is used for it
-        ctx.obj.version, _ = determine_version(version_info, ctx.obj.config_dir, ctx.obj.code_dir)
-
         # If the branch is not allowed to publish, skip version bump step
         is_publish_allowed = is_publish_branch(ctx)
 
@@ -757,6 +754,7 @@ def read_config_to_click_context(ctx):
         ctx.obj.config = read_config(config_file, ctx.obj.volume_vars)
         ctx.obj.config_dir = config_file.parent
         ctx.obj.volume_vars['CFGDIR'] = str(ctx.obj.config_dir)
+        ctx.obj.version, _ = determine_version(ctx.obj.config['version'], ctx.obj.config_dir, ctx.obj.code_dir)
     except (click.BadParameter, KeyError, TypeError, OSError, IOError, YAMLError):
         pass
 
