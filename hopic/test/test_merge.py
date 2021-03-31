@@ -957,6 +957,7 @@ def test_add_hopic_config_file(run_hopic):
             f.write('usable')
         repo.index.add(('something.txt',))
         base_commit = repo.index.commit(message='Initial commit', **_commitargs)
+        repo.create_tag('0.0.0')
 
         # PR branch
         repo.head.reference = repo.create_head('something-useful', base_commit)
@@ -966,7 +967,11 @@ def test_add_hopic_config_file(run_hopic):
         with (run_hopic.toprepo / 'hopic-ci-config.yaml').open('w') as f:
             f.write(dedent('''\
                 version:
-                    bump: no
+                  format: semver
+                  tag:    true
+                  bump:
+                    policy: conventional-commits
+                    strict: yes
                 '''))
 
         repo.index.add(('hopic-ci-config.yaml',))
@@ -976,7 +981,7 @@ def test_add_hopic_config_file(run_hopic):
     (*_, result) = run_hopic(
             ('checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'),
             ('prepare-source-tree', '--author-name', _author.name, '--author-email', _author.email,
-                'merge-change-request', '--source-remote', run_hopic.toprepo, '--source-ref', 'something-useful'),
+                'merge-change-request', '--source-remote', run_hopic.toprepo, '--source-ref', 'something-useful', '--title', 'chore: hopic config'),
             ('build',),
         )
     assert result.exit_code == 0
