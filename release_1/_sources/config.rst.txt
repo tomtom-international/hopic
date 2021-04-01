@@ -784,12 +784,14 @@ Repeating Steps for Commits
 Change Request Commits
 ^^^^^^^^^^^^^^^^^^^^^^
 
-``SOURCE_COMMIT``
+* ``SOURCE_COMMIT``
+* ``SOURCE_COMMITS``
 
 Change Request Autosquashed Commits
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-``AUTOSQUASHED_COMMIT``
+* ``AUTOSQUASHED_COMMIT``
+* ``AUTOSQUASHED_COMMITS``
 
 Sub SCM
 -------
