@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from . import hopic_cli
 from .markers import (
         docker,
     )
@@ -20,7 +19,6 @@ from .. import credentials
 from .. import config_reader
 from ..cli import extensions
 
-from click.testing import CliRunner
 from textwrap import dedent
 from typing import Pattern
 import git
@@ -36,10 +34,6 @@ import signal
 import stat
 import subprocess
 import sys
-from typing import (
-    Mapping,
-    Optional,
-)
 
 _source_date_epoch = 7 * 24 * 3600
 _git_time = f"{_source_date_epoch} +0000"
@@ -52,109 +46,22 @@ _commitargs = dict(
     )
 
 
-class MonkeypatchInjector:
-    def __init__(self, monkeypatch=None, context_entry_function=lambda dum: None):
-        self.monkeypatch = monkeypatch
-        self.context_entry_function = context_entry_function
-
-    def __enter__(self):
-        if self.monkeypatch:
-            self.monkeypatch_context = self.monkeypatch.context()
-            empty_monkeypatch_context = self.monkeypatch_context.__enter__()
-            self.context_entry_function(empty_monkeypatch_context)
-            return empty_monkeypatch_context
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.monkeypatch:
-            return self.monkeypatch_context.__exit__(exc_type, exc_val, exc_tb)
-
-
-@pytest.fixture
-def run_with_config(monkeypatch, tmp_path):
-    def run_with_config(
-        config,
-        *args,
-        files: Mapping = {},
-        env: Optional[Mapping[str, str]] = None,
-        monkeypatch_injector=MonkeypatchInjector(),
-        init_version: str = '0.0.0',
-        commit_count: int = 0,
-        dirty: bool = False,
-        tag: bool = True,
-        umask: int = 0o022,
-    ):
-        runner = CliRunner(mix_stderr=False, env=env)
-        commit = None
-        umask = os.umask(umask)
-        try:
-            with monkeypatch.context():
-                rundir = tmp_path / "rundir"
-                if not rundir.exists():
-                    rundir.mkdir(parents=True)
-                monkeypatch.chdir(rundir)
-                with git.Repo.init() as repo:
-                    with open('hopic-ci-config.yaml', 'w') as f:
-                        f.write(config)
-                    for fname, (content, on_file_created_callback) in files.items():
-                        if '/' in fname and not os.path.exists(os.path.dirname(fname)):
-                            os.makedirs(os.path.dirname(fname))
-                        with open(fname, 'w') as f:
-                            f.write(content)
-                        on_file_created_callback()
-                    repo.index.add(('hopic-ci-config.yaml',) + tuple(files.keys()))
-                    commit = repo.index.commit(message='Initial commit', **_commitargs)
-                    if tag:
-                        repo.create_tag(init_version)
-                    for i in range(commit_count):
-                        commit = repo.index.commit(message=f"Some commit {i}", **_commitargs)
-                    if dirty:
-                        with open('dirty_file', 'w') as f:
-                            f.write('dirty')
-                        repo.index.add(('dirty_file'))  # do not commit to create the dirty state
-                for arg in args:
-                    orig_main = hopic_cli.main
-
-                    def mock_main(*args, **kwargs):
-                        with monkeypatch_injector:
-                            return orig_main(*args, **kwargs)
-
-                    try:
-                        hopic_cli.main = mock_main
-                        result = runner.invoke(hopic_cli, arg)
-                    finally:
-                        hopic_cli.main = orig_main
-
-                    if result.stdout_bytes:
-                        print(result.stdout, end='')
-                    if result.stderr_bytes:
-                        print(result.stderr, end='', file=sys.stderr)
-
-                    if result.exception is not None and not isinstance(result.exception, SystemExit):
-                        raise result.exception
-
-                    if result.exit_code != 0:
-                        return result
-        finally:
-            os.umask(umask)
-
-        result.commit = commit
-        return result
-    return run_with_config
-
-
-def test_missing_manifest(run_with_config):
+def test_missing_manifest(run_hopic):
     with pytest.raises(FileNotFoundError, match=r'(?:i).*\bivy manifest\b.*/dependency_manifest.xml\b'):
-        run_with_config('''\
+        (_,) = run_hopic(
+            ("build",),
+            config='''\
 image: !image-from-ivy-manifest {}
 
 phases:
   build:
     test:
       - cat /etc/lsb-release
-''', ('build',))
+''',
+        )
 
 
-def test_all_phases_and_variants(monkeypatch, run_with_config):
+def test_all_phases_and_variants(monkeypatch, run_hopic):
     expected = [
         ('build', 'a'),
         ('build', 'b'),
@@ -166,7 +73,9 @@ def test_all_phases_and_variants(monkeypatch, run_with_config):
         assert tuple(args) == expected.pop(0)
 
     monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
-    result = run_with_config(dedent('''\
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent('''\
 phases:
   build:
     a:
@@ -178,11 +87,12 @@ phases:
       - test b
     a:
       - test a
-'''), ('build',))
+'''),
+    )
     assert result.exit_code == 0
 
 
-def test_filtered_phases(monkeypatch, run_with_config):
+def test_filtered_phases(monkeypatch, run_hopic):
     expected = [
         ('build', 'a'),
         ('test', 'a'),
@@ -192,7 +102,9 @@ def test_filtered_phases(monkeypatch, run_with_config):
         assert tuple(args) == expected.pop(0)
 
     monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
-    result = run_with_config(dedent('''\
+    (result,) = run_hopic(
+        ("build", "--phase=build", "--phase=test"),
+        config=dedent('''\
 phases:
   build:
     a:
@@ -203,18 +115,21 @@ phases:
   deploy:
     a:
       - deploy a
-'''), ('build', '--phase=build', '--phase=test'))
+'''),
+    )
     assert result.exit_code == 0
 
 
-def test_filtered_non_existing_phase(monkeypatch, capfd, run_with_config):
+def test_filtered_non_existing_phase(monkeypatch, capfd, run_hopic):
     expected = []
 
     def mock_check_call(args, *popenargs, **kwargs):
         assert tuple(args) == expected.pop(0)
 
     monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
-    result = run_with_config(dedent('''\
+    (result,) = run_hopic(
+        ("build", "--phase=build", "--phase=does-not-exist"),
+        config=dedent('''\
 phases:
   build:
     a:
@@ -225,7 +140,8 @@ phases:
   deploy:
     a:
       - deploy a
-'''), ('build', '--phase=build', '--phase=does-not-exist'))
+'''),
+    )
 
     _, err = capfd.readouterr()
     sys.stderr.write(err)
@@ -234,7 +150,7 @@ phases:
     assert result.exit_code == 35
 
 
-def test_filtered_variants(monkeypatch, capfd, run_with_config):
+def test_filtered_variants(monkeypatch, capfd, run_hopic):
     expected = [
         ('build', 'a'),
         ('build', 'c'),
@@ -247,7 +163,9 @@ def test_filtered_variants(monkeypatch, capfd, run_with_config):
         assert tuple(args) == expected.pop(0)
 
     monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
-    result = run_with_config(dedent('''\
+    (result,) = run_hopic(
+        ("build", "--variant=a", "--variant=c", "--variant=d"),
+        config=dedent('''\
 phases:
   build:
     a:
@@ -265,7 +183,8 @@ phases:
       - test a
     c:
       - test c
-'''), ('build', '--variant=a', '--variant=c', '--variant=d'))
+'''),
+    )
     out, err = capfd.readouterr()
     sys.stderr.write(out)
     sys.stderr.write(err)
@@ -274,25 +193,27 @@ phases:
     assert result.exit_code == 0
 
 
-def test_global_image(monkeypatch, run_with_config):
+def test_global_image(monkeypatch, run_hopic):
     def mock_check_call(args, *popenargs, **kwargs):
         assert args[0] == 'docker'
         assert tuple(args[-2:]) == ('buildpack-deps:18.04', './a.sh')
 
-    with monkeypatch.context() as m:
-        m.setattr(subprocess, 'check_call', mock_check_call)
-        result = run_with_config('''\
+    monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+    (result,) = run_hopic(
+        ("build",),
+        config='''\
 image: buildpack-deps:18.04
 
 phases:
   build:
     a:
       - ./a.sh
-''', ('build',))
+''',
+    )
     assert result.exit_code == 0
 
 
-def test_default_image(monkeypatch, run_with_config):
+def test_default_image(monkeypatch, run_hopic):
     expected = [
         ('buildpack-deps:18.04', './a.sh'),
         ('buildpack-deps:buster', './b.sh'),
@@ -302,9 +223,10 @@ def test_default_image(monkeypatch, run_with_config):
         assert args[0] == 'docker'
         assert tuple(args[-2:]) == expected.pop(0)
 
-    with monkeypatch.context() as m:
-        m.setattr(subprocess, 'check_call', mock_check_call)
-        result = run_with_config('''\
+    monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+    (result,) = run_hopic(
+        ("build",),
+        config='''\
 image:
   default: buildpack-deps:18.04
   b: buildpack-deps:buster
@@ -315,12 +237,13 @@ phases:
       - ./a.sh
     b:
       - ./b.sh
-''', ('build',))
+''',
+    )
     assert result.exit_code == 0
     assert not expected
 
 
-def test_null_image(monkeypatch, run_with_config):
+def test_null_image(monkeypatch, run_hopic):
     expected = [
         {"docker": True, "cmd": ('buildpack-deps:18.04', './a.sh', '123')},
         {"docker": False, "cmd": ('./b.sh',)},
@@ -337,9 +260,10 @@ def test_null_image(monkeypatch, run_with_config):
         cmd = tuple(args[-len(expected_call['cmd']):])
         assert cmd == expected_call['cmd']
 
-    with monkeypatch.context() as m:
-        m.setattr(subprocess, 'check_call', mock_check_call)
-        result = run_with_config('''\
+    monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+    (result,) = run_hopic(
+        ("build",),
+        config='''\
 image:
   default: buildpack-deps:18.04
   b: null
@@ -353,7 +277,8 @@ phases:
     c:
       - image: null
       - ./c.sh
-''', ('build',))
+''',
+    )
     assert result.exit_code == 0
     assert not expected
 
@@ -365,7 +290,7 @@ phases:
     (False,  False, True , False),
     (False,  False, False, False),
 ))
-def test_docker_run_arguments(monkeypatch, run_with_config, expect_forward_tty, has_stderr, has_stdin, has_stdout):
+def test_docker_run_arguments(run_hopic, expect_forward_tty, has_stderr, has_stdin, has_stdout):
     expected_image_command = [
         ('buildpack-deps:18.04', './a.sh'),
     ]
@@ -417,7 +342,9 @@ def test_docker_run_arguments(monkeypatch, run_with_config, expect_forward_tty, 
         monkeypatch.setattr(sys.stdin, 'isatty', lambda: has_stdin)
         monkeypatch.setattr(sys.stdout, 'isatty', lambda: has_stdout)
 
-    result = run_with_config('''\
+    (result,) = run_hopic(
+        ("build",),
+        config='''\
 image:
   default: buildpack-deps:18.04
 
@@ -426,7 +353,10 @@ phases:
     a:
       - docker-in-docker: yes
       - ./a.sh
-''', ('build',), monkeypatch_injector=MonkeypatchInjector(monkeypatch, set_monkey_patch_attrs))
+''',
+        monkeypatch_injector=set_monkey_patch_attrs,
+        tag="0.0.0",
+    )
     assert result.exit_code == 0
     assert not expected_image_command
 
@@ -465,7 +395,7 @@ phases:
     },
     ), ids=('single-device', 'multiple-hosts', 'all-options'),
 )
-def test_docker_run_extra_arguments(capfd, monkeypatch, run_with_config, extra_docker_run_args):
+def test_docker_run_extra_arguments(capfd, monkeypatch, run_hopic, extra_docker_run_args):
     mock_state = {'times_called': 0}
 
     def mock_check_call(args, *popenargs, **kwargs):
@@ -480,7 +410,9 @@ def test_docker_run_extra_arguments(capfd, monkeypatch, run_with_config, extra_d
 
     monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
     config_lines = ''.join([f'{10 * " "}{line}\n' for line in extra_docker_run_args['config-lines']])
-    result = run_with_config(dedent('''\
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent('''\
         image:
           default: buildpack-deps:18.04
 
@@ -496,7 +428,8 @@ def test_docker_run_extra_arguments(capfd, monkeypatch, run_with_config, extra_d
           p-two:
             v-one:
               - sh -c 'echo Should not contain extra args'
-        ''').format(extra_args=config_lines), ('build',),)
+        ''').format(extra_args=config_lines),
+    )
 
     assert result.exit_code == 0
     out, err = capfd.readouterr()
@@ -504,8 +437,10 @@ def test_docker_run_extra_arguments(capfd, monkeypatch, run_with_config, extra_d
     sys.stderr.write(err)
 
 
-def test_docker_run_extra_arguments_forbidden_option(capfd, run_with_config):
-    result = run_with_config(dedent('''\
+def test_docker_run_extra_arguments_forbidden_option(capfd, run_hopic):
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent('''\
             phases:
               p-one:
                 v-one:
@@ -515,8 +450,8 @@ def test_docker_run_extra_arguments_forbidden_option(capfd, run_with_config):
                       user: root
                       workspace: /dev
                   - echo This build shall fail
-            '''), ('build',),
-            )
+            '''),
+    )
 
     assert result.exit_code != 0
     out, err = capfd.readouterr()
@@ -527,8 +462,11 @@ def test_docker_run_extra_arguments_forbidden_option(capfd, run_with_config):
         assert option in err.splitlines()[2], f'expected {option} in error message'
 
 
-def test_docker_run_extra_arguments_whitespace_in_option(capfd, run_with_config):
-    result = run_with_config(dedent('''\
+def test_docker_run_extra_arguments_whitespace_in_option(capfd, run_hopic):
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(
+            '''\
             image:
               default: buildpack-deps:18.04
 
@@ -538,8 +476,9 @@ def test_docker_run_extra_arguments_whitespace_in_option(capfd, run_with_config)
                   - extra-docker-args:
                       hostname: something --user root
                   - echo This build shall fail
-            '''), ('build',),
-            )
+            '''
+        ),
+    )
 
     assert result.exit_code != 0
     out, err = capfd.readouterr()
@@ -548,7 +487,7 @@ def test_docker_run_extra_arguments_whitespace_in_option(capfd, run_with_config)
     assert 'argument `hostname` for `v-one` contains whitespace, which is not permitted.' in err.splitlines()[0]
 
 
-def test_override_default_volume(monkeypatch, run_with_config):
+def test_override_default_volume(run_hopic):
     global_source = '/somewhere/over/the/rainbow'
     local_source = '/platform/nine/and/three/quarters'
 
@@ -564,7 +503,10 @@ def test_override_default_volume(monkeypatch, run_with_config):
         monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
         monkeypatch.setattr(os, 'makedirs', lambda _: None)
 
-    result = run_with_config(dedent(f"""\
+    (result,) = run_hopic(
+        ('build',),
+        config=dedent(
+            f"""\
             image: buildpack-deps:18.04
 
             volumes:
@@ -581,12 +523,15 @@ def test_override_default_volume(monkeypatch, run_with_config):
                       - source: {local_source}
                         target: /code
                     sh: echo 'Hello World!'
-            """), ('build',), monkeypatch_injector=MonkeypatchInjector(monkeypatch, set_monkey_patch_attrs))
+            """
+        ),
+        monkeypatch_injector=set_monkey_patch_attrs,
+    )
     assert result.exit_code == 0
     assert not expected
 
 
-def test_image_override_per_phase(monkeypatch, run_with_config):
+def test_image_override_per_phase(monkeypatch, run_hopic):
     expected = [
         ('buildpack-deps:18.04', './build-a.sh'),
         ('buildpack-deps:buster', './build-b.sh'),
@@ -600,42 +545,42 @@ def test_image_override_per_phase(monkeypatch, run_with_config):
         assert args[0] == 'docker'
         assert tuple(args[-2:]) == expected.pop(0)
 
-    with monkeypatch.context() as m:
-        m.setattr(subprocess, 'check_call', mock_check_call)
-        result = run_with_config(
-            dedent('''\
-                image:
-                  default: buildpack-deps:18.04
-                  b: buildpack-deps:buster
+    monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent('''\
+            image:
+              default: buildpack-deps:18.04
+              b: buildpack-deps:buster
 
-                phases:
-                  build:
-                    a:
-                      - ./build-a.sh
-                    b:
-                      - ./build-b.sh
+            phases:
+              build:
+                a:
+                  - ./build-a.sh
+                b:
+                  - ./build-b.sh
 
-                  test:
-                    a:
-                      - image: test-image-a:latest
-                      - ./test-a.sh
-                    b:
-                      - image: test-image-b:bleeding-edge
-                      - ./test-b.sh
+              test:
+                a:
+                  - image: test-image-a:latest
+                  - ./test-a.sh
+                b:
+                  - image: test-image-b:bleeding-edge
+                  - ./test-b.sh
 
-                  deploy:
-                    a:
-                      - ./deploy-a.sh
-                    b:
-                      - ./deploy-b.sh
+              deploy:
+                a:
+                  - ./deploy-a.sh
+                b:
+                  - ./deploy-b.sh
 
-                '''),
-            ('build',))
+            '''),
+    )
     assert result.exit_code == 0
     assert not expected
 
 
-def test_image_override_per_step(monkeypatch, run_with_config):
+def test_image_override_per_step(monkeypatch, run_hopic):
     """
     Verify that, when switching between images, and the absence of an image, the WORKSPACE is set properly.
     """
@@ -655,7 +600,9 @@ def test_image_override_per_step(monkeypatch, run_with_config):
             assert args == expectation
 
     monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
-    result = run_with_config(dedent('''\
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent('''\
             image: buildpack-deps:18.04
 
             phases:
@@ -668,7 +615,8 @@ def test_image_override_per_step(monkeypatch, run_with_config):
                     sh: ./build-c.sh --workspace=${WORKSPACE}
                   - image: null
                     sh: ./build-d.sh --workspace=${WORKSPACE}
-'''), ('build',))
+'''),
+    )
     assert result.exit_code == 0
     assert not expected
 
@@ -677,7 +625,7 @@ def test_image_override_per_step(monkeypatch, run_with_config):
     signal.SIGINT,
     signal.SIGTERM,
 ))
-def test_docker_terminated(monkeypatch, run_with_config, signum):
+def test_docker_terminated(monkeypatch, run_hopic, signum):
     expected = [
             ('docker', 'run'),
             ('docker', 'stop'),
@@ -707,14 +655,17 @@ def test_docker_terminated(monkeypatch, run_with_config, signum):
     if old_handler == signal.default_int_handler:
         signal.signal(signum, old_handler)
     try:
-        result = run_with_config(dedent('''\
+        (result,) = run_hopic(
+            ("build",),
+            config=dedent('''\
             image: buildpack-deps:18.04
 
             phases:
               build:
                 a:
                   - ./build-a.sh
-            '''), ('build',))
+            '''),
+        )
     finally:
         signal.signal(signum, old_handler)
 
@@ -723,9 +674,10 @@ def test_docker_terminated(monkeypatch, run_with_config, signum):
 
 
 @docker
-def test_container_with_env_var(run_with_config):
-    result = run_with_config(
-        dedent('''\
+def test_container_with_env_var(run_hopic):
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent('''\
             image: buildpack-deps:18.04
 
             pass-through-environment-vars:
@@ -736,15 +688,17 @@ def test_container_with_env_var(run_with_config):
                 test:
                   - docker-in-docker: yes
                   - printenv THE_ENVIRONMENT
-            '''), ('build',),
-        env={'THE_ENVIRONMENT': 'The Real Environment!'})
+            '''),
+        env={'THE_ENVIRONMENT': 'The Real Environment!'},
+    )
     assert result.exit_code == 0
 
 
 @docker
-def test_container_without_env_var(run_with_config):
-    result = run_with_config(
-        dedent('''\
+def test_container_without_env_var(run_hopic):
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent('''\
             image: buildpack-deps:18.04
 
             pass-through-environment-vars:
@@ -755,26 +709,30 @@ def test_container_without_env_var(run_with_config):
                 test:
                   - printenv THE_ENVIRONMENT
             '''),
-        ('build',),
-        env={'THE_ENVIRONMENT': None})
+        env={'THE_ENVIRONMENT': None},
+    )
     assert result.exit_code != 0
 
 
-def test_command_with_source_date_epoch(capfd, run_with_config):
-    result = run_with_config('''\
+def test_command_with_source_date_epoch(capfd, run_hopic):
+    (result,) = run_hopic(
+        ("build",),
+        config='''\
 phases:
   build:
     test:
       - printenv SOURCE_DATE_EPOCH
-''', ('build',))
+''',
+    )
     assert result.exit_code == 0
     out, err = capfd.readouterr()
     assert out.strip() == str(_source_date_epoch)
 
 
-def test_command_with_deleted_env_var(capfd, run_with_config):
-    result = run_with_config(
-        dedent(
+def test_command_with_deleted_env_var(capfd, run_hopic):
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(
             '''\
             phases:
               build:
@@ -784,21 +742,20 @@ def test_command_with_deleted_env_var(capfd, run_with_config):
                     sh: printenv SOURCE_DATE_EPOCH
             '''
         ),
-        ('build',),
     )
     assert result.exit_code != 0
 
 
-def test_command_with_branch_and_commit(capfd, run_with_config):
-    result = run_with_config(
-        dedent('''\
+def test_command_with_branch_and_commit(capfd, run_hopic):
+    (_, result) = run_hopic(
+        ("checkout-source-tree", "--clean", "--target-remote", ".", "--target-ref", "master"),
+        ("build",),
+        config=dedent('''\
             phases:
               build:
                 test:
                   - echo ${GIT_BRANCH}=${GIT_COMMIT}
             '''),
-        ('checkout-source-tree', '--clean', '--target-remote', '.', '--target-ref', 'master'),
-        ('build',),
     )
     assert result.exit_code == 0
 
@@ -812,15 +769,18 @@ def test_command_with_branch_and_commit(capfd, run_with_config):
     assert claimed_commit == checkout_commit
 
 
-def test_empty_variant(run_with_config):
-    result = run_with_config(dedent('''\
+def test_empty_variant(run_hopic):
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent('''\
         phases:
           build:
-            test: []'''), ('build',))
+            test: []'''),
+    )
     assert result.exit_code == 0
 
 
-def test_embed_variants(monkeypatch, run_with_config):
+def test_embed_variants(monkeypatch, run_hopic):
     expected = [
         ('./a.sh', 'test_argument'),
         ('./b.sh',),
@@ -832,42 +792,41 @@ def test_embed_variants(monkeypatch, run_with_config):
     def mock_check_call(args, *popenargs, **kwargs):
         assert tuple(args) == expected.pop(0)
 
-    with monkeypatch.context() as m:
-        m.setattr(subprocess, 'check_call', mock_check_call)
-        result = run_with_config(
-            dedent(f'''\
-                    phases:
-                      build:
-                        a:
-                          - ./a.sh test_argument
-                        b:
-                          - ./b.sh
-
-                      test: !embed
-                        cmd: {generate_script_path}'''),
-            ('build',),
-            files={generate_script_path: (
-                dedent('''\
-                    #!/usr/bin/env python3
-                    print(\'\'\'a:
-                      - ./test-a.sh
+    monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(f'''\
+                phases:
+                  build:
+                    a:
+                      - ./a.sh test_argument
                     b:
-                      - ./test-b.sh \'\'\')'''),
-                lambda: os.chmod(generate_script_path, os.stat(generate_script_path).st_mode | stat.S_IEXEC))})
+                      - ./b.sh
+
+                  test: !embed
+                    cmd: {generate_script_path}'''),
+        files={generate_script_path: (
+            dedent('''\
+                #!/usr/bin/env python3
+                print(\'\'\'a:
+                  - ./test-a.sh
+                b:
+                  - ./test-b.sh \'\'\')'''),
+            lambda fname: os.chmod(fname, os.stat(fname).st_mode | stat.S_IEXEC))})
     assert result.exit_code == 0
     assert not expected
 
 
-def test_embed_variants_syntax_error(capfd, run_with_config):
+def test_embed_variants_syntax_error(capfd, run_hopic):
     generate_script_path = "generate-variants.py"
 
-    result = run_with_config(
-        dedent(f'''\
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(f'''\
                 phases:
                   test: !embed
                     cmd: {generate_script_path}
                 '''),
-        ('build',),
         files={generate_script_path: (dedent('''\
                 #!/usr/bin/env python3
                 print(\'\'\'a:
@@ -875,7 +834,7 @@ def test_embed_variants_syntax_error(capfd, run_with_config):
                 b:
                   - ./b-test.sh
                 yaml_error \'\'\')
-                '''), lambda: os.chmod(generate_script_path, os.stat(generate_script_path).st_mode | stat.S_IEXEC))})
+                '''), lambda fname: os.chmod(fname, os.stat(fname).st_mode | stat.S_IEXEC))})
     assert result.exit_code == 42
     out, err = capfd.readouterr()
     sys.stdout.write(out)
@@ -892,7 +851,7 @@ def test_embed_variants_syntax_error(capfd, run_with_config):
 ))
 def test_version_variables_content(
     capfd,
-    run_with_config,
+    run_hopic,
     init_version,
     build,
     commit_count,
@@ -901,7 +860,9 @@ def test_version_variables_content(
     expected_pure_version,
     expected_debversion,
 ):
-    result = run_with_config(dedent(f"""\
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(f"""\
                 version:
                   format: semver
                   tag:    true
@@ -917,7 +878,11 @@ def test_version_variables_content(
                       - sh -c 'echo $${{PURE_VERSION}}'
                       - echo ${{DEBVERSION}}
                       - sh -c 'echo $${{DEBVERSION}}'
-                """), ('build',), init_version=init_version, commit_count=commit_count, dirty=dirty)
+                """),
+        tag=init_version,
+        commit_count=commit_count,
+        dirty=dirty,
+    )
     assert result.exit_code == 0
     out, err = capfd.readouterr()
     sys.stdout.write(out)
@@ -938,24 +903,24 @@ def test_version_variables_content(
     assert out.splitlines()[4] == out.splitlines()[5]
 
 
-def test_execute_list(monkeypatch, run_with_config):
+def test_execute_list(monkeypatch, run_hopic):
     def mock_check_call(args, *popenargs, **kwargs):
         assert tuple(args) == ('echo', "an argument, with spaces and ' quotes", 'and-another-without')
 
-    with monkeypatch.context() as m:
-        m.setattr(subprocess, 'check_call', mock_check_call)
-        result = run_with_config(
-            dedent('''\
-                    phases:
-                      build:
-                        a:
-                          - sh: ['echo', "an argument, with spaces and ' quotes", 'and-another-without']
-                    '''),
-            ('build',))
+    monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent('''\
+                phases:
+                  build:
+                    a:
+                      - sh: ['echo', "an argument, with spaces and ' quotes", 'and-another-without']
+                '''),
+    )
     assert result.exit_code == 0
 
 
-def test_with_credentials_keyring_variable_names(monkeypatch, run_with_config, capfd):
+def test_with_credentials_keyring_variable_names(monkeypatch, run_hopic, capfd):
     username = 'test_username'
     password = 'super_secret'
     credential_id = 'test_credentialId'
@@ -968,7 +933,9 @@ def test_with_credentials_keyring_variable_names(monkeypatch, run_with_config, c
 
     monkeypatch.setattr(credentials, 'get_credential_by_id', get_credential_id)
 
-    result = run_with_config(dedent(f'''\
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(f'''\
                 project-name: {project_name}
                 phases:
                   build_and_test:
@@ -986,7 +953,8 @@ def test_with_credentials_keyring_variable_names(monkeypatch, run_with_config, c
                           password-variable: 'TEST_PASSWORD'
                       - sh -c "echo $TEST_USER $TEST_PASSWORD"
                       - sh -c "echo $$TEST_USER $$TEST_PASSWORD"
-                '''), ('build',))
+                '''),
+    )
     out, err = capfd.readouterr()
     sys.stdout.write(out)
     sys.stderr.write(err)
@@ -1003,7 +971,7 @@ def test_with_credentials_keyring_variable_names(monkeypatch, run_with_config, c
     ('señor_tester', 'se%C3%B1or_tester'  , '$&+,/:;=?@', '%24%26%2B%2C%2F%3A%3B%3D%3F%40'),
     ('señor tester', 'se%C3%B1or%20tester', 'the secret', 'the%20secret'),
 ))
-def test_with_credentials_with_url_encoding(monkeypatch, run_with_config, capfd, username, expected_username, password, expected_password):
+def test_with_credentials_with_url_encoding(monkeypatch, run_hopic, capfd, username, expected_username, password, expected_password):
     if expected_username is None:
         expected_username = username
     if expected_password is None:
@@ -1018,7 +986,9 @@ def test_with_credentials_with_url_encoding(monkeypatch, run_with_config, capfd,
 
     monkeypatch.setattr(credentials, 'get_credential_by_id', get_credential_id)
 
-    result = run_with_config(dedent(f'''\
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(f'''\
                 project-name: {project_name}
                 phases:
                   build_and_test:
@@ -1028,7 +998,8 @@ def test_with_credentials_with_url_encoding(monkeypatch, run_with_config, capfd,
                           type: username-password
                           encoding: url
                       - sh -c "echo $USERNAME $PASSWORD"
-                '''), ('build',))
+                '''),
+    )
     out, err = capfd.readouterr()
     sys.stdout.write(out)
     sys.stderr.write(err)
@@ -1036,7 +1007,7 @@ def test_with_credentials_with_url_encoding(monkeypatch, run_with_config, capfd,
     assert result.exit_code == 0
 
 
-def test_dry_run_build(capfd, monkeypatch, run_with_config):
+def test_dry_run_build(capfd, monkeypatch, run_hopic):
     template_build_command = ['build b from template']
 
     expected = [
@@ -1062,7 +1033,9 @@ def test_dry_run_build(capfd, monkeypatch, run_with_config):
     mock_install_extensions.callback = lambda: 0
     monkeypatch.setattr(extensions, 'install_extensions', mock_install_extensions)
 
-    result = run_with_config(dedent('''\
+    (result,) = run_hopic(
+        ("build", "--dry-run"),
+        config=dedent('''\
 pip:
   - with-extra-index:
       - 'https://test.pypi.org/simple/'
@@ -1086,7 +1059,8 @@ phases:
       - invalid command a
     b:
       - invalid command b
-'''), ('build', '--dry-run'))
+'''),
+    )
     assert result.exit_code == 0
     out, err = capfd.readouterr()
     sys.stdout.write(out)
@@ -1098,13 +1072,15 @@ phases:
     assert not expected
 
 
-def test_dry_run_does_not_ask_for_credentials(monkeypatch, capfd, run_with_config):
+def test_dry_run_does_not_ask_for_credentials(monkeypatch, capfd, run_hopic):
     def get_credential_id(project_name_arg, cred_id):
         assert False, "`get_credential_id` should not have been called in a dry run"
 
     monkeypatch.setattr(credentials, 'get_credential_by_id', get_credential_id)
 
-    result = run_with_config(dedent('''\
+    (result,) = run_hopic(
+        ("build", "-n"),
+        config=dedent('''\
                 project-name: dummy
                 phases:
                   p1:
@@ -1114,7 +1090,8 @@ def test_dry_run_does_not_ask_for_credentials(monkeypatch, capfd, run_with_confi
                           type: username-password
                       - sh -c 'echo $USERNAME $PASSWORD'
                       - echo $USERNAME $PASSWORD
-                '''), ('build', '-n'))
+                '''),
+    )
 
     assert result.exit_code == 0
     out, err = capfd.readouterr()
@@ -1124,7 +1101,7 @@ def test_dry_run_does_not_ask_for_credentials(monkeypatch, capfd, run_with_confi
     assert err.splitlines()[2] == "echo '${USERNAME}' '${PASSWORD}'"
 
 
-def test_config_recursive_template_build(monkeypatch, run_with_config):
+def test_config_recursive_template_build(monkeypatch, run_hopic):
     extra_index = 'https://test.pypi.org/simple/'
     pkg = 'pipeline-template'
     template_pkg = 'template-in-template'
@@ -1173,8 +1150,9 @@ def test_config_recursive_template_build(monkeypatch, run_with_config):
 
     monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
 
-    result = run_with_config(
-        dedent(f"""\
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(f"""\
                 pip:
                   - with-extra-index: {extra_index}
                     packages:
@@ -1182,13 +1160,13 @@ def test_config_recursive_template_build(monkeypatch, run_with_config):
 
                 config: !template {pkg}
                 """),
-        ('build',))
+    )
 
     assert result.exit_code == 0
     assert expected_check_calls == []
 
 
-def test_build_list_yaml_template(monkeypatch, run_with_config):
+def test_build_list_yaml_template(monkeypatch, run_hopic):
     extra_index = 'https://test.pypi.org/simple/'
     pkg = 'variant-template'
     expected_check_calls = [['pip', 'install', pkg], ['echo', 'bob the builder'], ['echo', 'second command']]
@@ -1218,8 +1196,9 @@ def test_build_list_yaml_template(monkeypatch, run_with_config):
 
     monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
 
-    result = run_with_config(
-        dedent(f"""\
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(f"""\
                 pip:
                   - with-extra-index: {extra_index}
                     packages:
@@ -1229,13 +1208,13 @@ def test_build_list_yaml_template(monkeypatch, run_with_config):
                   phase-1:
                     variant-1: !template {pkg}
                 """),
-        ('build',))
+    )
 
     assert result.exit_code == 0
     assert expected_check_calls == []
 
 
-def test_with_credentials_obfuscation(monkeypatch, capfd, run_with_config):
+def test_with_credentials_obfuscation(monkeypatch, capfd, run_hopic):
     username = 'test_username'
     password = '\'#$%123'
     credential_id = 'test_credentialId'
@@ -1248,7 +1227,9 @@ def test_with_credentials_obfuscation(monkeypatch, capfd, run_with_config):
 
     monkeypatch.setattr(credentials, 'get_credential_by_id', get_credential_id)
 
-    result = run_with_config(dedent(f'''\
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(f'''\
                 project-name: {project_name}
                 phases:
                   build_and_test:
@@ -1257,7 +1238,8 @@ def test_with_credentials_obfuscation(monkeypatch, capfd, run_with_config):
                         - id: {credential_id}
                           type: username-password
                       - echo $USERNAME $PASSWORD
-                '''), ('build',))
+                '''),
+    )
     out, err = capfd.readouterr()
     sys.stdout.write(out)
     sys.stderr.write(err)
@@ -1267,7 +1249,7 @@ def test_with_credentials_obfuscation(monkeypatch, capfd, run_with_config):
     assert result.exit_code == 0
 
 
-def test_with_missing_credentials_obfuscation(monkeypatch, capfd, run_with_config):
+def test_with_missing_credentials_obfuscation(monkeypatch, capfd, run_hopic):
     credential_id = 'test_credentialId'
     project_name = 'test_project'
 
@@ -1276,7 +1258,9 @@ def test_with_missing_credentials_obfuscation(monkeypatch, capfd, run_with_confi
 
     monkeypatch.setattr(credentials, 'get_credential_by_id', get_credential_id)
 
-    result = run_with_config(dedent(f'''\
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(f'''\
                 project-name: {project_name}
                 phases:
                   build_and_test:
@@ -1289,7 +1273,8 @@ def test_with_missing_credentials_obfuscation(monkeypatch, capfd, run_with_confi
                         - id: {credential_id}
                           type: username-password
                       - echo $USERNAME $PASSWORD
-                '''), ('build',))
+                '''),
+    )
     out, err = capfd.readouterr()
     sys.stdout.write(out)
     sys.stderr.write(err)
@@ -1297,13 +1282,15 @@ def test_with_missing_credentials_obfuscation(monkeypatch, capfd, run_with_confi
     assert result.exit_code != 0
 
 
-def test_with_credentials_obfuscation_empty_credentials(monkeypatch, capfd, run_with_config):
+def test_with_credentials_obfuscation_empty_credentials(monkeypatch, capfd, run_hopic):
     def get_credential_id(project_name_arg, cred_id):
         return '', ''
 
     monkeypatch.setattr(credentials, 'get_credential_by_id', get_credential_id)
 
-    result = run_with_config(dedent('''\
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent('''\
                 project-name: dummy
                 phases:
                   p1:
@@ -1312,7 +1299,8 @@ def test_with_credentials_obfuscation_empty_credentials(monkeypatch, capfd, run_
                         - id: some_empty_credentials
                           type: username-password
                       - echo $USERNAME $PASSWORD
-                '''), ('build',))
+                '''),
+    )
 
     assert result.exit_code == 0
     out, err = capfd.readouterr()
@@ -1326,8 +1314,10 @@ def test_with_credentials_obfuscation_empty_credentials(monkeypatch, capfd, run_
     ('file: version.txt', r"^Error: Failed to determine the current version from file\."),
     ('bump: false', r"^Error: Failed to determine the current version\."),
 ))
-def test_version_variable_with_undetermined_version(capfd, run_with_config, version_config, expected_msg):
-    result = run_with_config(dedent(f'''\
+def test_version_variable_with_undetermined_version(capfd, run_hopic, version_config, expected_msg):
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(f'''\
                 version:
                   {version_config}
                 phases:
@@ -1335,7 +1325,9 @@ def test_version_variable_with_undetermined_version(capfd, run_with_config, vers
                     variant-one:
                       - sh -c "set +u; echo VERSION=$$VERSION"
                       - echo $VERSION
-                '''), ('build',), tag=False)
+                '''),
+        tag=None,
+    )
 
     assert result.exit_code != 0
     out, err = capfd.readouterr()
@@ -1345,9 +1337,10 @@ def test_version_variable_with_undetermined_version(capfd, run_with_config, vers
     assert re.search(expected_msg, err, re.MULTILINE)
 
 
-def test_normalize_artifacts(capfd, run_with_config):
-    result = run_with_config(
-        dedent(
+def test_normalize_artifacts(capfd, run_hopic):
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(
             """\
             version:
               tag: true
@@ -1365,7 +1358,7 @@ def test_normalize_artifacts(capfd, run_with_config):
                   - sha256sum -b archive-${PURE_VERSION}.tar.gz
             """
         ),
-        ('build',),
+        tag="0.0.0",
     )
 
     assert result.exit_code == 0
@@ -1380,9 +1373,10 @@ def test_normalize_artifacts(capfd, run_with_config):
     "fingerprint",
     "junit",
 ))
-def test_complain_about_missing_artifacts(capfd, run_with_config, archive_key):
-    result = run_with_config(
-        dedent(
+def test_complain_about_missing_artifacts(capfd, run_hopic, archive_key):
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(
             f"""\
             phases:
               a:
@@ -1391,7 +1385,6 @@ def test_complain_about_missing_artifacts(capfd, run_with_config, archive_key):
                       {'test-results' if archive_key == 'junit' else 'artifacts'}: {archive_key}-doesnotexist.txt
             """
         ),
-        ('build',),
     )
 
     assert result.exit_code == 38
@@ -1407,9 +1400,10 @@ def test_complain_about_missing_artifacts(capfd, run_with_config, archive_key):
     "fingerprint",
     "junit",
 ))
-def test_accept_present_artifacts(run_with_config, archive_key):
-    result = run_with_config(
-        dedent(
+def test_accept_present_artifacts(run_hopic, archive_key):
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(
             f"""\
             phases:
               a:
@@ -1419,7 +1413,6 @@ def test_accept_present_artifacts(run_with_config, archive_key):
                     sh: touch {archive_key}-exists.txt
             """
         ),
-        ('build',),
     )
 
     assert result.exit_code == 0
@@ -1429,9 +1422,10 @@ def test_accept_present_artifacts(run_with_config, archive_key):
     "archive",
     "fingerprint",
 ))
-def test_permit_missing_artifacts(run_with_config, archive_key):
-    result = run_with_config(
-        dedent(
+def test_permit_missing_artifacts(run_hopic, archive_key):
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(
             f"""\
             phases:
               a:
@@ -1444,7 +1438,6 @@ def test_permit_missing_artifacts(run_with_config, archive_key):
                       allow-missing: yes
             """
         ),
-        ('build',),
     )
 
     assert result.exit_code == 0

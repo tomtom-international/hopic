@@ -1,4 +1,4 @@
-# Copyright (c) 2019 - 2020 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2019 - 2021 TomTom N.V.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,61 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from . import hopic_cli
-
-from click.testing import CliRunner
 from collections import OrderedDict
 from collections.abc import Sequence
 from textwrap import dedent
 import json
 import os
-import sys
 import stat
 
 
-class ExecutableFile:
-    def __init__(self, file=None):
-        self.file = file
-
-    def __enter__(self):
-        if self.file:
-            self.file_context = open(self.file, 'w')
-            return self.file_context.__enter__()
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.file:
-            os.chmod(self.file, os.stat(self.file).st_mode | stat.S_IEXEC)
-            return self.file_context.__exit__()
-
-
-def run_with_config(config, args, resource=()):
-    runner = CliRunner(mix_stderr=False)
-    with runner.isolated_filesystem():
-        with open('hopic-ci-config.yaml', 'w') as f:
-            f.write(config)
-
-        if resource:
-            with ExecutableFile(resource[0]) as f:
-                f.write(resource[1])
-        result = runner.invoke(hopic_cli, args)
-
-    if result.stdout_bytes:
-        print(result.stdout, end='')
-    if result.stderr_bytes:
-        print(result.stderr, end='', file=sys.stderr)
-
-    if result.exception is not None and not isinstance(result.exception, SystemExit):
-        raise result.exception
-
-    return result
-
-
-def test_order():
+def test_order(run_hopic):
     """
     The order of phase/variant combinations must be the same in the output JSON as in the config.
     """
 
-    result = run_with_config('''\
+    (result,) = run_hopic(
+        ("getinfo",),
+        config='''\
 phases:
   build:
     a:
@@ -81,7 +42,8 @@ phases:
       - sh: ./upload.sh a
     b:
       - sh: ./upload.sh a
-''', ('getinfo',))
+''',
+    )
 
     assert result.exit_code == 0
     output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
@@ -92,12 +54,14 @@ phases:
     assert tuple(output['upload'].keys()) == ('a', 'b')
 
 
-def test_variants_without_metadata():
+def test_variants_without_metadata(run_hopic):
     """
     Phase/variant combinations without meta data should still appear in the output JSON.
     """
 
-    result = run_with_config('''\
+    (result,) = run_hopic(
+        ("getinfo",),
+        config='''\
 phases:
   build:
     a:
@@ -112,7 +76,8 @@ phases:
       - ./upload.sh a
     b:
       - sh: ./upload.sh a
-''', ('getinfo',))
+''',
+    )
 
     assert result.exit_code == 0
     output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
@@ -128,8 +93,11 @@ phases:
     assert 'b' in output['upload']
 
 
-def test_with_credentials_format():
-    result = run_with_config('''\
+def test_with_credentials_format(run_hopic):
+    (result,) = run_hopic(
+        ("getinfo",),
+        config=dedent(
+            '''\
     phases:
       build:
         a:
@@ -139,7 +107,9 @@ def test_with_credentials_format():
         - with-credentials:
             - id: third_id
             - id: fourth_id
-    ''', ('getinfo',))
+            '''
+        ),
+    )
 
     assert result.exit_code == 0
     output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
@@ -153,25 +123,34 @@ def test_with_credentials_format():
     assert 'fourth_id' in with_credentials[3]['id']
 
 
-def test_embed_variants_file():
+def test_embed_variants_file(run_hopic):
     generate_script_path = "generate-variants.py"
-    result = run_with_config(
-        dedent(f'''\
+    (result,) = run_hopic(
+        ("getinfo",),
+        config=dedent(
+            f'''\
             phases:
               build:
                 a: []
 
               test: !embed
                 cmd: {generate_script_path}
-            '''),
-        ('getinfo',),
-        (generate_script_path, dedent('''\
+            '''
+        ),
+        files={
+            generate_script_path: (
+                dedent(
+                    '''\
             #!/usr/bin/env python3
 
             print(\'\'\'test-variant:
               - echo Bob the builder\'\'\')
-            '''))
-        )
+                    '''
+                ),
+                lambda fname: os.chmod(fname, os.stat(fname).st_mode | stat.S_IEXEC),
+            ),
+        },
+    )
 
     assert result.exit_code == 0
     output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
@@ -182,18 +161,21 @@ def test_embed_variants_file():
     assert 'test-variant' in output['test']
 
 
-def test_embed_variants_non_existing_file():
+def test_embed_variants_non_existing_file(run_hopic):
     generate_script_path = "generate-variants.py"
-    result = run_with_config(
-        dedent(f'''\
+    (result,) = run_hopic(
+        ("getinfo",),
+        config=dedent(
+            f'''\
             phases:
               build:
                 a: []
 
               test: !embed
                 cmd: {generate_script_path}
-            '''),
-        ('getinfo',))
+            '''
+        ),
+    )
 
     assert result.exit_code == 0
     output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
@@ -204,23 +186,33 @@ def test_embed_variants_non_existing_file():
     assert 'error-variant' in output['test']
 
 
-def test_embed_variants_error_in_file():
+def test_embed_variants_error_in_file(run_hopic):
     generate_script_path = "generate-variants.py"
-    result = run_with_config(
-        dedent(f'''\
+    (result,) = run_hopic(
+        ("getinfo",),
+        config=dedent(
+            f'''\
             phases:
               build:
                 a: []
 
               test: !embed
                 cmd: {generate_script_path}
-            '''),
-        ('getinfo',),
-        (generate_script_path, dedent('''\
+            '''
+        ),
+        files={
+            generate_script_path: (
+                dedent(
+                    '''\
             #!/usr/bin/env python3
             print(\'\'\'test-variant:
             error\'\'\')
-            ''')))
+                    '''
+                ),
+                lambda fname: os.chmod(fname, os.stat(fname).st_mode | stat.S_IEXEC),
+            ),
+        },
+    )
 
     assert result.exit_code == 0
     output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
@@ -231,24 +223,33 @@ def test_embed_variants_error_in_file():
     assert 'error-variant' in output['test']
 
 
-def test_embed_variants_script_with_arguments():
+def test_embed_variants_script_with_arguments(run_hopic):
     generate_script_path = "generate-variants.py"
     generate_script_args = 'argument-variant'
-    result = run_with_config(
-        dedent(f'''\
+    (result,) = run_hopic(
+        ("getinfo",),
+        config=dedent(
+            f'''\
             phases:
               test: !embed
                 cmd: '{generate_script_path} {generate_script_args}'
-            '''),
-        ('getinfo',),
-        (generate_script_path, dedent('''\
+            '''
+        ),
+        files={
+            generate_script_path: (
+                dedent(
+                    '''\
             #!/usr/bin/env python3
             import sys
 
             print(\'\'\'test-%s:
               - echo Bob the builder\'\'\' % sys.argv[1])
-            ''')
-         ))
+                    '''
+                ),
+                lambda fname: os.chmod(fname, os.stat(fname).st_mode | stat.S_IEXEC),
+             ),
+        },
+    )
 
     assert result.exit_code == 0
     output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
@@ -257,15 +258,20 @@ def test_embed_variants_script_with_arguments():
     assert f'test-{generate_script_args}' in output['test']
 
 
-def test_embed_variants_cmd():
+def test_embed_variants_cmd(run_hopic):
     cmd = dedent("'printf \"%s\"'" % '''test-variant:\n
   - Bob the builder''')
 
-    result = run_with_config(dedent(f'''\
+    (result,) = run_hopic(
+        ("getinfo",),
+        config=dedent(
+            f'''\
                 phases:
                   test: !embed
                     cmd: {cmd}
-                '''), ('getinfo',))
+            '''
+        ),
+    )
 
     assert result.exit_code == 0
     output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
@@ -274,9 +280,10 @@ def test_embed_variants_cmd():
     assert 'test-variant' in output['test']
 
 
-def test_wait_on_full_previous_phase_dependency():
-    result = run_with_config(
-        dedent(
+def test_wait_on_full_previous_phase_dependency(run_hopic):
+    (result,) = run_hopic(
+        ("getinfo",),
+        config=dedent(
             """\
             phases:
               x:
@@ -293,7 +300,6 @@ def test_wait_on_full_previous_phase_dependency():
                   - touch pig
             """
         ),
-        ('getinfo',),
     )
 
     assert result.exit_code == 0
@@ -303,9 +309,10 @@ def test_wait_on_full_previous_phase_dependency():
     assert not output['y']['b']['wait-on-full-previous-phase']
 
 
-def test_mark_nops():
-    result = run_with_config(
-        dedent(
+def test_mark_nops(run_hopic):
+    (result,) = run_hopic(
+        ("getinfo",),
+        config=dedent(
             """\
             phases:
               x:
@@ -315,7 +322,6 @@ def test_mark_nops():
                   - wait-on-full-previous-phase: no
             """
         ),
-        ('getinfo',),
     )
 
     assert result.exit_code == 0

@@ -12,16 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from . import hopic_cli
-
-from click.testing import CliRunner
-import git
 import os
-import pytest
 import re
 import subprocess
 import sys
 from textwrap import dedent
+
+import git
+import pytest
 
 from .. import credentials
 from ..cli import utils
@@ -36,49 +34,51 @@ _commitargs = dict(
     )
 
 
-def run(*args, env=None):
-    result = None
-    runner = CliRunner(mix_stderr=False, env=env)
-    with runner.isolated_filesystem():
-        for arg in args:
-            if callable(arg):
-                arg()
+@pytest.mark.parametrize("variable", (
+    "AUTOSQUASHED_COMMIT",
+    "AUTOSQUASHED_COMMITS",
+    "SOURCE_COMMIT",
+    "SOURCE_COMMITS",
+))
+def test_autosquash_base(capfd, run_hopic, variable):
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        with (run_hopic.toprepo / 'hopic-ci-config.yaml').open('w') as f:
+            f.write(
+                dedent(
+                    """\
+                    version:
+                      bump: no
+
+                    phases:
+                      build:
+                        test:
+                    """
+                )
+            )
+            if variable.endswith("S"):
+                f.write(
+                    dedent(
+                        f"""\
+                        #
+                              - sh: git log --format=%P ${{{variable}}}
+                        """
+                    )
+                )
             else:
-                result = runner.invoke(hopic_cli, arg)
-
-                if result.stdout_bytes:
-                    print(result.stdout, end='')
-                if result.stderr_bytes:
-                    print(result.stderr, end='', file=sys.stderr)
-
-                if result.exception is not None and not isinstance(result.exception, SystemExit):
-                    raise result.exception
-
-                if result.exit_code != 0:
-                    return result
-
-    return result
-
-
-def test_autosquash_base(capfd, tmp_path):
-    toprepo = tmp_path / 'repo'
-    with git.Repo.init(str(toprepo), expand_vars=False) as repo:
-        with (toprepo / 'hopic-ci-config.yaml').open('w') as f:
-            f.write('''\
-version:
-  bump: no
-
-phases:
-  build:
-    test:
-      - foreach: AUTOSQUASHED_COMMIT
-        sh: git log -1 --format=%P ${AUTOSQUASHED_COMMIT}
-''')
+                f.write(
+                    dedent(
+                        f"""\
+                        #
+                              - foreach: {variable}
+                                sh: git log -1 --format=%P ${{{variable}}}
+                        """
+                    )
+                )
         repo.index.add(('hopic-ci-config.yaml',))
         base_commit = repo.index.commit(message='Initial commit', **_commitargs)
 
         # Main branch moves on
-        with (toprepo / 'A.txt').open('w') as f:
+        with (run_hopic.toprepo / 'A.txt').open('w') as f:
             f.write('A')
         repo.index.add(('A.txt',))
         final_commit = repo.index.commit(message='feat: add A', **_commitargs)
@@ -89,22 +89,22 @@ phases:
         repo.head.reset(index=True, working_tree=True)
 
         # Some change
-        with (toprepo / 'something.txt').open('w') as f:
+        with (run_hopic.toprepo / 'something.txt').open('w') as f:
             f.write('usable')
         repo.index.add(('something.txt',))
         repo.index.commit(message='feat: add something useful', **_commitargs)
 
         # A fixup on top of that change
-        with (toprepo / 'something.txt').open('w') as f:
+        with (run_hopic.toprepo / 'something.txt').open('w') as f:
             f.write('useful')
         repo.index.add(('something.txt',))
         repo.index.commit(message='fixup! feat: add something useful', **_commitargs)
 
     # Successful checkout and build
-    result = run(
-            ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'),
+    (*_, result) = run_hopic(
+            ('checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'),
             ('prepare-source-tree', '--author-name', _author.name, '--author-email', _author.email,
-                'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful'),
+                'merge-change-request', '--source-remote', run_hopic.toprepo, '--source-ref', 'something-useful'),
             ('build',),
         )
     assert result.exit_code == 0
@@ -114,20 +114,19 @@ phases:
     sys.stderr.write(err)
 
     build_out = ''.join(out.splitlines(keepends=True)[2:])
-    autosquashed_commits = build_out.split()
-    assert str(final_commit) not in autosquashed_commits
-    assert str(base_commit) in autosquashed_commits
+    commits = build_out.split()
+    assert str(final_commit) not in commits
+    assert str(base_commit) in commits
 
 
-def hopic_config_subdir_version_file_tester(capfd, config_dir, hopic_config, version_file, version_input, expected_version, tmp_path, expect_tag=True):
-    toprepo = tmp_path / 'repo'
-    with git.Repo.init(str(toprepo), expand_vars=False) as repo:
-        if not os.path.exists(toprepo / config_dir):
-            os.mkdir(toprepo / config_dir)
-        with (toprepo / config_dir / 'hopic-ci-config.yaml').open('w') as f:
+def hopic_config_subdir_version_file_tester(capfd, config_dir, hopic_config, version_file, version_input, expected_version, run_hopic, expect_tag=True):
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        if not os.path.exists(run_hopic.toprepo / config_dir):
+            os.mkdir(run_hopic.toprepo / config_dir)
+        with (run_hopic.toprepo / config_dir / 'hopic-ci-config.yaml').open('w') as f:
             f.write(hopic_config)
 
-        with (toprepo / config_dir / version_file).open('w') as f:
+        with (run_hopic.toprepo / config_dir / version_file).open('w') as f:
             f.write(version_input)
         repo.index.add((os.path.join(config_dir, 'hopic-ci-config.yaml'),))
         repo.index.add((os.path.join(config_dir, version_file),))
@@ -139,18 +138,18 @@ def hopic_config_subdir_version_file_tester(capfd, config_dir, hopic_config, ver
         repo.head.reset(index=True, working_tree=True)
 
         # Some change
-        with (toprepo / 'something.txt').open('w') as f:
+        with (run_hopic.toprepo / 'something.txt').open('w') as f:
             f.write('usable')
         repo.index.add(('something.txt',))
         repo.index.commit(message='feat: add something useful', **_commitargs)
 
     # Successful checkout and build
-    result = run(
+    (*_, result) = run_hopic(
         ('--workspace', './', '--config', os.path.join(config_dir, 'hopic-ci-config.yaml'),
-         'checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'),
+         'checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'),
         ('--workspace', './', '--config', os.path.join(config_dir, 'hopic-ci-config.yaml'),
          'prepare-source-tree', '--author-name', _author.name, '--author-email', _author.email,
-         'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful'),
+         'merge-change-request', '--source-remote', run_hopic.toprepo, '--source-ref', 'something-useful'),
         ('--workspace', './', '--config', os.path.join(config_dir, 'hopic-ci-config.yaml'), 'submit'),
     )
     assert result.exit_code == 0
@@ -159,7 +158,7 @@ def hopic_config_subdir_version_file_tester(capfd, config_dir, hopic_config, ver
     sys.stderr.write(err)
     _, merge_commit, version_out, *_ = out.splitlines()
     assert version_out == expected_version
-    with git.Repo(toprepo, expand_vars=False) as repo:
+    with git.Repo(run_hopic.toprepo, expand_vars=False) as repo:
         repo.git.checkout('master')
         if expect_tag:
             assert repo.git.tag(l=True) == expected_version
@@ -170,10 +169,10 @@ def hopic_config_subdir_version_file_tester(capfd, config_dir, hopic_config, ver
                 note, flags=re.DOTALL | re.MULTILINE,
             )
 
-    return toprepo
+    return run_hopic.toprepo
 
 
-def test_hopic_config_subdir_version_file(capfd, tmp_path):
+def test_hopic_config_subdir_version_file(capfd, run_hopic):
     version = "0.0.1-SNAPSHOT"
     commit_version = "0.0.1"
     version_file = "revision_test.txt"
@@ -190,10 +189,10 @@ version:
                                             f"""\
 version={version}""",
                                             commit_version,
-                                            tmp_path)
+                                            run_hopic)
 
 
-def test_hopic_config_subdir_version_file_after_submit(capfd, tmp_path):
+def test_hopic_config_subdir_version_file_after_submit(capfd, run_hopic):
     version = "0.0.42-SNAPSHOT"
     commit_version = "0.0.42"
     version_file = "revision_test.txt"
@@ -213,12 +212,12 @@ version:
                                                         f"""\
 version={version}""",
                                                         commit_version,
-                                                        tmp_path)
+                                                        run_hopic)
     with (test_repo / config_dir / version_file).open('r') as f:
         assert f.read() == "version=0.0.43-PRERELEASE-TEST"
 
 
-def test_version_bump_after_submit_from_repo_root_dir(capfd, tmp_path):
+def test_version_bump_after_submit_from_repo_root_dir(capfd, run_hopic):
     version = "0.0.3-SNAPSHOT"
     commit_version = "0.0.3"
     version_file = "revision_test.txt"
@@ -238,12 +237,12 @@ version:
                                                         f"""\
 version={version}""",
                                                         commit_version,
-                                                        tmp_path)
+                                                        run_hopic)
     with (test_repo / config_dir / version_file).open('r') as f:
         assert f.read() == "version=0.0.4-PRERELEASE-TEST"
 
 
-def test_version_file_without_tag_and_bump(capfd, tmp_path):
+def test_version_file_without_tag_and_bump(capfd, run_hopic):
     version = '1.2.3'
     expected_version = version
     version_file = "revision_test.txt"
@@ -261,17 +260,16 @@ def test_version_file_without_tag_and_bump(capfd, tmp_path):
         dedent(f"""\
             version={version}"""),
         expected_version,
-        tmp_path,
+        run_hopic,
         expect_tag=False,
     )
 
 
-def merge_conventional_bump(capfd, tmp_path, message, strict=False, on_every_change=True, target='master', merge_message=None):
+def merge_conventional_bump(capfd, run_hopic, message, strict=False, on_every_change=True, target='master', merge_message=None):
     if merge_message is None:
         merge_message = message
-    toprepo = tmp_path / 'repo'
-    with git.Repo.init(str(toprepo), expand_vars=False) as repo:
-        with (toprepo / 'hopic-ci-config.yaml').open('w') as f:
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        with (run_hopic.toprepo / 'hopic-ci-config.yaml').open('w') as f:
             f.write('''\
 version:
   format: semver
@@ -297,7 +295,7 @@ version:
         print(repo.git.log(format='fuller', color=True, stat=True), file=sys.stderr)
 
         # Some change
-        with (toprepo / 'something.txt').open('w') as f:
+        with (run_hopic.toprepo / 'something.txt').open('w') as f:
             f.write('usable')
         repo.index.add(('something.txt',))
         repo.index.commit(message=message, **_commitargs)
@@ -307,19 +305,20 @@ version:
         print(repo.git.log(format='fuller', color=True, stat=True), file=sys.stderr)
 
     # Successful checkout and build
-    return run(
-            ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', target),
+    (*_, result) = run_hopic(
+            ('checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', target),
             ('prepare-source-tree',
                 '--author-date', f"@{_git_time}",
                 '--commit-date', f"@{_git_time}",
                 '--author-name', _author.name,
                 '--author-email', _author.email,
-                'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful', '--title', merge_message),
+                'merge-change-request', '--source-remote', run_hopic.toprepo, '--source-ref', 'something-useful', '--title', merge_message),
         )
+    return result
 
 
-def test_merge_conventional_refactor_no_bump(capfd, tmp_path):
-    result = merge_conventional_bump(capfd, tmp_path, message='refactor: some problem')
+def test_merge_conventional_refactor_no_bump(capfd, run_hopic):
+    result = merge_conventional_bump(capfd, run_hopic, message='refactor: some problem')
     assert result.exit_code == 0
 
     out, err = capfd.readouterr()
@@ -330,8 +329,8 @@ def test_merge_conventional_refactor_no_bump(capfd, tmp_path):
     assert merge_version.startswith('0.0.1-'), "post merge version should be a pre-release of 0.0.1, not 0.0.1 itself"
 
 
-def test_merge_conventional_fix_bump(capfd, tmp_path):
-    result = merge_conventional_bump(capfd, tmp_path, message='fix: some problem')
+def test_merge_conventional_fix_bump(capfd, run_hopic):
+    result = merge_conventional_bump(capfd, run_hopic, message='fix: some problem')
     assert result.exit_code == 0
 
     out, err = capfd.readouterr()
@@ -342,8 +341,8 @@ def test_merge_conventional_fix_bump(capfd, tmp_path):
     assert merge_version.startswith('0.0.1+g')
 
 
-def test_merge_conventional_feat_bump(capfd, tmp_path):
-    result = merge_conventional_bump(capfd, tmp_path, message='feat: add something useful')
+def test_merge_conventional_feat_bump(capfd, run_hopic):
+    result = merge_conventional_bump(capfd, run_hopic, message='feat: add something useful')
     assert result.exit_code == 0
 
     out, err = capfd.readouterr()
@@ -354,8 +353,8 @@ def test_merge_conventional_feat_bump(capfd, tmp_path):
     assert merge_version.startswith('0.1.0+g')
 
 
-def test_merge_conventional_breaking_change_bump(capfd, tmp_path):
-    result = merge_conventional_bump(capfd, tmp_path, message='refactor!: make the API type better')
+def test_merge_conventional_breaking_change_bump(capfd, run_hopic):
+    result = merge_conventional_bump(capfd, run_hopic, message='refactor!: make the API type better')
     assert result.exit_code == 0
 
     out, err = capfd.readouterr()
@@ -366,8 +365,8 @@ def test_merge_conventional_breaking_change_bump(capfd, tmp_path):
     assert merge_version.startswith('1.0.0+g')
 
 
-def test_merge_conventional_feat_with_breaking_bump(capfd, tmp_path):
-    result = merge_conventional_bump(capfd, tmp_path, message='''\
+def test_merge_conventional_feat_with_breaking_bump(capfd, run_hopic):
+    result = merge_conventional_bump(capfd, run_hopic, message='''\
 refactor!: add something awesome
 
 This adds the new awesome feature.
@@ -385,13 +384,13 @@ the same purpose, so you'll have to migrate.
     assert merge_version.startswith('1.0.0+g')
 
 
-def test_merge_conventional_broken_feat(capfd, tmp_path):
-    result = merge_conventional_bump(capfd, tmp_path, message='feat add something useful', strict=True)
+def test_merge_conventional_broken_feat(capfd, run_hopic):
+    result = merge_conventional_bump(capfd, run_hopic, message='feat add something useful', strict=True)
     assert result.exit_code != 0
 
 
-def test_merge_conventional_feat_bump_not_on_change(capfd, tmp_path):
-    result = merge_conventional_bump(capfd, tmp_path, message='feat: add something useful', on_every_change=False)
+def test_merge_conventional_feat_bump_not_on_change(capfd, run_hopic):
+    result = merge_conventional_bump(capfd, run_hopic, message='feat: add something useful', on_every_change=False)
     assert result.exit_code == 0
 
     out, err = capfd.readouterr()
@@ -402,8 +401,8 @@ def test_merge_conventional_feat_bump_not_on_change(capfd, tmp_path):
     assert merge_version.startswith('0.0.1-4+g')
 
 
-def test_merge_conventional_breaking_change_on_major_branch(capfd, tmp_path):
-    result = merge_conventional_bump(capfd, tmp_path, message='refactor!: make the API type better', target='release/42')
+def test_merge_conventional_breaking_change_on_major_branch(capfd, run_hopic):
+    result = merge_conventional_bump(capfd, run_hopic, message='refactor!: make the API type better', target='release/42')
     assert result.exit_code == 33
 
     out, err = capfd.readouterr()
@@ -413,8 +412,8 @@ def test_merge_conventional_breaking_change_on_major_branch(capfd, tmp_path):
     assert 'Breaking changes are not allowed' in err
 
 
-def test_merge_conventional_feat_on_minor_branch(capfd, tmp_path):
-    result = merge_conventional_bump(capfd, tmp_path, message='feat: add something useful', target='release/42.21')
+def test_merge_conventional_feat_on_minor_branch(capfd, run_hopic):
+    result = merge_conventional_bump(capfd, run_hopic, message='feat: add something useful', target='release/42.21')
     assert result.exit_code == 33
 
     out, err = capfd.readouterr()
@@ -424,7 +423,7 @@ def test_merge_conventional_feat_on_minor_branch(capfd, tmp_path):
     assert 'New features are not allowed' in err
 
 
-def test_move_submodule(capfd, tmp_path):
+def test_move_submodule(capfd, run_hopic, tmp_path):
     subrepo = tmp_path / 'subrepo'
     with git.Repo.init(str(subrepo), expand_vars=False) as repo:
         with (subrepo / 'dummy.txt').open('w') as f:
@@ -432,9 +431,8 @@ def test_move_submodule(capfd, tmp_path):
         repo.index.add(('dummy.txt',))
         repo.index.commit(message='Initial dummy commit', **_commitargs)
 
-    toprepo = tmp_path / 'repo'
-    with git.Repo.init(str(toprepo), expand_vars=False) as repo:
-        with (toprepo / 'hopic-ci-config.yaml').open('w') as f:
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        with (run_hopic.toprepo / 'hopic-ci-config.yaml').open('w') as f:
             f.write('''\
 version:
   bump: no
@@ -453,34 +451,34 @@ phases:
     repo.create_head("move_submodule_branch")
     repo.git.checkout('move_submodule_branch')
     repo.index.remove(['subrepo_test'])
-    with (toprepo / '.gitmodules').open('r+') as f:
+    with (run_hopic.toprepo / '.gitmodules').open('r+') as f:
         f.truncate(0)
 
     repo.git.submodule(('add', subrepo, 'moved_subrepo'))
     repo.index.commit(message='Move submodule', **_commitargs)
 
-    result = run(('--workspace', str(toprepo), 'checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'))
+    (result,) = run_hopic(('--workspace', run_hopic.toprepo, 'checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'))
     assert result.exit_code == 0
-    assert (toprepo / 'subrepo_test' / 'dummy.txt').is_file()
-    assert not (toprepo / 'moved_subrepo' / 'dummy.txt').is_file()
+    assert (run_hopic.toprepo / 'subrepo_test' / 'dummy.txt').is_file()
+    assert not (run_hopic.toprepo / 'moved_subrepo' / 'dummy.txt').is_file()
 
-    result = run(('--workspace', str(toprepo), 'prepare-source-tree', '--author-name', _author.name, '--author-email', _author.email,
-                  'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'move_submodule_branch'))
+    (result,) = run_hopic(
+        ('--workspace', run_hopic.toprepo, 'prepare-source-tree', '--author-name', _author.name, '--author-email', _author.email,
+         'merge-change-request', '--source-remote', run_hopic.toprepo, '--source-ref', 'move_submodule_branch'))
     assert result.exit_code == 0
-    assert not (toprepo / 'subrepo_test' / 'dummy.txt').is_file()
-    assert (toprepo / 'moved_subrepo' / 'dummy.txt').is_file()
+    assert not (run_hopic.toprepo / 'subrepo_test' / 'dummy.txt').is_file()
+    assert (run_hopic.toprepo / 'moved_subrepo' / 'dummy.txt').is_file()
 
     # Do checkout of master again to fake build retrigger of an PR
-    result = run(('--workspace', str(toprepo), 'checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'))
+    (result,) = run_hopic(('--workspace', run_hopic.toprepo, 'checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'))
     assert result.exit_code == 0
-    assert (toprepo / 'subrepo_test' / 'dummy.txt').is_file()
-    assert not (toprepo / 'moved_subrepo' / 'dummy.txt').is_file()
+    assert (run_hopic.toprepo / 'subrepo_test' / 'dummy.txt').is_file()
+    assert not (run_hopic.toprepo / 'moved_subrepo' / 'dummy.txt').is_file()
 
 
-def test_modality_merge_has_all_parents(tmp_path, monkeypatch):
-    toprepo = tmp_path / 'repo'
-    with git.Repo.init(toprepo, expand_vars=False) as repo:
-        with open(toprepo / 'hopic-ci-config.yaml', 'w') as f:
+def test_modality_merge_has_all_parents(run_hopic, monkeypatch):
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        with open(run_hopic.toprepo / 'hopic-ci-config.yaml', 'w') as f:
             f.write(dedent('''\
                 version:
                   bump: no
@@ -496,7 +494,7 @@ def test_modality_merge_has_all_parents(tmp_path, monkeypatch):
         base_commit = repo.index.commit(message='Initial commit', **_commitargs)
 
         # Main branch moves on
-        with (toprepo / 'A.txt').open('w') as f:
+        with (run_hopic.toprepo / 'A.txt').open('w') as f:
             f.write('A')
         repo.index.add(('A.txt',))
         final_commit = repo.index.commit(message='feat: add A', **_commitargs)
@@ -507,15 +505,15 @@ def test_modality_merge_has_all_parents(tmp_path, monkeypatch):
         repo.head.reset(index=True, working_tree=True)
 
         # Some change
-        with open(toprepo / 'something.txt', 'w') as f:
+        with open(run_hopic.toprepo / 'something.txt', 'w') as f:
             f.write('usable')
         repo.index.add(('something.txt',))
         merge_commit = repo.index.commit(message='feat: add something useful', **_commitargs)
 
     monkeypatch.setenv('GIT_COMMITTER_NAME' , 'My Name is Nobody')
     monkeypatch.setenv('GIT_COMMITTER_EMAIL', 'nobody@example.com')
-    result = run(
-            ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'),
+    (*_, result) = run_hopic(
+            ('checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'),
             ('prepare-source-tree',
                 '--author-name', _author.name,
                 '--author-email', _author.email,
@@ -526,7 +524,7 @@ def test_modality_merge_has_all_parents(tmp_path, monkeypatch):
         )
     assert result.exit_code == 0
 
-    with git.Repo(toprepo, expand_vars=False) as repo:
+    with git.Repo(run_hopic.toprepo, expand_vars=False) as repo:
         assert repo.heads.master.commit.parents == (final_commit, merge_commit), f"Produced commit {repo.heads.master.commit} is not a merge commit"
 
         note = repo.git.notes('show', 'master', ref='hopic/master')
@@ -536,10 +534,9 @@ def test_modality_merge_has_all_parents(tmp_path, monkeypatch):
             )
 
 
-def test_modality_merge_commit_message(tmp_path, monkeypatch):
-    toprepo = tmp_path / 'repo'
-    with git.Repo.init(toprepo, expand_vars=False) as repo:
-        with open(toprepo / 'hopic-ci-config.yaml', 'w') as f:
+def test_modality_merge_commit_message(run_hopic, monkeypatch):
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        with open(run_hopic.toprepo / 'hopic-ci-config.yaml', 'w') as f:
             f.write(dedent('''\
                 version:
                   format: semver
@@ -561,7 +558,7 @@ def test_modality_merge_commit_message(tmp_path, monkeypatch):
         repo.create_tag('0.0.0')
 
         # Main branch moves on
-        with (toprepo / 'A.txt').open('w') as f:
+        with (run_hopic.toprepo / 'A.txt').open('w') as f:
             f.write('A')
         repo.index.add(('A.txt',))
         repo.index.commit(message='feat: add A', **_commitargs)
@@ -572,15 +569,15 @@ def test_modality_merge_commit_message(tmp_path, monkeypatch):
         repo.head.reset(index=True, working_tree=True)
 
         # Some change
-        with open(toprepo / 'something.txt', 'w') as f:
+        with open(run_hopic.toprepo / 'something.txt', 'w') as f:
             f.write('usable')
         repo.index.add(('something.txt',))
         repo.index.commit(message='feat: add something useful', **_commitargs)
 
     monkeypatch.setenv('GIT_COMMITTER_NAME' , 'My Name is Nobody')
     monkeypatch.setenv('GIT_COMMITTER_EMAIL', 'nobody@example.com')
-    result = run(
-            ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'),
+    (*_, result) = run_hopic(
+            ('checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'),
             ('prepare-source-tree',
                 '--author-name', _author.name,
                 '--author-email', _author.email,
@@ -593,14 +590,13 @@ def test_modality_merge_commit_message(tmp_path, monkeypatch):
     assert result.exit_code == 0
 
 
-def test_separate_modality_change(tmp_path):
+def test_separate_modality_change(run_hopic):
     """It should be possible to apply modality changes without requiring to perform a checkout-source-tree first.
 
     This will allow using this command locally by users and developers to make testing of those configs easier."""
 
-    toprepo = tmp_path / 'repo'
-    with git.Repo.init(toprepo, expand_vars=False) as repo:
-        with open(toprepo / 'hopic-ci-config.yaml', 'w') as f:
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        with open(run_hopic.toprepo / 'hopic-ci-config.yaml', 'w') as f:
             f.write(dedent('''\
                 version:
                   bump: no
@@ -615,8 +611,8 @@ def test_separate_modality_change(tmp_path):
         repo.index.add(('hopic-ci-config.yaml',))
         base_commit = repo.index.commit(message='Initial commit', **_commitargs)
 
-    result = run(
-            ('--workspace', str(toprepo),
+    (result,) = run_hopic(
+            ('--workspace', run_hopic.toprepo,
                 'prepare-source-tree',
                 '--author-name', _author.name,
                 '--author-email', _author.email,
@@ -626,7 +622,7 @@ def test_separate_modality_change(tmp_path):
         )
     assert result.exit_code == 0
 
-    with git.Repo(toprepo, expand_vars=False) as repo:
+    with git.Repo(run_hopic.toprepo, expand_vars=False) as repo:
         assert repo.head.commit != base_commit
         assert repo.head.commit.parents == (base_commit,)
 
@@ -642,7 +638,7 @@ def test_separate_modality_change(tmp_path):
     ('new-version-only', 'docs: something', '0.0.1-2', False),
     ('new-version-only', 'feat: something', '0.1.0'  , True ),
 ))
-def test_run_on_change(monkeypatch, tmp_path, run_on_change, commit_message, expected_version, expect_publish):
+def test_run_on_change(monkeypatch, run_hopic, run_on_change, commit_message, expected_version, expect_publish):
     expected = [
         ('echo', 'build-a', expected_version),
     ]
@@ -654,11 +650,10 @@ def test_run_on_change(monkeypatch, tmp_path, run_on_change, commit_message, exp
 
     monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
 
-    toprepo = tmp_path / 'repo'
-    with git.Repo.init(str(toprepo), expand_vars=False) as repo:
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
         cfg_file = 'hopic-ci-config.yaml'
 
-        with (toprepo / cfg_file).open('w') as f:
+        with (run_hopic.toprepo / cfg_file).open('w') as f:
             f.write(dedent(f"""\
                     version:
                       format: semver
@@ -689,25 +684,25 @@ def test_run_on_change(monkeypatch, tmp_path, run_on_change, commit_message, exp
 
         # Some change
         if commit_message is not None:
-            with (toprepo / 'something.txt').open('w') as f:
+            with (run_hopic.toprepo / 'something.txt').open('w') as f:
                 f.write('usable')
             repo.index.add(('something.txt',))
             repo.index.commit(message=commit_message, **_commitargs)
 
     # Successful checkout and build
     cmds = (
-            ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'),
+            ('checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'),
         ) + ((
             ('prepare-source-tree',
                 '--author-date', f"@{_git_time}",
                 '--commit-date', f"@{_git_time}",
                 '--author-name', _author.name,
                 '--author-email', _author.email,
-                'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful', '--title', commit_message),
+                'merge-change-request', '--source-remote', run_hopic.toprepo, '--source-ref', 'something-useful', '--title', commit_message),
         ) if commit_message is not None else ()) + (
             ('build',),
         )
-    result = run(*cmds)
+    (*_, result) = run_hopic(*cmds)
 
     assert result.exit_code == 0
     assert not expected
@@ -719,12 +714,11 @@ def test_run_on_change(monkeypatch, tmp_path, run_on_change, commit_message, exp
     ('0.0.0', False, '1.70.0'),
     ('0.0.0', True , '1.70.0'),
 ))
-def test_run_publish_version(monkeypatch, tmp_path, init_version, submittable_version, version_build):
-    toprepo = tmp_path / 'repo'
-    with git.Repo.init(str(toprepo), expand_vars=False) as repo:
+def test_run_publish_version(monkeypatch, run_hopic, init_version, submittable_version, version_build):
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
         cfg_file = 'hopic-ci-config.yaml'
 
-        with (toprepo / cfg_file).open('w') as f:
+        with (run_hopic.toprepo / cfg_file).open('w') as f:
             f.write(dedent(f"""\
                     version:
                       format: semver
@@ -768,12 +762,12 @@ def test_run_publish_version(monkeypatch, tmp_path, init_version, submittable_ve
 
     # Successful checkout and build
     cmds = (
-            ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'),
+            ('checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'),
         ) + (
             ('--publishable-version', 'build') if submittable_version else
             ('build',),
         )
-    result = run(*cmds)
+    (*_, result) = run_hopic(*cmds)
 
     assert result.exit_code == 0
     assert not expected
@@ -783,12 +777,11 @@ def test_run_publish_version(monkeypatch, tmp_path, init_version, submittable_ve
     ('feat: initial test feature', '0.1.0'),
     ('chore: initial test feature', None),
 ))
-def test_post_submit(tmp_path, capfd, monkeypatch, commit_message, expected_version):
+def test_post_submit(run_hopic, capfd, monkeypatch, commit_message, expected_version):
     username = 'test_username'
     password = 'super_secret'
     credential_id = 'test_credentialId'
     project_name = 'test-project'
-    toprepo = tmp_path / 'repo'
     init_version = '0.0.0'
 
     expected_post_submit_commands = [
@@ -797,8 +790,8 @@ def test_post_submit(tmp_path, capfd, monkeypatch, commit_message, expected_vers
     if expected_version:
         expected_post_submit_commands.append(('echo', 'on new version only'),)
 
-    with git.Repo.init(str(toprepo), expand_vars=False) as repo:
-        with (toprepo / 'hopic-ci-config.yaml').open('w') as f:
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        with (run_hopic.toprepo / 'hopic-ci-config.yaml').open('w') as f:
             f.write(dedent(f'''\
                     project-name: {project_name}
                     version:
@@ -836,7 +829,7 @@ def test_post_submit(tmp_path, capfd, monkeypatch, commit_message, expected_vers
         assert not repo.head.is_detached
 
         # Some change
-        with (toprepo / 'something.txt').open('w') as f:
+        with (run_hopic.toprepo / 'something.txt').open('w') as f:
             f.write('some text')
         repo.index.add(('something.txt',))
         repo.index.commit(message=commit_message, **_commitargs)
@@ -857,16 +850,16 @@ def test_post_submit(tmp_path, capfd, monkeypatch, commit_message, expected_vers
 
             monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
 
-        hopic_result = run(
+        (*_, hopic_result) = run_hopic(
             ('checkout-source-tree',
-             '--target-remote', str(toprepo),
+             '--target-remote', run_hopic.toprepo,
              '--target-ref', 'master',),
             ('prepare-source-tree',
              '--author-date', f"@{_git_time}",
              '--commit-date', f"@{_git_time}",
              '--author-name', _author.name,
              '--author-email', _author.email,
-             'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful', '--title', commit_message),
+             'merge-change-request', '--source-remote', run_hopic.toprepo, '--source-ref', 'something-useful', '--title', commit_message),
             ('build',),
             prepare_subprocess_mock,
             ('submit',)
@@ -884,16 +877,16 @@ def test_post_submit(tmp_path, capfd, monkeypatch, commit_message, expected_vers
     ('initial test feature'      , 'best feat ever'      , '0.1.0', False),
     ('feat: another feature'     , 'not conventional'    , '0.1.0', False),
 ))
-def test_merge_commit_message_bump(capfd, tmp_path, commit_message, merge_message, expected_version, strict):
-    result = merge_conventional_bump(capfd, tmp_path, commit_message, strict=strict, merge_message=merge_message)
+def test_merge_commit_message_bump(capfd, run_hopic, commit_message, merge_message, expected_version, strict):
+    result = merge_conventional_bump(capfd, run_hopic, commit_message, strict=strict, merge_message=merge_message)
     assert result.exit_code == 0
 
 
 @pytest.mark.parametrize('commit_message, merge_message, expected_version, strict', (
     ('feat: a feature',       'fix: a fix',       '0.1.0', True),
 ))
-def test_merge_commit_message_bump_error(capfd, tmp_path, commit_message, merge_message, expected_version, strict):
-    result = merge_conventional_bump(capfd, tmp_path, commit_message, strict=strict, merge_message=merge_message)
+def test_merge_commit_message_bump_error(capfd, run_hopic, commit_message, merge_message, expected_version, strict):
+    result = merge_conventional_bump(capfd, run_hopic, commit_message, strict=strict, merge_message=merge_message)
     assert result.exit_code == 36
 
 
@@ -901,10 +894,9 @@ def test_merge_commit_message_bump_error(capfd, tmp_path, commit_message, merge_
     False,
     True
 ))
-def test_merge_branch_twice(tmp_path, monkeypatch, note_mismatch):
-    toprepo = tmp_path / 'repo'
-    with git.Repo.init(toprepo, expand_vars=False) as repo:
-        with open(toprepo / 'hopic-ci-config.yaml', 'w') as f:
+def test_merge_branch_twice(run_hopic, monkeypatch, note_mismatch):
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        with open(run_hopic.toprepo / 'hopic-ci-config.yaml', 'w') as f:
             f.write(dedent('''\
                 version:
                   bump: no
@@ -916,7 +908,7 @@ def test_merge_branch_twice(tmp_path, monkeypatch, note_mismatch):
         repo.head.reset(index=True, working_tree=True)
 
         # Some change
-        with open(toprepo / 'something.txt', 'w') as f:
+        with open(run_hopic.toprepo / 'something.txt', 'w') as f:
             f.write('usable')
         repo.index.add(('something.txt',))
         repo.index.commit(message='feat: add something useful', **_commitargs)
@@ -925,19 +917,19 @@ def test_merge_branch_twice(tmp_path, monkeypatch, note_mismatch):
     monkeypatch.setenv('GIT_COMMITTER_EMAIL', 'nobody@example.com')
     monkeypatch.setattr(utils, 'installed_pkgs', lambda : 'hopic==42.42.42\nhopic-dep==0.0.0\n')
     checkout_and_merge = (
-        ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master', '--target-commit', str(base_commit)),
+        ('checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master', '--target-commit', str(base_commit)),
         ('prepare-source-tree',
             '--author-name', _author.name,
             '--author-email', _author.email,
             '--author-date', f"@{_git_time}",
             '--commit-date', f"@{_git_time}",
-            'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'feat/branch'),
+            'merge-change-request', '--source-remote', run_hopic.toprepo, '--source-ref', 'feat/branch'),
     )
 
-    result = run(*checkout_and_merge, ('submit',),)
+    (*_, result) = run_hopic(*checkout_and_merge, ('submit',),)
     assert result.exit_code == 0
 
-    with git.Repo(toprepo, expand_vars=False) as repo:
+    with git.Repo(run_hopic.toprepo, expand_vars=False) as repo:
         note = repo.git.notes('show', 'master', ref='hopic/master')
         assert re.match(
                 r'^Committed-by: Hopic.*\nWith Python version: .*\nAnd with these installed packages:\n.*\bhopic\b',
@@ -949,7 +941,7 @@ def test_merge_branch_twice(tmp_path, monkeypatch, note_mismatch):
     if note_mismatch:
         monkeypatch.setattr(utils, 'get_package_version', lambda package: '42.42.42')
 
-    result = run(*checkout_and_merge)
+    (*_, result) = run_hopic(*checkout_and_merge)
 
     if note_mismatch:
         assert result.exit_code == 39
@@ -959,10 +951,9 @@ def test_merge_branch_twice(tmp_path, monkeypatch, note_mismatch):
         assert result.exception is None
 
 
-def test_add_hopic_config_file(tmp_path):
-    toprepo = tmp_path / 'repo'
-    with git.Repo.init(str(toprepo), expand_vars=False) as repo:
-        with open(toprepo / 'something.txt', 'w') as f:
+def test_add_hopic_config_file(run_hopic):
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        with open(run_hopic.toprepo / 'something.txt', 'w') as f:
             f.write('usable')
         repo.index.add(('something.txt',))
         base_commit = repo.index.commit(message='Initial commit', **_commitargs)
@@ -972,7 +963,7 @@ def test_add_hopic_config_file(tmp_path):
         assert not repo.head.is_detached
         repo.head.reset(index=True, working_tree=True)
 
-        with (toprepo / 'hopic-ci-config.yaml').open('w') as f:
+        with (run_hopic.toprepo / 'hopic-ci-config.yaml').open('w') as f:
             f.write(dedent('''\
                 version:
                     bump: no
@@ -982,10 +973,10 @@ def test_add_hopic_config_file(tmp_path):
         repo.index.commit(message='chore: add hopic config file', **_commitargs)
 
     # Successful checkout and build
-    result = run(
-            ('checkout-source-tree', '--target-remote', str(toprepo), '--target-ref', 'master'),
+    (*_, result) = run_hopic(
+            ('checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'),
             ('prepare-source-tree', '--author-name', _author.name, '--author-email', _author.email,
-                'merge-change-request', '--source-remote', str(toprepo), '--source-ref', 'something-useful'),
+                'merge-change-request', '--source-remote', run_hopic.toprepo, '--source-ref', 'something-useful'),
             ('build',),
         )
     assert result.exit_code == 0

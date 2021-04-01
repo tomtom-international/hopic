@@ -1,4 +1,4 @@
-# Copyright (c) 2020 - 2020 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2020 - 2021 TomTom N.V.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,6 +18,14 @@ try:
 except ImportError:
     import importlib_metadata as metadata
 
+from io import StringIO
+
 PACKAGE : str = __package__.split('.')[0]
 
 hopic_cli = [ep for ep in metadata.entry_points()['console_scripts'] if ep.name == PACKAGE][0].load()
+
+
+def config_file(name: str, content: str):
+    f = StringIO(content)
+    f.name = name
+    return f
