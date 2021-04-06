@@ -17,7 +17,7 @@
 Changelog
 =========
 
-1.38.0-rc1
+1.38.0
 ======
 
 New features
@@ -29,6 +29,7 @@ Bug fixes
 ---------
 
 * fix: read config file directly after merge (#350)
+* fix: pin typeguard version until breaking issue is resolved (#353)
 
 1.37.0
 ======
