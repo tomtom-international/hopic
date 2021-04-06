@@ -17,6 +17,27 @@
 Changelog
 =========
 
+1.38.0-rc1
+======
+
+New features
+------------
+
+* feat: make source commit ranges available without 'foreach' (#349)
+
+Bug fixes
+---------
+
+* fix: read config file directly after merge (#350)
+
+1.37.0
+======
+
+New features
+------------
+
+* feat(template.utils): support options with the same name as Python keywords (#348)
+
 1.36.0
 ======
 
