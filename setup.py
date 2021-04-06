@@ -49,7 +49,7 @@ setup(
       'python-dateutil',
       'PyYAML',
       'setuptools',
-      'typeguard>=2.10,<3,!=2.11.0,!=2.11.1',
+      'typeguard>=2.10,<2.11,<3', # <2.11 should be removed after https://github.com/agronholm/typeguard/issues/175 is fixed
     ),
     setup_requires=(
       'setuptools_scm',
