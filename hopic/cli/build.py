@@ -64,7 +64,7 @@ from ..git_time import (
     restore_mtime_from_git,
     to_git_time,
 )
-
+from .global_obj import initialize_global_variables_from_config
 
 log = logging.getLogger(__name__)
 
@@ -497,7 +497,7 @@ def build(ctx, phase, variant, dry_run):
     single variant for a single phase.
     """
     # Ensure any required extensions are available
-    extensions.install_extensions.callback()
+    initialize_global_variables_from_config(extensions.install_extensions.callback())
 
     ctx.obj.dry_run = dry_run
     if dry_run:

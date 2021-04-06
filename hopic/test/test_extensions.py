@@ -354,6 +354,7 @@ def test_recursive_extension_installation_version_functionality(monkeypatch, run
             config: !template {first_pkg}
             """
         ),
+        tag="0.0.0"
     )
 
     assert result.exit_code == 0

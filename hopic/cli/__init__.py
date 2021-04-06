@@ -877,7 +877,9 @@ def merge_change_request(
             msg += '\n'.join(f"Acked-by: {approver}" for approver in approvers) + u'\n'
         msg += f'Merged-by: Hopic {get_package_version(PACKAGE)}\n'
 
-        read_config_to_click_context()
+        # Reread config & install extensions after potential configuration file change
+        install_extensions_and_parse_config()
+
         bump = ctx.obj.config['version']['bump']
         strict = bump.get('strict', False)
         try:
