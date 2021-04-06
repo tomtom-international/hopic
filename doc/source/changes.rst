@@ -30,7 +30,6 @@ Bug fixes
 
 * fix: read config file directly after merge (#350)
 * fix: pin typeguard version until breaking issue is resolved (#353)
-* fix: read version config directly after config is read (#351)
 
 1.37.0
 ======
