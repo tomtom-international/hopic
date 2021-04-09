@@ -41,6 +41,7 @@ from ..git_time import (
         restore_mtime_from_git,
         to_git_time,
     )
+from .global_obj import initialize_global_variables_from_config
 from ..versioning import (
         replace_version,
     )
@@ -282,6 +283,10 @@ def clean_repo(repo, clean_config=[]):
     restore_mtime_from_git(repo)
 
 
+def install_extensions_and_parse_config():
+    initialize_global_variables_from_config(extensions.install_extensions.callback())
+
+
 @main.command()
 @click.option('--target-remote'     , metavar='<url>')
 @click.option('--target-ref'        , metavar='<ref>')
@@ -451,10 +456,7 @@ def process_prepare_source_tree(
 
         # Re-read config when it was not read already to ensure any changes introduced by 'change_applicator' are taken into account
         if not commit_params.pop('config_parsed', False):
-            read_config_to_click_context()
-
-        # Ensure any required extensions are available
-        extensions.install_extensions.callback()
+            install_extensions_and_parse_config()
 
         # Ensure that, when we're dealing with a separated config and code repository, that the code repository is checked out again to the newer version
         if ctx.obj.code_dir != ctx.obj.workspace:
@@ -750,17 +752,6 @@ def process_prepare_source_tree(
             click.echo(ctx.obj.version)
 
 
-@click.pass_context
-def read_config_to_click_context(ctx):
-    try:
-        config_file = determine_config_file_name(ctx)
-        ctx.obj.config = read_config(config_file, ctx.obj.volume_vars)
-        ctx.obj.config_dir = config_file.parent
-        ctx.obj.volume_vars['CFGDIR'] = str(ctx.obj.config_dir)
-    except (click.BadParameter, KeyError, TypeError, OSError, IOError, YAMLError):
-        pass
-
-
 @prepare_source_tree.command()
 @click.pass_context
 # git
@@ -933,7 +924,7 @@ def apply_modality_change(
     """
 
     # Ensure any required extensions are available
-    extensions.install_extensions.callback()
+    install_extensions_and_parse_config()
 
     modality_cmds = ctx.obj.config.get('modality-source-preparation', {}).get(modality, ())
 
