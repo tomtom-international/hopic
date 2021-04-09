@@ -17,7 +17,6 @@ from .markers import (
     )
 from .. import credentials
 from .. import config_reader
-from ..cli import extensions
 
 from textwrap import dedent
 from typing import Pattern
@@ -1011,6 +1010,7 @@ def test_dry_run_build(capfd, monkeypatch, run_hopic):
     template_build_command = ['build b from template']
 
     expected = [
+        ['https://test.pypi.org/simple/', 'test_template>=42.42'],
         ['[dry-run] would execute:'],
         ['generate doc/build/html/output.txt'],
         template_build_command,
@@ -1019,7 +1019,8 @@ def test_dry_run_build(capfd, monkeypatch, run_hopic):
     ]
 
     def mock_check_call(args, *popenargs, **kwargs):
-        assert False
+        assert 'https://test.pypi.org/simple/' in args and 'test_template>=42.42' in args
+
     monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
 
     def mock_load_template(*args, **kwargs):
@@ -1027,11 +1028,6 @@ def test_dry_run_build(capfd, monkeypatch, run_hopic):
             'sh': template_build_command
         }]
     monkeypatch.setattr(config_reader, 'load_yaml_template', mock_load_template)
-
-    def mock_install_extensions(ctx):
-        pass
-    mock_install_extensions.callback = lambda: 0
-    monkeypatch.setattr(extensions, 'install_extensions', mock_install_extensions)
 
     (result,) = run_hopic(
         ("build", "--dry-run"),
