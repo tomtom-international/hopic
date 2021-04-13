@@ -488,6 +488,7 @@ class ModalityRequest extends ChangeRequest {
 }
 
 class NodeExecution {
+  String allocation_group
   String exec_name
   long end_time     // unix epoch time (in ms)
   long request_time // unix epoch time (in ms)
@@ -1229,6 +1230,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   private def on_node(Map node_params = [:], Closure closure) {
     def node_expr = node_params.getOrDefault("node_expr", this.default_node_expr)
     def exec_name = node_params.getOrDefault("exec_name", "no execution name")
+    def allocation_group = node_params.getOrDefault("allocation_group", exec_name)
     def request_time = this.get_unix_epoch_time()
     return steps.node(node_expr) {
       if (!this.nodes_usage.containsKey(steps.env.NODE_NAME)) {
@@ -1241,7 +1243,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       }
       NodeExecution usage_entry
       if (exec_name != null) {
-        usage_entry = new NodeExecution(exec_name: exec_name, request_time: request_time, start_time: this.get_unix_epoch_time())
+        usage_entry = new NodeExecution(allocation_group: allocation_group, exec_name: exec_name, request_time: request_time, start_time: this.get_unix_epoch_time())
         this.nodes_usage.get(steps.env.NODE_NAME, [:]).get(steps.env.EXECUTOR_NUMBER as Integer, []).add(usage_entry)
       }
       def build_result = 'SUCCESS'
@@ -1548,7 +1550,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
               if (this.nodes.containsKey(variant)) {
                 label = this.nodes[variant]
               }
-              this.on_node(node_expr: label, exec_name: "${phase}-${variant}") {
+              this.on_node(node_expr: label, exec_name: "${phase}-${variant}", allocation_group: phase) {
                 with_workspace_for_variant(variant) {
                   this.with_hopic(variant) { cmd ->
                     // If working with multiple executors on this node, uniquely identify this node by variant
