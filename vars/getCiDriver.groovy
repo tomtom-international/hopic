@@ -1751,6 +1751,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
         throw e
       } finally {
         this.printMetrics.print_node_usage(this.nodes_usage)
+        this.printMetrics.print_critical_path(this.nodes_usage)
       }
 
       if (this.change != null) {
