@@ -33,6 +33,7 @@ Contents
    usage
    intro
    config
+   hotfix
    CONTRIBUTING
    changes
 

@@ -177,6 +177,16 @@ This assumes that the other git repo's are protected with a named lock while mer
 ``repo-name``
     Target git repo-name that needs to be protected
 
+``lock-on-change`` (optional)
+    Specifies when additional lock is acquired. Can only be one of the following values:
+     - *always* (default)
+     - *never*
+     - *new-version-only* (only acquire lock when version is bumped)
+
+``from-phase-onward`` (optional)
+    Acquire the lock only at the start of the specified phase
+    By default it would be acquired at the start of the build instead.
+
 The named lock that Hopic will acquire is formatted as ``repo-name``/``branch``
 If all merge checks pass and Hopic is going to submit the merge, all specified addition locks will be acquired at the beginning of a build, alongside the repository's own lock.
 
@@ -366,6 +376,39 @@ And this Hopic config file:
 The result will be to use the ``hub.docker.com/tomtom/python:3.6.5`` image by default.
 The ``PyPy`` build will instead use the ``hub.docker.com/tomtom/pypy:3.6.5`` image.
 I.e. for that build the image name is overridden from that used in the Ivy manifest, while still using the version from it.
+
+Extra Docker arguments
+----------------------
+
+.. option:: extra-docker-args
+
+There is a limited subset of ``docker run`` arguments that can be specified for a variant:
+
+``add-host``
+    This options accepts one value or a list of values.
+    Translates into ``docker run`` argument ``--add-host=<value>``, allowing the user to add a custom DNS entry to the container.
+    If a list is provided, the option shall be expanded to multiple ``--add-host`` arguments, e.g. ``--add-host=<list-item-1> --add-host=<list-item-2>``.
+
+``device``
+    This options accepts one value or a list of values.
+    Translates into ``docker run`` argument ``--device=<value>``, allowing the user to forward a device from the host machine to the container.
+    If a list is provided, the option shall be expanded to multiple ``--device`` arguments.
+
+``dns``
+    Translates into ``docker run`` argument ``--dns=<value>``, allowing the user to specify custom DNS servers to be used in the container.
+
+``entrypoint``
+    Translates into ``docker run`` argument ``--entrypoint=<value>``, allowing the user to override the entrypoint as defined in the Docker image.
+
+``hostname``
+    Translates into ``docker run`` argument ``--hostname=<value>``, allowing the user to specify the hostname that the container shall use.
+
+``init``
+    This option only accepts boolean value ``True``.
+    When provided, this translates into ``docker run`` argument ``--init``, which adds an init daemon to the container.
+
+.. literalinclude:: ../../examples/docker-extra-args.yaml
+    :language: yaml
 
 Docker in Docker
 ----------------
@@ -738,12 +781,14 @@ Repeating Steps for Commits
 Change Request Commits
 ^^^^^^^^^^^^^^^^^^^^^^
 
-``SOURCE_COMMIT``
+* ``SOURCE_COMMIT``
+* ``SOURCE_COMMITS``
 
 Change Request Autosquashed Commits
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-``AUTOSQUASHED_COMMIT``
+* ``AUTOSQUASHED_COMMIT``
+* ``AUTOSQUASHED_COMMITS``
 
 Sub SCM
 -------
@@ -765,6 +810,21 @@ For more information about this feature see: https://www.tutorialspoint.com/jenk
 **example:**
 
 .. literalinclude:: ../../examples/junit.yaml
+    :language: yaml
+
+JUnit allow-missing
+-----------------
+
+.. option:: allow-missing
+
+Normally, a build fails if none of the specified JUnit XML files are found.
+Setting this option's value to true allows the build to continue even if no JUnit XML files were found.
+When this option is specified, JUnit configuration must contain also a ``test-results`` option which specifies
+which XML files to be uploaded.
+
+**example:**
+
+.. literalinclude:: ../../examples/allow-missing-junit.yaml
     :language: yaml
 
 Artifact Archiving
@@ -851,6 +911,27 @@ Set this value to ``true`` to enable this option.
 **example:**
 
 .. literalinclude:: ../../examples/upload-on-fail.yaml
+    :language: yaml
+
+Artifact allow-empty-archive
+----------------------------
+
+.. note:: ``allow-empty-archive`` is a deprecated name for the ``allow-missing`` option.
+Avoid its use as it will be removed in the next release.
+Enabling both ``allow-empty-archive`` and  ``allow-missing`` will result in a configuration error.
+
+Artifact allow-missing
+----------------------
+
+.. option:: allow-missing
+
+Normally, a build fails if archiving returns zero artifacts. This option allows the archiving process to return
+nothing without failing the build. Instead, the archive step will simply throw a warning.
+Set this value to ``true`` to enable this option.
+
+**example:**
+
+.. literalinclude:: ../../examples/allow-missing-archive.yaml
     :language: yaml
 
 Embed scripts
