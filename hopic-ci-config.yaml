@@ -62,12 +62,16 @@ phases:
     sphinx-doc:
       - rm -rf doc/build/venv
       - python3 -m venv --clear doc/build/venv
-      - doc/build/venv/bin/python -m pip install setuptools_scm setuptools_scm_git_archive . -r doc-requirements.txt
+      - doc/build/venv/bin/python -m pip install --upgrade setuptools setuptools_scm setuptools_scm_git_archive . -r doc-requirements.txt
       - archive:
           artifacts: doc/build/html/**
         worktrees:
           doc/build/html:
             commit-message: "Update documentation for ${VERSION}"
+        with-credentials:
+          id: ssh_svc_bitbucket_access
+          type: ssh-key
+          ssh-command-variable: GIT_SSH
         sh: >
           sh -x -c ':
           && find doc/build/html -maxdepth 1 -not -path doc/build/html -not -name .git\* -exec rm -v -r "{}" +

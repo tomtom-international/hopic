@@ -1,4 +1,4 @@
-# Copyright (c) 2018 - 2020 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2018 - 2021 TomTom N.V. (https://tomtom.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ from configparser import (
 from datetime import datetime
 import logging
 import os
+from pathlib import Path
 
 import click
 import click_log
@@ -127,17 +128,19 @@ def main(ctx, color, config, workspace, whitelisted_var, publishable_version):
     for param in ctx.command.params:
         ctx.obj.register_parameter(ctx=ctx, param=param)
         if param.human_readable_name == 'workspace' and workspace is not None:
+            workspace = Path(workspace)
             if ctx.invoked_subcommand != 'checkout-source-tree':
                 # Require the workspace directory to exist for anything but the checkout command
-                if not os.path.isdir(workspace):
+                if not workspace.is_dir():
                     raise click.BadParameter(
                         f"Directory '{workspace}' does not exist.",
                         ctx=ctx, param=param
                     )
         elif param.human_readable_name == 'config' and config is not None:
+            config = Path(config)
             # Require the config file to exist everywhere that it's used
             try:
-                # Try to open the file instead of os.path.isfile because we want to be able to use /dev/null too
+                # Try to open the file instead of config.is_file() because we want to be able to use /dev/null too
                 with open(config, 'rb'):
                     pass
             except IOError:
@@ -150,27 +153,28 @@ def main(ctx, color, config, workspace, whitelisted_var, publishable_version):
 
     if workspace is None:
         # workspace default
-        if config is not None and config != os.devnull:
+        if config is not None and config != Path(os.devnull):
             try:
-                with git.Repo(os.path.dirname(config), search_parent_directories=True) as repo:
+                with git.Repo(config.parent, search_parent_directories=True) as repo:
                     # Default to containing repository of config file, ...
-                    workspace = repo.working_dir
+                    workspace = Path(repo.working_dir)
             except (git.InvalidGitRepositoryError, git.NoSuchPathError):
                 # ... but fall back to containing directory of config file.
-                workspace = os.path.dirname(config)
+                workspace = config.parent
         else:
-            workspace = os.getcwd()
-    workspace = os.path.join(os.getcwd(), workspace)
+            workspace = Path.cwd()
+    workspace = Path.cwd() / workspace
     ctx.obj.workspace = workspace
 
     ctx.obj.volume_vars = {}
     try:
         with git.Repo(workspace) as repo, repo.config_reader() as cfg:
-            code_dir = os.path.join(workspace, cfg.get_value('hopic.code', 'dir'))
+            code_dir = workspace / cfg.get_value('hopic.code', 'dir')
     except (git.InvalidGitRepositoryError, git.NoSuchPathError, NoOptionError, NoSectionError):
         code_dir = workspace
 
-    ctx.obj.code_dir = ctx.obj.volume_vars['WORKSPACE'] = code_dir
+    ctx.obj.code_dir = code_dir
+    ctx.obj.volume_vars['WORKSPACE'] = str(code_dir)
     source_date = determine_source_date(code_dir)
     if source_date is not None:
         ctx.obj.source_date = source_date
@@ -198,15 +202,16 @@ def main(ctx, color, config, workspace, whitelisted_var, publishable_version):
 
     cfg = {}
     if config is not None:
-        if not os.path.isabs(config) and config != os.devnull:
-            config = os.path.join(os.getcwd(), config)
-        ctx.obj.volume_vars['CFGDIR'] = ctx.obj.config_dir = os.path.dirname(config)
+        if not config.is_absolute() and not config.is_reserved():
+            config = Path.cwd() / config
+        ctx.obj.config_dir = config.parent
+        ctx.obj.volume_vars['CFGDIR'] = str(ctx.obj.config_dir)
         # Prevent reading the config file _before_ performing a checkout. This prevents a pre-existing file at the same
         # location from being read as the config file. This may cause problems if that pre-checkout file has syntax
         # errors for example.
         if ctx.invoked_subcommand != 'checkout-source-tree':
             try:
-                # Try to open the file instead of os.path.isfile because we want to be able to use /dev/null too
+                # Try to open the file instead of config.is_file() because we want to be able to use /dev/null too
                 with open(config, 'rb'):
                     pass
             except IOError:

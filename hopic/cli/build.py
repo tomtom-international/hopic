@@ -1,4 +1,4 @@
-# Copyright (c) 2018 - 2020 TomTom N.V.
+# Copyright (c) 2018 - 2021 TomTom N.V.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,10 +18,12 @@ import shlex
 import signal
 import stat
 import subprocess
+import sys
 import tempfile
 import urllib.parse
 from collections.abc import (
     Mapping,
+    Sequence,
 )
 
 import click
@@ -54,6 +56,7 @@ from ..config_reader import (
 )
 from ..errors import (
     MissingCredentialVarError,
+    MissingFileError,
     UnknownPhaseError,
 )
 from ..execution import echo_cmd_click as echo_cmd
@@ -84,9 +87,12 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
     if hopic_git_info.submit_ref is not None:
         volume_vars['GIT_BRANCH'] = hopic_git_info.submit_ref
 
-    artifacts = []
+    mandatory_artifacts = []
+    mandatory_junit = []
+    optional_artifacts = []
     worktree_commits = {}
     variant_credentials = {}
+    extra_docker_run_args = []
     with DockerContainers() as volumes_from:
         # If the branch is not allowed to publish, skip the publish phase. If run_on_change is set to 'always', phase will be run anyway regardless of
         # this condition. For build phase, run_on_change is set to 'always' by default, so build will always happen.
@@ -134,10 +140,25 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                         'fingerprint',
                     ):
                 try:
-                    artifacts.extend(expand_vars(volume_vars, (
-                        artifact['pattern'] for artifact in cmd[artifact_key]['artifacts'] if 'pattern' in artifact)))
+                    opt = cmd[artifact_key]
                 except (KeyError, TypeError):
                     pass
+                else:
+                    if artifact_key == "junit":
+                        new_artifacts = opt["test-results"]
+                    else:
+                        new_artifacts = (artifact["pattern"].replace("(*)", "*") for artifact in opt["artifacts"])
+                    if opt["allow-missing"]:
+                        optional_artifacts.extend(new_artifacts)
+                    else:
+                        mandatory_artifacts.extend(new_artifacts)
+            try:
+                junit = cmd["junit"]
+            except (KeyError, TypeError):
+                pass
+            else:
+                if not junit["allow-missing"]:
+                    mandatory_junit.extend(junit["test-results"])
 
             if not ctx.obj.dry_run:
                 try:
@@ -146,7 +167,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                     # Force clean builds when we don't know how to discover changed files
                     for subdir, worktree in worktrees.items():
                         if 'changed-files' not in worktree:
-                            with git.Repo(os.path.join(ctx.obj.workspace, subdir)) as repo:
+                            with git.Repo(ctx.obj.workspace / subdir) as repo:
                                 clean_output = repo.git.clean('-xd', subdir, force=True)
                                 if clean_output:
                                     log.info('%s', clean_output)
@@ -159,7 +180,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                 pass
 
             try:
-                scoped_volumes = expand_docker_volume_spec(ctx.obj.volume_vars['CFGDIR'],
+                scoped_volumes = expand_docker_volume_spec(ctx.obj.config_dir,
                                                            ctx.obj.volume_vars, cmd['volumes'],
                                                            add_defaults=False)
                 volumes.update(scoped_volumes)
@@ -170,6 +191,24 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                 image = cmd['image']
             except KeyError:
                 pass
+
+            cmd_extra_docker_run_args = cmd.get('extra-docker-args', '')
+            if cmd_extra_docker_run_args:
+                if not image:
+                    log.warning('`extra-docker-args` has no effect if no Docker image is configured')
+                else:
+                    for arg in cmd_extra_docker_run_args:
+                        value = cmd_extra_docker_run_args[arg]
+                        if isinstance(value, bool):
+                            if not value:
+                                log.warning('A "False" value for an `extra-docker-args` argument has no meaning and will be ignored')
+                            else:
+                                extra_docker_run_args.append(f'--{arg}')
+                        else:
+                            if (isinstance(value, Sequence) and not isinstance(value, str)):
+                                extra_docker_run_args.extend((f'--{arg}={v}' for v in value))
+                            else:
+                                extra_docker_run_args.append(f'--{arg}={value}')
 
             try:
                 docker_in_docker = cmd['docker-in-docker']
@@ -215,7 +254,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
             except KeyError:
                 continue
 
-            volume_vars['WORKSPACE'] = '/code' if image is not None else ctx.obj.code_dir
+            volume_vars['WORKSPACE'] = '/code' if image is not None else str(ctx.obj.code_dir)
 
             env = (dict(
                 HOME            = '/home/sandbox',              # noqa: E251 "unexpected spaces around '='"
@@ -272,7 +311,6 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                                       '--rm',
                                       f"--cidfile={cidfile}",
                                       '--net=host',
-                                      '--tty',
                                       '--cap-add=SYS_PTRACE',
                                       f"--tmpfs={final_env['HOME']}:exec,uid={uid},gid={gid}",
                                       f"--user={uid}:{gid}",
@@ -280,6 +318,9 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                                       ] + [
                                           f"--env={k}={v}" for k, v in final_env.items()
                                       ]
+
+                        if all(hasattr(fd, 'isatty') and fd.isatty() for fd in [sys.stderr, sys.stdout, sys.stdin]):
+                            docker_run += ['--tty']
 
                         if docker_in_docker:
                             try:
@@ -300,6 +341,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                         for volume_from in volumes_from:
                             docker_run += ['--volumes-from=' + volume_from]
 
+                        docker_run += extra_docker_run_args
                         docker_run.append(str(image))
                         final_cmd = docker_run + final_cmd
                     new_env = os.environ.copy()
@@ -348,7 +390,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                             pass
 
             for subdir, worktree in worktrees.items():
-                with git.Repo(os.path.join(ctx.obj.workspace, subdir)) as repo:
+                with git.Repo(ctx.obj.workspace / subdir) as repo:
                     worktree_commits.setdefault(subdir, [
                         str(repo.head.commit),
                         str(repo.head.commit),
@@ -406,13 +448,32 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                         repo.create_head(worktree_ref, submit_commit)
                     bundle_commits.append(f"{base_commit}..{worktree_ref}")
                     refspecs.append(f"{submit_commit}:{worktree_ref}")
-                repo.git.bundle('create', os.path.join(ctx.obj.workspace, 'worktree-transfer.bundle'), *bundle_commits)
+                repo.git.bundle('create', ctx.obj.workspace / 'worktree-transfer.bundle', *bundle_commits)
 
                 git_cfg.set_value(section, 'refspecs', ' '.join(shlex.quote(refspec) for refspec in refspecs))
 
         # Post-processing to make these artifacts as reproducible as possible
-        for artifact in artifacts:
-            binary_normalize.normalize(os.path.join(ctx.obj.code_dir, artifact), source_date_epoch=ctx.obj.source_date_epoch)
+        for artifact_pattern in optional_artifacts:
+            for artifact in ctx.obj.code_dir.glob(artifact_pattern):
+                binary_normalize.normalize(artifact, source_date_epoch=ctx.obj.source_date_epoch)
+
+        pattern_matched = False
+        mandatory_artifacts = [expand_vars(volume_vars, exp) for exp in mandatory_artifacts]
+        for pattern in mandatory_artifacts:
+            for artifact in ctx.obj.code_dir.glob(pattern):
+                pattern_matched = True
+                binary_normalize.normalize(artifact, source_date_epoch=ctx.obj.source_date_epoch)
+        if mandatory_artifacts and not pattern_matched:
+            raise MissingFileError(f"none of these mandatory artifact patterns matched a file: {mandatory_artifacts}")
+
+        pattern_matched = False
+        mandatory_junit = [expand_vars(volume_vars, exp) for exp in mandatory_junit]
+        for pattern in mandatory_junit:
+            for _ in ctx.obj.code_dir.glob(pattern):
+                pattern_matched = True
+                break
+        if mandatory_junit and not pattern_matched:
+            raise MissingFileError(f"none of these mandatory junit patterns matched a file: {mandatory_junit}")
 
 
 @click.command()

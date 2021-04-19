@@ -1,4 +1,4 @@
-# Copyright (c) 2018 - 2020 TomTom N.V.
+# Copyright (c) 2018 - 2021 TomTom N.V.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -67,17 +67,26 @@ from io import (
 import json
 import logging
 import os
+from pathlib import Path
 import platform
 import re
 import shlex
 import shutil
 import subprocess
 import sys
+from typing import (
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
 from textwrap import dedent
 from yaml.error import YAMLError
 
 from .main import main
 from ..errors import (
+    CommitAncestorMismatchError,
+    GitNotesMismatchError,
     VersionBumpMismatchError,
     VersioningError,
 )
@@ -146,7 +155,18 @@ def may_publish(ctx):
     ctx.exit(0 if is_publish_branch(ctx) else 1)
 
 
-def checkout_tree(tree, remote, ref, clean=False, remote_name='origin', allow_submodule_checkout_failure=False, clean_config=[]):
+def checkout_tree(
+    tree,
+    remote,
+    ref,
+    *,
+    commit: Optional[str] = None,
+    clean: bool = False,
+    remote_name: str = 'origin',
+    tags: bool = True,
+    allow_submodule_checkout_failure: bool = False,
+    clean_config: Union[List, Tuple] = (),
+):
     try:
         repo = git.Repo(tree)
         # Cleanup potential existing submodules to avoid conflicts in PR's where submodules are added
@@ -178,9 +198,9 @@ def checkout_tree(tree, remote, ref, clean=False, remote_name='origin', allow_su
             cfg.set_value('color', 'ui', 'always')
             cfg.set_value('hopic.code', 'cfg-clean', str(clean))
 
-        tags = repo.tags
-        if tags:
-            repo.delete_tag(*repo.tags)
+        clean_tags = tags and repo.tags
+        if clean_tags:
+            repo.delete_tag(*clean_tags)
 
         try:
             # Delete, instead of update, existing remotes.
@@ -190,7 +210,13 @@ def checkout_tree(tree, remote, ref, clean=False, remote_name='origin', allow_su
             pass
         origin = repo.create_remote(remote_name, remote)
 
-        commit = origin.fetch(ref, tags=True)[0].commit
+        fetch_info, *_ = origin.fetch(ref, tags=tags)
+
+        if commit is not None and not repo.is_ancestor(commit, fetch_info.commit):
+            raise CommitAncestorMismatchError(commit, fetch_info.commit, ref)
+
+        commit = repo.commit(commit) if commit else fetch_info.commit
+
         repo.head.reference = commit
         repo.head.reset(index=True, working_tree=True)
         # Remove potentially moved submodules
@@ -259,18 +285,35 @@ def clean_repo(repo, clean_config=[]):
 @main.command()
 @click.option('--target-remote'     , metavar='<url>')
 @click.option('--target-ref'        , metavar='<ref>')
+@click.option('--target-commit'     , metavar='<commit>')
 @click.option('--clean/--no-clean'  , default=False, help='''Clean workspace of non-tracked files''')
 @click.option('--ignore-initial-submodule-checkout-failure/--no-ignore-initial-submodule-checkout-failure',
               default=False, help='''Ignore git submodule errors during initial checkout''')
 @click.pass_context
-def checkout_source_tree(ctx, target_remote, target_ref, clean, ignore_initial_submodule_checkout_failure):
+def checkout_source_tree(
+    ctx,
+    target_remote,
+    target_ref,
+    target_commit,
+    clean,
+    ignore_initial_submodule_checkout_failure,
+):
     """
     Checks out a source tree of the specified remote's ref to the workspace.
     """
 
     workspace = ctx.obj.workspace
     # Check out specified repository
-    click.echo(checkout_tree(workspace, target_remote, target_ref, clean, allow_submodule_checkout_failure=ignore_initial_submodule_checkout_failure))
+    click.echo(
+        checkout_tree(
+            workspace,
+            target_remote,
+            target_ref,
+            commit=target_commit,
+            clean=clean,
+            allow_submodule_checkout_failure=ignore_initial_submodule_checkout_failure,
+        )
+    )
 
     try:
         ctx.obj.config = read_config(determine_config_file_name(ctx), ctx.obj.volume_vars)
@@ -292,7 +335,7 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean, ignore_initial_s
 
             for subdir, ref in worktrees.items():
                 try:
-                    os.remove(os.path.join(workspace, subdir, '.git'))
+                    os.remove(workspace / subdir / '.git')
                 except (OSError, IOError):
                     pass
                 clean_output = repo.git.clean('-xd', subdir, force=True)
@@ -308,10 +351,10 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean, ignore_initial_s
         return
 
     code_dir_re = re.compile(r'^code(?:-\d+)$')
-    code_dirs = sorted(dir for dir in os.listdir(workspace) if code_dir_re.match(dir))
+    code_dirs = sorted(Path(dir) for dir in os.listdir(workspace) if code_dir_re.match(dir))
     for dir in code_dirs:
         try:
-            with git.Repo(os.path.join(workspace, dir)):
+            with git.Repo(workspace / dir):
                 pass
         except (git.InvalidGitRepositoryError, git.NoSuchPathError):
             pass
@@ -321,23 +364,28 @@ def checkout_source_tree(ctx, target_remote, target_ref, clean, ignore_initial_s
     else:
         seq = 0
         while True:
-            dir = ('code' if seq == 0 else f"code-{seq:03}")
+            dir = Path('code' if seq == 0 else f"code-{seq:03}")
             seq += 1
             if dir not in code_dirs:
                 code_dir = dir
                 break
 
     # Check out configured repository and mark it as the code directory of this one
-    ctx.obj.code_dir = os.path.join(workspace, code_dir)
+    ctx.obj.code_dir = workspace / code_dir
     with git.Repo(workspace) as repo, repo.config_writer() as cfg:
         cfg.remove_section('hopic.code')
-        cfg.set_value('hopic.code', 'dir', code_dir)
+        cfg.set_value('hopic.code', 'dir', str(code_dir))
         cfg.set_value('hopic.code', 'cfg-remote', target_remote)
         cfg.set_value('hopic.code', 'cfg-ref', target_ref)
         cfg.set_value('hopic.code', 'cfg-clean', str(clean))
 
-    checkout_tree(ctx.obj.code_dir, git_cfg.get('remote', target_remote), git_cfg.get('ref', target_ref),
-                  clean, clean_config=ctx.obj.config['clean'])
+    checkout_tree(
+        ctx.obj.code_dir,
+        git_cfg.get("remote", target_remote),
+        git_cfg.get("ref", target_ref),
+        clean=clean,
+        clean_config=ctx.obj.config["clean"],
+    )
 
 
 @main.group()
@@ -405,7 +453,8 @@ def process_prepare_source_tree(
         try:
             config_file = determine_config_file_name(ctx)
             ctx.obj.config = read_config(config_file, ctx.obj.volume_vars)
-            ctx.obj.volume_vars['CFGDIR'] = ctx.obj.config_dir = os.path.dirname(config_file)
+            ctx.obj.config_dir = config_file.parent
+            ctx.obj.volume_vars['CFGDIR'] = str(ctx.obj.config_dir)
         except (click.BadParameter, KeyError, TypeError, OSError, IOError, YAMLError):
             pass
 
@@ -420,11 +469,17 @@ def process_prepare_source_tree(
                 except (KeyError, TypeError):
                     code_remote = cfg.get_value('hopic.code', 'cfg-remote')
                 try:
-                    code_commit = ctx.obj.config['scm']['git']['ref']
+                    code_ref = ctx.obj.config["scm"]["git"]["ref"]
                 except (KeyError, TypeError):
-                    code_commit = cfg.get_value('hopic.code', 'cfg-ref')
+                    code_ref = cfg.get_value("hopic.code", "cfg-ref")
 
-            checkout_tree(ctx.obj.code_dir, code_remote, code_commit, code_clean, clean_config=ctx.obj.config['clean'])
+            checkout_tree(
+                ctx.obj.code_dir,
+                code_remote,
+                code_ref,
+                clean=code_clean,
+                clean_config=ctx.obj.config["clean"],
+            )
 
         version_info = ctx.obj.config['version']
 
@@ -439,10 +494,7 @@ def process_prepare_source_tree(
 
         bump = version_info['bump'].copy()
         bump.update(commit_params.pop('bump-override', {}))
-        merge_message = None
         strict = bump.get('strict', False)
-        if 'message' in commit_params:
-            merge_message = parse_commit_message(commit_params['message'], policy=bump['policy'], strict=strict)
 
         source_commits = (
                 () if source_commit is None and base_commit is None
@@ -498,10 +550,6 @@ def process_prepare_source_tree(
                             hash_prefix = ''
                         log.debug("%s[%-8s][%-4s][%-3s]: %s", hash_prefix, breaking, feat, fix, commit.full_subject)
                 new_version = ctx.obj.version.next_version_for_commits(source_commits)
-                if merge_message and strict:
-                    merge_commit_next_version = ctx.obj.version.next_version_for_commits([merge_message])
-                    if new_version != merge_commit_next_version:
-                        raise VersionBumpMismatchError(new_version, merge_commit_next_version)
             else:
                 raise NotImplementedError(f"unsupported version bumping policy {bump['policy']}")
 
@@ -513,7 +561,7 @@ def process_prepare_source_tree(
                 ctx.obj.version = new_version
 
                 if 'file' in version_info:
-                    replace_version(os.path.join(ctx.obj.config_dir, version_info['file']), ctx.obj.version)
+                    replace_version(ctx.obj.config_dir / version_info['file'], ctx.obj.version)
                     repo.index.add((relative_version_file,))
                     if bump_message is not None:
                         commit_params.setdefault('message', bump_message)
@@ -548,21 +596,33 @@ def process_prepare_source_tree(
                     env['GIT_AUTHOR_DATE'] = commit_params['author_date']
                 if 'commit_date' in commit_params:
                     env['GIT_COMMITTER_DATE'] = commit_params['commit_date']
-                repo.git.notes(
+
+                hopic_commit_version = f"Committed-by: Hopic {utils.get_package_version(PACKAGE)}"
+                notes_message = dedent("""\
+                {hopic_commit_version}
+
+                With Python version: {python_version}
+
+                And with these installed packages:
+                {pkgs}
+                """).format(
+                    hopic_commit_version=hopic_commit_version,
+                    pkgs=pkgs,
+                    python_version=platform.python_version())
+
+                try:
+                    notes = repo.git.notes('show', submit_commit.hexsha, ref=notes_ref)
+                    if hopic_commit_version not in notes:
+                        raise GitNotesMismatchError(submit_commit.hexsha, notes_message, notes)
+                except git.GitCommandError:
+                    notes = None
+
+                if notes is None:
+                    repo.git.notes(
                         'add', submit_commit.hexsha,
-                        '--message=' + dedent("""\
-                        Committed-by: Hopic {version}
-
-                        With Python version: {python_version}
-
-                        And with these installed packages:
-                        {pkgs}
-                        """).format(
-                            pkgs=pkgs,
-                            version=get_package_version(PACKAGE),
-                            python_version=platform.python_version(),
-                        ),
+                        '--message=' + notes_message,
                         ref=notes_ref, env=env)
+
                 notes_ref = f"{repo.commit(notes_ref)}:refs/notes/hopic/{target_ref}"
         else:
             submit_commit = repo.head.commit
@@ -647,7 +707,7 @@ def process_prepare_source_tree(
             log.debug("bumped post-submit version to: %s", click.style(str(after_submit_version), fg='blue'))
 
             new_version_file = StringIO()
-            replace_version(os.path.join(ctx.obj.config_dir, version_info['file']), after_submit_version, outfile=new_version_file)
+            replace_version(ctx.obj.config_dir / version_info['file'], after_submit_version, outfile=new_version_file)
             new_version_file = new_version_file.getvalue().encode(sys.getdefaultencoding())
 
             old_version_blob = submit_commit.tree[relative_version_file]
@@ -696,6 +756,7 @@ def process_prepare_source_tree(
 
 
 @prepare_source_tree.command()
+@click.pass_context
 # git
 @click.option('--source-remote' , metavar='<url>', help='<source> remote to merge into <target>')
 @click.option('--source-ref'    , metavar='<ref>', help='ref of <source> remote to merge into <target>')
@@ -704,6 +765,7 @@ def process_prepare_source_tree(
 @click.option('--description'   , metavar='<description>'          , help='''Change request description to incorporate in merge commit message's body''')
 @click.option('--approved-by'   , metavar='<approver>'             , help='''Name of approving reviewer (can be provided multiple times).''', multiple=True)
 def merge_change_request(
+            ctx,
             source_remote,
             source_ref,
             change_request,
@@ -808,6 +870,35 @@ def merge_change_request(
         if approvers:
             msg += '\n'.join(f"Acked-by: {approver}" for approver in approvers) + u'\n'
         msg += f'Merged-by: Hopic {get_package_version(PACKAGE)}\n'
+
+        bump = ctx.obj.config['version']['bump']
+        strict = bump.get('strict', False)
+        try:
+            merge_commit = parse_commit_message(msg, policy=bump['policy'], strict=strict)
+        except Exception as e:
+            if bump['policy'] == 'conventional-commits':
+                log.error(
+                    "The pull request title could not be parsed as a conventional commit.\n"
+                    "Parsing the PR title failed due to:\n%s",
+                    "".join(f" - {problem}\n" for problem in str(e).split('\n'))
+                )
+                ctx.exit(1)
+            raise
+
+        if bump['policy'] in ('conventional-commits',) and strict and bump['on-every-change']:
+            source_commits = ([
+                parse_commit_message(commit, policy=bump['policy'], strict=False)
+                for commit in git.Commit.list_items(
+                    repo,
+                    (f"{repo.head.commit}..{source_commit}"),
+                    first_parent=bump.get('first-parent', True),
+                    no_merges=bump.get('no-merges', True),
+                )])
+            new_version = ctx.obj.version.next_version_for_commits(source_commits)
+            merge_commit_next_version = ctx.obj.version.next_version_for_commits([merge_commit])
+            if new_version != merge_commit_next_version:
+                raise VersionBumpMismatchError(new_version, merge_commit_next_version)
+
         return {
                 'message': msg,
                 'parent_commits': (
@@ -1088,7 +1179,13 @@ def unbundle_worktrees(ctx, bundle):
 
             subdir = worktrees[ref]
             log.debug("Checkout worktree '%s' to '%s' (proposed branch '%s')", subdir, commit, ref)
-            checkout_tree(os.path.join(ctx.obj.workspace, subdir), bundle, ref, remote_name='bundle')
+            checkout_tree(
+                ctx.obj.workspace / subdir,
+                bundle,
+                ref,
+                remote_name="bundle",
+                tags=False,
+            )
             refspecs.append(f"{commit}:{ref}")
 
         # Eliminate duplicate pushes to the same ref and replace it by a single push to the _last_ specified object

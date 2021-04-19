@@ -1,4 +1,4 @@
-# Copyright (c) 2020 - 2020 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2020 - 2021 TomTom N.V. (https://tomtom.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,15 +13,10 @@
 # limitations under the License.
 
 from io import StringIO
+import json
+import re
 from textwrap import dedent
 import typing
-
-try:
-    # Python >= 3.8
-    from importlib import metadata
-except ImportError:
-    import importlib_metadata as metadata
-
 import pytest
 
 from .. import config_reader
@@ -192,7 +187,8 @@ def mock_yaml_plugin(monkeypatch):
 
     def mock_entry_points():
         return {
-            'hopic.plugins.yaml': (
+            ep.name: ep
+            for ep in [
                 TestTemplate(),
                 TestKwargTemplate(),
                 TestSimpleTemplate(),
@@ -202,9 +198,10 @@ def mock_yaml_plugin(monkeypatch):
                 TestNonGeneratorTemplate(),
                 TestGeneratorTemplate(),
                 TestBadGeneratorTemplate(),
-            )
+            ]
         }
-    monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
+
+    monkeypatch.setattr(config_reader, 'get_entry_points', mock_entry_points)
 
 
 @pytest.mark.parametrize('version_build', (
@@ -894,3 +891,358 @@ def test_wait_on_full_previous_phase_dependency_default_yes():
     assert 'wait-on-full-previous-phase' not in x_b
     assert y_b['wait-on-full-previous-phase'] is True
     assert 'wait-on-full-previous-phase' not in y_c
+
+
+def test_docker_run_extra_arguments_wrong_type(capfd):
+    with pytest.raises(ConfigurationError, match="`extra-docker-args` argument `hostname` for `v-one` should be a str, not a float"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    """\
+                    image:
+                      default: buildpack-deps:18.04
+
+                    phases:
+                      p-one:
+                        v-one:
+                          - extra-docker-args:
+                              hostname: 3.14
+                          - echo This build shall fail
+                    """
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_ci_locks():
+    cfg = config_reader.read(_config_file(dedent('''\
+        ci-locks:
+            - branch: master
+              repo-name: FICTIONAL/some-lock
+            - branch: master
+              repo-name: FICTIONAL/some-other-lock
+              lock-on-change: never
+    ''')), {'WORKSPACE': None})
+    ci_locks = cfg['ci-locks']
+    assert isinstance(ci_locks, list)
+    assert ci_locks[0]['lock-on-change'] == 'always'
+    assert ci_locks[1]['lock-on-change'] == 'never'
+
+
+def test_ci_locks_wrong_lock_on_change_value():
+    with pytest.raises(ConfigurationError, match='has an invalid attribute "lock-on-change", expected one of'):
+        config_reader.read(_config_file(dedent('''\
+            ci-locks:
+            - branch: master
+              repo-name: FICTIONAL/some-other-lock
+              lock-on-change: never123
+        ''')), {'WORKSPACE': None})
+
+
+def test_ci_locks_wrong_branch_value():
+    with pytest.raises(ConfigurationError, match='has an invalid attribute "branch", expected a str, but got a list'):
+        config_reader.read(_config_file(dedent('''\
+            ci-locks:
+            - branch:
+              - master
+              repo-name: FICTIONAL/some-other-lock
+        ''')), {'WORKSPACE': None})
+
+
+def test_mutiple_options_on_archive():
+    with pytest.raises(ConfigurationError, match=r"are not allowed in the same Archive configuration, use only 'allow-missing"):
+        config_reader.read(_config_file(dedent('''\
+            phases:
+              build:
+                example:
+                  - archive:
+                     artifacts: doesnotexist.txt
+                     allow-missing: true
+                     allow-empty-archive: true
+        ''')), {'WORKSPACE': None})
+
+
+def test_allow_empty_archive_empty_variant_removed():
+    cfg = config_reader.read(_config_file(dedent('''\
+            phases:
+              build:
+                example:
+                  - archive:
+                     artifacts: doesnotexist.txt
+                     allow-empty-archive: true
+        ''')), {'WORKSPACE': None})
+
+    out = cfg['phases']['build']['example'][0]['archive']
+    assert 'allow-missing' in out
+    assert type(out['allow-missing']) is bool
+    assert 'allow-empty-archive' not in out
+
+
+def test_archive_allow_missing_not_boolean():
+    with pytest.raises(ConfigurationError, match=r"'build.example.archive.allow-missing' should be a boolean, not a str"):
+        config_reader.read(_config_file(dedent('''\
+            phases:
+              build:
+                example:
+                  - archive:
+                     artifacts: doesnotexist.txt
+                     allow-missing: 'true'
+        ''')), {'WORKSPACE': None})
+
+
+def test_allow_empty_junit():
+    with pytest.raises(ConfigurationError, match=r"JUnit configuration did not contain mandatory field 'test-results'"):
+        config_reader.read(_config_file(dedent('''\
+            phases:
+              build:
+                example:
+                  - junit:
+                     test: doesnotexist.txt
+                     allow-missing: true
+        ''')), {'WORKSPACE': None})
+
+
+def test_generated_config_has_test_results():
+    cfg = config_reader.read(_config_file(dedent('''\
+            phases:
+              build:
+                example:
+                  - junit:
+                     doesnotexistjunitresult.xml
+        ''')), {'WORKSPACE': None})
+
+    out = cfg['phases']['build']['example'][0]['junit']
+    assert 'test-results' in out
+
+
+def test_junit_allow_missing_not_boolean():
+    with pytest.raises(ConfigurationError, match=r"'build.example.junit.allow-missing' should be a boolean, not a str"):
+        config_reader.read(_config_file(dedent('''\
+            phases:
+              build:
+                example:
+                  - junit:
+                     test-results: doesnotexist.txt
+                     allow-missing: 'true'
+        ''')), {'WORKSPACE': None})
+
+
+def test_archive_type_mismatch():
+    with pytest.raises(ConfigurationError, match=r"member is not a mapping"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    '''\
+                    phases:
+                      test:
+                        example:
+                          - archive: null
+                    '''
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_archive_missing_artifacts():
+    with pytest.raises(ConfigurationError, match=r"lacks the mandatory 'artifacts' member"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    '''\
+                    phases:
+                      test:
+                        example:
+                          - archive: {}
+                    '''
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_archive_artifacts_missing_pattern():
+    with pytest.raises(ConfigurationError, match=r"lacks the mandatory 'pattern' member"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    '''\
+                    phases:
+                      test:
+                        example:
+                          - archive:
+                              artifacts:
+                                - {}
+                    '''
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_archive_artifacts_pattern_type_mismatch():
+    with pytest.raises(ConfigurationError, match=r"pattern' is not a string"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    '''\
+                    phases:
+                      test:
+                        example:
+                          - archive:
+                              artifacts:
+                                - pattern: null
+                    '''
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+@pytest.mark.parametrize('pattern', (
+    "**/a**",
+    "**/a(*)(*)",
+))
+def test_archive_artifacts_pattern_invalid_double_star(pattern):
+    with pytest.raises(
+        ConfigurationError,
+        match=fr"pattern' value of '{re.escape(pattern)}' is not a valid glob pattern: .*? '\*\*' can only be an entire path component",
+    ):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    f"""\
+                    phases:
+                      test:
+                        example:
+                          - archive:
+                              artifacts:
+                                - pattern: {json.dumps(pattern)}
+                    """
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_junit_pattern_invalid_double_star():
+    with pytest.raises(ConfigurationError, match=r"value of '.*?' is not a valid glob pattern: .*? '\*\*' can only be an entire path component"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    '''\
+                    phases:
+                      test:
+                        example:
+                          - junit:
+                            - "**/a**"
+                    '''
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_ci_locks_reference_invalid_phase():
+    with pytest.raises(ConfigurationError, match=r"referenced phase in ci-locks \(non-existing-phase\) doesn't exist"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    '''\
+                    ci-locks:
+                        - branch: branch
+                          repo-name: repo
+                          from-phase-onward: non-existing-phase
+
+                    phases:
+                      existing-phase:
+                        example:
+                          - echo 'test'
+                    '''
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_ci_locks_reference_wait_on_full_previous_phase_variant():
+    with pytest.raises(ConfigurationError, match=r"referenced phase in ci-locks \(phase-2\) refers to variant \(wait-on-full-previous-phase-variant\) "
+                                                 r"that has wait-on-full-previous-phase disabled"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    '''\
+                    ci-locks:
+                        - branch: branch
+                          repo-name: repo
+                          from-phase-onward: phase-2
+
+                    phases:
+                      phase-1:
+                        example:
+                          - echo 'test'
+
+                        wait-on-full-previous-phase-variant:
+                          - echo 'disable waiting on previous phase'
+
+                      phase-2:
+                        example:
+                          - echo 'test'
+
+                        wait-on-full-previous-phase-variant:
+                          - wait-on-full-previous-phase: no
+
+                    '''
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_ci_locks_duplicate_identifier():
+    with pytest.raises(ConfigurationError, match=r"ci-lock with repo-name 'repo' and branch 'branch' already exists, "
+                                                 r"this would lead to a deadlock"):
+        config_reader.read(
+            _config_file(
+                dedent(
+                    '''\
+                    ci-locks:
+                        - branch: branch
+                          repo-name: repo
+                          from-phase-onward: phase-1
+                        - branch: branch
+                          repo-name: repo
+
+                    phases:
+                      phase-1:
+                        example:
+                          - echo 'test'
+                    '''
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_ci_locks_on_phase_forward():
+    cfg = config_reader.read(
+        _config_file(
+            dedent(
+                '''\
+                ci-locks:
+                  - branch: branch
+                    repo-name: repo
+                    from-phase-onward: phase-1
+
+                phases:
+                  phase-1:
+                    example:
+                      - echo 'test'
+                '''
+            )
+        ),
+        {'WORKSPACE': None},
+    )
+    out = cfg['ci-locks'][0]
+    assert 'from-phase-onward' in out

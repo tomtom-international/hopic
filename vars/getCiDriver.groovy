@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 - 2020 TomTom N.V. (https://tomtom.com)
+ * Copyright (c) 2018 - 2021 TomTom N.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,7 @@
 
 import groovy.json.JsonOutput
 import hudson.model.ParametersDefinitionProperty
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter;
+import java.text.SimpleDateFormat
 import org.jenkinsci.plugins.credentialsbinding.impl.CredentialNotFoundException
 import org.jenkinsci.plugins.scriptsecurity.sandbox.RejectedAccessException
 import org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty
@@ -74,15 +73,17 @@ class BitbucketPullRequest extends ChangeRequest {
   private url
   private info = null
   private credentialsId
+  private refspec
   private restUrl = null
   private baseRestUrl = null
   private keyIds = [:]
   private source_commit = null
 
-  BitbucketPullRequest(steps, url, credentialsId) {
+  BitbucketPullRequest(steps, url, credentialsId, refspec) {
     super(steps)
     this.url = url
     this.credentialsId = credentialsId
+    this.refspec = refspec
 
     if (this.url != null) {
       this.restUrl = url
@@ -225,9 +226,7 @@ class BitbucketPullRequest extends ChangeRequest {
 
   private def current_source_commit(String source_remote) {
     assert steps.env.NODE_NAME != null, "current_source_commit must be executed on a node"
-
-    def source_refspec = steps.scm.userRemoteConfigs[0].refspec
-    def (remote_ref, local_ref) = source_refspec.tokenize(':')
+    def (remote_ref, local_ref) = this.refspec.tokenize(':')
     if (remote_ref.startsWith('+'))
       remote_ref = remote_ref.substring(1)
 
@@ -254,6 +253,90 @@ class BitbucketPullRequest extends ChangeRequest {
       steps.currentBuild.result = 'ABORTED'
       steps.currentBuild.description = 'Aborted: build outdated; change request updated since start'
       steps.error("this build is outdated. Its change request got updated to ${current_commit} (from ${this.source_commit}).")
+    }
+
+    if (!this.info
+      // we don't care about builds that weren't going to be merged anyway
+     || !this.info.canMerge)
+      return
+
+    final old_cr_info = this.info
+    def cur_cr_info = this.get_info(/* allow_cache=*/ false)
+    // keep the cache intact as it's used to generate merge commit messages
+    this.info = old_cr_info
+
+    // Ignore the current INPROGRESS build from the merge vetoes
+    for (int i = cur_cr_info.getOrDefault('vetoes', []).size() - 1; i >= 0; i--) {
+      if (cur_cr_info.vetoes[i].summaryMessage == 'Not all required builds are successful yet') {
+        if (!cur_cr_info.canMerge
+         && cur_cr_info.vetoes.size() == 1) {
+          cur_cr_info.canMerge = true
+        }
+        cur_cr_info.vetoes.remove(i)
+        break
+      }
+    }
+
+    String msg = ''
+    if (!cur_cr_info.canMerge) {
+      msg += '\n\033[33m[warning] no longer submitting because the BitBucket merge criteria are no longer met\033[39m'
+      if (cur_cr_info.vetoes) {
+        msg += '\n\033[36m[info] the following merge condition(s) are not met:'
+        cur_cr_info.vetoes.each { veto ->
+          if (veto.summaryMessage) {
+            msg += "\n[info] summary: ${veto.summaryMessage}"
+            if (veto.detailedMessage) {
+              msg += "\n[info]   details: ${veto.detailedMessage}"
+            }
+          }
+        }
+        msg += '\033[39m'
+      }
+    }
+    final String old_title = old_cr_info.getOrDefault('title', steps.env.CHANGE_TITLE)
+    final String cur_title = cur_cr_info.getOrDefault('title', steps.env.CHANGE_TITLE)
+    if (cur_title.trim() != old_title.trim()) {
+      msg += '\n\033[33m[warning] no longer submitting because the change request\'s title changed\033[39m'
+      msg += "\n\033[36m[info] old title: '${old_title}'"
+      msg +=         "\n[info] new title: '${cur_title}'\033[39m"
+    }
+    final String old_description = old_cr_info.containsKey('description') ? old_cr_info.description.trim() : null
+    final String cur_description = cur_cr_info.containsKey('description') ? cur_cr_info.description.trim() : null
+    if (cur_description != old_description) {
+      msg += '\n\033[33m[warning] no longer submitting because the change request\'s description changed\033[39m'
+      msg += '\n\033[36m[info] old description:'
+      if (old_description == null) {
+        msg += ' null'
+      } else {
+        line_split(old_description).each { line ->
+          msg += "\n[info]     ${line}"
+        }
+      }
+      msg += '\n[info] new description:'
+      if (cur_description == null) {
+        msg += ' null'
+      } else {
+        line_split(cur_description).each { line ->
+          msg += "\n[info]     ${line}"
+        }
+      }
+      msg += '\033[39m'
+    }
+
+    // trim() that doesn't strip \033
+    while (msg && msg[0] == '\n')
+      msg = msg[1..-1]
+
+    if (msg) {
+      steps.println(msg)
+      steps.currentBuild.result = 'ABORTED'
+      if (!cur_cr_info.canMerge) {
+        steps.currentBuild.description = "No longer submitting: Bitbucket merge criteria no longer met"
+        steps.error("This build is outdated. Merge criteria of its change request are no longer met.")
+      } else {
+        steps.currentBuild.description = "No longer submitting: change request's metadata changed since start"
+        steps.error("This build is outdated. Metadata of its change request changed.")
+      }
     }
   }
 
@@ -404,14 +487,29 @@ class ModalityRequest extends ChangeRequest {
   }
 }
 
+class NodeExecution {
+  String exec_name
+  long end_time     // unix epoch time (in ms)
+  long request_time // unix epoch time (in ms)
+  long start_time   // unix epoch time (in ms)
+  String status
+}
+
+class LockWaitingTime {
+  String lock_name
+  Long acquire_time // unix epoch time (in ms) (can be null)
+  long release_time // unix epoch time (in ms)
+  long request_time // unix epoch time (in ms)
+}
+
 class CiDriver {
   private repo
   private steps
   private cmds               = [:]
   private nodes              = [:]
-  private nodes_usage        = [:]
   private checkouts          = [:]
   private docker_images      = [:]
+  private scm                = [:]
   private stashes            = [:]
   private worktree_bundles   = [:]
   private submit_version     = null
@@ -422,6 +520,8 @@ class CiDriver {
   private may_publish_result = null
   private config_file
   private bitbucket_api_credential_id  = null
+  private LinkedHashMap<String, LinkedHashMap<Integer, NodeExecution[]>> nodes_usage = [:]
+  private ArrayList<LockWaitingTime> lock_times = []
 
   private final default_node_expr = "Linux && Docker"
 
@@ -431,6 +531,11 @@ class CiDriver {
     this.change = params.change
     this.config_file = params.config
     this.bitbucket_api_credential_id = params.getOrDefault('bb_api_cred_id', 'tt_service_account_creds')
+    this.scm = [
+      credentialsId: steps.scm.userRemoteConfigs[0].credentialsId,
+      refspec: steps.scm.userRemoteConfigs[0].refspec,
+      url: steps.scm.userRemoteConfigs[0].url,
+    ]
   }
 
   private def get_change() {
@@ -438,7 +543,7 @@ class CiDriver {
       if (steps.env.CHANGE_URL != null
        && steps.env.CHANGE_URL.contains('/pull-requests/'))
       {
-        def httpServiceCredential = steps.scm.userRemoteConfigs[0].credentialsId
+        def httpServiceCredential = this.scm.credentialsId
         try {
           steps.withCredentials([steps.usernamePassword(
               credentialsId: httpServiceCredential,
@@ -458,7 +563,7 @@ class CiDriver {
             httpServiceCredential = this.bitbucket_api_credential_id
           }
         }
-        this.change = new BitbucketPullRequest(steps, steps.env.CHANGE_URL, httpServiceCredential)
+        this.change = new BitbucketPullRequest(steps, steps.env.CHANGE_URL, httpServiceCredential, this.scm.refspec)
       }
       // FIXME: Don't rely on hard-coded build parameter, externalize this instead.
       else if (steps.params.MODALITY != null && steps.params.MODALITY != "NORMAL")
@@ -540,9 +645,9 @@ git reset --hard FETCH_HEAD
 cat >> hopic/test/docker-images/python/Dockerfile <<EOF
 # Install Hopic's dependencies in a separate layer to improve reuse between images produced for different Hopic versions.
 ADD setup.py /hopic-reqs/setup.py
-RUN mkdir -p /hopic-reqs/hopic/cli \\
+RUN mkdir -p /hopic-reqs/hopic/cli /hopic-reqs/hopic/template \\
  && cd /hopic-reqs \\
- && touch hopic/__init__.py hopic/cli/__init__.py README.rst \\
+ && touch hopic/__init__.py hopic/cli/__init__.py hopic/template/__init__.py README.rst \\
  && sed -i '/setuptools.scm/ d' setup.py \\
  && python setup.py dist_info \\
  && sed -n 's/^Requires-Dist: // p' hopic.dist-info/METADATA > hopic.dist-info/requires.txt \\
@@ -588,7 +693,7 @@ docker build --build-arg=PYTHON_VERSION=3.6 --iidfile=${shell_quote(docker_src)}
     // Ensure
     try {
       steps.withCredentials([steps.usernamePassword(
-          credentialsId: steps.scm.userRemoteConfigs[0].credentialsId,
+          credentialsId: this.scm.credentialsId,
           usernameVariable: 'USERNAME',
           passwordVariable: 'PASSWORD',
           )]) {
@@ -615,7 +720,7 @@ esac
     } catch (CredentialNotFoundException e1) {
       try {
         return this.with_credentials([[
-          id: steps.scm.userRemoteConfigs[0].credentialsId,
+          id: this.scm.credentialsId,
           type: 'ssh-key',
           'ssh-command-variable': 'GIT_SSH'
         ]]) {
@@ -794,8 +899,11 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       target_ref = steps.env.GIT_COMMIT
     }
 
-    params += ' --target-remote=' + shell_quote(steps.scm.userRemoteConfigs[0].url)
+    params += ' --target-remote=' + shell_quote(this.scm.url)
     params += ' --target-ref='    + shell_quote(target_ref)
+    if (this.target_commit) {
+      params += ' --target-commit=' + shell_quote(this.target_commit)
+    }
 
     steps.env.GIT_COMMIT = this.with_git_credentials() {
       this.target_commit = steps.sh(script: cmd
@@ -804,7 +912,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
                                     label: 'Hopic: checking out source tree',
                                     returnStdout: true).trim()
       if (this.get_change() != null) {
-        def submit_info = this.get_change().apply(cmd, steps.scm.userRemoteConfigs[0].url)
+        def submit_info = this.get_change().apply(cmd, this.scm.url)
         if (submit_info == null)
         {
           // Marking the build as ABORTED _before_ deleting it to prevent an exception from reincarnating it
@@ -898,7 +1006,6 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
    */
   private def ensure_checkout(String cmd, clean = false, String variant = null) {
     assert steps.env.NODE_NAME != null, "ensure_checkout must be executed on a node"
-
     String executor_identifier = get_executor_identifier(variant)
 
     if (!this.checkouts.containsKey(executor_identifier)) {
@@ -922,15 +1029,48 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     return "${repo_name}/${branch}"
   }
 
-  public String[] get_additional_ci_lock_names(cmd) {
+  public static version_is_prerelease(final String version) {
+    return version ==~ /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:[-0-9a-zA-Z]+(?:\.[-0-9a-zA-Z])*))(?:\+(?:[-0-9a-zA-Z]+(?:\.[-0-9a-zA-Z])*))?$/
+  }
+
+  private boolean is_new_version() {
+    def version = this.get_submit_version()
+    if (version != null && CiDriver.version_is_prerelease(version)) {
+      // Pre-release versions are not new versions
+      return false
+    }
+    return true
+  }
+
+  private Map get_ci_locks(cmd, is_publishable_change) {
+    def locks = ['global': [], 'from-phase': [:]]
+    if (!is_publishable_change) {
+      return locks
+    } else {
+      locks['global'].push(this.get_lock_name())
+    }
     def config = steps.readJSON(text: steps.sh(
       script: "${cmd} show-config",
       label: 'Hopic (internal): retrieving additional CI lock names',
       returnStdout: true,
     ))
-    return config.getOrDefault('ci-locks', []).collect { lock ->
-      get_repo_name_and_branch(lock['repo-name'], lock['branch'])
+    def all_locks = config.getOrDefault('ci-locks', []).findAll { lock ->
+      if (lock['lock-on-change'] == 'always' || 
+        (lock['lock-on-change'] == 'new-version-only' && this.is_new_version())) {
+          return true
+        }
+        return false
     }
+
+    all_locks.each { lock ->
+      def lock_name = get_repo_name_and_branch(lock['repo-name'], lock['branch'])
+      if (lock.containsKey('from-phase-onward')) {
+        locks['from-phase'].get(lock['from-phase-onward'], []).push(lock_name)
+      } else {
+        locks['global'].push(lock_name)
+      }
+    }
+    return locks
   }
 
   /**
@@ -944,7 +1084,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
    * @return a lock name unique to the target repository
    */
   public String get_lock_name() {
-    def repo_url  = steps.scm.userRemoteConfigs[0].url
+    def repo_url  = this.scm.url
     def repo_name = repo_url.tokenize('/')[-2..-1].join('/') - ~/\.git$/ // "${project}/${repo}"
     get_repo_name_and_branch(repo_name)
   }
@@ -973,6 +1113,15 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     String build_identifier = (steps.env.CHANGE_TARGET ? "PR-${steps.env.CHANGE_ID} " : '') + "${steps.currentBuild.number}"
 
     [build_name, build_identifier]
+  }
+
+  public Map<String, Map<Integer, NodeExecution[]>> get_node_allocations() {
+    return this.nodes_usage
+  }
+
+
+  public AbstractList<LockWaitingTime> get_lock_metrics() {
+    return this.lock_times
   }
 
   /**
@@ -1029,6 +1178,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           steps.archiveArtifacts(
               artifacts: pattern,
               fingerprint: meta.archive.getOrDefault('fingerprint', true),
+              allowEmptyArchive: meta.archive['allow-missing']
             )
         } else if (archiving_cfg == 'fingerprint') {
           steps.fingerprint(pattern)
@@ -1069,7 +1219,8 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
         ?: this.nodes.collect { variant, node -> node }.join(" || ")
         ?: params.getOrDefault('default_node_expr', this.default_node_expr)
       )
-    return this.on_node([node_expr: node_expr, name: params.name]) {
+
+    return this.on_node([node_expr: node_expr, exec_name: params.name]) {
       return this.with_hopic { cmd ->
         this.ensure_checkout(cmd, params.getOrDefault('clean', false))
         this.ensure_unstashed()
@@ -1105,19 +1256,19 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     return e.getClass() == org.jenkinsci.plugins.workflow.steps.FlowInterruptedException ? 'ABORTED' : 'FAILURE'
   }
 
-  private LocalDateTime get_local_time() {
-    return LocalDateTime.now()
+  private long get_unix_epoch_time() {
+    return System.currentTimeMillis()
   }
 
   private def on_node(Map node_params = [:], Closure closure) {
     def node_expr = node_params.getOrDefault("node_expr", this.default_node_expr)
-    def name = node_params.name
-    def request_time = this.get_local_time()
+    def exec_name = node_params.exec_name
+    def request_time = this.get_unix_epoch_time()
     return steps.node(node_expr) {
-      def usage_entry = null
-      if (name != null) {
-        this.nodes_usage.get(steps.env.NODE_NAME, []).add(name: name, request_time: request_time, start_time: this.get_local_time())
-        usage_entry = this.nodes_usage[steps.env.NODE_NAME][-1]
+      NodeExecution usage_entry
+      if (exec_name != null) {
+        usage_entry = new NodeExecution(exec_name: exec_name, request_time: request_time, start_time: this.get_unix_epoch_time())
+        this.nodes_usage.get(steps.env.NODE_NAME, [:]).get(steps.env.EXECUTOR_NUMBER as Integer, []).add(usage_entry)
       }
       def build_result = 'SUCCESS'
       try {
@@ -1126,11 +1277,11 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
         build_result = this.determine_error_build_result(e)
         throw e
       } finally {
-        if (name != null) {
+        if (exec_name != null) {
           assert usage_entry != null
-          assert usage_entry.name == name
-          usage_entry.end_time = this.get_local_time()
-          usage_entry.status = build_result
+          assert usage_entry.exec_name == exec_name
+          usage_entry.end_time = this.get_unix_epoch_time()
+          usage_entry.status = steps.currentBuild.currentResult != 'SUCCESS' ? steps.currentBuild.currentResult : build_result
         }
       }
     }
@@ -1216,20 +1367,31 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     }
   }
 
+  private epoch_to_UTC_time(long time) {
+    return new Date(time)
+  }
+
   private def print_node_usage() {
-    def largest_name_size = this.nodes_usage.collect { it.value.collect { it.name }}.flatten().max { it.size() }.size()
+    def largest_name_size = this.nodes_usage.collect { it.value.collect { it.value.collect { it.exec_name.size() }}}.flatten().max { it }
     String printable_string = ""
-    this.nodes_usage.each { node, allocation ->
+    this.nodes_usage.each { node, executor ->
       printable_string += "node: ${node}\n"
-      allocation.each {
-        printable_string += String.format("  %-${largest_name_size}s request time %s start time: %s end time: %s status: %s\n",
-          it.name,
-          it.request_time.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
-          it.start_time.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
-          it.end_time.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
-          it.status
-        )
-      }
+        def nesting_spaces = 2
+        executor.each { executor_number, allocation ->
+          if (executor.size() > 1) {
+            printable_string += "  executor number: ${executor_number}\n"
+            nesting_spaces = 4
+          }
+          allocation.each {
+            printable_string += String.format("${' '.multiply(nesting_spaces)}%-${largest_name_size}s request time: %s start time: %s end time: %s status: %s\n",
+              it.exec_name,
+              new SimpleDateFormat("HH:mm:ss").format(epoch_to_UTC_time(it.request_time)),
+              new SimpleDateFormat("HH:mm:ss").format(epoch_to_UTC_time(it.start_time)),
+              new SimpleDateFormat("HH:mm:ss").format(epoch_to_UTC_time(it.end_time)),
+              it.status
+            )
+          }
+        }
       printable_string += "\n"
     }
     steps.print(printable_string.trim())
@@ -1237,6 +1399,14 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
   private void build_variant(String phase, String variant, String cmd, String workspace, Map artifactoryBuildInfo, String hopic_extra_arguments) {
     steps.stage("${phase}-${variant}") {
+      // Interruption point (just after potentially lengthy node acquisition):
+      // abort PR builds that got changed since the start of this build
+      if (this.has_change()) {
+        this.with_git_credentials() {
+          this.get_change().abort_if_changed(this.scm.url)
+        }
+      }
+
       // Meta-data retrieval needs to take place on the executing node to ensure environment variable expansion happens properly
       def meta = steps.readJSON(text: steps.sh(
           script: "${cmd} getinfo --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant),
@@ -1258,14 +1428,6 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
         error_occurred = true // Jenkins only sets its currentResult to Failure after all user code is executed
         throw e
       } finally {
-        if (meta.containsKey('junit')) {
-          def results = meta.junit
-          steps.dir(workspace) {
-            meta.junit.each { result ->
-              steps.junit(result)
-            }
-          }
-        }
         this.archive_artifacts_if_enabled(meta, workspace, error_occurred) { server_id ->
           if (!artifactoryBuildInfo.containsKey(server_id)) {
             def newBuildInfo = steps.Artifactory.newBuildInfo()
@@ -1275,6 +1437,15 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
             artifactoryBuildInfo[server_id] = newBuildInfo
           }
           return artifactoryBuildInfo[server_id]
+        }
+        if (meta.containsKey('junit')) {
+          steps.dir(workspace) {
+            meta.junit['test-results'].each { result ->
+              steps.junit(
+                testResults: result,
+                allowEmptyResults: meta.junit['allow-missing'])
+            }
+          }
         }
       }
 
@@ -1323,6 +1494,157 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           )
         this.worktree_bundles[name] = [nodes: [(executor_identifier): true]]
       }
+
+      // Interruption point (just before node release potentially followed by lengthy node acquisition):
+      // abort PR builds that got changed since the start of this build
+      if (this.has_change()) {
+        this.with_git_credentials() {
+          this.get_change().abort_if_changed(this.scm.url)
+        }
+      }
+    }
+  }
+
+  public def with_locks(List<String> lock_names) {
+    return { closure ->
+      if (lock_names.size()) {
+        def lock_closure = { locked_closure ->
+          if (lock_names.size() > 1) {
+            steps.lock(resource: lock_names[0], extra: lock_names[1..-1].collect{['resource': it]}) {
+              locked_closure()
+            }
+          } else {
+            steps.lock(lock_names[0]) {
+              locked_closure()
+            }
+          }
+        }
+
+        def acquire_time = null
+        def lock_request_time = this.get_unix_epoch_time()
+        try {
+          return lock_closure {
+            acquire_time = this.get_unix_epoch_time()
+            return closure()
+          }
+        } finally {
+          def lock_release_time = this.get_unix_epoch_time()
+          lock_names.each {
+            this.lock_times.add(new LockWaitingTime(lock_name: it, acquire_time: acquire_time, request_time: lock_request_time, release_time: lock_release_time))
+          }
+        }
+      } else {
+        // NOP as default 
+        closure()
+      }
+    }
+  }
+
+  private def build_phases(phases, clean, artifactoryBuildInfo, hopic_extra_arguments, submit_meta, from_phases_locks, previous_phase_locks = []) {
+    if (!phases) {
+      return submit_if_needed(submit_meta, hopic_extra_arguments)
+    }
+    def build_phases_func = { locks ->
+      build_phases(phases, clean, artifactoryBuildInfo, hopic_extra_arguments, submit_meta, from_phases_locks, locks ?: previous_phase_locks)
+    }
+    def is_build_successful = steps.currentBuild.currentResult == 'SUCCESS'
+    final phase = phases.keySet().first()
+    // Make sure steps exclusive to changes are skipped when a failure occurred during one of the previous phases.
+    final variants = phases.remove(phase).findAll { variant, meta ->
+      def run_on_change = meta.run_on_change
+      if (run_on_change == 'only' || run_on_change == 'new-version-only') {
+        // run_on_change variants should not be executed for unstable builds 
+        if (!is_build_successful) {
+          steps.println("Skipping variant ${variant} in ${phase} because build is not successful")
+          return false
+        }
+      }
+      return true
+    }
+
+    def current_phase_locks = is_build_successful ? from_phases_locks.getOrDefault(phase, []) + previous_phase_locks : []
+    // Skip creation of a stage for phases with no variants to execute
+    if (variants.size() != 0) {
+      def lock_phase_onward_if_necessary = this.with_locks(current_phase_locks)
+      lock_phase_onward_if_necessary {
+        steps.stage(phase) {
+          def stepsForBuilding = variants.collectEntries { variant, meta ->
+            def label = meta.label
+            [ (variant): {
+              if (this.nodes.containsKey(variant)) {
+                label = this.nodes[variant]
+              }
+              this.on_node(node_expr: label, exec_name: "${phase}-${variant}") {
+                with_workspace_for_variant(variant) {
+                  this.with_hopic(variant) { cmd ->
+                    // If working with multiple executors on this node, uniquely identify this node by variant
+                    // to ensure the correct workspace.
+                    final workspace = this.ensure_checkout(cmd, clean, variant)
+                    this.pin_variant_to_current_node(variant)
+
+                    this.ensure_unstashed(variant)
+
+                    if (!meta.nop) {
+                      this.build_variant(phase, variant, cmd, workspace, artifactoryBuildInfo, hopic_extra_arguments)
+                    }
+
+                    // Execute a string of uninterrupted phases with our current variant for which we don't need to wait on preceding phases
+                    //
+                    // Using a regular for loop because we need to break out of it early and .takeWhile doesn't work with closures defined in CPS context
+                    for (next_phase in phases.keySet()) {
+                      final next_variants = phases[next_phase]
+
+                      if (!next_variants.containsKey(variant)
+                      // comparing against 'false' directly because we want to reject 'null' too
+                      || next_variants[variant].wait_on_full_previous_phase != false) {
+                        break
+                      }
+
+                      // Prevent executing this variant again during the phase it really belongs too
+                      final next_variant = next_variants.remove(variant)
+                      assert next_variant.run_on_change == 'always'
+
+                      // Execute this variant's next phase already.
+                      // Because the user asked for it, in order not to relinquish this node until we really have to.
+                      if (!next_variant.nop) {
+                        this.build_variant(next_phase, variant, cmd, workspace, artifactoryBuildInfo, hopic_extra_arguments)
+                      }
+                    }
+                  }
+                }
+              }
+            }]
+          }
+          steps.parallel stepsForBuilding
+        }
+        build_phases_func()
+      }
+    } else {
+      build_phases_func(current_phase_locks)
+    }
+  }
+
+  private def submit_if_needed(submit_meta, hopic_extra_arguments) {
+    if (this.may_submit_result != false) {
+      this.on_build_node(node_expr: submit_meta['node-label'], name: 'submit') { cmd ->
+        if (!this.has_submittable_change()) {
+          // Prevent reporting 'submit' as having run as we didn't actually do anything
+          def usage_entry = this.nodes_usage[steps.env.NODE_NAME][steps.env.EXECUTOR_NUMBER as Integer].pop()
+          assert usage_entry.exec_name == 'submit'
+          return
+        }
+
+        steps.stage('submit') {
+          this.with_git_credentials() {
+            this.get_change().abort_if_changed(this.scm.url)
+            this.subcommand_with_credentials(
+                cmd + hopic_extra_arguments,
+                'submit'
+              , submit_meta.getOrDefault('with-credentials', []),
+              'Hopic: submitting merge')
+          }
+        }
+      }
     }
   }
 
@@ -1333,7 +1655,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
     this.extend_build_properties()
     this.decorate_output {
-      def (phases, is_publishable_change, submit_meta, additional_locks) = this.on_node(node_expr: default_node, name: "hopic-init") {
+      def (phases, is_publishable_change, submit_meta, locks) = this.on_node(node_expr: default_node, exec_name: "hopic-init") {
         return this.with_hopic { cmd ->
           def workspace = steps.pwd()
 
@@ -1402,32 +1724,11 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
             this.change.notify_build_result(get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, 'STARTING', exclude_branches_filled_with_pr_branch_discovery)
           }
 
-          return [phases, is_publishable, submit_meta, is_publishable ? get_additional_ci_lock_names(cmd) : []]
+          return [phases, is_publishable, submit_meta, get_ci_locks(cmd, is_publishable)]
         }
       }
 
-      // NOP as default
-      def lock_if_necessary = { closure -> closure() }
-
-      if (is_publishable_change) {
-        lock_if_necessary = { closure ->
-          def lock_closure = { locked_closure ->
-              if (additional_locks.size()) {
-                steps.lock(resource: get_lock_name(), extra: additional_locks.collect{['resource': it]}) {
-                  locked_closure()
-                }
-              } else {
-                steps.lock(get_lock_name()) {
-                  locked_closure()
-                }
-              }
-            }
-
-          return lock_closure {
-            return closure()
-          }
-        }
-      }
+      def lock_if_necessary = this.with_locks(locks.global)
 
       def artifactoryBuildInfo = [:]
       def hopic_extra_arguments = is_publishable_change ? ' --publishable-version': ''
@@ -1450,13 +1751,8 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
                     // Don't have enough information to determine whether this is a submittable change: assume it is
                     return true
                   }
-                  if (run_on_change == 'new-version-only') {
-                    def version = this.get_submit_version()
-                    if (version != null
-                     && version ==~ /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:[-0-9a-zA-Z]+(?:\.[-0-9a-zA-Z])*))(?:\+(?:[-0-9a-zA-Z]+(?:\.[-0-9a-zA-Z])*))?$/) {
-                      // Pre-release versions are not new versions, skip
-                      return false
-                    }
+                  if (run_on_change == 'new-version-only' && !this.is_new_version()) {
+                    return false
                   }
                   return is_publishable_change
                 }
@@ -1464,94 +1760,10 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
               },
             ]
           }
-          while (phases) {
-            final phase = phases.keySet().first()
-            def is_build_successful = steps.currentBuild.currentResult == 'SUCCESS'
-            // Make sure steps exclusive to changes are skipped when a failure occurred during one of the previous phases.
-            final variants = phases.remove(phase).findAll { variant, meta ->
-              def run_on_change = meta.run_on_change
-
-              if (run_on_change == 'only' || run_on_change == 'new-version-only') {
-                if (!is_build_successful) {
-                  steps.println("Skipping variant ${variant} in ${phase} because build is not successful")
-                  return false
-                }
-              }
-              return true
-            }
-            // Skip creation of a stage for phases with no variants to execute
-            if (variants.size() == 0) {
-              continue
-            }
-
-            steps.stage(phase) {
-              def stepsForBuilding = variants.collectEntries { variant, meta ->
-                def label = meta.label
-                [ (variant): {
-                  if (this.nodes.containsKey(variant)) {
-                    label = this.nodes[variant]
-                  }
-                  this.on_node(node_expr: label, name: "${phase}-${variant}") {
-                    with_workspace_for_variant(variant) {
-                      this.with_hopic(variant) { cmd ->
-                        // If working with multiple executors on this node, uniquely identify this node by variant
-                        // to ensure the correct workspace.
-                        final workspace = this.ensure_checkout(cmd, clean, variant)
-                        this.pin_variant_to_current_node(variant)
-
-                        this.ensure_unstashed(variant)
-
-                        if (!meta.nop) {
-                          this.build_variant(phase, variant, cmd, workspace, artifactoryBuildInfo, hopic_extra_arguments)
-                        }
-
-                        // Execute a string of uninterrupted phases with our current variant for which we don't need to wait on preceding phases
-                        //
-                        // Using a regular for loop because we need to break out of it early and .takeWhile doesn't work with closures defined in CPS context
-                        for (next_phase in phases.keySet()) {
-                          final next_variants = phases[next_phase]
-
-                          if (!next_variants.containsKey(variant)
-                           // comparing against 'false' directly because we want to reject 'null' too
-                           || next_variants[variant].wait_on_full_previous_phase != false) {
-                            break
-                          }
-
-                          // Prevent executing this variant again during the phase it really belongs too
-                          final next_variant = next_variants.remove(variant)
-                          assert next_variant.run_on_change == 'always'
-
-                          // Execute this variant's next phase already.
-                          // Because the user asked for it, in order not to relinquish this node until we really have to.
-                          if (!next_variant.nop) {
-                            this.build_variant(next_phase, variant, cmd, workspace, artifactoryBuildInfo, hopic_extra_arguments)
-                          }
-                        }
-                      }
-                    }
-                  }
-                }]
-              }
-              steps.parallel stepsForBuilding
-            }
-          }
-
-          if (this.may_submit_result != false) {
-            this.on_build_node(node_expr: submit_meta['node-label'], name: 'submit') { cmd ->
-              if (this.has_submittable_change()) {
-                steps.stage('submit') {
-                  this.with_git_credentials() {
-                    this.get_change().abort_if_changed(steps.scm.userRemoteConfigs[0].url)
-                    this.subcommand_with_credentials(
-                        cmd + hopic_extra_arguments,
-                        'submit'
-                      , submit_meta.getOrDefault('with-credentials', []),
-                      'Hopic: submitting merge')
-                  }
-                }
-              }
-            }
-          }
+          // Clear the target commit hash that we determined outside of 'lock_if_necessary' because the target branch
+          // may have moved forward while we didn't hold the lock.
+          this.target_commit = null
+          this.build_phases(phases, clean, artifactoryBuildInfo, hopic_extra_arguments, submit_meta, locks['from-phase'])
         }
 
         if (artifactoryBuildInfo) {

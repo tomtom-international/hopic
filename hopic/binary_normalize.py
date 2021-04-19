@@ -1,4 +1,4 @@
-# Copyright (c) 2018 - 2020 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2018 - 2021 TomTom N.V. (https://tomtom.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -254,15 +254,15 @@ def normalize(filename, fileobj=None, outname='', outfileobj=None, source_date_e
     if (fileobj is None or outfileobj is None) and not os.path.isfile(filename):
         return
 
-    if filename.endswith('.tar') or filename.endswith('.tar.gz'):
+    if filename.suffix == ".tar" or filename.suffixes[-2:] == [".tar", ".gz"]:
         if outfileobj is None:
-            archivefile = outfile = open(filename + '.tmp', 'wb')
+            archivefile = outfile = open(filename.with_suffix(filename.suffix + ".tmp"), 'wb')
         else:
             archivefile = outfile = outfileobj
         with TarFile.open(filename, fileobj=fileobj) as in_archive:
             try:
                 compress = False
-                if filename.endswith('.gz'):
+                if filename.suffix == ".gz":
                     compress = True
                     archivefile = GzipFile(filename=outname, mode='wb', compresslevel=9, fileobj=outfile, mtime=source_date_epoch)
 
@@ -287,11 +287,11 @@ def normalize(filename, fileobj=None, outname='', outfileobj=None, source_date_e
                 if outfileobj is not None:
                     outfile.close()
         if outfileobj is None:
-            os.utime(filename + '.tmp', (source_date_epoch, source_date_epoch))
-            os.rename(filename + '.tmp', filename)
+            os.utime(outfile.name, (source_date_epoch, source_date_epoch))
+            os.rename(outfile.name, filename)
 
-    elif filename.endswith('.deb'):
-        with ArFile(filename) as in_pkg, ArFile(filename + '.tmp', 'w') as out_pkg:
+    elif filename.suffix == ".deb":
+        with ArFile(filename) as in_pkg, ArFile(filename.with_suffix(filename.suffix + ".tmp"), 'w') as out_pkg:
             # A valid Debian package contains these files in this order
             expected_files = [
                 (u'debian-binary',),

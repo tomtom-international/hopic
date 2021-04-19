@@ -1,4 +1,4 @@
-# Copyright (c) 2018 - 2020 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2018 - 2021 TomTom N.V. (https://tomtom.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ from collections.abc import (
     )
 from enum import Enum
 import errno
+from functools import lru_cache
 try:
     # Python >= 3.8
     from importlib import metadata
@@ -32,9 +33,11 @@ import io
 import json
 import logging
 import os
+from pathlib import Path
 import re
 import shlex
 import subprocess
+from textwrap import dedent
 import typeguard
 import typing
 try:
@@ -97,6 +100,21 @@ class RunOnChange(str, Enum):
     """The steps will only be performed when the change is to be submitted in the current execution."""
     new_version_only = 'new-version-only'
     """The steps will only be performed when the change is on a new version and is to be submitted in the current execution."""
+
+    default = always
+
+
+class LockOnChange(str, Enum):
+    """
+    The :option:`lock-on-change` option allows you to specify when additional locks needs to be acquired.
+    The value of this option can be one of:
+    """
+    always           = 'always'
+    """Additional lock will always be acquired. (Default if not specified)."""
+    never            = 'never'
+    """Additional lock will never be acquired"""
+    new_version_only = 'new-version-only'
+    """Additional lock will only be acquired when the version was bumped and is to be submitted in the current execution."""
 
     default = always
 
@@ -370,6 +388,11 @@ def match_template_props_to_signature(
     return new_params
 
 
+@lru_cache()
+def get_entry_points():
+    return {ep.name: ep for ep in metadata.entry_points().get('hopic.plugins.yaml', ())}
+
+
 def load_yaml_template(volume_vars, extension_installer, loader, node):
     if node.id == 'scalar':
         props = {}
@@ -378,13 +401,11 @@ def load_yaml_template(volume_vars, extension_installer, loader, node):
         props = loader.construct_mapping(node, deep=True)
         name = props.pop('name')
 
-    for ep in metadata.entry_points().get('hopic.plugins.yaml', ()):
-        if ep.name == name:
-            break
-    else:
-        raise TemplateNotFoundError(name=name, props=props)
+    try:
+        template_fn = get_entry_points()[name].load()
+    except KeyError as exc:
+        raise TemplateNotFoundError(name=name, props=props) from exc
 
-    template_fn = ep.load()
     template_sig = inspect.signature(template_fn)
     rt_type = template_sig.return_annotation
     if rt_type is inspect.Signature.empty:
@@ -514,8 +535,8 @@ def expand_docker_volume_spec(config_dir, volume_vars, volume_specs, add_default
 
             # Make relative paths relative to the configuration directory.
             # Absolute paths will be absolute
-            source = os.path.join(config_dir, source)
-            volume['source'] = source
+            source = config_dir / source
+            volume['source'] = str(source)
 
         # Expand target specification resolved on the guest side
         if 'target' in volume:
@@ -681,8 +702,19 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
                 raise ConfigurationError(
                         f"'run-on-change' member's value of {cmd['run-on-change']!r} is not among the valid options ({', '.join(RunOnChange)})",
                         file=config_file) from exc
-        if cmd_key in ('archive', 'fingerprint') and isinstance(cmd[cmd_key], (OrderedDict, dict)) and 'artifacts' in cmd[cmd_key]:
-            artifacts = cmd[cmd_key]['artifacts']
+        if cmd_key in ('archive', 'fingerprint'):
+            if not isinstance(cmd[cmd_key], (OrderedDict, dict)):
+                raise ConfigurationError(
+                    f"'{phase}.{variant}.{cmd_key}' member is not a mapping",
+                    file=config_file,
+                )
+            try:
+                artifacts = cmd[cmd_key]['artifacts']
+            except KeyError:
+                raise ConfigurationError(
+                    f"'{phase}.{variant}.{cmd_key}' lacks the mandatory 'artifacts' member",
+                    file=config_file,
+                )
 
             # Convert single artifact string to list of single artifact specification
             if isinstance(artifacts, str):
@@ -699,10 +731,82 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
                 for artifact in artifacts:
                     artifact.setdefault('target', target)
 
+            for artifact_idx, artifact in enumerate(artifacts):
+                try:
+                    pattern = artifact["pattern"]
+                except KeyError:
+                    raise ConfigurationError(
+                        f"'{phase}.{variant}.{cmd_key}[{artifact_idx}]' lacks the mandatory 'pattern' member",
+                        file=config_file,
+                    )
+                if not isinstance(pattern, str):
+                    raise ConfigurationError(
+                        f"'{phase}.{variant}.{cmd_key}[{artifact_idx}].pattern' is not a string but a `{type(pattern).__name__}",
+                        file=config_file,
+                    )
+                try:
+                    for _ in Path(os.path.devnull).glob(pattern.replace("(*)", "*")):
+                        break
+                except ValueError as exc:
+                    raise ConfigurationError(
+                        f"'{phase}.{variant}.{cmd_key}[{artifact_idx}].pattern' value of {pattern!r} is not a valid glob pattern: {exc}",
+                        file=config_file,
+                    ) from exc
+
             cmd[cmd_key]['artifacts'] = artifacts
+
+            if 'allow-empty-archive' in cmd[cmd_key]:
+                if 'allow-missing' in cmd[cmd_key]:
+                    raise ConfigurationError(
+                        "'allow-empty-archive' and 'allow-missing' are not allowed in the same "
+                        "Archive configuration, use only 'allow-missing'",
+                        file=config_file,
+                    )
+
+                allow_empty_archive = cmd[cmd_key]['allow-empty-archive']
+                cmd[cmd_key].pop('allow-empty-archive')
+                cmd[cmd_key]['allow-missing'] = allow_empty_archive
+
+            allow_missing = cmd[cmd_key].setdefault("allow-missing", False)
+            if not isinstance(allow_missing, bool):
+                raise ConfigurationError(
+                    f"'{phase}.{variant}.{cmd_key}.allow-missing' should be a boolean, not a {type(allow_missing).__name__}",
+                    file=config_file,
+                )
         if cmd_key == 'junit':
+            if isinstance(cmd[cmd_key], list):
+                cmd[cmd_key] = OrderedDict([('test-results', cmd[cmd_key])])
             if isinstance(cmd[cmd_key], str):
-                cmd[cmd_key] = [cmd[cmd_key]]
+                cmd[cmd_key] = OrderedDict([('test-results', [cmd[cmd_key]])])
+
+            try:
+                test_results = cmd[cmd_key]['test-results']
+            except KeyError:
+                raise ConfigurationError("JUnit configuration did not contain mandatory field 'test-results'", file=config_file)
+            if isinstance(test_results, str):
+                test_results = cmd[cmd_key]['test-results'] = [test_results]
+            try:
+                typeguard.check_type(argname=f"{phase}.{variant}.{cmd_key}.test-results", value=test_results, expected_type=typing.Sequence[str])
+            except TypeError as exc:
+                raise ConfigurationError(
+                    "'{phase}.{variant}.{cmd_key}.test-results' member is not a list of file pattern strings",
+                    file=config_file,
+                ) from exc
+            allow_missing = cmd[cmd_key].setdefault("allow-missing", False)
+            if not isinstance(allow_missing, bool):
+                raise ConfigurationError(
+                    f"'{phase}.{variant}.{cmd_key}.allow-missing' should be a boolean, not a {type(allow_missing).__name__}",
+                    file=config_file,
+                )
+            for pattern_idx, pattern in enumerate(test_results):
+                try:
+                    for _ in Path(os.path.devnull).glob(pattern):
+                        break
+                except ValueError as exc:
+                    raise ConfigurationError(
+                        f"'{phase}.{variant}.{cmd_key}[{pattern_idx}]' value of {pattern!r} is not a valid glob pattern: {exc}",
+                        file=config_file,
+                    ) from exc
         if cmd_key == 'with-credentials':
             if isinstance(cmd[cmd_key], str):
                 cmd[cmd_key] = OrderedDict([('id', cmd[cmd_key])])
@@ -756,6 +860,46 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
         if cmd_key == 'volumes-from':
             cmd[cmd_key] = expand_docker_volumes_from(volume_vars, cmd[cmd_key])
 
+        if cmd_key == 'extra-docker-args':
+            args = cmd[cmd_key]
+            if not isinstance(args, Mapping):
+                raise ConfigurationError(
+                    f"`extra-docker-args` member of `{variant}` should be a Mapping, not a {type(cmd[cmd_key]).__name__}",
+                    file=config_file)
+
+            allowed_options = {
+                'device': typing.Sequence[str],
+                'add-host': typing.Sequence[str],
+                'hostname': str,
+                'entrypoint': str,
+                'dns': str,
+                'init': bool,
+            }
+            disallowed_options = args.keys() - allowed_options
+            if disallowed_options != set():
+                raise ConfigurationError(dedent('''
+                    `extra-docker-args` member of `{}` contains one or more options that are not allowed:
+                      {}
+                    Allowed options:
+                      {}
+                    '''.format(
+                         variant,
+                         ', '.join(disallowed_options),
+                         ', '.join(allowed_options)
+                    )),
+                    file=config_file)
+            for k, v in args.items():
+                try:
+                    typeguard.check_type(argname=k, value=v, expected_type=allowed_options[k])
+                except TypeError:
+                    raise ConfigurationError(
+                        f"`extra-docker-args` argument `{k}` for `{variant}` should be a {allowed_options[k].__name__}, not a {type(v).__name__}",
+                        file=config_file)
+                if isinstance(v, str) and ' ' in v:
+                    raise ConfigurationError(
+                        f"`extra-docker-args` argument `{k}` for `{variant}` contains whitespace, which is not permitted.",
+                        file=config_file)
+
     if 'environment' in cmd and 'sh' not in cmd:
         raise ConfigurationError(
             "Trying to set 'environment' member for a command entry that doesn't have 'sh'",
@@ -808,10 +952,11 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
         file_close = True
 
     try:
-        config_dir = os.path.dirname(config)
+        config = Path(config)
+        config_dir = config.parent
 
         volume_vars = volume_vars.copy()
-        volume_vars['CFGDIR'] = config_dir
+        volume_vars['CFGDIR'] = str(config_dir)
 
         cfg = install_top_level_extensions(f, config, extension_installer, volume_vars)
         f.seek(0)
@@ -854,13 +999,30 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
     ci_locks = cfg.setdefault('ci-locks', [])
     if not isinstance(ci_locks, Sequence):
         raise ConfigurationError(f"`ci-locks` doesn't contain a sequence but a {type(ci_locks).__name__}", file=config)
+    ci_locks_argument_mapping = {
+        'branch'           : {'type': str },
+        'repo-name'        : {'type': str },
+        'lock-on-change'   : {'type': LockOnChange, 'default': LockOnChange.default},
+        'from-phase-onward': {'type': str, 'optional': True }
+    }
     for lock_properties in ci_locks:
-        for property in ['branch', 'repo-name']:
+        for property, argument_spec in ci_locks_argument_mapping.items():
             if property not in lock_properties:
-                raise ConfigurationError(f"`ci-locks` {lock_properties} doesn't contain a {property}", file=config)
-            if not isinstance(lock_properties[property], str):
-                raise ConfigurationError(f"`ci-locks` {lock_properties} has an invalid attribute {property}, "
-                                         f"expected a string but got a {type(lock_properties[property])}", file=config)
+                if 'default' in argument_spec:
+                    lock_properties[property] = argument_spec['type'](argument_spec['default'])
+                elif not argument_spec.get('optional', False):
+                    raise ConfigurationError(f"`ci-locks` {lock_properties} doesn't contain a {property}", file=config)
+                else:
+                    continue
+
+            msg = f'`ci-locks` {lock_properties} has an invalid attribute "{property}", expected %s, but got a {type(lock_properties[property]).__name__}'
+            if issubclass(ci_locks_argument_mapping[property]['type'], Enum):
+                try:
+                    isinstance(argument_spec['type'](lock_properties[property]), argument_spec['type'])
+                except ValueError:
+                    raise ConfigurationError(msg % ("one of " + ", ".join(f'"{x}"' for x in LockOnChange)))
+            elif not isinstance(lock_properties[property], argument_spec['type']):
+                raise ConfigurationError(msg % f"a {argument_spec['type'].__name__}")
 
     valid_image_types = (_basic_image_types, Mapping)
     image = cfg.setdefault('image', OrderedDict())
@@ -983,6 +1145,31 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
                     phase[variant].insert(0, OrderedDict())
                 phase[variant][0]['wait-on-full-previous-phase'] = True
         previous_phase = phasename
+
+    lock_names = []
+    for ci_lock in ci_locks:
+        if 'from-phase-onward' in ci_lock:
+            if ci_lock['from-phase-onward'] not in cfg['phases']:
+                raise ConfigurationError(
+                    f"referenced phase in ci-locks ({ci_lock['from-phase-onward']}) doesn't exist",
+                    file=config,
+                )
+            for variant_name, variant in cfg['phases'][ci_lock['from-phase-onward']].items():
+                if any('wait-on-full-previous-phase' in item and not item['wait-on-full-previous-phase'] for item in variant):
+                    raise ConfigurationError(
+                        f"referenced phase in ci-locks ({ci_lock['from-phase-onward']}) "
+                        f"refers to variant ({variant_name}) that has wait-on-full-previous-phase disabled",
+                        file=config,
+                    )
+
+        lock_id = ci_lock['repo-name'] + ci_lock['branch']
+        if lock_id in lock_names:
+            raise ConfigurationError(
+                f"ci-lock with repo-name '{ci_lock['repo-name']}' and branch '{ci_lock['branch']}' already exists, "
+                "this would lead to a deadlock",
+                file=config,
+            )
+        lock_names.append(ci_lock['repo-name'] + ci_lock['branch'])
 
     post_submit = cfg.setdefault('post-submit', OrderedDict())
     if not isinstance(post_submit, Mapping):

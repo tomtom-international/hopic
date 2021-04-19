@@ -1,0 +1,15 @@
+image:
+  default: buildpack-deps:testing
+
+phases:
+  docker-phase:
+    variant-with-extra-docker-args:
+      - extra-docker-args:
+          hostname: buildhost
+          init: yes
+          device:
+            - /dev/ttyS0
+            - /dev/kvm
+          add-host: my-test-host:10.1.2.3
+          dns: 9.9.9.9
+      - sh -c 'test "$$HOSTNAME" = "buildhost"'

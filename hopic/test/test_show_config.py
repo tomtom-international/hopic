@@ -20,9 +20,12 @@ from collections.abc import Sequence
 import git
 import json
 import os
+from pathlib import Path
 import re
 import sys
 from textwrap import dedent
+
+import pytest
 
 
 _git_time = f"{7 * 24 * 3600} +0000"
@@ -35,7 +38,15 @@ _commitargs = dict(
     )
 
 
-def run_with_config(config, args, files={}, env=None, cfg_file='hopic-ci-config.yaml'):
+def run_with_config(
+    config,
+    args,
+    *,
+    files={},
+    env=None,
+    cfg_file: str = "hopic-ci-config.yaml",
+    is_default_cfg_file: bool = False,
+):
     runner = CliRunner(mix_stderr=False, env=env)
     with runner.isolated_filesystem():
         with git.Repo.init() as repo:
@@ -51,7 +62,7 @@ def run_with_config(config, args, files={}, env=None, cfg_file='hopic-ci-config.
                         f.write(content)
                 repo.index.add((cfg_file,) + tuple(files.keys()))
             repo.index.commit(message='Initial commit', **_commitargs)
-        if cfg_file != 'hopic-ci-config.yaml':
+        if cfg_file != "hopic-ci-config.yaml" and not is_default_cfg_file:
             args = ('--config', cfg_file) + tuple(args)
         result = runner.invoke(hopic_cli, args)
 
@@ -270,6 +281,31 @@ volumes:
     cfgdir = output['volumes']['/cfg']['source']
     assert not cfgdir.endswith('hopic-ci-config.yaml')
     assert os.path.relpath(workspace, cfgdir) == '../..'
+
+
+@pytest.mark.parametrize("cfg_file, subdir, name", (
+    ("hopic-ci-config.yaml"    , "."  , "hopic-ci-config.yaml"),
+    (".ci/hopic-ci-config.yaml", ".ci", "hopic-ci-config.yaml"),
+))
+def test_default_paths(capfd, cfg_file, subdir, name):
+    result = run_with_config(
+        dedent(
+            """\
+            volumes:
+              - ${CFGDIR}:/cfg
+            """
+        ),
+        ("show-config",),
+        cfg_file=cfg_file,
+        is_default_cfg_file=True,
+    )
+
+    assert result.exit_code == 0
+    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
+    workspace = Path(output["volumes"]["/code"]["source"])
+    cfgdir = Path(output["volumes"]["/cfg"]["source"])
+    assert cfgdir.name != name
+    assert cfgdir.relative_to(workspace) == Path(subdir)
 
 
 def test_default_volume_mapping_set():

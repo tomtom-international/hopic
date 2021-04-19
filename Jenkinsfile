@@ -59,7 +59,7 @@ properties([
   ]),
 ])
 
-timeout(time: 10, unit: 'MINUTES') {
+timeout(time: 20, unit: 'MINUTES') {
   hopic.build(
     clean: params.CLEAN || params.MODALITY != "NORMAL",
   )

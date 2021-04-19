@@ -1,5 +1,5 @@
 ..
-   Copyright (c) 2019 - 2020 TomTom N.V. (https://tomtom.com)
+   Copyright (c) 2019 - 2021 TomTom N.V. (https://tomtom.com)
    
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -16,6 +16,139 @@
 =========
 Changelog
 =========
+
+1.34.0-6+gb9667e79c74262
+======
+
+New features
+------------
+
+* feat(groovy): allow taking additional locks only from specified phase onward (#338)
+
+1.33.2
+======
+
+Bug fixes
+---------
+
+* fix: remove indentation in git notes message (#339)
+
+1.33.1
+======
+
+Bug fixes
+---------
+
+* fix: cache static jenkins SCM properties (#332)
+* fix: avoid adding duplicate notes to same commit (#332)
+
+1.33.0
+======
+
+New features
+------------
+
+* feat: add allow-missing for junit and archive config (#325)
+* feat: increase abbreviated commit hash' length in version number to 14 nibbles (#328)
+* feat(groovy): abort submits when BitBucket PR state changed since the start (#327)
+* feat(config): add new default config file location .ci/hopic-ci-config.yaml (#336)
+
+Improvements
+------------
+
+* improvement(config): type check member options of archive/fingerprint/junit (#329)
+* improvement(archival): process Ant-style ``dir/**/subdir/*`` glob patterns (#329)
+* improvement(build): detect and complain about declared-but-missing artifacts (#329)
+
+Bug fixes
+---------
+
+* fix(groovy): restore BB PR metadata to avoid altering the msg during a build (#330)
+* fix(autocomplete): load default config file as well during autocompletion (#331)
+* fix: avoid using specific versions of typeguard (#333)
+* fix(unbundle): don't delete tags we cannot fetch again (#335)
+
+1.32.0
+======
+
+New features
+------------
+
+* feat(checkout): support checking out a specific commit of the target branch (#316)
+
+Improvements
+------------
+
+* improvement(groovy): abort early when a build's PR changed since build started (#315)
+
+Bug fixes
+---------
+
+* fix(groovy): ensure to build the same commit of the target branch on all nodes (#316)
+* fix(checkout): don't try to check out the same commit on the configured repo too (#323)
+* fix(groovy): only pin target branch to commits obtained while holding merge lock (#324)
+* fix: only run docker with tty when stdout is a terminal (#321)
+
+1.31.0
+======
+
+New features
+------------
+
+* feat: expose ci lock timings (#313)
+* feat: add lock-on-change to ci-locks config (#319)
+* feat: expose has_prerelease function from cidriver (#319)
+
+Improvements
+------------
+
+* refactor(groovy): extract taking a resource lock to new function (#313)
+* improvement: log a more helpful error for invalid merge commit message (#312)
+
+1.30.0
+======
+
+New features
+------------
+
+* feat: add version check for pull request title (#300)
+* feat: expose node allocation timings via an interface (#302)
+* feat: add more detailed information to build info metrics (#309)
+* feat: introduce allow-empty-archive (#307)
+* feat: allow extra 'docker run' args to be specified per variant (#284)
+
+Improvements
+------------
+
+* improvement(versioning): log 'git describe' form of failed-to-parse git version (#301)
+* improvement: set human-friendly error for unknown VERSION (#266)
+
+Documentation improvements
+--------------------------
+
+* docs: requirements for the version format to support a hotfix process (#308)
+
+Bug fixes
+---------
+
+* fix: use only simple types on node information interface (#309)
+* fix: handle all build status values of Jenkins (#309)
+* fix: run archive before junit (#307)
+
+1.29.2
+======
+
+Improvements
+------------
+
+* improvement(groovy): mark methods that override something from the base as such (#299)
+
+Bug fixes
+---------
+
+* fix(groovy): abort before submitting a changed PR (#295)
+* fix: align abort_if_changed method signature (#297)
+* fix(groovy): annotate and align method signatures between base and derived (#299)
 
 1.29.1
 ======
