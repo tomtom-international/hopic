@@ -16,40 +16,43 @@
 Helper functionality for Hopic templates.
 """
 
+from collections.abc import Sequence
 import sys
 from typing import (
     Any,
+    Iterable,
     List,
-    Mapping,
     Tuple,
     Union,
 )
 
 
-def _kebabify(name: str):
+def _kebabify(name: str) -> str:
     """Convert from snake_case to kebab-case"""
     return name.replace("_", "-")
 
 
-def _name_to_arg(name):
+def _name_to_arg(name: str) -> str:
+    if name.startswith("_") and len(name) > 1:
+        name = name[1:]
     if len(name) == 1:
+        assert name not in ("_", "-")
         return f"-{name}"
     else:
         return f"--{_kebabify(name)}"
 
 
-def _kwarg_to_arg(name, value):
+def _kwarg_to_arg(name: str, value: Any) -> Iterable[str]:
     if value is True:
-        return [_name_to_arg(name)]
+        yield _name_to_arg(name)
     elif value is not False and value is not None:
-        return [_name_to_arg(name), str(value)]
-    else:
-        return []
+        yield _name_to_arg(name)
+        yield str(value)
 
 
-def _kwargs_to_args(**kwargs: Mapping[str, Any]):
+def _kwargs_to_args(**kwargs: Any) -> Iterable[str]:
     for key, val in kwargs.items():
-        if isinstance(val, (list, tuple)):
+        if not isinstance(val, str) and isinstance(val, Sequence):
             for subval in val:
                 yield from _kwarg_to_arg(key, subval)
         else:

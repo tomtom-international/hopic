@@ -17,7 +17,69 @@
 Changelog
 =========
 
-1.34.0-6+gb9667e79c74262
+1.38.0
+======
+
+New features
+------------
+
+* feat: make source commit ranges available without 'foreach' (#349)
+
+Bug fixes
+---------
+
+* fix: read config file directly after merge (#350)
+* fix: pin typeguard version until breaking issue is resolved (#353)
+
+1.37.0
+======
+
+New features
+------------
+
+* feat(template.utils): support options with the same name as Python keywords (#348)
+
+1.36.0
+======
+
+New features
+------------
+
+* feat(template): add helper functions for creating command argument lists (#346)
+
+Bug fixes
+---------
+
+* fix: only parse merge commit message for merge change requests (#347)
+
+1.35.0
+======
+
+New features
+------------
+
+* feat(groovy): expose lock wrapper (#343)
+
+
+Performance improvements
+------------------------
+
+* perf: cache template entry points (#344)
+
+Improvements
+------------
+
+* improvement(groovy): don't log NOP submits as having run (#342)
+
+1.34.1
+======
+
+Bug fixes
+---------
+
+* fix(build): allow variables to be used in artifact/junit patterns (#341)
+
+1.34.0
 ======
 
 New features

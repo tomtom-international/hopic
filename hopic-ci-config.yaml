@@ -31,28 +31,28 @@ phases:
   style:
     commit-messages: !template "commisery"
     flake8:
-      - docker build --build-arg=PYTHON_VERSION=3.8 -t hopic-python:3.8-slim-git hopic/test/docker-images/python
+      - docker build --network=host --build-arg=PYTHON_VERSION=3.8 -t hopic-python:3.8-slim-git hopic/test/docker-images/python
       - junit: flake8.xml
         image: hopic-python:3.8-slim-git
         sh: tox -e flake8
 
   test:
     python3.6:
-      - docker build --build-arg=PYTHON_VERSION=3.6 -t hopic-python:3.6-slim-git hopic/test/docker-images/python
+      - docker build --network=host --build-arg=PYTHON_VERSION=3.6 -t hopic-python:3.6-slim-git hopic/test/docker-images/python
       - junit: junit-test.xml
         image: hopic-python:3.6-slim-git
         docker-in-docker: yes
         sh: tox -r -e py36
 
     python3.7:
-      - docker build --build-arg=PYTHON_VERSION=3.7 -t hopic-python:3.7-slim-git hopic/test/docker-images/python
+      - docker build --network=host --build-arg=PYTHON_VERSION=3.7 -t hopic-python:3.7-slim-git hopic/test/docker-images/python
       - junit: junit-test.xml
         image: hopic-python:3.7-slim-git
         docker-in-docker: yes
         sh: tox -r -e py37
 
     python3.8:
-      - docker build --build-arg=PYTHON_VERSION=3.8 -t hopic-python:3.8-slim-git hopic/test/docker-images/python
+      - docker build --network=host --build-arg=PYTHON_VERSION=3.8 -t hopic-python:3.8-slim-git hopic/test/docker-images/python
       - junit: junit-test.xml
         image: hopic-python:3.8-slim-git
         docker-in-docker: yes

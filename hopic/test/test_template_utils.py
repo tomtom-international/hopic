@@ -12,8 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import keyword
 from pathlib import Path
 import sys
+
+import pytest
 
 from hopic.template.utils import (
     command,
@@ -54,6 +57,16 @@ def test_str_coercion():
     )
 
     assert command("cmd", 0, arg=1, args=(2, True)) == ("cmd", "--arg", "1", "--args", "2", "--args", "0")
+
+
+@pytest.mark.parametrize("keyword", keyword.kwlist)
+def test_keyword_opts(keyword):
+    try:
+        call = compile(f"command('cmd', {keyword}=True)", filename="", mode="eval")
+    except SyntaxError:
+        call = compile(f"command('cmd', _{keyword}=True)", filename="", mode="eval")
+
+    assert eval(call) == ("cmd", f"--{keyword}")
 
 
 def test_opt_like_args():

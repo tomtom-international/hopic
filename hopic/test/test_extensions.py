@@ -1,4 +1,4 @@
-# Copyright (c) 2020 - 2020 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2020 - 2021 TomTom N.V.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,56 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from . import hopic_cli
-
-from click.testing import CliRunner
-
 try:
     # Python >= 3.8
     from importlib import metadata
 except ImportError:
     import importlib_metadata as metadata
-import git
 import json
 import pytest
 import subprocess
 import sys
 from textwrap import dedent
-
-_git_time = f"{42 * 365 * 24 * 3600} +0000"
-_author = git.Actor('Bob Tester', 'bob@example.net')
-_commitargs = dict(
-    author_date=_git_time,
-    commit_date=_git_time,
-    author=_author,
-    committer=_author,
-)
-
-
-def run_with_config(config, *args, env=None):
-    runner = CliRunner(mix_stderr=False, env=env)
-    with runner.isolated_filesystem():
-        with git.Repo.init() as repo:
-            with open('hopic-ci-config.yaml', 'w') as f:
-                f.write(config)
-            repo.index.add(('hopic-ci-config.yaml',))
-            repo.index.commit(message='Initial commit', **_commitargs)
-            repo.create_tag('0.0.0')
-        for arg in args:
-            result = runner.invoke(hopic_cli, arg)
-
-            if result.stdout_bytes:
-                print(result.stdout, end='')
-            if result.stderr_bytes:
-                print(result.stderr, end='', file=sys.stderr)
-
-            if result.exception is not None and not isinstance(result.exception, SystemExit):
-                raise result.exception
-
-            yield result
-
-            if result.exit_code != 0:
-                return
 
 
 @pytest.mark.parametrize('expected_args', (
@@ -69,7 +29,7 @@ def run_with_config(config, *args, env=None):
         ('--index-url', 'https://test.pypi.org/simple/', 'commisery>=0.2,<1',),
         ('flake8',),  # noqa: E201
 ))
-def test_install_extensions_from_multiple_indices(monkeypatch, expected_args):
+def test_install_extensions_from_multiple_indices(monkeypatch, run_hopic, expected_args):
     def mock_check_call(args, *popenargs, **kwargs):
         if '--user' in args:
             args.remove('--user')
@@ -102,14 +62,15 @@ def test_install_extensions_from_multiple_indices(monkeypatch, expected_args):
         config = dedent(f"""\
                 pip: {json.dumps(expected_args)}
                 """)
-    result, = run_with_config(
-        config,
-        ('install-extensions',))
+    (result,) = run_hopic(
+        ("install-extensions",),
+        config=config,
+    )
 
     assert result.exit_code == 0
 
 
-def test_with_single_extra_index(monkeypatch):
+def test_with_single_extra_index(monkeypatch, run_hopic):
     extra_index = 'https://test.pypi.org/simple/'
     pkg = 'hopic>=1.19<2'
 
@@ -125,19 +86,22 @@ def test_with_single_extra_index(monkeypatch):
 
     monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
 
-    result, = run_with_config(
-        dedent(f"""\
+    (result,) = run_hopic(
+        ("install-extensions",),
+        config=dedent(
+            f"""\
                 pip:
                   - with-extra-index: {extra_index}
                     packages:
                       - {pkg}
-                """),
-        ('install-extensions',))
+            """
+        ),
+    )
 
     assert result.exit_code == 0
 
 
-def test_recursive_extension_installation(monkeypatch):
+def test_recursive_extension_installation(monkeypatch, run_hopic):
     extra_index = 'https://test.pypi.org/simple/'
     pkg = 'pipeline-template'
     template_pkg = 'template-in-template'
@@ -194,23 +158,26 @@ def test_recursive_extension_installation(monkeypatch):
 
     monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
 
-    result, = run_with_config(
-        dedent(f"""\
+    (result,) = run_hopic(
+        ("install-extensions",),
+        config=dedent(
+            f"""\
                 pip:
                   - with-extra-index: {extra_index}
                     packages:
                       - {pkg}
 
                 config: !template {pkg}
-                """),
-        ('install-extensions',))
+            """
+        ),
+    )
 
     assert result.exit_code == 0
     assert len(expected_pkg_install_order) == 0
     assert inner_template_called.pop()
 
 
-def test_recursive_extension_installation_invalid_template_name(monkeypatch):
+def test_recursive_extension_installation_invalid_template_name(monkeypatch, run_hopic):
     extra_index = 'https://test.pypi.org/simple/'
     pkg = 'pipeline-template'
     template_pkg = 'template-in-template'
@@ -252,30 +219,38 @@ def test_recursive_extension_installation_invalid_template_name(monkeypatch):
 
     monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
 
-    result, = run_with_config(
-        dedent(f"""\
+    (result,) = run_hopic(
+        ("install-extensions",),
+        config=dedent(
+            f"""\
                 pip:
                   - with-extra-index: {extra_index}
                     packages:
                       - {pkg}
 
                 config: !template {pkg}
-                """),
-        ('install-extensions',))
+            """
+        ),
+    )
 
     assert result.exit_code == 0
     assert len(expected_pkg_install_order) == 0
 
 
-def test_invalid_template_name(capfd):
+def test_invalid_template_name(capfd, run_hopic):
     '''
     `hopic build` should return a clear error message when a template is specified
     that can't be found.
     '''
 
-    result, = run_with_config(dedent('''
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(
+            '''
                 config: !template xyzzy
-                '''), ('build',))
+            '''
+        ),
+    )
 
     assert result.exit_code != 0
 
@@ -286,7 +261,7 @@ def test_invalid_template_name(capfd):
 
 
 @pytest.mark.xfail
-def test_recursive_extension_installation_version_functionality(monkeypatch):
+def test_recursive_extension_installation_version_functionality(monkeypatch, run_hopic):
     first_pkg = 'firstorder'
     second_pkg = 'secondorder'
 
@@ -359,8 +334,9 @@ def test_recursive_extension_installation_version_functionality(monkeypatch):
     monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
     monkeypatch.setattr(subprocess, 'check_call', lambda *args, **kwargs: None)
 
-    result, = run_with_config(
-        dedent(
+    (result,) = run_hopic(
+        ("build", "--dry-run"),
+        config=dedent(
             f"""
             pip:
               - packages:
@@ -369,7 +345,6 @@ def test_recursive_extension_installation_version_functionality(monkeypatch):
             config: !template {first_pkg}
             """
         ),
-        ('build', '--dry-run')
     )
 
     assert result.exit_code == 0
