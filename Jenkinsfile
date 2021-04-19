@@ -42,8 +42,8 @@ properties([
   pipelineTriggers([
     parameterizedCron(''
       + (BRANCH_NAME =~ /^master$|^release\/\d+(?:\.\d+)?$/ ? '''
-        # trigger build as AUTO_MERGE each 2 hours, on master and release branches only
-        H */2 * * * % MODALITY=AUTO_MERGE
+        # trigger build as AUTO_MERGE every 2 hours during business hours on weekdays, on master and release branches only
+        H H(7-20)/2 * * 1-5 % MODALITY=AUTO_MERGE
         ''' : '')
       + (BRANCH_NAME =~ /^release\/\d+(?:\.\d+)?$/ ? '''
         # Bump the version early on every Monday. Only does something if there are any bumpable changes since the last tagged version.
