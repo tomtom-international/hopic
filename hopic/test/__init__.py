@@ -23,6 +23,7 @@ from io import StringIO
 PACKAGE : str = __package__.split('.')[0]
 
 hopic_cli = [ep for ep in metadata.entry_points()['console_scripts'] if ep.name == PACKAGE][0].load()
+source_date_epoch = 7 * 24 * 3600
 
 
 def config_file(name: str, content: str):

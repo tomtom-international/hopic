@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from . import source_date_epoch
 from .markers import (
         docker,
     )
@@ -21,7 +22,6 @@ from ..cli import extensions
 
 from textwrap import dedent
 from typing import Pattern
-import git
 try:
     # Python >= 3.8
     from importlib import metadata
@@ -34,16 +34,6 @@ import signal
 import stat
 import subprocess
 import sys
-
-_source_date_epoch = 7 * 24 * 3600
-_git_time = f"{_source_date_epoch} +0000"
-_author = git.Actor('Bob Tester', 'bob@example.net')
-_commitargs = dict(
-        author_date=_git_time,
-        commit_date=_git_time,
-        author=_author,
-        committer=_author,
-    )
 
 
 def test_missing_manifest(run_hopic):
@@ -306,7 +296,7 @@ def test_docker_run_arguments(run_hopic, expect_forward_tty, has_stderr, has_std
             '--cap-add=SYS_PTRACE', '--rm', '--volume=/etc/passwd:/etc/passwd:ro',
             '--volume=/etc/group:/etc/group:ro', '--workdir=/code',
             f"--volume={os.getcwd()}:/code",
-            f"--env=SOURCE_DATE_EPOCH={_source_date_epoch}",
+            f"--env=SOURCE_DATE_EPOCH={source_date_epoch}",
             '--env=HOME=/home/sandbox', '--env=_JAVA_OPTIONS=-Duser.home=/home/sandbox',
             f"--user={uid}:{gid}",
             '--net=host', f"--tmpfs=/home/sandbox:exec,uid={uid},gid={gid}",
@@ -726,7 +716,7 @@ phases:
     )
     assert result.exit_code == 0
     out, err = capfd.readouterr()
-    assert out.strip() == str(_source_date_epoch)
+    assert out.strip() == str(source_date_epoch)
 
 
 def test_command_with_deleted_env_var(capfd, run_hopic):
