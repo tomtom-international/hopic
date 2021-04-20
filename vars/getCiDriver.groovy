@@ -16,7 +16,6 @@
 
 import groovy.json.JsonOutput
 import hudson.model.ParametersDefinitionProperty
-import java.text.SimpleDateFormat
 import org.jenkinsci.plugins.credentialsbinding.impl.CredentialNotFoundException
 import org.jenkinsci.plugins.scriptsecurity.sandbox.RejectedAccessException
 import org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty
@@ -523,10 +522,11 @@ class CiDriver {
   private bitbucket_api_credential_id  = null
   private LinkedHashMap<String, LinkedHashMap<Integer, NodeExecution[]>> nodes_usage = [:]
   private ArrayList<LockWaitingTime> lock_times = []
+  private printMetrics
 
   private final default_node_expr = "Linux && Docker"
 
-  CiDriver(Map params = [:], steps, String repo) {
+  CiDriver(Map params = [:], steps, String repo, printMetrics) {
     this.repo = repo
     this.steps = steps
     this.change = params.change
@@ -537,6 +537,7 @@ class CiDriver {
       refspec: steps.scm.userRemoteConfigs[0].refspec,
       url: steps.scm.userRemoteConfigs[0].url,
     ]
+    this.printMetrics = printMetrics
   }
 
   private def get_change() {
@@ -1343,36 +1344,6 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     }
   }
 
-  private epoch_to_UTC_time(long time) {
-    return new Date(time)
-  }
-
-  private def print_node_usage() {
-    def largest_name_size = this.nodes_usage.collect { it.value.collect { it.value.collect { it.exec_name.size() }}}.flatten().max { it }
-    String printable_string = ""
-    this.nodes_usage.each { node, executor ->
-      printable_string += "node: ${node}\n"
-        def nesting_spaces = 2
-        executor.each { executor_number, allocation ->
-          if (executor.size() > 1) {
-            printable_string += "  executor number: ${executor_number}\n"
-            nesting_spaces = 4
-          }
-          allocation.each {
-            printable_string += String.format("${' '.multiply(nesting_spaces)}%-${largest_name_size}s request time: %s start time: %s end time: %s status: %s\n",
-              it.exec_name,
-              new SimpleDateFormat("HH:mm:ss").format(epoch_to_UTC_time(it.request_time)),
-              new SimpleDateFormat("HH:mm:ss").format(epoch_to_UTC_time(it.start_time)),
-              new SimpleDateFormat("HH:mm:ss").format(epoch_to_UTC_time(it.end_time)),
-              it.status
-            )
-          }
-        }
-      printable_string += "\n"
-    }
-    steps.print(printable_string.trim())
-  }
-
   private void build_variant(String phase, String variant, String cmd, String workspace, Map artifactoryBuildInfo, String hopic_extra_arguments) {
     steps.stage("${phase}-${variant}") {
       // Interruption point (just after potentially lengthy node acquisition):
@@ -1779,7 +1750,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
         }
         throw e
       } finally {
-        this.print_node_usage()
+        this.printMetrics.print_node_usage(this.nodes_usage)
       }
 
       if (this.change != null) {
@@ -1795,5 +1766,5 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   */
 
 def call(Map params = [:], String repo) {
-  return new CiDriver(params, this, repo)
+  return new CiDriver(params, this, repo, printMetrics(this))
 }
