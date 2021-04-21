@@ -77,6 +77,44 @@ The ``build`` property value is appended to the build metadata.
 Some package managers (e.g Maven) do not correctly implement SemVer 2.0.0. 
 Those package managers fail to perform range checks with a 'build metadata' component, because they treat the build metadata as an alphanumeric part of the version instead of ignoring it.
 
+.. option:: GIT_COMMIT
+
+``GIT_COMMIT`` contains the full commit hash of the current commit, also known symbolically as ``HEAD``.
+
+.. option:: GIT_COMMIT_TIME
+
+``GIT_COMMIT_TIME`` contains the committer time of :option:`GIT_COMMIT` formatted according to :rfc:`3339`.
+
+.. option:: GIT_BRANCH
+
+*Iff* the current repository was checked out from a branch with ``checkout-source-tree`` then ``GIT_BRANCH`` will contain that branch's name.
+
+.. option:: BUILD_NAME
+
+``BUILD_NAME`` will contain the same value as the same named environment variable, if it exists.
+If that environment variable doesn't exist it will default to ``"unknown"``.
+On Jenkins that environment variable will contain the "job name".
+
+.. option:: BUILD_NUMBER
+
+``BUILD_NUMBER`` will contain the same value as the same named environment variable, if it exists.
+If that environment variable doesn't exist it will default to ``"NaN"``.
+On Jenkins that environment variable will contain the "build number".
+For pull-requests that build number will be prefixed with "PR-<n>", e.g. "PR-123 42".
+
+.. option:: BUILD_URL
+
+``BUILD_URL`` will contain the same value as the same named environment variable, if it exists.
+If that environment variable doesn't exist it will default to to the empty string.
+On Jenkins it will contain the URL for the build's overview page.
+
+During a build the following configuration variables are available.
+
+.. option:: BUILD_DURATION
+
+``BUILD_DURATION`` will contain the amount of seconds passed since ``GIT_COMMIT_TIME``.
+Under the assumption that ``GIT_COMMIT_TIME`` is (close enough) to the start of the build this represents the time the build has taken so far.
+
 Pre-defined environment variables
 ---------------------------------
 
