@@ -44,7 +44,9 @@ setup(
       'Click>=7.0,<8.0',
       'click-log',
       'commisery>=0.5,<1',
-      'GitPython>=3,<4',
+      # The 3.1.15 version causes test_clean_checkout_in_non_empty_dir to fail due to a missing stderr.
+      # See https://github.com/gitpython-developers/GitPython/issues/1221 for details.
+      'GitPython>=3,<4,!=3.1.15',
       'importlib_metadata; python_version < "3.8"',
       'python-dateutil',
       'PyYAML',

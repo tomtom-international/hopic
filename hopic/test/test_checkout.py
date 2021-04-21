@@ -81,7 +81,7 @@ phases:
     assert result.exit_code == 0
 
 
-def test_clean_checkout_in_non_empty_dir(capfd, run_hopic, tmp_path):
+def test_clean_checkout_in_non_empty_dir(run_hopic, tmp_path):
     with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
         repo.index.commit(message='Initial commit', **_commitargs)
 
