@@ -1228,9 +1228,17 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
   private def on_node(Map node_params = [:], Closure closure) {
     def node_expr = node_params.getOrDefault("node_expr", this.default_node_expr)
-    def exec_name = node_params.exec_name
+    def exec_name = node_params.getOrDefault("exec_name", "no execution name")
     def request_time = this.get_unix_epoch_time()
     return steps.node(node_expr) {
+      if (!this.nodes_usage.containsKey(steps.env.NODE_NAME)) {
+        steps.sh(
+          script: """
+            echo network config for node ${steps.env.NODE_NAME} && 
+            ((LC_ALL=C.UTF-8 ifconfig || LC_ALL=C.UTF-8 ip addr show) | grep inet) || echo -e '\\033[33m[warning] could not get ip information of the node' >&2
+          """,
+          label: 'Hopic (internal): node ip logging')
+      }
       NodeExecution usage_entry
       if (exec_name != null) {
         usage_entry = new NodeExecution(exec_name: exec_name, request_time: request_time, start_time: this.get_unix_epoch_time())
