@@ -17,6 +17,14 @@
 Changelog
 =========
 
+1.39.0-7+gaeea71bd495bc0
+======
+
+New features
+------------
+
+* feat(build): expose build name, number, URL, start time and duration as vars (#352)
+
 1.38.0
 ======
 
