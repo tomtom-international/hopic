@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from . import source_date_epoch
 from .markers import (
         docker,
     )
@@ -19,9 +20,9 @@ from .. import credentials
 from .. import config_reader
 from ..cli import extensions
 
+from datetime import datetime
 from textwrap import dedent
 from typing import Pattern
-import git
 try:
     # Python >= 3.8
     from importlib import metadata
@@ -35,15 +36,8 @@ import stat
 import subprocess
 import sys
 
-_source_date_epoch = 7 * 24 * 3600
-_git_time = f"{_source_date_epoch} +0000"
-_author = git.Actor('Bob Tester', 'bob@example.net')
-_commitargs = dict(
-        author_date=_git_time,
-        commit_date=_git_time,
-        author=_author,
-        committer=_author,
-    )
+from dateutil.parser import parse as parse_date
+from dateutil.tz import tzutc
 
 
 def test_missing_manifest(run_hopic):
@@ -306,7 +300,7 @@ def test_docker_run_arguments(run_hopic, expect_forward_tty, has_stderr, has_std
             '--cap-add=SYS_PTRACE', '--rm',
             '--workdir=/code',
             f"--volume={os.getcwd()}:/code",
-            f"--env=SOURCE_DATE_EPOCH={_source_date_epoch}",
+            f"--env=SOURCE_DATE_EPOCH={source_date_epoch}",
             '--env=HOME=/home/sandbox', '--env=_JAVA_OPTIONS=-Duser.home=/home/sandbox',
             f"--user={uid}:{gid}",
             '--net=host', f"--tmpfs=/home/sandbox:exec,uid={uid},gid={gid}",
@@ -726,7 +720,7 @@ phases:
     )
     assert result.exit_code == 0
     out, err = capfd.readouterr()
-    assert out.strip() == str(_source_date_epoch)
+    assert out.strip() == str(source_date_epoch)
 
 
 def test_command_with_deleted_env_var(capfd, run_hopic):
@@ -1441,3 +1435,76 @@ def test_permit_missing_artifacts(run_hopic, archive_key):
     )
 
     assert result.exit_code == 0
+
+
+def test_build_times(capfd, run_hopic):
+    expected_time = datetime.utcfromtimestamp(int(source_date_epoch)).replace(tzinfo=tzutc())
+    expected_duration = 42 * 60 + 42.42
+
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(
+            """\
+            phases:
+              a:
+                x:
+                  - echo ${GIT_COMMIT_TIME} ${BUILD_DURATION}
+            """
+        ),
+        env=dict(
+            SOURCE_DATE_EPOCH=str(source_date_epoch + expected_duration),
+        ),
+    )
+
+    assert result.exit_code == 0
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    git_commit_time, duration = out.split()
+    git_commit_time = parse_date(git_commit_time)
+    duration = float(duration)
+
+    assert git_commit_time == expected_time
+    assert duration == expected_duration
+
+
+def test_build_identifiers(capfd, run_hopic):
+    repo = "something"
+    branch = "release/1"
+    pr_number = 123
+    job_build_number = 42
+
+    expected_build_name = f"{repo}/{branch}"
+    expected_build_number = f"PR-{pr_number} {job_build_number}"
+    expected_build_url = f"https://some-where-jenkins.example.com/job/{repo}/job/PR-{pr_number}/{job_build_number}/"
+
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(
+            """\
+            phases:
+              a:
+                x:
+                  - echo ${BUILD_NAME}
+                  - echo ${BUILD_NUMBER}
+                  - echo ${BUILD_URL}
+            """
+        ),
+        env=dict(
+            BUILD_NAME=expected_build_name,
+            BUILD_NUMBER=expected_build_number,
+            BUILD_URL=expected_build_url,
+        ),
+    )
+
+    assert result.exit_code == 0
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    build_name, build_number, build_url = out.splitlines()
+
+    assert build_name == expected_build_name
+    assert build_number == expected_build_number
+    assert build_url == expected_build_url

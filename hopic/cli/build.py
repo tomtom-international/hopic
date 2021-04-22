@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from datetime import datetime
 import logging
 import os
 import shlex
@@ -27,6 +28,7 @@ from collections.abc import (
 )
 
 import click
+from dateutil.tz import tzutc
 import git
 
 from . import (
@@ -86,6 +88,13 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
     volume_vars['GIT_COMMIT'] = str(hopic_git_info.submit_commit)
     if hopic_git_info.submit_ref is not None:
         volume_vars['GIT_BRANCH'] = hopic_git_info.submit_ref
+    git_commit_time = hopic_git_info.submit_commit.committed_datetime
+    # RFC 3339 formatted (strict subset of ISO 8601)
+    volume_vars["GIT_COMMIT_TIME"] = f"{git_commit_time:%Y-%m-%dT%H:%M:%S.%f%z}"
+
+    volume_vars["BUILD_NAME"] = os.environ.get("BUILD_NAME", "unknown")
+    volume_vars["BUILD_NUMBER"] = os.environ.get("BUILD_NUMBER", "NaN")
+    volume_vars["BUILD_URL"] = os.environ.get("BUILD_URL", "")
 
     # Hack to represent an empty commit list
     volume_vars["SOURCE_COMMITS"] = volume_vars["AUTOSQUASHED_COMMITS"] = "HEAD..HEAD"
@@ -296,6 +305,13 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                             'AUTOSQUASHED_COMMIT',
                         ):
                     cfg_vars[foreach] = str(foreach_item)
+                try:
+                    # Be compatible with reproducible-builds.org
+                    now = datetime.utcfromtimestamp(float(os.environ["SOURCE_DATE_EPOCH"])).replace(tzinfo=tzutc())
+                except (KeyError, TypeError):
+                    now = datetime.utcnow().replace(tzinfo=tzutc())
+                duration = now - git_commit_time
+                cfg_vars["BUILD_DURATION"] = f"{duration.total_seconds():.6f}"
 
                 final_env = env.copy()
                 for k, v in cmd_env.items():

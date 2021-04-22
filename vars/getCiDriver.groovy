@@ -685,7 +685,10 @@ docker build --build-arg=PYTHON_VERSION=3.6 --iidfile=${shell_quote(docker_src)}
         cmd += ' --config=' + "${config_file_path}"
       }
 
-      return closure(cmd)
+      def (build_name, build_identifier) = get_build_id()
+      return steps.withEnv(["BUILD_NAME=${build_name}", "BUILD_NUMBER=${build_identifier}"]) {
+        return closure(cmd)
+      }
     }
   }
 

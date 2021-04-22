@@ -42,7 +42,10 @@ import git
 import pytest
 from typeguard import typechecked
 
-from . import hopic_cli
+from . import (
+    hopic_cli,
+    source_date_epoch,
+)
 from ..cli import utils
 
 try:
@@ -63,8 +66,7 @@ _hopic_version_str = f"{PACKAGE}=={metadata.version(PACKAGE)}"
 _root_dir = Path(__file__).parent / '..' / '..'
 _example_dir = _root_dir / 'examples'
 
-_source_date_epoch = 7 * 24 * 3600
-_git_time = f"{_source_date_epoch} +0000"
+_git_time = f"{source_date_epoch} +0000"
 _author = git.Actor('Bob Tester', 'bob@example.net')
 _commitargs = dict(
         author_date=_git_time,
