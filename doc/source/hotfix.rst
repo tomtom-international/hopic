@@ -46,7 +46,7 @@ Given a base version ``X.Y.Z`` that the hotfix is based on a hotfix version is f
 
 * ``ID`` represents an alpha-numeric identifier that should be unique and is determined based on configuration.
     - ``ID`` *MUST* start with a letter (``[a-zA-Z]``) and *MUST* end with an alphanumeric character (``[a-zA-Z0-9]``) and *MAY* contain hyphens (``[-a-zA-Z0-9]``)
-    - In order to prevent compatibility problems ``ID`` *MUST NOT* have any of these forms ``^(a|b|rc|alpha|beta)-?[0-9]+$``
+    - In order to prevent compatibility problems ``ID`` *MUST NOT* have any of these forms ``^(a|b|rc|alpha|beta)[-.]?[0-9]*$``
 * ``N`` is a monotonically increasing integer
  
 ``N`` *MAY* be determined by the commit distance through the first parent of the hotfix change to the base version.
