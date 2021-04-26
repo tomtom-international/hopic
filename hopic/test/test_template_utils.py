@@ -61,6 +61,9 @@ def test_str_coercion():
 
 @pytest.mark.parametrize("keyword", keyword.kwlist)
 def test_keyword_opts(keyword):
+    if keyword.startswith("_"):
+        pytest.skip("Ignoring keywords starting with underscores as we don't support those currently.")
+
     try:
         call = compile(f"command('cmd', {keyword}=True)", filename="", mode="eval")
     except SyntaxError:
