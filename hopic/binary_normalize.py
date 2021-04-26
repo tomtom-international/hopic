@@ -16,6 +16,7 @@ import copy
 from gzip import GzipFile
 import os
 import shutil
+import sys
 import tarfile
 from tarfile import TarFile
 
@@ -267,6 +268,66 @@ def normalize(filename, fileobj=None, outname='', outfileobj=None, source_date_e
                     archivefile = GzipFile(filename=outname, mode='wb', compresslevel=9, fileobj=outfile, mtime=source_date_epoch)
 
                 with TarFile.open(outname, fileobj=archivefile, format=tarfile.USTAR_FORMAT, mode='w', encoding='UTF-8') as out_archive:
+                    if sys.version_info < (3, 9, 0):
+                        # Erase major/minor fields for non-device files as other tar-archive producing tools do and Python does since 3.9.0.
+
+                        archive_props = {
+                            "offset": 0,
+                            "next_header_offset": 0,
+                        }
+                        original_write = archivefile.write
+
+                        def write_archivefile(data):
+                            # Intercept writes to the archive file and rewrite any headers matching our criteria
+                            for block_idx in range((len(data) + tarfile.BLOCKSIZE - 1) // tarfile.BLOCKSIZE):
+                                block = data[block_idx * tarfile.BLOCKSIZE : (block_idx + 1) * tarfile.BLOCKSIZE]
+                                cur_offset = archive_props["offset"]
+                                archive_props["offset"] += len(block)
+
+                                if cur_offset != archive_props["next_header_offset"]:
+                                    continue
+
+                                try:
+                                    tarinfo = out_archive.tarinfo.frombuf(block, out_archive.encoding, out_archive.errors)
+                                except tarfile.EOFHeaderError:
+                                    break
+
+                                block_count = (tarinfo.size + tarfile.BLOCKSIZE - 1) // tarfile.BLOCKSIZE
+                                archive_props["next_header_offset"] = archive_props["offset"] + block_count * tarfile.BLOCKSIZE
+
+                                if tarinfo.devmajor != 0 or tarinfo.devmajor != 0 or tarinfo.type in (tarfile.CHRTYPE, tarfile.BLKTYPE):
+                                    continue
+
+                                # Erase major/minor fields for non-device files as other tar-archive producing tools do.
+                                if not isinstance(data, bytearray):
+                                    data = bytearray(data)
+
+                                DEVNUMBERS_OFFSET = 329
+                                DEVNUMBERS_LENGTH = 2 * 8
+                                DEVNUMBERS_RANGE = slice(
+                                    block_idx * tarfile.BLOCKSIZE + DEVNUMBERS_OFFSET,
+                                    block_idx * tarfile.BLOCKSIZE + DEVNUMBERS_OFFSET + DEVNUMBERS_LENGTH,
+                                )
+                                CHECKSUM_OFFSET = 148
+                                CHECKSUM_LENGTH = 8
+                                CHECKSUM_RANGE = slice(
+                                    block_idx * tarfile.BLOCKSIZE + CHECKSUM_OFFSET,
+                                    block_idx * tarfile.BLOCKSIZE + CHECKSUM_OFFSET + CHECKSUM_LENGTH,
+                                )
+
+                                data[DEVNUMBERS_RANGE] = b"\0" * DEVNUMBERS_LENGTH
+
+                                # Recompute checksum, but whipe checksum field (with spaces) before doing so
+                                data[CHECKSUM_RANGE] = b" " * CHECKSUM_LENGTH
+                                chksum, *_ = tarfile.calc_chksums(
+                                    data[block_idx * tarfile.BLOCKSIZE : (block_idx + 1) * tarfile.BLOCKSIZE]
+                                )
+                                data[CHECKSUM_RANGE] = b"%06o\0 " % (chksum,)
+
+                            return original_write(data)
+
+                        archivefile.write = write_archivefile
+
                     # Sorting the file list ensures that we don't depend on the order that files appear on disk
                     for member in sorted(in_archive, key=lambda x: x.name):
                         # Clamping mtime to source_date_epoch ensures that source files are the only sources of timestamps, not build time
