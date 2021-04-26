@@ -37,9 +37,9 @@ phases:
   style:
     commit-messages: !template "commisery"
     flake8:
-      - docker build --network=host --build-arg=PYTHON_VERSION=3.8 -t hopic-python:3.8-slim-git hopic/test/docker-images/python
+      - docker build --network=host --build-arg=PYTHON_VERSION=3.9 -t hopic-python:3.9-slim-git hopic/test/docker-images/python
       - junit: flake8.xml
-        image: hopic-python:3.8-slim-git
+        image: hopic-python:3.9-slim-git
         sh: tox -e flake8
 
   test:
@@ -63,6 +63,13 @@ phases:
         image: hopic-python:3.8-slim-git
         docker-in-docker: yes
         sh: tox -r -e py38
+
+    python3.9:
+      - docker build --network=host --build-arg=PYTHON_VERSION=3.9 -t hopic-python:3.9-slim-git hopic/test/docker-images/python
+      - junit: junit-test.xml
+        image: hopic-python:3.9-slim-git
+        docker-in-docker: yes
+        sh: tox -r -e py39
 
   build:
     sphinx-doc:
