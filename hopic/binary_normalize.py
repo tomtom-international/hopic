@@ -289,7 +289,7 @@ def normalize(filename, fileobj=None, outname='', outfileobj=None, source_date_e
 
                                 try:
                                     tarinfo = out_archive.tarinfo.frombuf(block, out_archive.encoding, out_archive.errors)
-                                except tarfile.EOFHeaderError:
+                                except tarfile.EOFHeaderError:  # type: ignore[attr-defined]
                                     break
 
                                 block_count = (tarinfo.size + tarfile.BLOCKSIZE - 1) // tarfile.BLOCKSIZE
@@ -319,7 +319,7 @@ def normalize(filename, fileobj=None, outname='', outfileobj=None, source_date_e
 
                                 # Recompute checksum, but whipe checksum field (with spaces) before doing so
                                 data[CHECKSUM_RANGE] = b" " * CHECKSUM_LENGTH
-                                chksum, *_ = tarfile.calc_chksums(
+                                chksum, *_ = tarfile.calc_chksums(  # type: ignore[attr-defined]
                                     data[block_idx * tarfile.BLOCKSIZE : (block_idx + 1) * tarfile.BLOCKSIZE]
                                 )
                                 data[CHECKSUM_RANGE] = b"%06o\0 " % (chksum,)
