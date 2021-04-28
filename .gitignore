@@ -4,5 +4,6 @@
 /.tox/
 /flake8.xml
 /junit-test.xml
+/mypy-test.xml
 /venv
 /.vscode/
