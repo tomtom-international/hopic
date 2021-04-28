@@ -72,10 +72,10 @@ def command(
     if isinstance(the_command_list, str):
         the_command_list = (the_command_list,)
 
-    args = [str(arg) for arg in args]
+    args = tuple(str(arg) for arg in args)
     if any(arg.startswith("-") for arg in args):
         # Prevent interpretation as an option
-        args = ["--", *args]
+        args = ("--", *args)
 
     return (*the_command_list, *_kwargs_to_args(**kwargs), *args)
 

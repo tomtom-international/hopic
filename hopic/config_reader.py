@@ -292,8 +292,8 @@ def match_template_props_to_signature(
     signature: typing.Mapping[str, inspect.Parameter],
     params: typing.Mapping[str, typing.Any],
     *,
-    globals: typing.Optional[typing.Mapping[str, typing.Any]] = None,
-    locals: typing.Optional[typing.Mapping[str, typing.Any]] = None,
+    globals: typing.Optional[typing.Dict[str, typing.Any]] = None,
+    locals: typing.Optional[typing.Dict[str, typing.Any]] = None,
 ) -> typing.Mapping[str, typing.Any]:
 
     kwargs_var, *_ = [
