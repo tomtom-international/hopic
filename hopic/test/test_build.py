@@ -1359,7 +1359,7 @@ def test_normalize_artifacts(capfd, run_hopic):
     out, err = capfd.readouterr()
     sys.stdout.write(out)
     sys.stderr.write(err)
-    assert out == "959ba292674303dc82e926f7a5e4a839135b2c5ebd6e68759c095c2160548e44 *archive-0.0.0.tar.gz\n", "archive's hash should not depend on build time"
+    assert out == "c63b283df45487cb0d957e0aa799b9c72f78e45b707da6c3946701a63a514713 *archive-0.0.0.tar.gz\n", "archive's hash should not depend on build time"
 
 
 @pytest.mark.parametrize("archive_key", (
