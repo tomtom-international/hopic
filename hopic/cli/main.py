@@ -12,39 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from configparser import (
-        NoOptionError,
-        NoSectionError,
-    )
-from datetime import datetime
 import logging
 import os
 from pathlib import Path
 
 import click
 import click_log
-from dateutil.tz import (
-        tzutc,
-    )
 import git
 
 from . import autocomplete
 from .utils import (
-        determine_config_file_name,
         get_package_version,
     )
 from ..config_reader import (
         read as read_config,
     )
-from ..errors import (
-    VersioningError,
-)
-from ..git_time import (
-        determine_source_date,
-        determine_version,
-    )
-from ..versioning import (
-        SemVer
+
+from .global_obj import (
+    set_path_variables,
+    set_version_variables
 )
 
 PACKAGE : str = __package__.split('.')[0]
@@ -165,40 +151,23 @@ def main(ctx, color, config, workspace, whitelisted_var, publishable_version):
             workspace = Path.cwd()
     workspace = Path.cwd() / workspace
     ctx.obj.workspace = workspace
-
+    ctx.obj.publishable_version = publishable_version
     ctx.obj.volume_vars = {}
-    try:
-        with git.Repo(workspace) as repo, repo.config_reader() as cfg:
-            code_dir = workspace / cfg.get_value('hopic.code', 'dir')
-    except (git.InvalidGitRepositoryError, git.NoSuchPathError, NoOptionError, NoSectionError):
-        code_dir = workspace
 
-    ctx.obj.code_dir = code_dir
-    ctx.obj.volume_vars['WORKSPACE'] = str(code_dir)
-    source_date = determine_source_date(code_dir)
-    if source_date is not None:
-        ctx.obj.source_date = source_date
-        ctx.obj.source_date_epoch = int((
-            source_date - datetime.utcfromtimestamp(0).replace(tzinfo=tzutc())
-        ).total_seconds())
-        ctx.obj.volume_vars['SOURCE_DATE_EPOCH'] = str(ctx.obj.source_date_epoch)
     ctx.obj.register_dependent_attribute('code_dir', 'workspace')
     ctx.obj.register_dependent_attribute('source_date', 'workspace')
     ctx.obj.register_dependent_attribute('source_date_epoch', 'workspace')
+
+    if config is not None:
+        ctx.obj.config_file = config
+    ctx.obj.register_dependent_attribute('config_file', 'config')
+    config = set_path_variables(workspace)
 
     for var in whitelisted_var:
         try:
             ctx.obj.volume_vars[var] = os.environ[var]
         except KeyError:
             pass
-
-    if config is not None:
-        ctx.obj.config_file = config
-    ctx.obj.register_dependent_attribute('config_file', 'config')
-    try:
-        config = determine_config_file_name(ctx)
-    except click.BadParameter:
-        config = None
 
     cfg = {}
     if config is not None:
@@ -218,46 +187,4 @@ def main(ctx, color, config, workspace, whitelisted_var, publishable_version):
                 pass
             else:
                 cfg = ctx.obj.config = read_config(config, ctx.obj.volume_vars)
-    ctx.obj.register_dependent_attribute('config_dir', 'config')
-
-    version_info = cfg.get('version', {})
-    ctx.obj.version, commit_hash = determine_version(
-            version_info,
-            config_dir=(config and ctx.obj.config_dir),
-            code_dir=ctx.obj.code_dir,
-        )
-    if ctx.obj.version is not None:
-        log.debug("read version: \x1B[34m%s\x1B[39m", ctx.obj.version)
-        ctx.obj.volume_vars['VERSION'] = str(ctx.obj.version)
-        ctx.obj.volume_vars['PURE_VERSION'] = ctx.obj.volume_vars['VERSION'].split('+')[0]
-        # FIXME: make this conversion work even when not using SemVer as versioning policy
-        # Convert SemVer to Debian version: '~' for pre-release instead of '-'
-        ctx.obj.volume_vars['DEBVERSION'] = ctx.obj.volume_vars['VERSION'].replace('-', '~', 1).replace('.dirty.', '+dirty', 1)
-        if publishable_version:
-            ctx.obj.volume_vars['PUBLISH_VERSION'] = ctx.obj.volume_vars['PURE_VERSION']
-            if 'build' in version_info:
-                ctx.obj.volume_vars['PUBLISH_VERSION'] += f"+{version_info['build']}"
-        else:
-            assert commit_hash
-            ver = SemVer.parse(ctx.obj.volume_vars['VERSION'])
-            ver.build = ()  # discard duplicate commit_hash
-            ver.prerelease += (commit_hash, )
-            if 'build' in version_info:
-                ver.build = (version_info['build'],)
-            ctx.obj.volume_vars['PUBLISH_VERSION'] = str(ver)
-    else:
-        if version_info.get('tag'):
-            error_msg = (
-                "Failed to determine the current version from Git tag. "
-                "If this is a new repository, please create a version tag. "
-                "If this is a shallow clone, try a deepening fetch."
-            )
-        elif version_info.get('file'):
-            error_msg = (
-                "Failed to determine the current version from file. "
-                "Make sure the file exists and contains the expected value."
-            )
-        else:
-            error_msg = "Failed to determine the current version."
-
-        ctx.obj.volume_vars['VERSION'] = ctx.obj.volume_vars['PURE_VERSION'] = ctx.obj.volume_vars['PUBLISH_VERSION'] = VersioningError(error_msg)
+    set_version_variables(config, config=cfg)

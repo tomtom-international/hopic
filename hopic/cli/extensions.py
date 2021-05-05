@@ -45,7 +45,7 @@ log = logging.getLogger(__name__)
 @click.pass_context
 def install_extensions(ctx):
     # Read the config file and install all templates available
-    ctx.obj.config = read_config(determine_config_file_name(ctx), ctx.obj.volume_vars, install_extensions_with_config)
+    return read_config(determine_config_file_name(ctx), ctx.obj.volume_vars, install_extensions_with_config)
 
 
 def install_extensions_with_config(pip_cfg):
