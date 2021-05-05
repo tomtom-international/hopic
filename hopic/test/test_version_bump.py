@@ -17,6 +17,7 @@ from textwrap import dedent
 import git
 import pytest
 
+from .. import config_reader
 
 _git_time = f"{42 * 365 * 24 * 3600} +0000"
 _author = git.Actor('Bob Tester', 'bob@example.net')
@@ -31,6 +32,7 @@ _commitargs = dict(
 @pytest.mark.parametrize('version_build', ('1.2.3', None))
 @pytest.mark.parametrize('version_file', ('revision.txt', None))
 def test_conventional_bump(version_build, version_file, run_hopic):
+    config_reader.get_entry_points.cache_clear()  # clear (potential) dirty entry_point cache from previous tests as comissery is not installed in this test
     init_version = f'0.0.0+{version_build}' if version_build else '0.0.0'
     with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
         cfg_file = 'hopic-ci-config.yaml'

@@ -17,11 +17,21 @@ try:
     from importlib import metadata
 except ImportError:
     import importlib_metadata as metadata
+import git
 import json
 import pytest
 import subprocess
 import sys
 from textwrap import dedent
+
+_git_time = f"{42 * 365 * 24 * 3600} +0000"
+_author = git.Actor('Bob Tester', 'bob@example.net')
+_commitargs = dict(
+        author_date=_git_time,
+        commit_date=_git_time,
+        author=_author,
+        committer=_author,
+    )
 
 
 @pytest.mark.parametrize('expected_args', (
@@ -260,7 +270,6 @@ def test_invalid_template_name(capfd, run_hopic):
     assert "No YAML template named 'xyzzy' available (props={})" in err.strip()
 
 
-@pytest.mark.xfail
 def test_recursive_extension_installation_version_functionality(monkeypatch, run_hopic):
     first_pkg = 'firstorder'
     second_pkg = 'secondorder'
@@ -345,6 +354,189 @@ def test_recursive_extension_installation_version_functionality(monkeypatch, run
             config: !template {first_pkg}
             """
         ),
+        tag="0.0.0"
     )
 
     assert result.exit_code == 0
+
+
+def add_template(monkeypatch, pkg, config):
+    def template(volume_vars):
+        return config
+
+    class TestPipelinePackage:
+        name = pkg
+
+        def load(self):
+            return template
+
+    def mock_entry_points():
+        return {
+            'hopic.plugins.yaml': (TestPipelinePackage(),)
+        }
+
+    monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
+
+
+def run_default_merge_flow(capfd, monkeypatch, run_hopic, config, pkg, message, target='master', merge_message=None):
+    template_config = dedent("""\
+                                version:
+                                    format: semver
+                                    tag: true
+                                    bump:
+                                        policy: conventional-commits
+                                        strict: yes
+                                    """)
+    if merge_message is None:
+        merge_message = message
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        with (run_hopic.toprepo / 'hopic-ci-config.yaml').open('w') as f:
+            f.write(config)
+        repo.index.add(('hopic-ci-config.yaml',))
+        repo.index.commit(message='Initial commit', **_commitargs)
+        repo.git.branch(target, move=True)
+        repo.create_tag('0.0.0')
+
+        # PR branch
+        repo.head.reference = repo.create_head('something-useful')
+        assert not repo.head.is_detached
+
+        # Some change
+        with (run_hopic.toprepo / 'something.txt').open('w') as f:
+            f.write('usable')
+        repo.index.add(('something.txt',))
+        repo.index.commit(message=message, **_commitargs)
+
+    # Successful checkout and build
+    (*_, result) = run_hopic(
+            ('checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', target),
+            lambda: add_template(monkeypatch, pkg, template_config),
+            ('prepare-source-tree',
+                '--author-date', f"@{_git_time}",
+                '--commit-date', f"@{_git_time}",
+                '--author-name', _author.name,
+                '--author-email', _author.email,
+                'merge-change-request', '--source-remote', run_hopic.toprepo, '--source-ref', 'something-useful', '--title', merge_message),
+        )
+    return result
+
+
+@pytest.mark.parametrize('merge_message, commit_message, expected_result_code', (
+    ("feat: new feat", "fix: bump mismatch", 36),
+    ("fix: a fix", "fix: bump mismatch", 0),
+))
+def test_extension_installation_version_config(capfd, monkeypatch, run_hopic, merge_message, commit_message, expected_result_code):
+    extra_index = 'https://test.pypi.org/simple/'
+    pkg = 'pipeline-template'
+    expected_pkg_install_order = [pkg]
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        if '--user' in args:
+            args.remove('--user')
+        if '--verbose' in args:
+            args.remove('--verbose')
+        del args[4:6]
+        if len(expected_pkg_install_order):
+            assert [*args] == [
+                sys.executable,
+                '-m', 'pip', 'install', '--extra-index-url', extra_index,
+                expected_pkg_install_order.pop(0)
+            ]
+
+    monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+
+    result = run_default_merge_flow(
+        capfd,
+        monkeypatch,
+        run_hopic,
+        dedent(
+            f"""\
+                pip:
+                  - with-extra-index: {extra_index}
+                    packages:
+                      - {pkg}
+
+                config: !template {pkg}
+            """
+        ),
+        pkg=pkg,
+        message=commit_message,
+        merge_message=merge_message
+    )
+
+    assert result.exit_code == expected_result_code
+    assert len(expected_pkg_install_order) == 0
+
+
+def test_add_hopic_config_with_template_in_pr(capfd, monkeypatch, run_hopic):
+    extra_index = 'https://test.pypi.org/simple/'
+    pkg = 'pipeline-template'
+    template_config = dedent("""\
+                version:
+                    format: semver
+                    tag: true
+                    bump:
+                        policy: conventional-commits
+                        strict: yes
+
+                phases:
+                    first-phase:
+                        first-variant:
+                            - echo 'Hello World!'
+                """)
+    subprocess_call = subprocess.check_call
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        if '--user' in args:
+            args.remove('--user')
+        if '--verbose' in args:
+            args.remove('--verbose')
+        del args[4:6]
+        if not all(arg in args for arg in ['pip', 'install']):
+            subprocess_call(args)
+
+    monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+
+    merge_message = "ci: add hopic"
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        with (run_hopic.toprepo / 'something.txt').open('w') as f:
+            f.write('usable')
+        repo.index.add(('something.txt',))
+        repo.index.commit(message='ci: add hopic commit', **_commitargs)
+        repo.create_tag('0.0.0')
+
+        # PR branch
+        repo.head.reference = repo.create_head('something-useful')
+        assert not repo.head.is_detached
+
+        # add hopic config
+        with (run_hopic.toprepo / 'hopic-ci-config.yaml').open('w') as f:
+            f.write(dedent(f"""\
+                    pip:
+                      - with-extra-index: {extra_index}
+                        packages:
+                          - {pkg}
+
+                    config: !template {pkg}
+                """))
+        repo.index.add(('hopic-ci-config.yaml',))
+        repo.index.commit(message='ci: add hopic commit', **_commitargs)
+
+    # Successful checkout and build
+    (*_, result) = run_hopic(
+            ('checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'),
+            lambda: add_template(monkeypatch, pkg, template_config),
+            ('prepare-source-tree',
+                '--author-date', f"@{_git_time}",
+                '--commit-date', f"@{_git_time}",
+                '--author-name', _author.name,
+                '--author-email', _author.email,
+                'merge-change-request', '--source-remote', run_hopic.toprepo, '--source-ref', 'something-useful', '--title', merge_message),
+            ('build',)
+        )
+
+    assert result.exit_code == 0
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+    out.splitlines()[-1] = 'Hello World!'
