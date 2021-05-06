@@ -36,15 +36,17 @@ from ..config_reader import (
     )
 from ..execution import echo_cmd_click as echo_cmd
 from ..git_time import (
-        determine_git_version,
-        determine_version,
-        restore_mtime_from_git,
-        to_git_time,
-    )
+    GitVersion,
+    determine_git_version,
+    determine_version,
+    restore_mtime_from_git,
+    to_git_time,
+)
 from .global_obj import initialize_global_variables_from_config
 from ..versioning import (
-        replace_version,
-    )
+    hotfix_id,
+    replace_version,
+)
 from collections import OrderedDict
 from collections.abc import (
         Mapping,
@@ -506,16 +508,38 @@ def process_prepare_source_tree(
                         no_merges=bump.get('no-merges', True),
                     )])
 
+        hotfix = hotfix_id(version_info["hotfix-branch"], target_ref)
+
+        def _is_valid_hotfix_base(version) -> bool:
+            if not version.prerelease:
+                # full release: valid point to start a hotfix from
+                return True
+            # Pre-release must be a valid hotfix prefix for the current hotfix ID
+            return version.prerelease[:2] == ("hotfix", hotfix)
+
         if bump['policy'] == 'conventional-commits' and target_ref is not None:
-            if bump['reject-breaking-changes-on'].match(target_ref):
-                for commit in source_commits:
-                    if commit.has_breaking_change():
+            has_fix = False
+            for commit in source_commits:
+                if commit.has_breaking_change():
+                    if bump['reject-breaking-changes-on'].match(target_ref):
                         raise VersioningError(
                                 f"Breaking changes are not allowed on '{target_ref}', but commit '{commit.hexsha}' contains one:\n{commit.message}")
-            if bump['reject-new-features-on'].match(target_ref):
-                for commit in source_commits:
-                    if commit.has_new_feature():
+                    elif hotfix:
+                        raise VersioningError(
+                            f"Breaking changes are not allowed on hotfix branch '{target_ref}', but commit '{commit.hexsha}' contains one:\n{commit.message}")
+                if commit.has_new_feature():
+                    if bump['reject-new-features-on'].match(target_ref):
                         raise VersioningError(f"New features are not allowed on '{target_ref}', but commit '{commit.hexsha}' contains one:\n{commit.message}")
+                    elif hotfix:
+                        raise VersioningError(
+                            f"New features are not allowed on hotfix branch '{target_ref}', but commit '{commit.hexsha}' contains one:\n{commit.message}")
+                if commit.has_fix():
+                    has_fix = True
+            if hotfix and bump["on-every-change"] and not has_fix:
+                raise VersioningError(
+                    f"The presence of a 'fix' commit is mandatory on hotfix branch '{target_ref}', but none of these commits contains one:\n"
+                    + ', '.join(str(commit) for commit in source_commits)
+                )
 
         version_bumped = False
         if is_publish_allowed and bump['policy'] != 'disabled' and bump['on-every-change']:
@@ -529,11 +553,32 @@ def process_prepare_source_tree(
                     log.info("If this is a new repository you may wish to create a 0.0.0 tag for Hopic to start bumping from")
                     raise VersioningError(msg)
 
+            cur_version = ctx.obj.version
+            if hotfix:
+                if not _is_valid_hotfix_base(cur_version):
+                    raise VersioningError(f"Creating hotfixes on anything but a full release is not supported. Currently on: {cur_version}")
+
+                # strip commit distance and dirty state from version to ensure we're bumping the hotfix suffix instead of the commit distance suffix
+                if "file" not in version_info:
+                    with git.Repo(ctx.obj.code_dir) as code_repo:
+                        gitversion = determine_git_version(code_repo)
+                    gitversion = GitVersion(tag_name=gitversion.tag_name, commit_hash=gitversion.commit_hash)
+                    params = {}
+                    try:
+                        params["format"] = version_info["format"]
+                    except KeyError:
+                        pass
+                    cur_version = gitversion.to_version(**params)
+
             if bump['policy'] == 'constant':
                 params = {}
                 if 'field' in bump:
                     params['bump'] = bump['field']
-                new_version = ctx.obj.version.next_version(**params)
+                if hotfix:
+                    params["bump"] = "prerelease"
+                    params["prerelease_seed"] = ("hotfix", hotfix)
+                    assert _is_valid_hotfix_base(cur_version), "implementation error: invalid hotfix bases should have been caught already"
+                new_version = cur_version.next_version(**params)
             elif bump['policy'] in ('conventional-commits',):
                 if log.isEnabledFor(logging.DEBUG):
                     log.debug("bumping based on conventional commits:")
@@ -546,13 +591,19 @@ def process_prepare_source_tree(
                         except AttributeError:
                             hash_prefix = ''
                         log.debug("%s[%-8s][%-4s][%-3s]: %s", hash_prefix, breaking, feat, fix, commit.full_subject)
-                new_version = ctx.obj.version.next_version_for_commits(source_commits)
+                new_version = cur_version.next_version_for_commits(source_commits)
+                if hotfix and new_version != cur_version:
+                    assert (new_version.major, new_version.minor) == (cur_version.major, cur_version.minor), (
+                        "bumping anything other than 'patch' shouldn't happen for hotfix branches and should have been caught already"
+                    )
+                    assert _is_valid_hotfix_base(cur_version), "implementation error: invalid hotfix bases should have been caught already"
+                    new_version = cur_version.next_prerelease(seed=("hotfix", hotfix))
             else:
                 raise NotImplementedError(f"unsupported version bumping policy {bump['policy']}")
 
-            assert new_version >= ctx.obj.version, "the new version should be more recent than the old one"
+            assert new_version >= cur_version, f"the new version {new_version} should be more recent than the old one {cur_version}"
 
-            if new_version != ctx.obj.version:
+            if new_version != cur_version:
                 log.info("bumped version to: %s (from %s)", click.style(str(new_version), fg='blue'), click.style(str(ctx.obj.version), fg='blue'))
                 version_bumped = True
                 ctx.obj.version = new_version
@@ -668,12 +719,17 @@ def process_prepare_source_tree(
         # Tagging after bumping the version
         tagname = None
         version_tag = version_info.get('tag', False)
-        if version_bumped and not ctx.obj.version.prerelease and version_tag and is_publish_allowed:
-            if version_tag and not isinstance(version_tag, str):
+        if version_bumped and _is_valid_hotfix_base(ctx.obj.version) and version_tag and is_publish_allowed:
+            if not isinstance(version_tag, str):
                 version_tag = ctx.obj.version.default_tag_name
             tagname = version_tag.format(
                     version        = ctx.obj.version,                                           # noqa: E251 "unexpected spaces around '='"
                     build_sep      = ('+' if getattr(ctx.obj.version, 'build', None) else ''),  # noqa: E251 "unexpected spaces around '='"
+                )
+            if hotfix and "-hotfix." not in tagname:
+                raise VersioningError(
+                    f"Tag '{tagname}' for hotfix version '{ctx.obj.version}' does not contain 'hotfix' in its prerelease portion.\n"
+                    f"Likely the tag pattern ('{version_tag}') omitted the prerelease portion"
                 )
             if 'build' in version_info and '+' not in tagname:
                 tagname += f"+{version_info['build']}"
