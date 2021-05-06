@@ -32,6 +32,11 @@ Restrictions
 
   This could be "customername" if and only if there is no more than a single hotfix branch for that customer on that version.
 
+* Hotfix branches *SHOULD* split off directly from (tagged) releases
+* Hotfix branches *MUST NOT* split off from pre-release versions
+
+  Because hotfixes are only relevant for full releases, not pre-releases or development snapshots.
+
 Requirements
 ------------
 
