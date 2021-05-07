@@ -1057,7 +1057,6 @@ def test_hotfix_pr_on_release(bump_policy, run_hopic, version_file):
 def test_hotfix_pr_off_release(run_hopic, unrelated_tag):
     init_version = "1.2.3"
     hotfix_id = "vindyne-mem-leak"
-    expected_version = f"1.2.4-hotfix.{hotfix_id}"
     hotfix_branch = f"hotfix/{init_version}-{hotfix_id}"
     with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
         cfg_file = "hopic-ci-config.yaml"
@@ -1077,7 +1076,7 @@ def test_hotfix_pr_off_release(run_hopic, unrelated_tag):
         )
         repo.index.add((cfg_file,))
 
-        base_commit = repo.index.commit(message="chore: initial commit", **_commitargs)
+        repo.index.commit(message="chore: initial commit", **_commitargs)
         repo.create_tag(init_version)
         repo.git.branch(hotfix_branch, move=True)
 
