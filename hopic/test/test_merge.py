@@ -1035,8 +1035,7 @@ def test_hotfix_pr_on_release(bump_policy, run_hopic, version_file):
         ("checkout-source-tree", "--target-remote", run_hopic.toprepo, "--target-ref", hotfix_branch),
         ("prepare-source-tree", "--author-name", _author.name, "--author-email", _author.email,
             "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", "fix/mem-leak",
-            "--change-request", "42", "--title", "fix: work around oom kill due to memory leak",
-        ),
+            "--change-request", "42", "--title", "fix: work around oom kill due to memory leak"),
     )
     assert result.exit_code == 0
     assert result.stdout.splitlines()[-1].split("+")[0] == expected_version
@@ -1063,7 +1062,7 @@ def test_hotfix_pr_off_release(run_hopic, unrelated_tag):
 
         (run_hopic.toprepo / cfg_file).write_text(
             dedent(
-                f"""\
+                """\
                 version:
                   tag: yes
                   format: semver
@@ -1095,8 +1094,7 @@ def test_hotfix_pr_off_release(run_hopic, unrelated_tag):
         ("checkout-source-tree", "--target-remote", run_hopic.toprepo, "--target-ref", hotfix_branch),
         ("prepare-source-tree", "--author-name", _author.name, "--author-email", _author.email,
             "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", "fix/mem-leak",
-            "--change-request", "42", "--title", "fix: work around oom kill due to memory leak",
-        ),
+            "--change-request", "42", "--title", "fix: work around oom kill due to memory leak"),
     )
     assert result.exit_code == 33
 
@@ -1111,14 +1109,13 @@ def test_hotfix_double_bump(run_hopic):
 
         (run_hopic.toprepo / cfg_file).write_text(
             dedent(
-                f"""\
+                """\
                 version:
                   tag: yes
                   format: semver
                   bump:
                     policy: conventional-commits
                     strict: yes
-                    #on-every-change: no
                   hotfix-branch: '^hotfix/\\d+\\.\\d+\\.\\d+-(?P<id>[a-zA-Z](?:[-a-zA-Z0-9]*[a-zA-Z0-9])?)$'
                 """
             )
@@ -1140,17 +1137,16 @@ def test_hotfix_double_bump(run_hopic):
         ("checkout-source-tree", "--target-remote", run_hopic.toprepo, "--target-ref", hotfix_branch),
         ("prepare-source-tree", "--author-name", _author.name, "--author-email", _author.email,
             "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", "fix/mem-leak",
-            "--change-request", "42", "--title", "fix: work around oom kill due to memory leak",
-        ),
+            "--change-request", "42", "--title", "fix: work around oom kill due to memory leak"),
         ("submit",),
     )
     assert result.exit_code == 0
 
     with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
         repo.git.checkout(hotfix_branch)
-        repo.index.commit(message=f"chore: intermediate commit 1 to increase commit distance", **_commitargs)
-        repo.index.commit(message=f"chore: intermediate commit 2 to increase commit distance", **_commitargs)
-        repo.index.commit(message=f"chore: intermediate commit 3 to increase commit distance", **_commitargs)
+        repo.index.commit(message="chore: intermediate commit 1 to increase commit distance", **_commitargs)
+        repo.index.commit(message="chore: intermediate commit 2 to increase commit distance", **_commitargs)
+        repo.index.commit(message="chore: intermediate commit 3 to increase commit distance", **_commitargs)
 
         # PR branch 2
         repo.head.reference = repo.create_head("fix/out-of-bounds-access", repo.head.commit)
@@ -1162,8 +1158,7 @@ def test_hotfix_double_bump(run_hopic):
         ("checkout-source-tree", "--target-remote", run_hopic.toprepo, "--target-ref", hotfix_branch),
         ("prepare-source-tree", "--author-name", _author.name, "--author-email", _author.email,
             "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", "fix/out-of-bounds-access",
-            "--change-request", "43", "--title", "fix: skip out of bounds read",
-        ),
+            "--change-request", "43", "--title", "fix: skip out of bounds read"),
     )
     assert result.exit_code == 0
     assert result.stdout.splitlines()[-1].split("+")[0] == expected_version
@@ -1205,7 +1200,7 @@ def test_hotfix_invalid_id(hotfix_id, run_hopic):
 
         (run_hopic.toprepo / cfg_file).write_text(
             dedent(
-                f"""\
+                """\
                 version:
                   tag: yes
                   format: semver
@@ -1233,13 +1228,13 @@ def test_hotfix_invalid_id(hotfix_id, run_hopic):
         ("checkout-source-tree", "--target-remote", run_hopic.toprepo, "--target-ref", hotfix_branch),
         ("prepare-source-tree", "--author-name", _author.name, "--author-email", _author.email,
             "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", "fix/mem-leak",
-            "--change-request", "42", "--title", "fix: work around oom kill due to memory leak",
-        ),
+            "--change-request", "42", "--title", "fix: work around oom kill due to memory leak"),
     )
     assert result.exit_code == 33
 
 
-@pytest.mark.parametrize("msg_tag",
+@pytest.mark.parametrize(
+    "msg_tag",
     ("refactor!", "feat", "chore"),
     ids=("breaking-change", "new-feature", "not-fix"),
 )
@@ -1252,7 +1247,7 @@ def test_hotfix_rejects(msg_tag, run_hopic):
 
         (run_hopic.toprepo / cfg_file).write_text(
             dedent(
-                f"""\
+                """\
                 version:
                   tag: yes
                   format: semver
@@ -1280,7 +1275,6 @@ def test_hotfix_rejects(msg_tag, run_hopic):
         ("checkout-source-tree", "--target-remote", run_hopic.toprepo, "--target-ref", hotfix_branch),
         ("prepare-source-tree", "--author-name", _author.name, "--author-email", _author.email,
             "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", "pr-42",
-            "--change-request", "42", "--title", f"{msg_tag}: blorg the oompsie vatsaat",
-        ),
+            "--change-request", "42", "--title", f"{msg_tag}: blorg the oompsie vatsaat"),
     )
     assert result.exit_code == 33
