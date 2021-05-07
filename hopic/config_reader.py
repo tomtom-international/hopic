@@ -23,11 +23,6 @@ from collections.abc import (
 from enum import Enum
 import errno
 from functools import lru_cache
-try:
-    # Python >= 3.8
-    from importlib import metadata
-except ImportError:
-    import importlib_metadata as metadata
 import inspect
 import io
 import json
@@ -37,6 +32,7 @@ from pathlib import Path
 import re
 import shlex
 import subprocess
+import sys
 from textwrap import dedent
 import typeguard
 import typing
@@ -47,6 +43,11 @@ except ImportError:
     from typing import _ForwardRef as ForwardRef
 import xml.etree.ElementTree as ET
 import yaml
+
+if sys.version_info[:2] >= (3, 10):
+    from importlib import metadata
+else:
+    import importlib_metadata as metadata
 
 from .errors import ConfigurationError
 
@@ -390,7 +391,7 @@ def match_template_props_to_signature(
 
 @lru_cache()
 def get_entry_points():
-    return {ep.name: ep for ep in metadata.entry_points().get('hopic.plugins.yaml', ())}
+    return {ep.name: ep for ep in metadata.entry_points(group="hopic.plugins.yaml")}
 
 
 def load_yaml_template(volume_vars, extension_installer, loader, node):

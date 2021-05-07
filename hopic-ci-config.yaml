@@ -65,6 +65,13 @@ phases:
         docker-in-docker: yes
         sh: tox -r -e py39
 
+    python3.10:
+      - docker build --network=host --build-arg=PYTHON_VERSION=3.10.0b1 -t hopic-python:3.10.0b1-slim-git hopic/test/docker-images/python
+      - junit: junit-test.xml
+        image: hopic-python:3.10.0b1-slim-git
+        docker-in-docker: yes
+        sh: tox -r -e py310
+
   build:
     sphinx-doc:
       - rm -rf doc/build/venv

@@ -22,11 +22,6 @@ from .. import config_reader
 from datetime import datetime
 from textwrap import dedent
 from typing import Pattern
-try:
-    # Python >= 3.8
-    from importlib import metadata
-except ImportError:
-    import importlib_metadata as metadata
 import os
 import pytest
 import re
@@ -34,6 +29,11 @@ import signal
 import stat
 import subprocess
 import sys
+
+if sys.version_info[:2] >= (3, 10):
+    from importlib import metadata
+else:
+    import importlib_metadata as metadata
 
 from dateutil.parser import parse as parse_date
 from dateutil.tz import tzutc
@@ -1133,10 +1133,9 @@ def test_config_recursive_template_build(monkeypatch, run_hopic):
         def load(self):
             return pipeline_template
 
-    def mock_entry_points():
-        return {
-            'hopic.plugins.yaml': (TestPipelinePackage(), TestTemplatePackage())
-        }
+    def mock_entry_points(*, group: str):
+        assert group == "hopic.plugins.yaml"
+        return (TestPipelinePackage(), TestTemplatePackage())
 
     monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
 
@@ -1179,10 +1178,9 @@ def test_build_list_yaml_template(monkeypatch, run_hopic):
         def load(self):
             return pipeline_template
 
-    def mock_entry_points():
-        return {
-            'hopic.plugins.yaml': (TestPipelinePackage(),)
-        }
+    def mock_entry_points(*, group: str):
+        assert group == "hopic.plugins.yaml"
+        return (TestPipelinePackage(),)
 
     monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
 
