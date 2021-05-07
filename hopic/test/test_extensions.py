@@ -12,17 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-try:
-    # Python >= 3.8
-    from importlib import metadata
-except ImportError:
-    import importlib_metadata as metadata
 import git
 import json
 import pytest
 import subprocess
 import sys
 from textwrap import dedent
+
+if sys.version_info[:2] >= (3, 10):
+    from importlib import metadata
+else:
+    import importlib_metadata as metadata
 
 _git_time = f"{42 * 365 * 24 * 3600} +0000"
 _author = git.Actor('Bob Tester', 'bob@example.net')
@@ -161,10 +161,9 @@ def test_recursive_extension_installation(monkeypatch, run_hopic):
         def load(self):
             return pipeline_template
 
-    def mock_entry_points():
-        return {
-            'hopic.plugins.yaml': (TestPipelinePackage(), TestTemplatePackage())
-        }
+    def mock_entry_points(*, group: str):
+        assert group == "hopic.plugins.yaml"
+        return (TestPipelinePackage(), TestTemplatePackage())
 
     monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
 
@@ -222,10 +221,9 @@ def test_recursive_extension_installation_invalid_template_name(monkeypatch, run
         def load(self):
             return pipeline_template
 
-    def mock_entry_points():
-        return {
-            'hopic.plugins.yaml': (TestPipelinePackage(),)
-        }
+    def mock_entry_points(*, group: str):
+        assert group == "hopic.plugins.yaml"
+        return (TestPipelinePackage(),)
 
     monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
 
@@ -334,11 +332,10 @@ def test_recursive_extension_installation_version_functionality(monkeypatch, run
         def load(self):
             return self.second_order_template
 
-    def mock_entry_points():
-        monkeypatch.setattr(metadata, 'entry_points', lambda: {'hopic.plugins.yaml': (FirstOrderTemplate(), SecondOrderTemplate())})
-        return {
-            'hopic.plugins.yaml': (FirstOrderTemplateFirst(),)
-        }
+    def mock_entry_points(*, group: str):
+        assert group == "hopic.plugins.yaml"
+        monkeypatch.setattr(metadata, 'entry_points', lambda group: {'hopic.plugins.yaml': (FirstOrderTemplate(), SecondOrderTemplate())}[group])
+        return (FirstOrderTemplateFirst(),)
 
     monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
     monkeypatch.setattr(subprocess, 'check_call', lambda *args, **kwargs: None)
@@ -370,10 +367,9 @@ def add_template(monkeypatch, pkg, config):
         def load(self):
             return template
 
-    def mock_entry_points():
-        return {
-            'hopic.plugins.yaml': (TestPipelinePackage(),)
-        }
+    def mock_entry_points(*, group: str):
+        assert group == "hopic.plugins.yaml"
+        return (TestPipelinePackage(),)
 
     monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
 

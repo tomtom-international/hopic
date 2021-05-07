@@ -12,17 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-try:
-    # Python >= 3.8
-    from importlib import metadata
-except ImportError:
-    import importlib_metadata as metadata
-
+import sys
 from io import StringIO
+
+if sys.version_info[:2] >= (3, 10):
+    from importlib import metadata
+else:
+    import importlib_metadata as metadata
 
 PACKAGE : str = __package__.split('.')[0]
 
-hopic_cli = [ep for ep in metadata.entry_points()['console_scripts'] if ep.name == PACKAGE][0].load()
+(_hopic_ep,) = metadata.entry_points(group="console_scripts", name=PACKAGE)
+hopic_cli = _hopic_ep.load()
 source_date_epoch = 7 * 24 * 3600
 
 

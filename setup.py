@@ -47,7 +47,7 @@ setup(
       # The 3.1.15 version causes test_clean_checkout_in_non_empty_dir to fail due to a missing stderr.
       # See https://github.com/gitpython-developers/GitPython/issues/1221 for details.
       'GitPython>=3,<4,!=3.1.15',
-      'importlib_metadata; python_version < "3.8"',
+      'importlib_metadata >= 3.6; python_version < "3.10.0b1"',
       'python-dateutil',
       'PyYAML',
       'setuptools',
