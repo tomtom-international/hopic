@@ -36,18 +36,18 @@ import sys
 from textwrap import dedent
 import typeguard
 import typing
-try:
-    # Python >= 3.8
-    from typing import ForwardRef
-except ImportError:
-    from typing import _ForwardRef as ForwardRef
 import xml.etree.ElementTree as ET
 import yaml
 
 if sys.version_info[:2] >= (3, 10):
     from importlib import metadata
 else:
-    import importlib_metadata as metadata
+    import importlib_metadata as metadata  # type: ignore # mypy is buggy for this try-except import style: https://github.com/python/mypy/issues/1153
+
+if sys.version_info[:2] >= (3, 7):
+    from typing import ForwardRef
+else:
+    from typing import _ForwardRef as ForwardRef  # type: ignore[attr-defined]
 
 from .errors import ConfigurationError
 
@@ -292,8 +292,8 @@ def match_template_props_to_signature(
     signature: typing.Mapping[str, inspect.Parameter],
     params: typing.Mapping[str, typing.Any],
     *,
-    globals: typing.Optional[typing.Mapping[str, typing.Any]] = None,
-    locals: typing.Optional[typing.Mapping[str, typing.Any]] = None,
+    globals: typing.Optional[typing.Dict[str, typing.Any]] = None,
+    locals: typing.Optional[typing.Dict[str, typing.Any]] = None,
 ) -> typing.Mapping[str, typing.Any]:
 
     kwargs_var, *_ = [

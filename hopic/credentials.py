@@ -74,7 +74,7 @@ try:
             if cred is not None:
                 return cred.password
 except ImportError:
-    keyring = None
+    keyring = None  # type: ignore # mypy is buggy for this try-except import style: https://github.com/python/mypy/issues/1153
 
 _keyring_backend = None
 

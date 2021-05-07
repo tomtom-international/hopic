@@ -42,40 +42,87 @@ phases:
         image: hopic-python:3.9-slim-git
         sh: tox -e flake8
 
-  test:
+  docker:
     python3.6:
       - docker build --network=host --build-arg=PYTHON_VERSION=3.6 -t hopic-python:3.6-slim-git hopic/test/docker-images/python
-      - junit: junit-test.xml
-        image: hopic-python:3.6-slim-git
-        docker-in-docker: yes
-        sh: tox -r -e py36
 
     python3.7:
       - docker build --network=host --build-arg=PYTHON_VERSION=3.7 -t hopic-python:3.7-slim-git hopic/test/docker-images/python
-      - junit: junit-test.xml
-        image: hopic-python:3.7-slim-git
-        docker-in-docker: yes
-        sh: tox -r -e py37
 
     python3.8:
       - docker build --network=host --build-arg=PYTHON_VERSION=3.8 -t hopic-python:3.8-slim-git hopic/test/docker-images/python
-      - junit: junit-test.xml
-        image: hopic-python:3.8-slim-git
-        docker-in-docker: yes
-        sh: tox -r -e py38
 
     python3.9:
       - docker build --network=host --build-arg=PYTHON_VERSION=3.9 -t hopic-python:3.9-slim-git hopic/test/docker-images/python
-      - junit: junit-test.xml
-        image: hopic-python:3.9-slim-git
-        docker-in-docker: yes
-        sh: tox -r -e py39
 
     python3.10:
       - docker build --network=host --build-arg=PYTHON_VERSION=3.10.0b1 -t hopic-python:3.10.0b1-slim-git hopic/test/docker-images/python
+
+  static:
+    python3.6:
+      - junit: mypy-test.xml
+        image: hopic-python:3.6-slim-git
+        wait-on-full-previous-phase: no
+        sh: tox -r -e py36-types
+
+    python3.7:
+      - junit: mypy-test.xml
+        image: hopic-python:3.7-slim-git
+        wait-on-full-previous-phase: no
+        sh: tox -r -e py37-types
+
+    python3.8:
+      - junit: mypy-test.xml
+        image: hopic-python:3.8-slim-git
+        wait-on-full-previous-phase: no
+        sh: tox -r -e py38-types
+
+    python3.9:
+      - junit: mypy-test.xml
+        image: hopic-python:3.9-slim-git
+        wait-on-full-previous-phase: no
+        sh: tox -r -e py39-types
+
+    python3.10:
+      - junit: mypy-test.xml
+        image: hopic-python:3.10.0b1-slim-git
+        wait-on-full-previous-phase: no
+        sh: tox -r -e py310-types
+
+  test:
+    python3.6:
+      - junit: junit-test.xml
+        image: hopic-python:3.6-slim-git
+        docker-in-docker: yes
+        wait-on-full-previous-phase: no
+        sh: tox -r -e py36
+
+    python3.7:
+      - junit: junit-test.xml
+        image: hopic-python:3.7-slim-git
+        docker-in-docker: yes
+        wait-on-full-previous-phase: no
+        sh: tox -r -e py37
+
+    python3.8:
+      - junit: junit-test.xml
+        image: hopic-python:3.8-slim-git
+        docker-in-docker: yes
+        wait-on-full-previous-phase: no
+        sh: tox -r -e py38
+
+    python3.9:
+      - junit: junit-test.xml
+        image: hopic-python:3.9-slim-git
+        docker-in-docker: yes
+        wait-on-full-previous-phase: no
+        sh: tox -r -e py39
+
+    python3.10:
       - junit: junit-test.xml
         image: hopic-python:3.10.0b1-slim-git
         docker-in-docker: yes
+        wait-on-full-previous-phase: no
         sh: tox -r -e py310
 
   build:

@@ -28,6 +28,7 @@ from typing import (
     NamedTuple,
     Optional,
     Sequence,
+    Tuple,
     Union,
 )
 
@@ -101,7 +102,9 @@ class HopicGitInfo(NamedTuple):
 
         try:
             submit_ref, target_commit, source_commit, autosquashed_commit = None, None, None, None
-            refspecs, source_commits, autosquashed_commits = (), (), ()
+            refspecs: Tuple[str, ...] = ()
+            source_commits: Tuple[git.Commit, ...] = ()
+            autosquashed_commits: Tuple[git.Commit, ...] = ()
 
             submit_commit = repo.head.commit
             section = f"hopic.{submit_commit}"
