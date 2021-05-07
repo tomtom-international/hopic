@@ -23,7 +23,7 @@ from textwrap import dedent
 try:
     from importlib import metadata
 except ImportError:
-    import importlib_metadata as metadata
+    import importlib_metadata as metadata  # type: ignore # mypy is buggy for this try-except import style: https://github.com/python/mypy/issues/1153
 
 import click
 
