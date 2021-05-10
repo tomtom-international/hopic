@@ -17,6 +17,7 @@ import json
 import pytest
 import subprocess
 import sys
+from collections import OrderedDict
 from textwrap import dedent
 
 if sys.version_info[:2] >= (3, 10):
@@ -243,6 +244,143 @@ def test_recursive_extension_installation_invalid_template_name(monkeypatch, run
 
     assert result.exit_code == 0
     assert len(expected_pkg_install_order) == 0
+
+
+def test_config_as_extension(monkeypatch, run_hopic):
+    '''
+    'config' item in hopic config yaml file should extend the existing config, not completely replace it.
+    '''
+    extra_index = 'https://test.pypi.org/simple/'
+    template_pkg = 'template-pkg-extension'
+    test_image_name = 'fake_docker_image'
+    inner_template_called = []
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        if '--user' in args:
+            args.remove('--user')
+        if '--verbose' in args:
+            args.remove('--verbose')
+        del args[4:6]
+
+        assert [*args] == [sys.executable, '-m', 'pip', 'install', '--extra-index-url', extra_index, template_pkg]
+
+    monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+
+    def template(volume_vars):
+        inner_template_called.append(True)
+        return dedent(
+            """\
+              phases:
+                test:
+                  variant:
+                    - echo 'bob'
+            """)
+
+    class TestTemplatePackage:
+        name = template_pkg
+
+        def load(self):
+            return template
+
+    def mock_entry_points(*, group: str):
+        assert group == "hopic.plugins.yaml"
+        return (TestTemplatePackage(),)
+
+    monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
+
+    hopic_ci_config = dedent(
+        f"""\
+            pip:
+              - with-extra-index: {extra_index}
+                packages:
+                  - {template_pkg}
+
+            image: {test_image_name}
+
+            config: !template {template_pkg}
+        """)
+
+    (install_ext_result,) = run_hopic(("install-extensions",), config=hopic_ci_config)
+    assert install_ext_result.exit_code == 0
+    assert inner_template_called.pop()
+
+    (result,) = run_hopic(("show-config",), config=hopic_ci_config)
+    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
+    # validate that items from top-level configuration are not removed
+    assert output['image']['default'] == test_image_name
+    # validate that items from config are added
+    assert 'variant' in output['phases']['test']
+    # validate that 'config' is actually removed to not trigger the process again
+    assert 'config' not in output
+
+
+def test_config_has_duplicated_keys(capfd, monkeypatch, run_hopic):
+    '''
+    'config' item only adds new items to the hopic config, if an item is already present, hopic should throw.
+    '''
+    extra_index = 'https://test.pypi.org/simple/'
+    template_pkg = 'template-pkg-duplicate-keys'
+    test_image_name = 'fake_docker_image'
+    inner_template_called = []
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        if '--user' in args:
+            args.remove('--user')
+        if '--verbose' in args:
+            args.remove('--verbose')
+        del args[4:6]
+
+        assert [*args] == [sys.executable, '-m', 'pip', 'install', '--extra-index-url', extra_index, template_pkg]
+
+    monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+
+    def template(volume_vars):
+        inner_template_called.append(True)
+        return dedent("""\
+                        phases:
+                          test:
+                            variant:
+                              - echo 'bob'
+                        """)
+
+    class TestTemplatePackage:
+        def __init__(self):
+            self.name = template_pkg
+
+        def load(self):
+            return template
+
+    def mock_entry_points(*, group: str):
+        assert group == "hopic.plugins.yaml"
+        return (TestTemplatePackage(),)
+
+    monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
+
+    (result,) = run_hopic(
+        ("install-extensions",),
+        config=dedent(
+            f"""\
+                pip:
+                  - with-extra-index: {extra_index}
+                    packages:
+                      - {template_pkg}
+
+                image: {test_image_name}
+
+                phases:
+                  test_custom:
+                    variant_custom:
+                      - echo 'jax'
+
+                config: !template {template_pkg}
+            """)
+    )
+    assert result.exit_code == 32
+    assert inner_template_called.pop()
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+    assert "top level configuration and 'config' item have duplicated keys: {'phases'}" in err
 
 
 def test_invalid_template_name(capfd, run_hopic):
