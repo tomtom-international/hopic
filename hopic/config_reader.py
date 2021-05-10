@@ -394,6 +394,21 @@ def get_entry_points():
     return {ep.name: ep for ep in metadata.entry_points(group="hopic.plugins.yaml")}
 
 
+def load_config_section(cfg):
+    if 'config' not in cfg:
+        return cfg
+
+    allowed_duplicates = {'pip', 'config'}
+    illegal_duplicates = set(cfg.keys()) & set(cfg["config"].keys()) - allowed_duplicates
+    if illegal_duplicates:
+        raise ConfigurationError(f"top level configuration and 'config' item have duplicated keys: {illegal_duplicates}")
+
+    config_item = cfg.pop('config')
+    cfg.pop('pip', None)
+    cfg.update(config_item)
+    return cfg
+
+
 def load_yaml_template(volume_vars, extension_installer, loader, node):
     if node.id == 'scalar':
         props = {}
@@ -434,8 +449,7 @@ def load_yaml_template(volume_vars, extension_installer, loader, node):
         # Parse provided yaml without template substitution
         install_top_level_extensions(cfg, name, extension_installer, volume_vars)
         cfg = yaml.load(cfg, ordered_config_loader(volume_vars, extension_installer))
-        if 'config' in cfg:
-            cfg = cfg['config']
+        cfg = load_config_section(cfg)
     elif isinstance(cfg, Generator):
         yielded_type = typing.Any
         if getattr(rt_type, "__origin__", None) in (typing.Generator, Generator):
@@ -976,8 +990,7 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
             if cfg is None:
                 cfg = OrderedDict()
 
-            if 'config' in cfg:
-                cfg = cfg['config']
+            cfg = load_config_section(cfg)
     finally:
         if file_close:
             f.close()
