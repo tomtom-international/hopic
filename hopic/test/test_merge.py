@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 # Copyright (c) 2019 - 2021 TomTom N.V.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import os
 import re
 import subprocess
@@ -980,3 +983,298 @@ def test_add_hopic_config_file(run_hopic):
             ('build',),
         )
     assert result.exit_code == 0
+
+
+@pytest.mark.parametrize("version_file", ("version.txt", None), ids=lambda fn: fn or "{tag}")
+@pytest.mark.parametrize(
+    "bump_policy",
+    (
+        {"policy": "constant", "field": "patch"},
+        {"policy": "conventional-commits", "strict": True},
+    ),
+    ids=lambda bp: bp["policy"],
+)
+def test_hotfix_pr_on_release(bump_policy, run_hopic, version_file):
+    init_version = "1.2.3"
+    hotfix_id = "vindyne-mem-leak"
+    expected_version = f"1.2.4-hotfix.{hotfix_id}"
+    hotfix_branch = f"hotfix/{init_version}-{hotfix_id}"
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        cfg_file = "hopic-ci-config.yaml"
+
+        (run_hopic.toprepo / cfg_file).write_text(
+            dedent(
+                f"""\
+                version:
+                  tag: yes
+                  format: semver
+                  bump: {json.dumps(bump_policy)}
+                  hotfix-branch: '^hotfix/\\d+\\.\\d+\\.\\d+-(?P<id>[a-zA-Z](?:[-a-zA-Z0-9]*[a-zA-Z0-9])?)$'
+                  {("file: " + version_file) if version_file else ""}
+                """
+            )
+        )
+        repo.index.add((cfg_file,))
+
+        if version_file:
+            (run_hopic.toprepo / version_file).write_text(f"version={init_version}")
+            repo.index.add((version_file,))
+
+        base_commit = repo.index.commit(message="chore: initial commit", **_commitargs)
+        repo.create_tag(init_version)
+        repo.git.branch(hotfix_branch, move=True)
+
+        # PR branch
+        repo.head.reference = repo.create_head("fix/mem-leak", base_commit)
+        assert not repo.head.is_detached
+        repo.head.reset(index=True, working_tree=True)
+        repo.index.commit(message="fix: work around oom kill due to memory leak", **_commitargs)
+
+    # Successful checkout and build
+    (*_, result) = run_hopic(
+        ("checkout-source-tree", "--target-remote", run_hopic.toprepo, "--target-ref", hotfix_branch),
+        ("prepare-source-tree", "--author-name", _author.name, "--author-email", _author.email,
+            "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", "fix/mem-leak",
+            "--change-request", "42", "--title", "fix: work around oom kill due to memory leak"),
+    )
+    assert result.exit_code == 0
+    assert result.stdout.splitlines()[-1].split("+")[0] == expected_version
+
+    (result,) = run_hopic(
+        ("submit",),
+    )
+    assert result.exit_code == 0
+
+    with git.Repo(run_hopic.toprepo) as repo:
+        # Switch back to hotfix branch to be able to easily look at its contents
+        repo.git.checkout(hotfix_branch)
+
+        assert repo.tags[expected_version].commit == repo.head.commit
+
+
+@pytest.mark.parametrize("unrelated_tag", (None, "1.2.4-rc1"), ids=lambda t: t or "{no-tag}")
+def test_hotfix_pr_off_release(run_hopic, unrelated_tag):
+    init_version = "1.2.3"
+    hotfix_id = "vindyne-mem-leak"
+    hotfix_branch = f"hotfix/{init_version}-{hotfix_id}"
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        cfg_file = "hopic-ci-config.yaml"
+
+        (run_hopic.toprepo / cfg_file).write_text(
+            dedent(
+                """\
+                version:
+                  tag: yes
+                  format: semver
+                  bump:
+                    policy: conventional-commits
+                    strict: yes
+                  hotfix-branch: '^hotfix/\\d+\\.\\d+\\.\\d+-(?P<id>[a-zA-Z](?:[-a-zA-Z0-9]*[a-zA-Z0-9])?)$'
+                """
+            )
+        )
+        repo.index.add((cfg_file,))
+
+        repo.index.commit(message="chore: initial commit", **_commitargs)
+        repo.create_tag(init_version)
+        repo.git.branch(hotfix_branch, move=True)
+
+        base_commit = repo.index.commit(message="fix: unrelated cosmetic problem", **_commitargs)
+        if unrelated_tag:
+            repo.create_tag(unrelated_tag)
+
+        # PR branch
+        repo.head.reference = repo.create_head("fix/mem-leak", base_commit)
+        assert not repo.head.is_detached
+        repo.head.reset(index=True, working_tree=True)
+        repo.index.commit(message="fix: work around oom kill due to memory leak", **_commitargs)
+
+    # Successful checkout and build
+    (*_, result) = run_hopic(
+        ("checkout-source-tree", "--target-remote", run_hopic.toprepo, "--target-ref", hotfix_branch),
+        ("prepare-source-tree", "--author-name", _author.name, "--author-email", _author.email,
+            "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", "fix/mem-leak",
+            "--change-request", "42", "--title", "fix: work around oom kill due to memory leak"),
+    )
+    assert result.exit_code == 33
+
+
+def test_hotfix_double_bump(run_hopic):
+    init_version = "1.2.3"
+    hotfix_id = "vindyne-mem-leak"
+    expected_version = f"1.2.4-hotfix.{hotfix_id}.1"
+    hotfix_branch = f"hotfix/{init_version}-{hotfix_id}"
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        cfg_file = "hopic-ci-config.yaml"
+
+        (run_hopic.toprepo / cfg_file).write_text(
+            dedent(
+                """\
+                version:
+                  tag: yes
+                  format: semver
+                  bump:
+                    policy: conventional-commits
+                    strict: yes
+                  hotfix-branch: '^hotfix/\\d+\\.\\d+\\.\\d+-(?P<id>[a-zA-Z](?:[-a-zA-Z0-9]*[a-zA-Z0-9])?)$'
+                """
+            )
+        )
+        repo.index.add((cfg_file,))
+
+        base_commit = repo.index.commit(message="chore: initial commit", **_commitargs)
+        repo.create_tag(init_version)
+        repo.git.branch(hotfix_branch, move=True)
+
+        # PR branch 1
+        repo.head.reference = repo.create_head("fix/mem-leak", base_commit)
+        assert not repo.head.is_detached
+        repo.head.reset(index=True, working_tree=True)
+        repo.index.commit(message="fix: work around oom kill due to memory leak", **_commitargs)
+
+    # Successful checkout and build
+    (*_, result) = run_hopic(
+        ("checkout-source-tree", "--target-remote", run_hopic.toprepo, "--target-ref", hotfix_branch),
+        ("prepare-source-tree", "--author-name", _author.name, "--author-email", _author.email,
+            "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", "fix/mem-leak",
+            "--change-request", "42", "--title", "fix: work around oom kill due to memory leak"),
+        ("submit",),
+    )
+    assert result.exit_code == 0
+
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        repo.git.checkout(hotfix_branch)
+        repo.index.commit(message="chore: intermediate commit 1 to increase commit distance", **_commitargs)
+        repo.index.commit(message="chore: intermediate commit 2 to increase commit distance", **_commitargs)
+        repo.index.commit(message="chore: intermediate commit 3 to increase commit distance", **_commitargs)
+
+        # PR branch 2
+        repo.head.reference = repo.create_head("fix/out-of-bounds-access", repo.head.commit)
+        assert not repo.head.is_detached
+        repo.head.reset(index=True, working_tree=True)
+        repo.index.commit(message="fix: skip out of bounds read", **_commitargs)
+
+    (*_, result) = run_hopic(
+        ("checkout-source-tree", "--target-remote", run_hopic.toprepo, "--target-ref", hotfix_branch),
+        ("prepare-source-tree", "--author-name", _author.name, "--author-email", _author.email,
+            "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", "fix/out-of-bounds-access",
+            "--change-request", "43", "--title", "fix: skip out of bounds read"),
+    )
+    assert result.exit_code == 0
+    assert result.stdout.splitlines()[-1].split("+")[0] == expected_version
+
+    (result,) = run_hopic(
+        ("submit",),
+    )
+    assert result.exit_code == 0
+
+    with git.Repo(run_hopic.toprepo) as repo:
+        # Switch back to hotfix branch to be able to easily look at its contents
+        repo.git.checkout(hotfix_branch)
+
+        assert repo.tags[expected_version].commit == repo.head.commit
+
+
+@pytest.mark.parametrize("hotfix_id", (
+    "42indi",
+    "-42",
+    "-abc",
+    "abc-",
+    "abc/42",
+    "a",
+    "a42",
+    "a-42",
+    "a-test-1",
+    "b",
+    "rc",
+    "alpha",
+    "beta",
+    "awesomeness-{init_version}-something",
+))
+def test_hotfix_invalid_id(hotfix_id, run_hopic):
+    init_version = "1.2.3"
+    hotfix_id = hotfix_id.format(init_version=init_version)
+    hotfix_branch = f"hotfix/{init_version}-{hotfix_id}"
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        cfg_file = "hopic-ci-config.yaml"
+
+        (run_hopic.toprepo / cfg_file).write_text(
+            dedent(
+                """\
+                version:
+                  tag: yes
+                  format: semver
+                  bump:
+                    policy: conventional-commits
+                    strict: yes
+                  hotfix-branch: '^hotfix/\\d+\\.\\d+\\.\\d+-(?P<id>.*)$'
+                """
+            )
+        )
+        repo.index.add((cfg_file,))
+
+        base_commit = repo.index.commit(message="chore: initial commit", **_commitargs)
+        repo.create_tag(init_version)
+        repo.git.branch(hotfix_branch, move=True)
+
+        # PR branch
+        repo.head.reference = repo.create_head("fix/mem-leak", base_commit)
+        assert not repo.head.is_detached
+        repo.head.reset(index=True, working_tree=True)
+        repo.index.commit(message="fix: work around oom kill due to memory leak", **_commitargs)
+
+    # Successful checkout and build
+    (*_, result) = run_hopic(
+        ("checkout-source-tree", "--target-remote", run_hopic.toprepo, "--target-ref", hotfix_branch),
+        ("prepare-source-tree", "--author-name", _author.name, "--author-email", _author.email,
+            "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", "fix/mem-leak",
+            "--change-request", "42", "--title", "fix: work around oom kill due to memory leak"),
+    )
+    assert result.exit_code == 33
+
+
+@pytest.mark.parametrize(
+    "msg_tag",
+    ("refactor!", "feat", "chore"),
+    ids=("breaking-change", "new-feature", "not-fix"),
+)
+def test_hotfix_rejects(msg_tag, run_hopic):
+    init_version = "1.2.3"
+    hotfix_id = "vindyne"
+    hotfix_branch = f"hotfix/{init_version}-{hotfix_id}"
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        cfg_file = "hopic-ci-config.yaml"
+
+        (run_hopic.toprepo / cfg_file).write_text(
+            dedent(
+                """\
+                version:
+                  tag: yes
+                  format: semver
+                  bump:
+                    policy: conventional-commits
+                    strict: yes
+                  hotfix-branch: '^hotfix/\\d+\\.\\d+\\.\\d+-(?P<id>.*)$'
+                """
+            )
+        )
+        repo.index.add((cfg_file,))
+
+        base_commit = repo.index.commit(message="chore: initial commit", **_commitargs)
+        repo.create_tag(init_version)
+        repo.git.branch(hotfix_branch, move=True)
+
+        # PR branch
+        repo.head.reference = repo.create_head("pr-42", base_commit)
+        assert not repo.head.is_detached
+        repo.head.reset(index=True, working_tree=True)
+        repo.index.commit(message=f"{msg_tag}: blorg the oompsie vatsaat", **_commitargs)
+
+    # Successful checkout and build
+    (*_, result) = run_hopic(
+        ("checkout-source-tree", "--target-remote", run_hopic.toprepo, "--target-ref", hotfix_branch),
+        ("prepare-source-tree", "--author-name", _author.name, "--author-email", _author.email,
+            "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", "pr-42",
+            "--change-request", "42", "--title", f"{msg_tag}: blorg the oompsie vatsaat"),
+    )
+    assert result.exit_code == 33

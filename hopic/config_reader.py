@@ -637,6 +637,26 @@ def read_version_info(config, version_info):
         if not re.match(r"^[-0-9a-zA-Z]+(?:\.[-0-9a-zA-Z]+)*$", build):
             raise ConfigurationError("`version.build` field must be a valid semantic versioning build metadata string", file=config)
 
+    hotfix_branch = version_info.get(
+        "hotfix-branch",
+        r"^hotfix/\d+\.\d+\.\d+-(?P<id>(?!(?:a|b|rc|alpha|beta)[-.]?[0-9]*$)[a-zA-Z](?:[-a-zA-Z0-9]*[a-zA-Z0-9])?)$",
+    )
+    if isinstance(hotfix_branch, str):
+        hotfix_branch = re.compile(hotfix_branch)
+    if not isinstance(hotfix_branch, Pattern):
+        raise ConfigurationError(
+            "`version.hotfix-branch` field must be a string containing a valid regex",
+            file=config,
+        )
+    if "id" not in hotfix_branch.groupindex and "ID" not in hotfix_branch.groupindex:
+        unnamed_groups = [n for n in range(1, hotfix_branch.groups + 1) if n not in hotfix_branch.groupindex.values()]
+        if len(unnamed_groups) != 1:
+            raise ConfigurationError(
+                "`version.hotfix-branch` field must contain a regex with a named capture group called 'id' or 'ID' or exactly one unnamed capture group",
+                files=config,
+            )
+    version_info["hotfix-branch"] = hotfix_branch
+
     return version_info
 
 
