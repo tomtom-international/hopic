@@ -661,6 +661,16 @@ When bumping is enabled, Hopic bumps each time that it applies a change.
 Usually this means when it's merging a pull request.
 Another option is when it's performing a modality change (currently only ``UPDATE_DEPENDENCY_MANIFEST``).
 
+.. _hotfix-branch:
+
+``hotfix-branch``
+    :ref:`Hotfix <hotfix>` versioning is supported and performed on hotfix branches only.
+    If and only if a branch's name matches the regular expression configured in this option will hotfix versioning be performed.
+    The regular expression in this option *MUST* either contain an ``id`` or ``ID`` named capture group or have exactly one capture group.
+    This capture group will be used as the :ref:`hotfix ID <hotfix-id>`.
+
+    This defaults to matching branch names like ``hotfix/x.y.z-{hotfix-id}``.
+
 .. todo:: Describe ``after-submit``. Maybe?
 
 .. _Semantic Versioning: https://semver.org/

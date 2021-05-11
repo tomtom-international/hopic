@@ -13,6 +13,8 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 
+.. _hotfix:
+
 Hotfix Version Requirements
 ===========================
 
@@ -46,6 +48,8 @@ A hotfix version:
 * *MUST* always compare as coming after any previous hotfix version, with the same identifier, it's directly based on
 
 In order to address these requirements, for semver 1 and 2, the following format of a hotfix version is prescribed:
+
+.. _hotfix-id:
 
 Given a base version ``X.Y.Z`` that the hotfix is based on a hotfix version is formatted as ``X.Y.${Z + 1}-hotfix.${ID}.${N}``.
 
