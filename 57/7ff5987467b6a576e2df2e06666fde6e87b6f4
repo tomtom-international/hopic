@@ -1,0 +1,21 @@
+Committed-by: Hopic 1.39.3.dev8+g4a7138a
+
+With Python version: 3.6.9
+
+And with these installed packages:
+click==7.1.2
+click-log==0.3.2
+commisery==0.9.0
+gitdb==4.0.7
+GitPython==3.1.14
+hopic @ git+https://github.com/tomtom-international/hopic.git@4a7138a8a8d031b64bb3cece5128089ed1b12cc8
+importlib-metadata==4.0.1
+python-dateutil==2.8.1
+PyYAML==5.4.1
+regex==2021.4.4
+six==1.16.0
+smmap==4.0.0
+stemming==1.0.1
+typeguard==2.10.0
+typing-extensions==3.10.0.0
+zipp==3.4.1
