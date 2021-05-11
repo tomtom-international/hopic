@@ -7,6 +7,6 @@ phases:
       - archive:
           artifacts:
             produce_output.txt
-          upload-on-failure: yes
+          upload-on-failure: true
       - touch produce_output.txt
       - "false"

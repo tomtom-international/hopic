@@ -5,7 +5,7 @@ phases:
   prepare:
     whoami:
       - image: buildpack-deps:testing-curl
-        docker-in-docker: yes
+        docker-in-docker: true
         volumes:
           - /usr/bin/docker:/usr/bin/docker:ro
       - docker pull buildpack-deps:testing-curl

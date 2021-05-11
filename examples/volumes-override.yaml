@@ -3,7 +3,7 @@ image: buildpack-deps:testing-curl
 volumes:
   - source: ~/
     target: /tools/devenv
-    read-only: yes
+    read-only: true
   - /tmp
   - /tmp/Music:/home/sandbox/temp
 
