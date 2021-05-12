@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    <title>Configuration &#8212; Hopic 1.39.3.dev18+g577ff59 documentation</title>
+    <title>Configuration &#8212; Hopic 1.39.3.dev163+ge19dbc2 documentation</title>
     <link rel="stylesheet" href="_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
     <link rel="stylesheet" type="text/css" href="_static/banner.css" />
@@ -34,7 +34,7 @@
         <li class="right" >
           <a href="intro.html" title="Introduction"
              accesskey="P">previous</a> |</li>
-        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.39.3.dev18+g577ff59 documentation</a> &#187;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.39.3.dev163+ge19dbc2 documentation</a> &#187;</li> 
       </ul>
     </div>  
 
@@ -1045,6 +1045,15 @@ The purpose of this is to prevent accidental inclusion of these kinds of changes
 <p>When bumping is enabled, Hopic bumps each time that it applies a change.
 Usually this means when it’s merging a pull request.
 Another option is when it’s performing a modality change (currently only <code class="docutils literal notranslate"><span class="pre">UPDATE_DEPENDENCY_MANIFEST</span></code>).</p>
+<dl class="docutils" id="hotfix-branch">
+<dt><code class="docutils literal notranslate"><span class="pre">hotfix-branch</span></code></dt>
+<dd><p class="first"><a class="reference internal" href="hotfix.html#hotfix"><span class="std std-ref">Hotfix</span></a> versioning is supported and performed on hotfix branches only.
+If and only if a branch’s name matches the regular expression configured in this option will hotfix versioning be performed.
+The regular expression in this option <em>MUST</em> either contain an <code class="docutils literal notranslate"><span class="pre">id</span></code> or <code class="docutils literal notranslate"><span class="pre">ID</span></code> named capture group or have exactly one capture group.
+This capture group will be used as the <a class="reference internal" href="hotfix.html#hotfix-id"><span class="std std-ref">hotfix ID</span></a>.</p>
+<p class="last">This defaults to matching branch names like <code class="docutils literal notranslate"><span class="pre">hotfix/x.y.z-{hotfix-id}</span></code>.</p>
+</dd>
+</dl>
 <div class="admonition-todo admonition" id="index-1">
 <p class="first admonition-title">Todo</p>
 <p class="last">Describe <code class="docutils literal notranslate"><span class="pre">after-submit</span></code>. Maybe?</p>
@@ -1612,7 +1621,7 @@ The command should output the part of the configuration file to standard output.
         <li class="right" >
           <a href="intro.html" title="Introduction"
              >previous</a> |</li>
-        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.39.3.dev18+g577ff59 documentation</a> &#187;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.39.3.dev163+ge19dbc2 documentation</a> &#187;</li> 
       </ul>
     </div>
     <div class="footer" role="contentinfo">
