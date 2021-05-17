@@ -17,6 +17,14 @@
 Changelog
 =========
 
+1.40.1
+======
+
+Bug fixes
+---------
+
+* fix(merge): determine base version before checking that it's a valid hotfix base (#362)
+
 1.40.0
 ======
 
