@@ -17,13 +17,44 @@
 Changelog
 =========
 
-1.39.0-7+gaeea71bd495bc0
+1.40.0
+======
+
+* feat: extend top-level config instead of replacing it with 'config' sub-member (#360)
+* feat: print critical path of pipeline (#355)
+* feat(merge): version bumping and error checking for PRs to hotfix branches (#357)
+
+Documentation improvements
+--------------------------
+
+* docs: use consistent boolean form in docs and examples (#310)
+
+1.39.2
+======
+
+Bug fixes
+---------
+
+* fix: initialize all global variables when parsing config (#354)
+* fix: warning about old-style metadata.entry_points usage (#361)
+* fix: introduce mypy type checking and fix type annotations (#359)
+
+1.39.1
+======
+
+Bug fixes
+---------
+
+* fix(binary-normalize): zero out major/minor number of non-device files (#358)
+
+1.39.0
 ======
 
 New features
 ------------
 
 * feat(build): expose build name, number, URL, start time and duration as vars (#352)
+* feat: log ip address of node first time it is used (#298)
 
 1.38.0
 ======
