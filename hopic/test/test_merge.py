@@ -1028,6 +1028,9 @@ def test_hotfix_pr_on_release(bump_policy, run_hopic, version_file):
         repo.head.reference = repo.create_head("fix/mem-leak", base_commit)
         assert not repo.head.is_detached
         repo.head.reset(index=True, working_tree=True)
+
+        (run_hopic.toprepo / "something.txt").write_text("usable")
+        repo.index.add(("something.txt",))
         repo.index.commit(message="fix: work around oom kill due to memory leak", **_commitargs)
 
     # Successful checkout and build
@@ -1087,6 +1090,9 @@ def test_hotfix_pr_off_release(run_hopic, unrelated_tag):
         repo.head.reference = repo.create_head("fix/mem-leak", base_commit)
         assert not repo.head.is_detached
         repo.head.reset(index=True, working_tree=True)
+
+        (run_hopic.toprepo / "something.txt").write_text("usable")
+        repo.index.add(("something.txt",))
         repo.index.commit(message="fix: work around oom kill due to memory leak", **_commitargs)
 
     # Successful checkout and build
@@ -1130,6 +1136,9 @@ def test_hotfix_double_bump(run_hopic):
         repo.head.reference = repo.create_head("fix/mem-leak", base_commit)
         assert not repo.head.is_detached
         repo.head.reset(index=True, working_tree=True)
+
+        (run_hopic.toprepo / "something.txt").write_text("usable")
+        repo.index.add(("something.txt",))
         repo.index.commit(message="fix: work around oom kill due to memory leak", **_commitargs)
 
     # Successful checkout and build
@@ -1221,6 +1230,9 @@ def test_hotfix_invalid_id(hotfix_id, run_hopic):
         repo.head.reference = repo.create_head("fix/mem-leak", base_commit)
         assert not repo.head.is_detached
         repo.head.reset(index=True, working_tree=True)
+
+        (run_hopic.toprepo / "something.txt").write_text("usable")
+        repo.index.add(("something.txt",))
         repo.index.commit(message="fix: work around oom kill due to memory leak", **_commitargs)
 
     # Successful checkout and build
@@ -1268,6 +1280,9 @@ def test_hotfix_rejects(msg_tag, run_hopic):
         repo.head.reference = repo.create_head("pr-42", base_commit)
         assert not repo.head.is_detached
         repo.head.reset(index=True, working_tree=True)
+
+        (run_hopic.toprepo / "something.txt").write_text("usable")
+        repo.index.add(("something.txt",))
         repo.index.commit(message=f"{msg_tag}: blorg the oompsie vatsaat", **_commitargs)
 
     # Successful checkout and build

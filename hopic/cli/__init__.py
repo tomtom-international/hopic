@@ -555,20 +555,28 @@ def process_prepare_source_tree(
 
             cur_version = ctx.obj.version
             if hotfix:
-                if not _is_valid_hotfix_base(cur_version):
-                    raise VersioningError(f"Creating hotfixes on anything but a full release is not supported. Currently on: {cur_version}")
+                base_version = cur_version
 
-                # strip commit distance and dirty state from version to ensure we're bumping the hotfix suffix instead of the commit distance suffix
                 if "file" not in version_info:
                     with git.Repo(ctx.obj.code_dir) as code_repo:
                         gitversion = determine_git_version(code_repo)
-                    gitversion = GitVersion(tag_name=gitversion.tag_name, commit_hash=gitversion.commit_hash)
+
                     params = {}
                     try:
                         params["format"] = version_info["format"]
                     except KeyError:
                         pass
+
+                    # strip dirty state from version to ensure we're not complaining about that in the _is_valid_hotfix_base check below
+                    gitversion = GitVersion(tag_name=gitversion.tag_name, commit_hash=gitversion.commit_hash, commit_count=gitversion.commit_count)
+                    base_version = gitversion.to_version(**params)
+
+                    # strip commit distance from version to ensure we're bumping the hotfix suffix instead of the commit distance suffix
+                    gitversion = GitVersion(tag_name=gitversion.tag_name, commit_hash=gitversion.commit_hash)
                     cur_version = gitversion.to_version(**params)
+
+                if not _is_valid_hotfix_base(base_version):
+                    raise VersioningError(f"Creating hotfixes on anything but a full release is not supported. Currently on: {base_version}")
 
             if bump['policy'] == 'constant':
                 params = {}
