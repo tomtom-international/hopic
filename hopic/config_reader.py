@@ -639,7 +639,7 @@ def read_version_info(config, version_info):
 
     hotfix_branch = version_info.get(
         "hotfix-branch",
-        r"^hotfix/\d+\.\d+\.\d+-(?P<id>(?!(?:a|b|rc|alpha|beta)[-.]?[0-9]*$)[a-zA-Z](?:[-a-zA-Z0-9]*[a-zA-Z0-9])?)$",
+        r"^hotfix/\d+\.\d+\.\d+-(?P<id>[a-zA-Z](?:[-a-zA-Z0-9]*[a-zA-Z0-9])?)$",
     )
     if isinstance(hotfix_branch, str):
         hotfix_branch = re.compile(hotfix_branch)
