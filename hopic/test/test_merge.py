@@ -996,7 +996,7 @@ def test_add_hopic_config_file(run_hopic):
 )
 def test_hotfix_pr_on_release(bump_policy, run_hopic, version_file):
     init_version = "1.2.3"
-    hotfix_id = "vindyne-mem-leak"
+    hotfix_id = "vindyne.mem-leak"
     expected_version = f"1.2.4-hotfix.{hotfix_id}"
     hotfix_branch = f"hotfix/{init_version}-{hotfix_id}"
     with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
@@ -1009,7 +1009,7 @@ def test_hotfix_pr_on_release(bump_policy, run_hopic, version_file):
                   tag: yes
                   format: semver
                   bump: {json.dumps(bump_policy)}
-                  hotfix-branch: '^hotfix/\\d+\\.\\d+\\.\\d+-(?P<id>[a-zA-Z](?:[-a-zA-Z0-9]*[a-zA-Z0-9])?)$'
+                  hotfix-branch: '^hotfix/\\d+\\.\\d+\\.\\d+-(?P<id>[a-zA-Z](?:[-.a-zA-Z0-9]*[a-zA-Z0-9])?)$'
                   {("file: " + version_file) if version_file else ""}
                 """
             )
@@ -1058,7 +1058,7 @@ def test_hotfix_pr_on_release(bump_policy, run_hopic, version_file):
 @pytest.mark.parametrize("unrelated_tag", (None, "1.2.4-rc1"), ids=lambda t: t or "{no-tag}")
 def test_hotfix_pr_off_release(run_hopic, unrelated_tag):
     init_version = "1.2.3"
-    hotfix_id = "vindyne-mem-leak"
+    hotfix_id = "vindyne.mem-leak"
     hotfix_branch = f"hotfix/{init_version}-{hotfix_id}"
     with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
         cfg_file = "hopic-ci-config.yaml"
@@ -1072,7 +1072,7 @@ def test_hotfix_pr_off_release(run_hopic, unrelated_tag):
                   bump:
                     policy: conventional-commits
                     strict: yes
-                  hotfix-branch: '^hotfix/\\d+\\.\\d+\\.\\d+-(?P<id>[a-zA-Z](?:[-a-zA-Z0-9]*[a-zA-Z0-9])?)$'
+                  hotfix-branch: '^hotfix/\\d+\\.\\d+\\.\\d+-(?P<id>[a-zA-Z](?:[-.a-zA-Z0-9]*[a-zA-Z0-9])?)$'
                 """
             )
         )
@@ -1107,7 +1107,7 @@ def test_hotfix_pr_off_release(run_hopic, unrelated_tag):
 
 def test_hotfix_double_bump(run_hopic):
     init_version = "1.2.3"
-    hotfix_id = "vindyne-mem-leak"
+    hotfix_id = "vindyne.mem-leak"
     expected_version = f"1.2.4-hotfix.{hotfix_id}.1"
     hotfix_branch = f"hotfix/{init_version}-{hotfix_id}"
     with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
@@ -1122,7 +1122,7 @@ def test_hotfix_double_bump(run_hopic):
                   bump:
                     policy: conventional-commits
                     strict: yes
-                  hotfix-branch: '^hotfix/\\d+\\.\\d+\\.\\d+-(?P<id>[a-zA-Z](?:[-a-zA-Z0-9]*[a-zA-Z0-9])?)$'
+                  hotfix-branch: '^hotfix/\\d+\\.\\d+\\.\\d+-(?P<id>[a-zA-Z](?:[-.a-zA-Z0-9]*[a-zA-Z0-9])?)$'
                 """
             )
         )
@@ -1193,6 +1193,7 @@ def test_hotfix_double_bump(run_hopic):
     "a",
     "a42",
     "a-42",
+    "a.42",
     "a-test-1",
     "b",
     "rc",
