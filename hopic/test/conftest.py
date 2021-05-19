@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from functools import wraps
+import logging
 import os
 import os.path
 from pathlib import (
@@ -38,12 +39,14 @@ except ImportError:
     import importlib_metadata as metadata
 
 from click.testing import CliRunner
+import click_log
 import git
 import pytest
 from typeguard import typechecked
 
 from . import (
     hopic_cli,
+    sgr_re,
     source_date_epoch,
 )
 from ..cli import utils
@@ -77,7 +80,7 @@ _commitargs = dict(
 
 
 @pytest.fixture
-def run_hopic(monkeypatch, tmp_path):
+def run_hopic(caplog, monkeypatch, tmp_path):
     @typechecked
     def run_hopic(
         *args: Union[List, Tuple, Callable[[], Any]],
@@ -144,6 +147,11 @@ def run_hopic(monkeypatch, tmp_path):
                     @wraps(orig_main)
                     def mock_main(*args, **kwargs):
                         with monkeypatch.context() as m:
+                            # Ensure pytest can capture our logging
+                            m.setattr(click_log, "basic_config", lambda: None)
+                            m.setattr(logging.getLogger("hopic"), "setLevel", lambda _: None)
+                            m.setattr(logging.getLogger("git"), "setLevel", lambda _: None)
+
                             monkeypatch_injector(m)
                             return orig_main(*args, **kwargs)
 
@@ -160,6 +168,9 @@ def run_hopic(monkeypatch, tmp_path):
                         raise result.exception
 
                     result.commit = commit
+                    result.logs = tuple(
+                        (rec.levelno, sgr_re.sub("", rec.getMessage())) for rec in caplog.records if rec.name == "hopic" or rec.name.startswith("hopic.")
+                    )
                     yield result
 
                     if result.exit_code != 0:
@@ -168,6 +179,9 @@ def run_hopic(monkeypatch, tmp_path):
             os.umask(umask)
 
     run_hopic.toprepo = tmp_path / "repo"
+    # Make _all_ logging levels available for capture by pytest
+    caplog.set_level("DEBUG", logger="git")
+    caplog.set_level("DEBUG", logger="hopic")
     return run_hopic
 
 

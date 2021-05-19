@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
 import sys
 from io import StringIO
 
@@ -25,6 +26,8 @@ PACKAGE : str = __package__.split('.')[0]
 (_hopic_ep,) = metadata.entry_points(group="console_scripts", name=PACKAGE)
 hopic_cli = _hopic_ep.load()
 source_date_epoch = 7 * 24 * 3600
+
+sgr_re = re.compile(r"\x1B\[.*?m")
 
 
 def config_file(name: str, content: str):

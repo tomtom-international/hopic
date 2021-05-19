@@ -12,13 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import git
 import json
-import pytest
 import subprocess
 import sys
 from collections import OrderedDict
 from textwrap import dedent
+
+import git
+import pytest
 
 if sys.version_info[:2] >= (3, 10):
     from importlib import metadata
@@ -399,11 +400,7 @@ def test_invalid_template_name(capfd, run_hopic):
     )
 
     assert result.exit_code != 0
-
-    out, err = capfd.readouterr()
-    sys.stdout.write(out)
-    sys.stderr.write(err)
-    assert "No YAML template named 'xyzzy' available (props={})" in err.strip()
+    assert any("No YAML template named 'xyzzy' available (props={})" in msg for _, msg in result.logs)
 
 
 def test_recursive_extension_installation_version_functionality(monkeypatch, run_hopic):

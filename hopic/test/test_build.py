@@ -22,6 +22,7 @@ from .. import config_reader
 from datetime import datetime
 from textwrap import dedent
 from typing import Pattern
+import logging
 import os
 import pytest
 import re
@@ -143,7 +144,7 @@ phases:
     assert result.exit_code == 35
 
 
-def test_filtered_variants(monkeypatch, capfd, run_hopic):
+def test_filtered_variants(monkeypatch, run_hopic):
     expected = [
         ('build', 'a'),
         ('build', 'c'),
@@ -178,11 +179,8 @@ phases:
       - test c
 '''),
     )
-    out, err = capfd.readouterr()
-    sys.stderr.write(out)
-    sys.stderr.write(err)
 
-    assert "warning: phase 'test' does not contain variant 'd'" == err.splitlines()[3]
+    assert (logging.WARNING, "phase 'test' does not contain variant 'd'") in result.logs
     assert result.exit_code == 0
 
 
@@ -722,7 +720,7 @@ phases:
     assert out.strip() == str(source_date_epoch)
 
 
-def test_command_with_deleted_env_var(capfd, run_hopic):
+def test_command_with_deleted_env_var(run_hopic):
     (result,) = run_hopic(
         ("build",),
         config=dedent(
@@ -1000,7 +998,7 @@ def test_with_credentials_with_url_encoding(monkeypatch, run_hopic, capfd, usern
     assert result.exit_code == 0
 
 
-def test_dry_run_build(capfd, monkeypatch, run_hopic):
+def test_dry_run_build(monkeypatch, run_hopic):
     template_build_command = ['build b from template']
 
     expected = [
@@ -1052,17 +1050,16 @@ phases:
 '''),
     )
     assert result.exit_code == 0
-    out, err = capfd.readouterr()
-    sys.stdout.write(out)
-    sys.stderr.write(err)
 
-    for line in err.splitlines():
+    for level, msg in result.logs:
+        if level < logging.INFO:
+            continue
         for expected_string in expected.pop(0):
-            assert expected_string in line
+            assert expected_string in msg
     assert not expected
 
 
-def test_dry_run_does_not_ask_for_credentials(monkeypatch, capfd, run_hopic):
+def test_dry_run_does_not_ask_for_credentials(monkeypatch, run_hopic):
     def get_credential_id(project_name_arg, cred_id):
         assert False, "`get_credential_id` should not have been called in a dry run"
 
@@ -1084,11 +1081,8 @@ def test_dry_run_does_not_ask_for_credentials(monkeypatch, capfd, run_hopic):
     )
 
     assert result.exit_code == 0
-    out, err = capfd.readouterr()
-    sys.stdout.write(out)
-    sys.stderr.write(err)
-    assert err.splitlines()[1] == "sh -c 'echo ${USERNAME} ${PASSWORD}'"
-    assert err.splitlines()[2] == "echo '${USERNAME}' '${PASSWORD}'"
+    assert result.logs[-2][1] == "sh -c 'echo ${USERNAME} ${PASSWORD}'"
+    assert result.logs[-1][1] == "echo '${USERNAME}' '${PASSWORD}'"
 
 
 def test_config_recursive_template_build(monkeypatch, run_hopic):
@@ -1233,7 +1227,7 @@ def test_with_credentials_obfuscation(monkeypatch, capfd, run_hopic):
     sys.stderr.write(err)
 
     assert out.splitlines()[0] == f'{username} {password}'
-    assert "'${USERNAME}' '${PASSWORD}'" in err.splitlines()[0]
+    assert any("'${USERNAME}' '${PASSWORD}'" in msg for _, msg in result.logs)
     assert result.exit_code == 0
 
 
