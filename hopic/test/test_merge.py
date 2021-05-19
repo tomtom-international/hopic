@@ -26,6 +26,7 @@ import pytest
 
 from .. import credentials
 from ..cli import utils
+from ..errors import VersioningError
 
 _git_time = f"{42 * 365 * 24 * 3600} +0000"
 _author = git.Actor('Bob Tester', 'bob@example.net')
@@ -406,23 +407,15 @@ def test_merge_conventional_feat_bump_not_on_change(capfd, run_hopic):
 
 def test_merge_conventional_breaking_change_on_major_branch(capfd, run_hopic):
     result = merge_conventional_bump(capfd, run_hopic, message='refactor!: make the API type better', target='release/42')
-    assert result.exit_code == 33
-
-    out, err = capfd.readouterr()
-    sys.stdout.write(out)
-    sys.stderr.write(err)
-
+    assert isinstance(result.exception, VersioningError)
+    err = result.exception.format_message()
     assert 'Breaking changes are not allowed' in err
 
 
 def test_merge_conventional_feat_on_minor_branch(capfd, run_hopic):
     result = merge_conventional_bump(capfd, run_hopic, message='feat: add something useful', target='release/42.21')
-    assert result.exit_code == 33
-
-    out, err = capfd.readouterr()
-    sys.stdout.write(out)
-    sys.stderr.write(err)
-
+    assert isinstance(result.exception, VersioningError)
+    err = result.exception.format_message()
     assert 'New features are not allowed' in err
 
 

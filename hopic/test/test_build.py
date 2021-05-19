@@ -18,6 +18,12 @@ from .markers import (
     )
 from .. import credentials
 from .. import config_reader
+from ..errors import (
+    ConfigurationError,
+    MissingFileError,
+    UnknownPhaseError,
+    VersioningError,
+)
 
 from datetime import datetime
 from textwrap import dedent
@@ -114,7 +120,7 @@ phases:
     assert result.exit_code == 0
 
 
-def test_filtered_non_existing_phase(monkeypatch, capfd, run_hopic):
+def test_filtered_non_existing_phase(monkeypatch, run_hopic):
     expected = []
 
     def mock_check_call(args, *popenargs, **kwargs):
@@ -137,11 +143,8 @@ phases:
 '''),
     )
 
-    _, err = capfd.readouterr()
-    sys.stderr.write(err)
-
-    assert "Error: build does not contain phase(s): does-not-exist" == err.splitlines()[0]
-    assert result.exit_code == 35
+    assert isinstance(result.exception, UnknownPhaseError)
+    assert result.exception.format_message() == "build does not contain phase(s): does-not-exist"
 
 
 def test_filtered_variants(monkeypatch, run_hopic):
@@ -428,7 +431,7 @@ def test_docker_run_extra_arguments(capfd, monkeypatch, run_hopic, extra_docker_
     sys.stderr.write(err)
 
 
-def test_docker_run_extra_arguments_forbidden_option(capfd, run_hopic):
+def test_docker_run_extra_arguments_forbidden_option(run_hopic):
     (result,) = run_hopic(
         ("build",),
         config=dedent('''\
@@ -444,16 +447,14 @@ def test_docker_run_extra_arguments_forbidden_option(capfd, run_hopic):
             '''),
     )
 
-    assert result.exit_code != 0
-    out, err = capfd.readouterr()
-    sys.stdout.write(out)
-    sys.stderr.write(err)
+    assert isinstance(result.exception, ConfigurationError)
+    err = result.exception.format_message()
     assert '`extra-docker-args` member of `v-one` contains one or more options that are not allowed:' in err.splitlines()[1]
     for option in ('user', 'workspace'):
         assert option in err.splitlines()[2], f'expected {option} in error message'
 
 
-def test_docker_run_extra_arguments_whitespace_in_option(capfd, run_hopic):
+def test_docker_run_extra_arguments_whitespace_in_option(run_hopic):
     (result,) = run_hopic(
         ("build",),
         config=dedent(
@@ -471,11 +472,9 @@ def test_docker_run_extra_arguments_whitespace_in_option(capfd, run_hopic):
         ),
     )
 
-    assert result.exit_code != 0
-    out, err = capfd.readouterr()
-    sys.stdout.write(out)
-    sys.stderr.write(err)
-    assert 'argument `hostname` for `v-one` contains whitespace, which is not permitted.' in err.splitlines()[0]
+    assert isinstance(result.exception, ConfigurationError)
+    err = result.exception.format_message()
+    assert 'argument `hostname` for `v-one` contains whitespace, which is not permitted.' in err
 
 
 def test_override_default_volume(run_hopic):
@@ -1292,9 +1291,9 @@ def test_with_credentials_obfuscation_empty_credentials(monkeypatch, capfd, run_
 
 
 @pytest.mark.parametrize('version_config, expected_msg', (
-    ('tag: true', r"^Error: Failed to determine the current version from Git tag\."),
-    ('file: version.txt', r"^Error: Failed to determine the current version from file\."),
-    ('bump: false', r"^Error: Failed to determine the current version\."),
+    ('tag: true', r"^Failed to determine the current version from Git tag\."),
+    ('file: version.txt', r"^Failed to determine the current version from file\."),
+    ('bump: false', r"^Failed to determine the current version\."),
 ))
 def test_version_variable_with_undetermined_version(capfd, run_hopic, version_config, expected_msg):
     (result,) = run_hopic(
@@ -1311,12 +1310,12 @@ def test_version_variable_with_undetermined_version(capfd, run_hopic, version_co
         tag=None,
     )
 
-    assert result.exit_code != 0
+    assert isinstance(result.exception, VersioningError)
     out, err = capfd.readouterr()
     sys.stdout.write(out)
     sys.stderr.write(err)
     assert out.splitlines()[0] == 'VERSION='
-    assert re.search(expected_msg, err, re.MULTILINE)
+    assert re.search(expected_msg, result.exception.format_message(), re.MULTILINE)
 
 
 def test_normalize_artifacts(capfd, run_hopic):
@@ -1355,7 +1354,7 @@ def test_normalize_artifacts(capfd, run_hopic):
     "fingerprint",
     "junit",
 ))
-def test_complain_about_missing_artifacts(capfd, run_hopic, archive_key):
+def test_complain_about_missing_artifacts(run_hopic, archive_key):
     (result,) = run_hopic(
         ("build",),
         config=dedent(
@@ -1369,12 +1368,10 @@ def test_complain_about_missing_artifacts(capfd, run_hopic, archive_key):
         ),
     )
 
-    assert result.exit_code == 38
-    out, err = capfd.readouterr()
-    sys.stdout.write(out)
-    sys.stderr.write(err)
-    assert re.search(r"\b[Nn]one of these mandatory .*? patterns matched a file\b", err)
-    assert f"{archive_key}-doesnotexist.txt" in err
+    assert isinstance(result.exception, MissingFileError)
+    msg = result.exception.format_message()
+    assert re.search(r"\b[Nn]one of these mandatory .*? patterns matched a file\b", msg)
+    assert f"{archive_key}-doesnotexist.txt" in msg
 
 
 @pytest.mark.parametrize("archive_key", (
