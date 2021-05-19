@@ -1095,7 +1095,9 @@ def test_hotfix_pr_off_release(run_hopic, unrelated_tag):
             "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", "fix/mem-leak",
             "--change-request", "42", "--title", "fix: work around oom kill due to memory leak"),
     )
-    assert result.exit_code == 33
+    assert isinstance(result.exception, VersioningError)
+    err = result.exception.format_message()
+    assert "Creating hotfixes on anything but a full release is not supported." in err
 
 
 def test_hotfix_double_bump(run_hopic):
@@ -1177,24 +1179,28 @@ def test_hotfix_double_bump(run_hopic):
         assert repo.tags[expected_version].commit == repo.head.commit
 
 
-@pytest.mark.parametrize("hotfix_id", (
-    "42indi",
-    "-42",
-    "-abc",
-    "abc-",
-    "abc/42",
-    "a",
-    "a42",
-    "a-42",
-    "a.42",
-    "a-test-1",
-    "b",
-    "rc",
-    "alpha",
-    "beta",
-    "awesomeness-{init_version}-something",
-))
-def test_hotfix_invalid_id(hotfix_id, run_hopic):
+@pytest.mark.parametrize(
+    "hotfix_id, error_msg",
+    (
+        ("42indi"  , re.compile(r"Hotfix ID '.*?' is not a valid identifier")),
+        ("-42"     , re.compile(r"Hotfix ID '.*?' is not a valid identifier")),
+        ("-abc"    , re.compile(r"Hotfix ID '.*?' is not a valid identifier")),
+        ("abc-"    , re.compile(r"Hotfix ID '.*?' is not a valid identifier")),
+        ("abc/42"  , re.compile(r"Hotfix ID '.*?' is not a valid identifier")),
+        ("a"       , re.compile(r"Hotfix ID '.*?' starts with reserved prefix")),
+        ("a42"     , re.compile(r"Hotfix ID '.*?' starts with reserved prefix")),
+        ("a-42"    , re.compile(r"Hotfix ID '.*?' starts with reserved prefix")),
+        ("a.42"    , re.compile(r"Hotfix ID '.*?' starts with reserved prefix")),
+        ("a-test-1", re.compile(r"Hotfix ID '.*?' starts with reserved prefix")),
+        ("b"       , re.compile(r"Hotfix ID '.*?' starts with reserved prefix")),
+        ("rc"      , re.compile(r"Hotfix ID '.*?' starts with reserved prefix")),
+        ("alpha"   , re.compile(r"Hotfix ID '.*?' starts with reserved prefix")),
+        ("beta"    , re.compile(r"Hotfix ID '.*?' starts with reserved prefix")),
+        ("awesomeness-{init_version}-something", re.compile(r"Hotfix ID 'awesomeness-(.*?)-something' is not allowed to contain the base version '\1'")),
+    ),
+    ids=lambda x: x if isinstance(x, str) else "",
+)
+def test_hotfix_invalid_id(error_msg, hotfix_id, run_hopic):
     init_version = "1.2.3"
     hotfix_id = hotfix_id.format(init_version=init_version)
     hotfix_branch = f"hotfix/{init_version}-{hotfix_id}"
@@ -1236,15 +1242,21 @@ def test_hotfix_invalid_id(hotfix_id, run_hopic):
             "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", "fix/mem-leak",
             "--change-request", "42", "--title", "fix: work around oom kill due to memory leak"),
     )
-    assert result.exit_code == 33
+    assert isinstance(result.exception, VersioningError)
+    err = result.exception.format_message()
+    assert error_msg.search(err)
 
 
 @pytest.mark.parametrize(
-    "msg_tag",
-    ("refactor!", "feat", "chore"),
+    "msg_tag, error_msg",
+    (
+        ("refactor!", re.compile("[Bb]reaking changes are not allowed [io]n hotfix")),
+        ("feat"     , re.compile("[Nn]ew features are not allowed [io]n hotfix")),
+        ("chore"    , re.compile("presence of a 'fix' commit is mandatory")),
+    ),
     ids=("breaking-change", "new-feature", "not-fix"),
 )
-def test_hotfix_rejects(msg_tag, run_hopic):
+def test_hotfix_rejects(error_msg, msg_tag, run_hopic):
     init_version = "1.2.3"
     hotfix_id = "vindyne"
     hotfix_branch = f"hotfix/{init_version}-{hotfix_id}"
@@ -1286,4 +1298,6 @@ def test_hotfix_rejects(msg_tag, run_hopic):
             "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", "pr-42",
             "--change-request", "42", "--title", f"{msg_tag}: blorg the oompsie vatsaat"),
     )
-    assert result.exit_code == 33
+    assert isinstance(result.exception, VersioningError)
+    err = result.exception.format_message()
+    assert error_msg.search(err)
