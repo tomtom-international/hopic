@@ -267,7 +267,7 @@ def normalize(filename, fileobj=None, outname='', outfileobj=None, source_date_e
                     compress = True
                     archivefile = GzipFile(filename=outname, mode='wb', compresslevel=9, fileobj=outfile, mtime=source_date_epoch)
 
-                with TarFile.open(outname, fileobj=archivefile, format=tarfile.USTAR_FORMAT, mode='w', encoding='UTF-8') as out_archive:
+                with TarFile.open(outname, fileobj=archivefile, format=tarfile.PAX_FORMAT, mode='w', encoding='UTF-8') as out_archive:
                     if sys.version_info < (3, 9, 0):
                         # Erase major/minor fields for non-device files as other tar-archive producing tools do and Python does since 3.9.0.
 
