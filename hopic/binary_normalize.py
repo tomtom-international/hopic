@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import copy
+from decimal import Decimal
 from gzip import GzipFile
 import os
 import shutil
@@ -331,7 +332,18 @@ def normalize(filename, fileobj=None, outname='', outfileobj=None, source_date_e
                     # Sorting the file list ensures that we don't depend on the order that files appear on disk
                     for member in sorted(in_archive, key=lambda x: x.name):
                         # Clamping mtime to source_date_epoch ensures that source files are the only sources of timestamps, not build time
-                        member.mtime = min(member.mtime, source_date_epoch)
+                        mtime = min(Decimal(member.pax_headers.pop("mtime", member.mtime)), source_date_epoch)
+                        # Store in PAX header if it needs sub-integer precision
+                        if int(mtime) != mtime:
+                            member.mtime = int(mtime)
+                            member.pax_headers["mtime"] = f"{mtime:f}"
+                        else:
+                            member.mtime = int(mtime)
+                            member.pax_headers.pop("mtime", None)
+
+                        # Don't store atime or ctime. These are just too volatile.
+                        member.pax_headers.pop("atime", None)
+                        member.pax_headers.pop("ctime", None)
 
                         # Prevent including the account details of the account used to execute the build
                         if member.uid == os.getuid() or member.gid == os.getgid():
