@@ -1325,11 +1325,16 @@ def test_version_variable_with_undetermined_version(capfd, run_hopic, version_co
     assert re.search(expected_msg, err, re.MULTILINE)
 
 
-def test_normalize_artifacts(capfd, run_hopic):
+@pytest.mark.parametrize("expected_hash, mtime, include_file", (
+    ("c63b283df45487cb0d957e0aa799b9c72f78e45b707da6c3946701a63a514713", "2038-01-19 03:14:08.134210", "include/something/here.hpp"),
+    ("a9ffb501db85f6bd1d5544ad2761c1d55449d8d36b9388c7798525a98eebdfe8", "1970-01-03 17:30:01.372010 +0000", "include/something/here.hpp"),
+    ("cbbeedaa870244a7d7cdc655ad7ac890d7817f2b0172ca18203c8954b24050c4", "2038-01-19 03:14:08.134210", "include/from-really-long-directory-that-cannot-be-represented-all-that-super-well-in-the-super-teeny-tiny-little-amount-that-is-a-hundred-and-fifty-five-bytes/here.hpp"),  # noqa: E501
+))
+def test_normalize_artifacts(capfd, expected_hash, include_file, mtime, run_hopic):
     (result,) = run_hopic(
         ("build",),
         config=dedent(
-            """\
+            f"""\
             version:
               tag: true
 
@@ -1337,13 +1342,13 @@ def test_normalize_artifacts(capfd, run_hopic):
               a:
                 x:
                   - archive:
-                      artifacts: archive-${PURE_VERSION}.tar.gz
-                  - mkdir -p include/something src
-                  - touch include/something/here.hpp src/here.cpp
-                  - tar czf archive-${PURE_VERSION}.tar.gz include src
+                      artifacts: archive-${{PURE_VERSION}}.tar.gz
+                  - mkdir -p {os.path.dirname(include_file)} src
+                  - touch -d '{mtime}' {include_file} src/here.cpp
+                  - tar czf archive-${{PURE_VERSION}}.tar.gz --format=pax include src
               b:
                 x:
-                  - sha256sum -b archive-${PURE_VERSION}.tar.gz
+                  - sha256sum -b archive-${{PURE_VERSION}}.tar.gz
             """
         ),
         tag="0.0.0",
@@ -1353,7 +1358,7 @@ def test_normalize_artifacts(capfd, run_hopic):
     out, err = capfd.readouterr()
     sys.stdout.write(out)
     sys.stderr.write(err)
-    assert out == "c63b283df45487cb0d957e0aa799b9c72f78e45b707da6c3946701a63a514713 *archive-0.0.0.tar.gz\n", "archive's hash should not depend on build time"
+    assert out == f"{expected_hash} *archive-0.0.0.tar.gz\n", "archive's hash should not depend on build time"
 
 
 @pytest.mark.parametrize("archive_key", (
