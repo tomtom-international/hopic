@@ -582,8 +582,8 @@ def process_prepare_source_tree(
                 release_part = copy(cur_version)
                 release_part.build = ()
                 release_part = str(release_part)
-                if re.search(f"\\b{re.escape(release_part)}\\b", ".".join(hotfix)):
-                    raise VersioningError(f"Hotfix ID '{'.'.join(hotfix)}' is not allowed to contain the base version '{release_part}'")
+                if re.search(f"\\b{re.escape(release_part)}\\b", str(hotfix)):
+                    raise VersioningError(f"Hotfix ID '{hotfix}' is not allowed to contain the base version '{release_part}'")
 
             if bump['policy'] == 'constant':
                 params = {}
