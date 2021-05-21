@@ -12,18 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import git
 import json
-import pytest
 import subprocess
 import sys
 from collections import OrderedDict
 from textwrap import dedent
 
+import git
+import pytest
+
 if sys.version_info[:2] >= (3, 10):
     from importlib import metadata
 else:
     import importlib_metadata as metadata
+
+from ..errors import ConfigurationError
 
 _git_time = f"{42 * 365 * 24 * 3600} +0000"
 _author = git.Actor('Bob Tester', 'bob@example.net')
@@ -314,7 +317,7 @@ def test_config_as_extension(monkeypatch, run_hopic):
     assert 'config' not in output
 
 
-def test_config_has_duplicated_keys(capfd, monkeypatch, run_hopic):
+def test_config_has_duplicated_keys(monkeypatch, run_hopic):
     '''
     'config' item only adds new items to the hopic config, if an item is already present, hopic should throw.
     '''
@@ -375,15 +378,13 @@ def test_config_has_duplicated_keys(capfd, monkeypatch, run_hopic):
                 config: !template {template_pkg}
             """)
     )
-    assert result.exit_code == 32
+    assert isinstance(result.exception, ConfigurationError)
     assert inner_template_called.pop()
-    out, err = capfd.readouterr()
-    sys.stdout.write(out)
-    sys.stderr.write(err)
+    err = result.exception.format_message()
     assert "top level configuration and 'config' item have duplicated keys: {'phases'}" in err
 
 
-def test_invalid_template_name(capfd, run_hopic):
+def test_invalid_template_name(run_hopic):
     '''
     `hopic build` should return a clear error message when a template is specified
     that can't be found.
@@ -399,11 +400,7 @@ def test_invalid_template_name(capfd, run_hopic):
     )
 
     assert result.exit_code != 0
-
-    out, err = capfd.readouterr()
-    sys.stdout.write(out)
-    sys.stderr.write(err)
-    assert "No YAML template named 'xyzzy' available (props={})" in err.strip()
+    assert any("No YAML template named 'xyzzy' available (props={})" in msg for _, msg in result.logs)
 
 
 def test_recursive_extension_installation_version_functionality(monkeypatch, run_hopic):
@@ -512,7 +509,7 @@ def add_template(monkeypatch, pkg, config):
     monkeypatch.setattr(metadata, 'entry_points', mock_entry_points)
 
 
-def run_default_merge_flow(capfd, monkeypatch, run_hopic, config, pkg, message, target='master', merge_message=None):
+def run_default_merge_flow(monkeypatch, run_hopic, config, pkg, message, target='master', merge_message=None):
     template_config = dedent("""\
                                 version:
                                     format: semver
@@ -559,7 +556,7 @@ def run_default_merge_flow(capfd, monkeypatch, run_hopic, config, pkg, message, 
     ("feat: new feat", "fix: bump mismatch", 36),
     ("fix: a fix", "fix: bump mismatch", 0),
 ))
-def test_extension_installation_version_config(capfd, monkeypatch, run_hopic, merge_message, commit_message, expected_result_code):
+def test_extension_installation_version_config(monkeypatch, run_hopic, merge_message, commit_message, expected_result_code):
     extra_index = 'https://test.pypi.org/simple/'
     pkg = 'pipeline-template'
     expected_pkg_install_order = [pkg]
@@ -580,7 +577,6 @@ def test_extension_installation_version_config(capfd, monkeypatch, run_hopic, me
     monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
 
     result = run_default_merge_flow(
-        capfd,
         monkeypatch,
         run_hopic,
         dedent(

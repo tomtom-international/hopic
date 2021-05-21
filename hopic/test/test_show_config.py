@@ -18,12 +18,12 @@ import json
 import os
 from pathlib import Path
 import re
-import sys
 from textwrap import dedent
 
 import pytest
 
 from . import config_file
+from ..errors import ConfigurationError
 
 
 def test_image_from_manifest(run_hopic):
@@ -94,7 +94,7 @@ image: example
     assert output['image']['default'] == 'example'
 
 
-def test_default_image_type_error(capfd, run_hopic):
+def test_default_image_type_error(run_hopic):
     (result,) = run_hopic(
         ("show-config",),
         config='''\
@@ -102,16 +102,12 @@ image: yes
 ''',
     )
 
-    assert result.exit_code == 32
-
-    out, err = capfd.readouterr()
-    sys.stdout.write(out)
-    sys.stderr.write(err)
-
-    assert re.search(r"^Error: configuration error in '.*?\bhopic-ci-config\.yaml': .*\bimage\b.*\bmust be\b.*\bstring\b", err, re.MULTILINE)
+    assert isinstance(result.exception, ConfigurationError)
+    err = result.exception.format_message()
+    assert re.search(r"^configuration error in '.*?\bhopic-ci-config\.yaml': .*\bimage\b.*\bmust be\b.*\bstring\b", err, re.MULTILINE)
 
 
-def test_image_type_error(capfd, run_hopic):
+def test_image_type_error(run_hopic):
     (result,) = run_hopic(
         ("show-config",),
         config='''\
@@ -124,16 +120,12 @@ image:
 ''',
     )
 
-    assert result.exit_code == 32
-
-    out, err = capfd.readouterr()
-    sys.stdout.write(out)
-    sys.stderr.write(err)
-
-    assert re.search(r"^Error: configuration error in '.*?\bhopic-ci-config\.yaml': .*\bimage\b.*\bexemplare\b.*\bmust be\b.*\bstring\b", err, re.MULTILINE)
+    assert isinstance(result.exception, ConfigurationError)
+    err = result.exception.format_message()
+    assert re.search(r"^configuration error in '.*?\bhopic-ci-config\.yaml': .*\bimage\b.*\bexemplare\b.*\bmust be\b.*\bstring\b", err, re.MULTILINE)
 
 
-def test_image_in_variant_type_error(capfd, run_hopic):
+def test_image_in_variant_type_error(run_hopic):
     (result,) = run_hopic(
         ("show-config",),
         config='''\
@@ -149,16 +141,12 @@ phases:
 ''',
     )
 
-    assert result.exit_code == 32
-
-    out, err = capfd.readouterr()
-    sys.stdout.write(out)
-    sys.stderr.write(err)
-
-    assert re.search(r"^Error: configuration error in '.*?\bhopic-ci-config\.yaml': .*\bimage\b.*\ba\b.*\bmust be\b.*\bstring\b", err, re.MULTILINE)
+    assert isinstance(result.exception, ConfigurationError)
+    err = result.exception.format_message()
+    assert re.search(r"^configuration error in '.*?\bhopic-ci-config\.yaml': .*\bimage\b.*\ba\b.*\bmust be\b.*\bstring\b", err, re.MULTILINE)
 
 
-def test_bad_version_config(capfd, run_hopic):
+def test_bad_version_config(run_hopic):
     (result,) = run_hopic(
         ("show-config",),
         config='''\
@@ -166,16 +154,12 @@ version: patch
 ''',
     )
 
-    assert result.exit_code == 32
-
-    out, err = capfd.readouterr()
-    sys.stdout.write(out)
-    sys.stderr.write(err)
-
-    assert re.search(r"^Error: configuration error in '.*?\bhopic-ci-config\.yaml': .*\bversion\b.*\bmust be\b.*\bmapping\b", err, re.MULTILINE)
+    assert isinstance(result.exception, ConfigurationError)
+    err = result.exception.format_message()
+    assert re.search(r"^configuration error in '.*?\bhopic-ci-config\.yaml': .*\bversion\b.*\bmust be\b.*\bmapping\b", err, re.MULTILINE)
 
 
-def test_default_version_bumping_config(capfd, run_hopic):
+def test_default_version_bumping_config(run_hopic):
     (result,) = run_hopic(
         ("show-config",),
         config='''\
@@ -188,7 +172,7 @@ def test_default_version_bumping_config(capfd, run_hopic):
     assert output['version']['bump']['policy'] == 'constant'
 
 
-def test_default_version_bumping_backwards_compatible_policy(capfd, run_hopic):
+def test_default_version_bumping_backwards_compatible_policy(run_hopic):
     (result,) = run_hopic(
         ("show-config",),
         config='''\
@@ -203,7 +187,7 @@ version:
     assert output['version']['bump']['field'] == 'patch'
 
 
-def test_disabled_version_bumping(capfd, run_hopic):
+def test_disabled_version_bumping(run_hopic):
     (result,) = run_hopic(
         ("show-config",),
         config='''\
@@ -218,7 +202,7 @@ version:
     assert 'field' not in output['version']['bump']
 
 
-def test_default_conventional_bumping(capfd, run_hopic):
+def test_default_conventional_bumping(run_hopic):
     (result,) = run_hopic(
         ("show-config",),
         config='''\
@@ -251,7 +235,7 @@ version:
         assert reject_new_features_on.match(minor_branch)
 
 
-def test_default_workspace_is_repo_toplevel(capfd, run_hopic):
+def test_default_workspace_is_repo_toplevel(run_hopic):
     """This checks whether the default workspace, when a --config option is given but not a --workspace option,
     is the toplevel directory of the repository the --config file resides in."""
     cfg_file = ".ci/some-special-config/hopic-ci-config.yaml"
@@ -277,7 +261,7 @@ volumes:
     ("hopic-ci-config.yaml"    , "."  , "hopic-ci-config.yaml"),
     (".ci/hopic-ci-config.yaml", ".ci", "hopic-ci-config.yaml"),
 ))
-def test_default_paths(capfd, run_hopic, cfg_file, subdir, name):
+def test_default_paths(run_hopic, cfg_file, subdir, name):
     (result,) = run_hopic(
         ("show-config",),
         config=config_file(
@@ -329,7 +313,7 @@ def test_delete_volumes_from_default_set(run_hopic):
     assert '/etc/group' not in volumes
 
 
-def test_disallow_phase_name_reuse(capfd, run_hopic):
+def test_disallow_phase_name_reuse(run_hopic):
     (result,) = run_hopic(
         ("show-config",),
         config='''\
@@ -342,16 +326,12 @@ phases:
 ''',
     )
 
-    assert result.exit_code == 32
-
-    out, err = capfd.readouterr()
-    sys.stdout.write(out)
-    sys.stderr.write(err)
-
-    assert re.search(r"^Error: configuration error: [Dd]uplicate entry for key .* mapping is not permitted\b", err, re.MULTILINE)
+    assert isinstance(result.exception, ConfigurationError)
+    err = result.exception.format_message()
+    assert re.search(r"^configuration error: [Dd]uplicate entry for key .* mapping is not permitted\b", err, re.MULTILINE)
 
 
-def test_reject_sequence_in_phase(capfd, run_hopic):
+def test_reject_sequence_in_phase(run_hopic):
     (result,) = run_hopic(
         ("show-config",),
         config='''\
@@ -361,16 +341,12 @@ phases:
 ''',
     )
 
-    assert result.exit_code == 32
-
-    out, err = capfd.readouterr()
-    sys.stdout.write(out)
-    sys.stderr.write(err)
-
-    assert re.search(r"^Error: configuration error in '.*?\bhopic-ci-config\.yaml': phase `a`.*\bmapping\b", err, re.MULTILINE)
+    assert isinstance(result.exception, ConfigurationError)
+    err = result.exception.format_message()
+    assert re.search(r"^configuration error in '.*?\bhopic-ci-config\.yaml': phase `a`.*\bmapping\b", err, re.MULTILINE)
 
 
-def test_reject_mapping_in_variant(capfd, run_hopic):
+def test_reject_mapping_in_variant(run_hopic):
     (result,) = run_hopic(
         ("show-config",),
         config='''\
@@ -382,13 +358,9 @@ phases:
 ''',
     )
 
-    assert result.exit_code == 32
-
-    out, err = capfd.readouterr()
-    sys.stdout.write(out)
-    sys.stderr.write(err)
-
-    assert re.search(r"^Error: configuration error in '.*?\bhopic-ci-config\.yaml': variant `a.x`.*\bsequence\b", err, re.MULTILINE)
+    assert isinstance(result.exception, ConfigurationError)
+    err = result.exception.format_message()
+    assert re.search(r"^configuration error in '.*?\bhopic-ci-config\.yaml': variant `a.x`.*\bsequence\b", err, re.MULTILINE)
 
 
 def test_devnull_config(run_hopic):
@@ -423,7 +395,7 @@ def test_global_config_block(run_hopic):
     assert isinstance(output['phases']['test-phase']['test-variant'], Sequence)
 
 
-def test_post_submit_type_error(capfd, run_hopic):
+def test_post_submit_type_error(run_hopic):
     (result,) = run_hopic(
         ("show-config",),
         config=dedent(
@@ -434,16 +406,12 @@ def test_post_submit_type_error(capfd, run_hopic):
         ),
     )
 
-    assert result.exit_code == 32
-
-    out, err = capfd.readouterr()
-    sys.stdout.write(out)
-    sys.stderr.write(err)
-
-    assert re.search(r"^Error: configuration error in '.*?\bhopic-ci-config\.yaml': `post-submit` doesn't contain a mapping but a list", err, re.MULTILINE)
+    assert isinstance(result.exception, ConfigurationError)
+    err = result.exception.format_message()
+    assert re.search(r"^configuration error in '.*?\bhopic-ci-config\.yaml': `post-submit` doesn't contain a mapping but a list", err, re.MULTILINE)
 
 
-def test_post_submit_forbidden_field(capfd, run_hopic):
+def test_post_submit_forbidden_field(run_hopic):
     (result,) = run_hopic(
         ("show-config",),
         config=dedent(
@@ -457,12 +425,8 @@ def test_post_submit_forbidden_field(capfd, run_hopic):
         ),
     )
 
-    assert result.exit_code == 32
-
-    out, err = capfd.readouterr()
-    sys.stdout.write(out)
-    sys.stderr.write(err)
-    assert "`post-submit`.`stash-phase` contains not permitted field `stash`" in err
+    assert isinstance(result.exception, ConfigurationError)
+    assert "`post-submit`.`stash-phase` contains not permitted field `stash`" in result.exception.format_message()
 
 
 def test_post_submit(run_hopic):
@@ -480,7 +444,7 @@ def test_post_submit(run_hopic):
     assert result.exit_code == 0
 
 
-def test_config_is_mapping_failure(capfd, run_hopic):
+def test_config_is_mapping_failure(run_hopic):
     (result,) = run_hopic(
         ("show-config",),
         config=dedent(
@@ -492,12 +456,12 @@ def test_config_is_mapping_failure(capfd, run_hopic):
             """
         ),
     )
-    assert result.exit_code == 32
-    out, err = capfd.readouterr()
-    sys.stdout.write(out)
-    sys.stderr.write(err)
-    assert re.search(r"^Error: configuration error in '.*?\bhopic-ci-config\.yaml': top level configuration should be a map, but is a list",
-                     err, re.MULTILINE)
+    assert isinstance(result.exception, ConfigurationError)
+    assert re.search(
+        r"configuration error in '.*?\bhopic-ci-config\.yaml': top level configuration should be a map, but is a list",
+        result.exception.format_message(),
+        re.MULTILINE,
+    )
 
 
 def test_config_is_mapping_empty(run_hopic):
