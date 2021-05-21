@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    <title>Hotfix Version Requirements &#8212; Hopic 1.40.2.dev153+g9506b57 documentation</title>
+    <title>Hotfix Version Requirements &#8212; Hopic 1.40.2.dev12+gb08cb91 documentation</title>
     <link rel="stylesheet" href="_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
     <link rel="stylesheet" type="text/css" href="_static/banner.css" />
@@ -34,7 +34,7 @@
         <li class="right" >
           <a href="config.html" title="Configuration"
              accesskey="P">previous</a> |</li>
-        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.40.2.dev153+g9506b57 documentation</a> &#187;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.40.2.dev12+gb08cb91 documentation</a> &#187;</li> 
       </ul>
     </div>  
 
@@ -76,13 +76,13 @@ NOT”, “SHOULD”, “SHOULD NOT”, “RECOMMENDED”,  “MAY”, and
 <li><em>MUST</em> always compare as coming after any previous hotfix version, with the same identifier, it’s directly based on</li>
 </ul>
 <p>In order to address these requirements, for semver 1 and 2, the following format of a hotfix version is prescribed:</p>
-<p id="hotfix-id">Given a base version <code class="docutils literal notranslate"><span class="pre">X.Y.Z</span></code> that the hotfix is based on a hotfix version is formatted as <code class="docutils literal notranslate"><span class="pre">X.Y.${Z</span> <span class="pre">+</span> <span class="pre">1}-hotfix.${ID}.${N}</span></code>.</p>
+<p id="hotfix-id">Given a base version <code class="docutils literal notranslate"><span class="pre">X.Y.Z</span></code> that the hotfix is based on, a hotfix version is formatted as <code class="docutils literal notranslate"><span class="pre">X.Y.${Z</span> <span class="pre">+</span> <span class="pre">1}-hotfix.${ID}.${N}</span></code>.</p>
 <ul class="simple">
 <li><dl class="first docutils">
 <dt><code class="docutils literal notranslate"><span class="pre">ID</span></code> represents an alpha-numeric identifier that should be unique and is determined based on configuration.</dt>
 <dd><ul class="first last">
-<li><code class="docutils literal notranslate"><span class="pre">ID</span></code> <em>MUST</em> start with a letter (<code class="docutils literal notranslate"><span class="pre">[a-zA-Z]</span></code>) and <em>MUST</em> end with an alphanumeric character (<code class="docutils literal notranslate"><span class="pre">[a-zA-Z0-9]</span></code>) and <em>MAY</em> contain hyphens (<code class="docutils literal notranslate"><span class="pre">[-a-zA-Z0-9]</span></code>)</li>
-<li>In order to prevent compatibility problems <code class="docutils literal notranslate"><span class="pre">ID</span></code> <em>MUST NOT</em> have any of these forms <code class="docutils literal notranslate"><span class="pre">^(a|b|rc|alpha|beta)[-.]?[0-9]*$</span></code></li>
+<li><code class="docutils literal notranslate"><span class="pre">ID</span></code> <em>MUST</em> start with a letter (<code class="docutils literal notranslate"><span class="pre">[a-zA-Z]</span></code>) and <em>MUST</em> end with an alphanumeric character (<code class="docutils literal notranslate"><span class="pre">[a-zA-Z0-9]</span></code>) and <em>MAY</em> contain hyphens and periods (<code class="docutils literal notranslate"><span class="pre">[-.a-zA-Z0-9]</span></code>)</li>
+<li>In order to prevent compatibility problems <code class="docutils literal notranslate"><span class="pre">ID</span></code> <em>MUST NOT</em> have any of these forms <code class="docutils literal notranslate"><span class="pre">^(a|b|c|rc|alpha|beta|pre|preview|post|rev|r|dev)[-.]?[0-9]*$</span></code></li>
 </ul>
 </dd>
 </dl>
@@ -130,7 +130,7 @@ If such a regex is used the implementation <em>SHOULD</em> reject duplicating of
         <li class="right" >
           <a href="config.html" title="Configuration"
              >previous</a> |</li>
-        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.40.2.dev153+g9506b57 documentation</a> &#187;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.40.2.dev12+gb08cb91 documentation</a> &#187;</li> 
       </ul>
     </div>
     <div class="footer" role="contentinfo">
