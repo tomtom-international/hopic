@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 from textwrap import dedent
 
 import git
@@ -147,7 +148,7 @@ def test_bump_skipped_when_no_new_commits(run_hopic):
 
     assert result.exit_code == 0
     assert result.stdout == ''
-    assert "Not bumping because no new commits are present since the last tag '0.0.0'" in result.stderr.splitlines()
+    assert (logging.INFO, "Not bumping because no new commits are present since the last tag '0.0.0'") in result.logs
 
 
 def test_bump_skipped_when_no_bumpable_commits(run_hopic):
@@ -188,5 +189,7 @@ def test_bump_skipped_when_no_bumpable_commits(run_hopic):
 
     assert result.exit_code == 0
     assert result.stdout == ''
-    assert ("error: Version bumping requested, but the version policy 'conventional-commits' decided not to bump from '0.0.1-1+gee3642c057a2af'"
-            in result.stderr.splitlines())
+    assert (
+        logging.ERROR,
+        "Version bumping requested, but the version policy 'conventional-commits' decided not to bump from '0.0.1-1+gee3642c057a2af'",
+    ) in result.logs

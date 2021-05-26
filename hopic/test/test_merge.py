@@ -26,6 +26,7 @@ import pytest
 
 from .. import credentials
 from ..cli import utils
+from ..errors import VersioningError
 
 _git_time = f"{42 * 365 * 24 * 3600} +0000"
 _author = git.Actor('Bob Tester', 'bob@example.net')
@@ -406,23 +407,15 @@ def test_merge_conventional_feat_bump_not_on_change(capfd, run_hopic):
 
 def test_merge_conventional_breaking_change_on_major_branch(capfd, run_hopic):
     result = merge_conventional_bump(capfd, run_hopic, message='refactor!: make the API type better', target='release/42')
-    assert result.exit_code == 33
-
-    out, err = capfd.readouterr()
-    sys.stdout.write(out)
-    sys.stderr.write(err)
-
+    assert isinstance(result.exception, VersioningError)
+    err = result.exception.format_message()
     assert 'Breaking changes are not allowed' in err
 
 
 def test_merge_conventional_feat_on_minor_branch(capfd, run_hopic):
     result = merge_conventional_bump(capfd, run_hopic, message='feat: add something useful', target='release/42.21')
-    assert result.exit_code == 33
-
-    out, err = capfd.readouterr()
-    sys.stdout.write(out)
-    sys.stderr.write(err)
-
+    assert isinstance(result.exception, VersioningError)
+    err = result.exception.format_message()
     assert 'New features are not allowed' in err
 
 
@@ -996,7 +989,7 @@ def test_add_hopic_config_file(run_hopic):
 )
 def test_hotfix_pr_on_release(bump_policy, run_hopic, version_file):
     init_version = "1.2.3"
-    hotfix_id = "vindyne-mem-leak"
+    hotfix_id = "vindyne.mem-leak"
     expected_version = f"1.2.4-hotfix.{hotfix_id}"
     hotfix_branch = f"hotfix/{init_version}-{hotfix_id}"
     with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
@@ -1009,7 +1002,7 @@ def test_hotfix_pr_on_release(bump_policy, run_hopic, version_file):
                   tag: yes
                   format: semver
                   bump: {json.dumps(bump_policy)}
-                  hotfix-branch: '^hotfix/\\d+\\.\\d+\\.\\d+-(?P<id>[a-zA-Z](?:[-a-zA-Z0-9]*[a-zA-Z0-9])?)$'
+                  hotfix-branch: '^hotfix/\\d+\\.\\d+\\.\\d+-(?P<id>[a-zA-Z](?:[-.a-zA-Z0-9]*[a-zA-Z0-9])?)$'
                   {("file: " + version_file) if version_file else ""}
                 """
             )
@@ -1058,7 +1051,7 @@ def test_hotfix_pr_on_release(bump_policy, run_hopic, version_file):
 @pytest.mark.parametrize("unrelated_tag", (None, "1.2.4-rc1"), ids=lambda t: t or "{no-tag}")
 def test_hotfix_pr_off_release(run_hopic, unrelated_tag):
     init_version = "1.2.3"
-    hotfix_id = "vindyne-mem-leak"
+    hotfix_id = "vindyne.mem-leak"
     hotfix_branch = f"hotfix/{init_version}-{hotfix_id}"
     with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
         cfg_file = "hopic-ci-config.yaml"
@@ -1072,7 +1065,7 @@ def test_hotfix_pr_off_release(run_hopic, unrelated_tag):
                   bump:
                     policy: conventional-commits
                     strict: yes
-                  hotfix-branch: '^hotfix/\\d+\\.\\d+\\.\\d+-(?P<id>[a-zA-Z](?:[-a-zA-Z0-9]*[a-zA-Z0-9])?)$'
+                  hotfix-branch: '^hotfix/\\d+\\.\\d+\\.\\d+-(?P<id>[a-zA-Z](?:[-.a-zA-Z0-9]*[a-zA-Z0-9])?)$'
                 """
             )
         )
@@ -1102,12 +1095,14 @@ def test_hotfix_pr_off_release(run_hopic, unrelated_tag):
             "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", "fix/mem-leak",
             "--change-request", "42", "--title", "fix: work around oom kill due to memory leak"),
     )
-    assert result.exit_code == 33
+    assert isinstance(result.exception, VersioningError)
+    err = result.exception.format_message()
+    assert "Creating hotfixes on anything but a full release is not supported." in err
 
 
 def test_hotfix_double_bump(run_hopic):
     init_version = "1.2.3"
-    hotfix_id = "vindyne-mem-leak"
+    hotfix_id = "vindyne.mem-leak"
     expected_version = f"1.2.4-hotfix.{hotfix_id}.1"
     hotfix_branch = f"hotfix/{init_version}-{hotfix_id}"
     with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
@@ -1122,7 +1117,7 @@ def test_hotfix_double_bump(run_hopic):
                   bump:
                     policy: conventional-commits
                     strict: yes
-                  hotfix-branch: '^hotfix/\\d+\\.\\d+\\.\\d+-(?P<id>[a-zA-Z](?:[-a-zA-Z0-9]*[a-zA-Z0-9])?)$'
+                  hotfix-branch: '^hotfix/\\d+\\.\\d+\\.\\d+-(?P<id>[a-zA-Z](?:[-.a-zA-Z0-9]*[a-zA-Z0-9])?)$'
                 """
             )
         )
@@ -1184,23 +1179,28 @@ def test_hotfix_double_bump(run_hopic):
         assert repo.tags[expected_version].commit == repo.head.commit
 
 
-@pytest.mark.parametrize("hotfix_id", (
-    "42indi",
-    "-42",
-    "-abc",
-    "abc-",
-    "abc/42",
-    "a",
-    "a42",
-    "a-42",
-    "a-test-1",
-    "b",
-    "rc",
-    "alpha",
-    "beta",
-    "awesomeness-{init_version}-something",
-))
-def test_hotfix_invalid_id(hotfix_id, run_hopic):
+@pytest.mark.parametrize(
+    "hotfix_id, error_msg",
+    (
+        ("42indi"  , re.compile(r"Hotfix ID '.*?' is not a valid identifier")),
+        ("-42"     , re.compile(r"Hotfix ID '.*?' is not a valid identifier")),
+        ("-abc"    , re.compile(r"Hotfix ID '.*?' is not a valid identifier")),
+        ("abc-"    , re.compile(r"Hotfix ID '.*?' is not a valid identifier")),
+        ("abc/42"  , re.compile(r"Hotfix ID '.*?' is not a valid identifier")),
+        ("a"       , re.compile(r"Hotfix ID '.*?' starts with reserved prefix")),
+        ("a42"     , re.compile(r"Hotfix ID '.*?' starts with reserved prefix")),
+        ("a-42"    , re.compile(r"Hotfix ID '.*?' starts with reserved prefix")),
+        ("a.42"    , re.compile(r"Hotfix ID '.*?' starts with reserved prefix")),
+        ("a-test-1", re.compile(r"Hotfix ID '.*?' starts with reserved prefix")),
+        ("b"       , re.compile(r"Hotfix ID '.*?' starts with reserved prefix")),
+        ("rc"      , re.compile(r"Hotfix ID '.*?' starts with reserved prefix")),
+        ("alpha"   , re.compile(r"Hotfix ID '.*?' starts with reserved prefix")),
+        ("beta"    , re.compile(r"Hotfix ID '.*?' starts with reserved prefix")),
+        ("awesomeness-{init_version}-something", re.compile(r"Hotfix ID 'awesomeness-(.*?)-something' is not allowed to contain the base version '\1'")),
+    ),
+    ids=lambda x: x if isinstance(x, str) else "",
+)
+def test_hotfix_invalid_id(error_msg, hotfix_id, run_hopic):
     init_version = "1.2.3"
     hotfix_id = hotfix_id.format(init_version=init_version)
     hotfix_branch = f"hotfix/{init_version}-{hotfix_id}"
@@ -1242,15 +1242,21 @@ def test_hotfix_invalid_id(hotfix_id, run_hopic):
             "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", "fix/mem-leak",
             "--change-request", "42", "--title", "fix: work around oom kill due to memory leak"),
     )
-    assert result.exit_code == 33
+    assert isinstance(result.exception, VersioningError)
+    err = result.exception.format_message()
+    assert error_msg.search(err)
 
 
 @pytest.mark.parametrize(
-    "msg_tag",
-    ("refactor!", "feat", "chore"),
+    "msg_tag, error_msg",
+    (
+        ("refactor!", re.compile("[Bb]reaking changes are not allowed [io]n hotfix")),
+        ("feat"     , re.compile("[Nn]ew features are not allowed [io]n hotfix")),
+        ("chore"    , re.compile("presence of a 'fix' commit is mandatory")),
+    ),
     ids=("breaking-change", "new-feature", "not-fix"),
 )
-def test_hotfix_rejects(msg_tag, run_hopic):
+def test_hotfix_rejects(error_msg, msg_tag, run_hopic):
     init_version = "1.2.3"
     hotfix_id = "vindyne"
     hotfix_branch = f"hotfix/{init_version}-{hotfix_id}"
@@ -1292,4 +1298,6 @@ def test_hotfix_rejects(msg_tag, run_hopic):
             "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", "pr-42",
             "--change-request", "42", "--title", f"{msg_tag}: blorg the oompsie vatsaat"),
     )
-    assert result.exit_code == 33
+    assert isinstance(result.exception, VersioningError)
+    err = result.exception.format_message()
+    assert error_msg.search(err)

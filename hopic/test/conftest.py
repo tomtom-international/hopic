@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from functools import wraps
+import logging
 import os
 import os.path
 from pathlib import (
@@ -37,13 +38,16 @@ try:
 except ImportError:
     import importlib_metadata as metadata
 
+from click import ClickException
 from click.testing import CliRunner
+import click_log
 import git
 import pytest
 from typeguard import typechecked
 
 from . import (
     hopic_cli,
+    sgr_re,
     source_date_epoch,
 )
 from ..cli import utils
@@ -77,7 +81,7 @@ _commitargs = dict(
 
 
 @pytest.fixture
-def run_hopic(monkeypatch, tmp_path):
+def run_hopic(caplog, monkeypatch, tmp_path):
     @typechecked
     def run_hopic(
         *args: Union[List, Tuple, Callable[[], Any]],
@@ -140,26 +144,40 @@ def run_hopic(monkeypatch, tmp_path):
                         continue
 
                     orig_main = hopic_cli.main
+                    rv = []
 
                     @wraps(orig_main)
                     def mock_main(*args, **kwargs):
                         with monkeypatch.context() as m:
+                            # Ensure pytest can capture our logging
+                            m.setattr(click_log, "basic_config", lambda: None)
+                            m.setattr(logging.getLogger("hopic"), "setLevel", lambda _: None)
+                            m.setattr(logging.getLogger("git"), "setLevel", lambda _: None)
+
                             monkeypatch_injector(m)
-                            return orig_main(*args, **kwargs)
+                            rv.append(orig_main(*args, **kwargs))
+                            return rv[-1]
 
                     with monkeypatch.context() as call_ctx:
                         call_ctx.setattr(hopic_cli, "main", mock_main)
-                        result = runner.invoke(hopic_cli, [str(a) for a in arg])
+                        result = runner.invoke(hopic_cli, [str(a) for a in arg], standalone_mode=False)
 
                     if result.stdout_bytes:
                         print(result.stdout, end='')
                     if result.stderr_bytes:
                         print(result.stderr, end='', file=sys.stderr)
 
-                    if result.exception is not None and not isinstance(result.exception, SystemExit):
+                    if result.exception is not None and not isinstance(result.exception, (SystemExit, ClickException)):
                         raise result.exception
+                    if isinstance(result.exception, ClickException):
+                        result.exit_code = result.exception.exit_code
+                    if result.exit_code == 0 and isinstance(rv[-1], int):
+                        result.exit_code = rv[-1]
 
                     result.commit = commit
+                    result.logs = tuple(
+                        (rec.levelno, sgr_re.sub("", rec.getMessage())) for rec in caplog.records if rec.name == "hopic" or rec.name.startswith("hopic.")
+                    )
                     yield result
 
                     if result.exit_code != 0:
@@ -168,6 +186,9 @@ def run_hopic(monkeypatch, tmp_path):
             os.umask(umask)
 
     run_hopic.toprepo = tmp_path / "repo"
+    # Make _all_ logging levels available for capture by pytest
+    caplog.set_level("DEBUG", logger="git")
+    caplog.set_level("DEBUG", logger="hopic")
     return run_hopic
 
 

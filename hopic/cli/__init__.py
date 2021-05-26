@@ -58,6 +58,7 @@ from configparser import (
         NoOptionError,
         NoSectionError,
     )
+from copy import copy
 from datetime import datetime
 from dateutil.parser import parse as date_parse
 from dateutil.tz import (tzoffset, tzlocal)
@@ -515,7 +516,7 @@ def process_prepare_source_tree(
                 # full release: valid point to start a hotfix from
                 return True
             # Pre-release must be a valid hotfix prefix for the current hotfix ID
-            return version.prerelease[:2] == ("hotfix", hotfix)
+            return version.prerelease[:len(hotfix) + 1] == ("hotfix", *hotfix)
 
         if bump['policy'] == 'conventional-commits' and target_ref is not None:
             has_fix = False
@@ -578,13 +579,19 @@ def process_prepare_source_tree(
                 if not _is_valid_hotfix_base(base_version):
                     raise VersioningError(f"Creating hotfixes on anything but a full release is not supported. Currently on: {base_version}")
 
+                release_part = copy(cur_version)
+                release_part.build = ()
+                release_part = str(release_part)
+                if re.search(f"\\b{re.escape(release_part)}\\b", str(hotfix)):
+                    raise VersioningError(f"Hotfix ID '{hotfix}' is not allowed to contain the base version '{release_part}'")
+
             if bump['policy'] == 'constant':
                 params = {}
                 if 'field' in bump:
                     params['bump'] = bump['field']
                 if hotfix:
                     params["bump"] = "prerelease"
-                    params["prerelease_seed"] = ("hotfix", hotfix)
+                    params["prerelease_seed"] = ("hotfix", *hotfix)
                     assert _is_valid_hotfix_base(cur_version), "implementation error: invalid hotfix bases should have been caught already"
                 new_version = cur_version.next_version(**params)
             elif bump['policy'] in ('conventional-commits',):
@@ -605,7 +612,7 @@ def process_prepare_source_tree(
                         "bumping anything other than 'patch' shouldn't happen for hotfix branches and should have been caught already"
                     )
                     assert _is_valid_hotfix_base(cur_version), "implementation error: invalid hotfix bases should have been caught already"
-                    new_version = cur_version.next_prerelease(seed=("hotfix", hotfix))
+                    new_version = cur_version.next_prerelease(seed=("hotfix", *hotfix))
             else:
                 raise NotImplementedError(f"unsupported version bumping policy {bump['policy']}")
 

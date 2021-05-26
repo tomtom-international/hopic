@@ -103,7 +103,7 @@ def test_clean_checkout_in_non_empty_dir(run_hopic, tmp_path):
     assert not garbage_file.exists()
 
 
-def test_checkout_in_newly_initialized_repo(capfd, run_hopic, tmp_path):
+def test_checkout_in_newly_initialized_repo(run_hopic, tmp_path):
     with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
         repo.index.commit(message='Initial commit', **_commitargs)
 
@@ -115,7 +115,7 @@ def test_checkout_in_newly_initialized_repo(capfd, run_hopic, tmp_path):
     assert result.exit_code == 0
 
 
-def test_default_clean_checkout_option(capfd, run_hopic):
+def test_default_clean_checkout_option(run_hopic):
     author = git.Actor('Bob Tester', 'bob@example.net')
     commitargs = dict(
         author_date=_git_time,
@@ -144,7 +144,7 @@ nothing to see here
         assert commit.committed_date == (run_hopic.toprepo / 'hopic-ci-config.yaml').stat().st_mtime
 
 
-def test_clean_option_custom_command_is_run_before_default_command(capfd, run_hopic):
+def test_clean_option_custom_command_is_run_before_default_command(run_hopic):
     author = git.Actor('Bob Tester', 'bob@example.net')
     commitargs = dict(
         author_date=_git_time,
@@ -246,7 +246,7 @@ clean:
         assert clean_tilde_out == home_path
 
 
-def test_handle_syntax_error_in_optional_hopic_file(capfd, run_hopic):
+def test_handle_syntax_error_in_optional_hopic_file(run_hopic):
     with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
         (run_hopic.toprepo / 'hopic-ci-config.yaml').write_text(
             dedent(
@@ -270,7 +270,7 @@ def test_handle_syntax_error_in_optional_hopic_file(capfd, run_hopic):
     assert result.exit_code == 0
 
 
-def test_checkout_non_head_commit(capfd, run_hopic):
+def test_checkout_non_head_commit(run_hopic):
     dummy = run_hopic.toprepo / "dummy.txt"
     first_content = "Lalalala!\n"
     with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
@@ -288,7 +288,7 @@ def test_checkout_non_head_commit(capfd, run_hopic):
     assert result.exit_code == 0
 
 
-def test_reject_checkout_out_of_branch_commit(capfd, run_hopic):
+def test_reject_checkout_out_of_branch_commit(run_hopic):
     dummy = run_hopic.toprepo / "dummy.txt"
     first_content = "Lalalala!\n"
     with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:

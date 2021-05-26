@@ -1,4 +1,4 @@
-# Copyright (c) 2020 - 2020 TomTom N.V. (https://tomtom.com)
+# Copyright (c) 2020 - 2021 TomTom N.V.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,13 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from . import sgr_re
 from .. import execution
 import hopic
 import click
 import copy
-import shlex
 import subprocess
-import sys
 
 
 def test_echo_cmd_dry_run_argument_parsing(monkeypatch):
@@ -45,7 +44,7 @@ def test_echo_cmd_dry_run_argument_parsing(monkeypatch):
     assert expected_kwargs == {}
 
 
-def test_echo_cmd_dry_run(capfd, monkeypatch):
+def test_echo_cmd_dry_run(caplog, monkeypatch):
     expected_cmd = ['echo']
     expected_cmd_args = ['-e', 'Bob the builder']
 
@@ -53,11 +52,10 @@ def test_echo_cmd_dry_run(capfd, monkeypatch):
         assert False
 
     monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
+    caplog.set_level("INFO")
     execution.echo_cmd(subprocess.check_call, expected_cmd + expected_cmd_args, **{'a': 'aa', 'b': 'bbb'}, dry_run=True)
-    out, err = capfd.readouterr()
-    sys.stdout.write(out)
-    sys.stderr.write(err)
-    assert ' '.join(expected_cmd) + ' ' + ' '.join([shlex.quote(x) for x in expected_cmd_args]) in err
+    msgs = tuple(sgr_re.sub("", record.getMessage()) for record in caplog.records)
+    assert "echo -e 'Bob the builder'" in msgs
 
 
 def test_echo_cmd_return_value():
