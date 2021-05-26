@@ -17,6 +17,21 @@
 Changelog
 =========
 
+1.40.2
+======
+
+Improvements
+------------
+
+* improvement(hotfix): accept periods in hotfix IDs too (#363)
+
+Bug fixes
+---------
+
+* fix(binary-normalize): ensure that long paths can be archived as well (#364)
+* fix(binary-normalize): clamp mtime in PAX header too (#364)
+* fix(hotfix): reject all PEP-440 reserved keywords from being used in hotfix IDs (#363)
+
 1.40.1
 ======
 
