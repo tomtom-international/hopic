@@ -1510,8 +1510,7 @@ def test_new_version_only(branch_name, run_hopic, monkeypatch, version_file):
 
 def test_no_initial_version(run_hopic):
     with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
-        with open(run_hopic.toprepo / "something.txt", "w") as f:
-            f.write("usable")
+        (run_hopic.toprepo / "something.txt").write_text("usable")
         repo.index.add(("something.txt",))
         base_commit = repo.index.commit(message="Initial commit", **_commitargs)
 
