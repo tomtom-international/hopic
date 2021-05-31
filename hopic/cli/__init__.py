@@ -494,20 +494,9 @@ def process_prepare_source_tree(
 
         bump = version_info['bump'].copy()
         bump.update(commit_params.pop('bump-override', {}))
-        strict = bump.get('strict', False)
 
-        source_commits = (
-                () if source_commit is None and base_commit is None
-                else [
-                    parse_commit_message(commit, policy=bump['policy'], strict=strict)
-                    for commit in git.Commit.list_items(
-                        repo,
-                        (f"{base_commit}..{target_commit}"
-                            if base_commit is not None
-                            else f"{target_commit}..{source_commit}"),
-                        first_parent=bump.get('first-parent', True),
-                        no_merges=bump.get('no-merges', True),
-                    )])
+        commit_from, commit_to = (base_commit, target_commit) if base_commit else (target_commit, source_commit)
+        source_commits = get_commits(repo, commit_from, commit_to, bump)
 
         hotfix = hotfix_id(version_info["hotfix-branch"], target_ref)
 
@@ -543,18 +532,8 @@ def process_prepare_source_tree(
                 )
 
         version_bumped = False
-        if is_publish_allowed and bump['policy'] != 'disabled' and bump['on-every-change']:
-            if ctx.obj.version is None:
-                if 'file' in version_info:
-                    raise VersioningError(f"Failed to read the current version (from {version_info['file']}) while attempting to bump the version")
-                else:
-                    msg = "Failed to determine the current version while attempting to bump the version"
-                    log.error(msg)
-                    # TODO: PIPE-309: provide an initial starting point instead
-                    log.info("If this is a new repository you may wish to create a 0.0.0 tag for Hopic to start bumping from")
-                    raise VersioningError(msg)
-
-            cur_version = ctx.obj.version
+        if is_version_bump_enabled(bump, is_publish_from_branch_allowed=is_publish_allowed):
+            cur_version = get_current_version(ctx)
             if hotfix:
                 base_version = cur_version
 
@@ -826,6 +805,56 @@ def process_prepare_source_tree(
                 cfg.set_value(section, 'autosquashed-commit', str(autosquashed_commit))
         if ctx.obj.version is not None:
             click.echo(ctx.obj.version)
+
+
+def is_version_bump_enabled(bump_config, ctx=None, is_publish_from_branch_allowed=None):
+    """
+    Check if current branch with version configuration is allowed to bump version
+    To avoid multiple is_publish_branch calls this can optionally be passed to this function
+    """
+
+    assert ctx is not None or is_publish_from_branch_allowed is not None
+    if is_publish_from_branch_allowed is None:
+        is_publish_from_branch_allowed = is_publish_branch(ctx)
+    return is_publish_from_branch_allowed and bump_config['policy'] != 'disabled' and bump_config['on-every-change']
+
+
+def get_current_version(ctx):
+    """
+    Get current version, raise error when initial version cannot be found
+    """
+
+    version_info = ctx.obj.config['version']
+    if ctx.obj.version is None:
+        if 'file' in version_info:
+            raise VersioningError(f"Failed to read the current version (from {version_info['file']}) while attempting to bump the version")
+        else:
+            msg = "Failed to determine the current version while attempting to bump the version"
+            log.error(msg)
+            # TODO: PIPE-309: provide an initial starting point instead
+            log.info("If this is a new repository you may wish to create a 0.0.0 tag for Hopic to start bumping from")
+            raise VersioningError(msg)
+
+    return ctx.obj.version
+
+
+def get_commits(repo, from_commit, to_commit, bump_config={}):
+    """
+    Get parsed commit list
+    """
+
+    return (
+        () if from_commit is None or to_commit is None
+        else [
+            parse_commit_message(commit, policy=bump_config['policy'], strict=bump_config.get('strict', False))
+            for commit in git.Commit.list_items(
+                repo,
+                f"{from_commit}..{to_commit}",
+                first_parent=bump_config.get('first-parent', True),
+                no_merges=bump_config.get('no-merges', True),
+            )
+        ]
+    )
 
 
 @prepare_source_tree.command()
