@@ -92,6 +92,7 @@ class HopicGitInfo(NamedTuple):
     autosquashed_commit  : Optional[git.Commit] = None
     source_commits       : Sequence[git.Commit] = ()
     autosquashed_commits : Sequence[git.Commit] = ()
+    version_bumped       : Optional[bool] = None
 
     @classmethod
     def from_repo(cls, repo_ctx: Union[git.Repo, str, PurePath]) -> 'HopicGitInfo':
@@ -101,7 +102,7 @@ class HopicGitInfo(NamedTuple):
             repo = git.Repo(repo_ctx)
 
         try:
-            submit_ref, target_commit, source_commit, autosquashed_commit = None, None, None, None
+            submit_ref, version_bumped, target_commit, source_commit, autosquashed_commit = None, None, None, None, None
             refspecs: Tuple[str, ...] = ()
             source_commits: Tuple[git.Commit, ...] = ()
             autosquashed_commits: Tuple[git.Commit, ...] = ()
@@ -112,6 +113,8 @@ class HopicGitInfo(NamedTuple):
                 try:
                     # Determine remote ref for current commit
                     submit_ref = git_cfg.get(section, 'ref', fallback=None)
+
+                    version_bumped = git_cfg.getboolean(section, "version-bumped", fallback=None)
 
                     if git_cfg.has_option(section, 'refspecs'):
                         refspecs = tuple(shlex.split(git_cfg.get_value(section, 'refspecs')))
@@ -154,6 +157,7 @@ class HopicGitInfo(NamedTuple):
             target_commit        = target_commit,         # noqa: E251 "unexpected spaces around '='"
             source_commit        = source_commit,         # noqa: E251 "unexpected spaces around '='"
             autosquashed_commit  = autosquashed_commit,   # noqa: E251 "unexpected spaces around '='"
+            version_bumped       = version_bumped,        # noqa: E251 "unexpected spaces around '='"
         )
 
     @property

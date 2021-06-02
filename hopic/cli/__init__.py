@@ -804,6 +804,7 @@ def process_prepare_source_tree(
             section = f"hopic.{submit_commit}"
             if target_remote is not None:
                 cfg.set_value(section, 'remote', target_remote)
+            cfg.set_value(section, "version-bumped", str(version_bumped))
             refspecs = []
             if target_ref is not None:
                 cfg.set_value(section, 'ref', target_ref)
