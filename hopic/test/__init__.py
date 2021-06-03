@@ -23,7 +23,10 @@ else:
 
 PACKAGE : str = __package__.split('.')[0]
 
-(_hopic_ep,) = metadata.entry_points(group="console_scripts", name=PACKAGE)
+# Converting to frozenset because this returns two duplicate entries since importlib_metadata 4.3.0.
+# Specifically it seems that the f"{PACKAGE}.egg-info" directory created by setup.py in the repository's root directory gets selected along with the
+# f"{PACKAGE}-{VERSION}.dist-info" directory in Tox' virtualenv.
+(_hopic_ep,) = frozenset(metadata.entry_points(group="console_scripts", name=PACKAGE))
 hopic_cli = _hopic_ep.load()
 source_date_epoch = 7 * 24 * 3600
 
