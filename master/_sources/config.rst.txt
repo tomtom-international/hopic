@@ -67,6 +67,7 @@ Version                                     Meaning
 .. option:: PUBLISH_VERSION
 
 Based on the :option:`VERSION` (see above) by default, with the following differences:
+
 * Where ``COMMIT_ID`` is part part of the ``prerelease`` (``-COMMIT_ID``) instead of ``build metadata`` (``+gCommit_ID``)
 * Where ``build`` is present in the `Versioning`_ configuration this is added, e.g. ``+build`` (only to ``PUBLISH_VERSION``)
 
