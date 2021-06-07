@@ -1304,8 +1304,10 @@ def test_hotfix_rejects(error_msg, msg_tag, run_hopic):
     assert error_msg.search(err)
 
 
+@pytest.mark.parametrize("version_file", ("version.txt", None), ids=lambda fn: fn or "{tag}")
 @pytest.mark.parametrize("branch_name", ("master", "hotfix/{hotfix_id}"))
-def test_new_version_only(branch_name, run_hopic, monkeypatch):
+def test_new_version_only(branch_name, run_hopic, monkeypatch, version_file):
+    init_version = "1.2.3"
     hotfix_id = "vindyne.mem-leak"
     branch = branch_name.format(hotfix_id=hotfix_id)
 
@@ -1323,14 +1325,15 @@ def test_new_version_only(branch_name, run_hopic, monkeypatch):
 
         (run_hopic.toprepo / cfg_file).write_text(
             dedent(
-                """\
+                f"""\
                 version:
-                  tag: yes
+                  tag: {bool(not version_file)}
                   format: semver
                   bump:
                     policy: conventional-commits
                     strict: yes
                   hotfix-branch: '^hotfix/(?P<id>.+)$'
+                  {("file: " + version_file) if version_file else ""}
 
                 phases:
                   always:
@@ -1352,8 +1355,13 @@ def test_new_version_only(branch_name, run_hopic, monkeypatch):
         )
         repo.index.add((cfg_file,))
 
+        if version_file:
+            (run_hopic.toprepo / version_file).write_text(f"version={init_version}")
+            repo.index.add((version_file,))
+
         base_commit = repo.index.commit(message="chore: initial commit", **_commitargs)
-        repo.create_tag("1.2.3")
+        if not version_file:
+            repo.create_tag(init_version)
         repo.git.branch(branch, move=True)
 
         # PR branch
