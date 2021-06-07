@@ -26,7 +26,7 @@ import pytest
 
 from .. import credentials
 from ..cli import utils
-from ..errors import VersioningError
+from ..errors import VersionBumpMismatchError, VersioningError
 
 _git_time = f"{42 * 365 * 24 * 3600} +0000"
 _author = git.Actor('Bob Tester', 'bob@example.net')
@@ -531,6 +531,7 @@ def test_modality_merge_has_all_parents(run_hopic, monkeypatch):
 
 
 def test_modality_merge_commit_message(run_hopic, monkeypatch):
+    expected_version = "0.1.0"
     with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
         with open(run_hopic.toprepo / 'hopic-ci-config.yaml', 'w') as f:
             f.write(dedent('''\
@@ -546,7 +547,7 @@ def test_modality_merge_commit_message(run_hopic, monkeypatch):
                     - git fetch origin release/0
                     - sh: git merge --no-commit --no-ff FETCH_HEAD
                       changed-files: []
-                      commit-message: "Merge branch 'release/0'"
+                      commit-message: "feat: merge branch 'release/0'"
                 '''))
 
         repo.index.add(('hopic-ci-config.yaml',))
@@ -583,7 +584,112 @@ def test_modality_merge_commit_message(run_hopic, monkeypatch):
             ('submit',),
         )
 
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        repo.git.checkout('master')
+        repo.git.describe() == expected_version
+
     assert result.exit_code == 0
+
+
+@pytest.mark.parametrize('modality_message, expected_version', (
+    ('feat: some feature', '0.1.0'),
+    ('chore: non bumping', '0.0.0'),
+))
+def test_modality_version_bump(run_hopic, monkeypatch, modality_message, expected_version):
+    monkeypatch.setenv('GIT_COMMITTER_NAME' , 'My Name is Nobody')
+    monkeypatch.setenv('GIT_COMMITTER_EMAIL', 'nobody@example.com')
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        with open(run_hopic.toprepo / 'hopic-ci-config.yaml', 'w') as f:
+            f.write(dedent(f"""\
+                version:
+                  format: semver
+                  tag: true
+                  bump:
+                    policy: conventional-commits
+                    strict: yes
+
+                modality-source-preparation:
+                  INTAKE:
+                    - sh: touch test.txt
+                      changed-files: test.txt
+                      commit-message: "{modality_message}"
+                """))
+
+        repo.index.add(('hopic-ci-config.yaml',))
+        base_commit = repo.index.commit(message='Initial commit', **_commitargs)
+        repo.create_tag('0.0.0', message='first version')
+        repo.head.reference = repo.create_head('release/0', base_commit)
+
+    (*_, result) = run_hopic(
+            ('checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'),
+            ('prepare-source-tree',
+                '--author-name', _author.name,
+                '--author-email', _author.email,
+                '--author-date', f"@{_git_time}",
+                '--commit-date', f"@{_git_time}",
+                'apply-modality-change', 'INTAKE'),
+            ('submit', '--target-remote', run_hopic.toprepo)
+        )
+
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        repo.git.checkout('master')
+        assert repo.git.describe().startswith(expected_version)
+
+    assert result.exit_code == 0
+
+
+@pytest.mark.parametrize('strict, commit_message, merge_message, expected_result', (
+    (True , 'feat: some feature', 'feat: some feature', {'version': '0.1.0'}),
+    (False, 'chore: non bumping', 'feat: some feature', {'version': '0.1.0'}),
+    (True , 'chore: non bumping', 'feat: some feature', {'error'  : VersionBumpMismatchError}),
+    (False, 'fix: some fix'     , 'ci: non bumping'   , {'version': '0.0.1'}),
+))
+def test_merge_change_request_version_bump(capfd, monkeypatch, run_hopic, strict, commit_message, merge_message, expected_result):
+    monkeypatch.setenv('GIT_COMMITTER_NAME' , 'My Name is Nobody')
+    monkeypatch.setenv('GIT_COMMITTER_EMAIL', 'nobody@example.com')
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        with (run_hopic.toprepo / 'hopic-ci-config.yaml').open('w') as f:
+            f.write(
+                dedent(f"""\
+                    version:
+                        format: semver
+                        tag: true
+                        bump:
+                            policy: conventional-commits
+                            strict: {strict}
+                """)
+            )
+        repo.index.add(('hopic-ci-config.yaml',))
+        base_commit = repo.index.commit(message='Initial commit', **_commitargs)
+        repo.create_tag('0.0.0', message='first version')
+
+        # PR branch from just before the main branch's HEAD
+        repo.head.reference = repo.create_head('something-useful', base_commit)
+        assert not repo.head.is_detached
+        repo.head.reset(index=True, working_tree=True)
+
+        # Some change
+        with (run_hopic.toprepo / 'something.txt').open('w') as f:
+            f.write('usable')
+        repo.index.add(('something.txt',))
+        repo.index.commit(message=commit_message, **_commitargs)
+
+    # Successful checkout and build
+    (*_, result) = run_hopic(
+            ('checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'),
+            ('prepare-source-tree', '--author-name', _author.name, '--author-email', _author.email,
+                'merge-change-request', '--source-remote', run_hopic.toprepo, '--source-ref', 'something-useful',
+                '--title', merge_message),
+            ('submit',),
+        )
+
+    if 'error' in expected_result:
+        assert isinstance(result.exception, VersionBumpMismatchError)
+    else:
+        assert result.exit_code == 0
+        with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+            repo.git.checkout('master')
+            assert repo.git.describe().startswith(expected_result['version'])
 
 
 def test_separate_modality_change(run_hopic):

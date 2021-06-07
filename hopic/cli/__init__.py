@@ -595,9 +595,13 @@ def process_prepare_source_tree(
                     assert _is_valid_hotfix_base(cur_version), "implementation error: invalid hotfix bases should have been caught already"
                 new_version = cur_version.next_version(**params)
             elif bump['policy'] in ('conventional-commits',):
+                all_commits = source_commits
+                if 'message' in commit_params:
+                    all_commits = (*source_commits, parse_commit_message(commit_params['message'], policy=bump['policy'], strict=strict))
+
                 if log.isEnabledFor(logging.DEBUG):
                     log.debug("bumping based on conventional commits:")
-                    for commit in source_commits:
+                    for commit in all_commits:
                         breaking = ('breaking' if commit.has_breaking_change() else '')
                         feat = ('feat' if commit.has_new_feature() else '')
                         fix = ('fix' if commit.has_fix() else '')
@@ -606,7 +610,7 @@ def process_prepare_source_tree(
                         except AttributeError:
                             hash_prefix = ''
                         log.debug("%s[%-8s][%-4s][%-3s]: %s", hash_prefix, breaking, feat, fix, commit.full_subject)
-                new_version = cur_version.next_version_for_commits(source_commits)
+                new_version = cur_version.next_version_for_commits(all_commits)
                 if hotfix and new_version != cur_version:
                     assert (new_version.major, new_version.minor) == (cur_version.major, cur_version.minor), (
                         "bumping anything other than 'patch' shouldn't happen for hotfix branches and should have been caught already"
