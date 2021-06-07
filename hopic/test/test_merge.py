@@ -1304,9 +1304,10 @@ def test_hotfix_rejects(error_msg, msg_tag, run_hopic):
     assert error_msg.search(err)
 
 
-def test_hotfix_new_version_only(run_hopic, monkeypatch):
+@pytest.mark.parametrize("branch_name", ("master", "hotfix/{hotfix_id}"))
+def test_new_version_only(branch_name, run_hopic, monkeypatch):
     hotfix_id = "vindyne.mem-leak"
-    hotfix_branch = f"hotfix/{hotfix_id}"
+    branch = branch_name.format(hotfix_id=hotfix_id)
 
     expected_build_commands = [
         ("echo", "build always"),
@@ -1353,7 +1354,7 @@ def test_hotfix_new_version_only(run_hopic, monkeypatch):
 
         base_commit = repo.index.commit(message="chore: initial commit", **_commitargs)
         repo.create_tag("1.2.3")
-        repo.git.branch(hotfix_branch, move=True)
+        repo.git.branch(branch, move=True)
 
         # PR branch
         repo.head.reference = repo.create_head("fix/mem-leak", base_commit)
@@ -1369,7 +1370,7 @@ def test_hotfix_new_version_only(run_hopic, monkeypatch):
 
     # Successful checkout, build and submit
     (*_, result) = run_hopic(
-        ("checkout-source-tree", "--target-remote", run_hopic.toprepo, "--target-ref", hotfix_branch),
+        ("checkout-source-tree", "--target-remote", run_hopic.toprepo, "--target-ref", branch),
         ("prepare-source-tree", "--author-name", _author.name, "--author-email", _author.email,
          "--author-date", f"@{_git_time}", "--commit-date", f"@{_git_time}",
          "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", "fix/mem-leak",
