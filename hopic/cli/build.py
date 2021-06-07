@@ -128,10 +128,13 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                     break
             elif run_on_change in (RunOnChange.only, RunOnChange.new_version_only):
                 if not hopic_git_info.has_change:
+                    log.debug("No change detected for %r", hopic_git_info)
                     break
                 if not is_publish_allowed:
+                    log.debug("Not allowed to publish for %r", hopic_git_info)
                     break
-                if run_on_change == RunOnChange.new_version_only and ctx.obj.version.prerelease:
+                if run_on_change == RunOnChange.new_version_only and not hopic_git_info.version_bumped:
+                    log.debug("No version change detected for %r", hopic_git_info)
                     break
             try:
                 desc = cmd['description']

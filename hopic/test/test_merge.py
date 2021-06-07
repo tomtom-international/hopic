@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import functools
 import json
 import os
 import re
@@ -1407,3 +1408,101 @@ def test_hotfix_rejects(error_msg, msg_tag, run_hopic):
     assert isinstance(result.exception, VersioningError)
     err = result.exception.format_message()
     assert error_msg.search(err)
+
+
+@pytest.mark.parametrize("version_file", ("version.txt", None), ids=lambda fn: fn or "{tag}")
+@pytest.mark.parametrize("branch_name", ("master", "hotfix/{hotfix_id}"))
+def test_new_version_only(branch_name, run_hopic, monkeypatch, version_file):
+    init_version = "1.2.3"
+    hotfix_id = "vindyne.mem-leak"
+    branch = branch_name.format(hotfix_id=hotfix_id)
+
+    expected_build_commands = [
+        ("echo", "build always"),
+        ("echo", "build on new version only"),
+    ]
+    expected_post_submit_commands = [
+        ("echo", "post submit always"),
+        ("echo", "post submit on new version only"),
+    ]
+
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        cfg_file = "hopic-ci-config.yaml"
+
+        (run_hopic.toprepo / cfg_file).write_text(
+            dedent(
+                f"""\
+                version:
+                  tag: {bool(not version_file)}
+                  format: semver
+                  bump:
+                    policy: conventional-commits
+                    strict: yes
+                  hotfix-branch: '^hotfix/(?P<id>.+)$'
+                  {("file: " + version_file) if version_file else ""}
+
+                phases:
+                  always:
+                    pre-submit:
+                      - echo "build always"
+                  new-version-only-step:
+                    pre-submit:
+                      - run-on-change: new-version-only
+                        sh: echo "build on new version only"
+
+                post-submit:
+                  always:
+                    - echo "post submit always"
+                  new-version-only-step:
+                    - run-on-change: new-version-only
+                      sh: echo "post submit on new version only"
+                """
+            )
+        )
+        repo.index.add((cfg_file,))
+
+        if version_file:
+            (run_hopic.toprepo / version_file).write_text(f"version={init_version}")
+            repo.index.add((version_file,))
+
+        base_commit = repo.index.commit(message="chore: initial commit", **_commitargs)
+        if not version_file:
+            repo.create_tag(init_version)
+        repo.git.branch(branch, move=True)
+
+        # PR branch
+        repo.head.reference = repo.create_head("fix/mem-leak", base_commit)
+        assert not repo.head.is_detached
+        repo.head.reset(index=True, working_tree=True)
+
+        (run_hopic.toprepo / "something.txt").write_text("usable")
+        repo.index.add(("something.txt",))
+        repo.index.commit(message="fix: work around oom kill due to memory leak", **_commitargs)
+
+    def mock_check_call(expected, args, *popenargs, **kwargs):
+        assert tuple(args) == expected.pop(0)
+
+    # Successful checkout, build and submit
+    (*_, result) = run_hopic(
+        ("checkout-source-tree", "--target-remote", run_hopic.toprepo, "--target-ref", branch),
+        ("prepare-source-tree", "--author-name", _author.name, "--author-email", _author.email,
+         "--author-date", f"@{_git_time}", "--commit-date", f"@{_git_time}",
+         "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", "fix/mem-leak",
+         "--change-request", "42", "--title", "fix: work around oom kill due to memory leak"),
+        functools.partial(
+            monkeypatch.setattr,
+            "subprocess.check_call",
+            functools.partial(mock_check_call, expected_build_commands),
+        ),
+        ("build",),
+        functools.partial(
+            monkeypatch.setattr,
+            "subprocess.check_call",
+            functools.partial(mock_check_call, expected_post_submit_commands),
+        ),
+        ("submit",),
+    )
+
+    assert result.exit_code == 0
+    assert not expected_build_commands
+    assert not expected_post_submit_commands

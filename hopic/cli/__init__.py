@@ -736,7 +736,7 @@ def process_prepare_source_tree(
             restore_mtime_from_git(repo)
 
         # Tagging after bumping the version
-        tagname = None
+        tagref = None
         version_tag = version_info.get('tag', False)
         if version_bumped and _is_valid_hotfix_base(ctx.obj.version) and version_tag and is_publish_allowed:
             if not isinstance(version_tag, str):
@@ -752,7 +752,7 @@ def process_prepare_source_tree(
                 )
             if 'build' in version_info and '+' not in tagname:
                 tagname += f"+{version_info['build']}"
-            repo.create_tag(
+            tagref = repo.create_tag(
                     tagname, submit_commit, force=True,
                     message=f"Tagged-by: Hopic {get_package_version(PACKAGE)}",
                     env={
@@ -808,12 +808,13 @@ def process_prepare_source_tree(
             section = f"hopic.{submit_commit}"
             if target_remote is not None:
                 cfg.set_value(section, 'remote', target_remote)
+            cfg.set_value(section, "version-bumped", str(version_bumped))
             refspecs = []
             if target_ref is not None:
                 cfg.set_value(section, 'ref', target_ref)
                 refspecs.append(f"{push_commit}:{target_ref}")
-            if tagname is not None:
-                refspecs.append(f"refs/tags/{tagname}:refs/tags/{tagname}")
+            if tagref is not None:
+                refspecs.append(f"{tagref.object}:{tagref.path}")
             if notes_ref is not None:
                 refspecs.append(notes_ref)
             if refspecs:
