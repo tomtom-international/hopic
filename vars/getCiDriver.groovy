@@ -554,16 +554,8 @@ class CiDriver {
               )]) {
           }
         } catch (CredentialNotFoundException e1) {
-          try {
-            steps.withCredentials([steps.usernamePassword(
-                credentialsId: httpServiceCredential,
-                keystoreVariable: 'KEYSTORE',
-                )]) {
-            }
-          } catch (CredentialNotFoundException e2) {
-            /* Fall back when this credential isn't usable for HTTP(S) Basic Auth */
-            httpServiceCredential = this.bitbucket_api_credential_id
-          }
+          /* Fall back when this credential isn't usable for HTTP(S) Basic Auth */
+          httpServiceCredential = this.bitbucket_api_credential_id
         }
         this.change = new BitbucketPullRequest(steps, steps.env.CHANGE_URL, httpServiceCredential, this.scm.refspec)
       }
@@ -652,7 +644,15 @@ ${shell_quote(venv)}/bin/python -m pip install ${shell_quote(this.repo)}
     }
 
     def (build_name, build_identifier) = get_build_id()
-    return steps.withEnv(["BUILD_NAME=${build_name}", "BUILD_NUMBER=${build_identifier}"]) {
+    def environment = [
+      "BUILD_NAME=${build_name}",
+      "BUILD_NUMBER=${build_identifier}",
+    ]
+    try {
+      environment.add("JENKINS_VERSION=${Jenkins.VERSION}")
+    } catch (RejectedAccessException e) {
+    }
+    return steps.withEnv(environment) {
       return closure(this.base_cmds[executor_identifier])
     }
   }
