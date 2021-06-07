@@ -28,14 +28,37 @@ For example:
 Version                                     Meaning
 =========================================== ==================================================
 ``1.8.1+g3269de8``                          tag **1.8.1**, clean, unmodified, ``HEAD`` is at commit **3269de8**
-``1.8.1-0.dirty.20200609131656+g3269de8``   tag **1.8.1**, with uncommited changes
-``1.8.1-1+gdaffe9c``                        tag **1.8.1**, with one commit on top of it (**-1**)
-``1.8.1-1.dirty.20200609152429+g4dbb6b4``   tag **1.8.1**, with one commit on top of it, as well as uncommitted changes
+``1.8.2-0.dirty.20210607131656+g3269de8``   tag **1.8.1**, with uncommited changes
+``1.8.2-1+gdaffe9c``                        tag **1.8.1**, with one commit on top of it (**-1**)
+``1.8.2-1.dirty.20210607131703+g4dbb6b4``   tag **1.8.1**, with one commit on top of it, as well as uncommitted changes
 =========================================== ==================================================
+
+.. note::
+  When the current ``HEAD`` is *dirty* or does not have a version tag, the latest tag does not uniquely describe ``HEAD``.
+
+  This is technically a "post-release" of the last tag. To implement this, Hopic will define the version as a **pre-release** for the **next patch-version**, using the commit distance to the latest tag as the pre-release identifier.
+  This is the closest approximation of a "post-release" while still remaining SemVer-compliant in format as well as version precedence.
+
+Since the 'pre-release-behavior' can be experienced as non-intuitive, an extra example is provided below.
+
+Consider the following repository history:
+
+.. code-block:: console
+
+  ea47ce2 (HEAD -> master) test: add extra unit test for feature X
+  9f8f270 ci: add ci configuration
+  fe6b6fa (tag: 0.1.0) feat: add feature X
+  cd0aec6 (tag: 0.0.1) chore: initial commit
+
+The latest tag for this repository is **0.1.0**. However, since two non-bumping commits were done on top of that tag, the tag **0.1.0** no longer uniquely describes the code in the repository.
+The version for ``HEAD`` will therefore be a pre-release for the next patch commit, the pre-release field being defined as the distance to that last tag: **0.1.1-2**.
+
+When a ``fix``-commit is submitted thereafter, the version will be bumped to **0.1.1**.
+This version, not being a pre-release (that is, not containing a hyphen: ``-``), has a higher precedence than any previously published pre-release version (**0.1.1-N**).
 
 .. option:: PURE_VERSION
 
-Contains the :option:`VERSION` (see above), but without ``build metadata`` (everything after the``+``).
+Contains the :option:`VERSION` (see above), but without ``build metadata`` (everything after the ``+``).
 
 For example:
 
@@ -43,9 +66,9 @@ For example:
 Version                                     Meaning
 =========================================== ==================================================
 ``1.8.1``                                   tag **1.8.1**, clean, unmodified
-``1.8.1-0.dirty.20200609131656``            tag **1.8.1**, with uncommited changes
-``1.8.1-1``                                 tag **1.8.1**, with one commit on top of it
-``1.8.1-1.dirty.20200609152429``            tag **1.8.1**, with one commit on top of it, as well as uncommitted changes
+``1.8.2-0.dirty.20200609131656``            tag **1.8.1**, with uncommited changes
+``1.8.2-1``                                 tag **1.8.1**, with one commit on top of it
+``1.8.2-1.dirty.20200609152429``            tag **1.8.1**, with one commit on top of it, as well as uncommitted changes
 =========================================== ==================================================
 
 .. option:: DEBVERSION
@@ -59,9 +82,9 @@ For example:
 Version                                     Meaning
 =========================================== ==================================================
 ``1.8.1+g3269de8``                          tag **1.8.1**, clean, unmodified, ``HEAD`` is at commit **3269de8**
-``1.8.1~0+dirty20200609131656+g3269de8``    tag **1.8.1**, with uncommited changes
-``1.8.1~1+gdaffe9c``                        tag **1.8.1**, with one commit on top of it (**~1**)
-``1.8.1~1+dirty20200609152429+g4dbb6b4``    tag **1.8.1**, with one commit on top of it, as well as uncommitted changes
+``1.8.2~0+dirty20200609131656+g3269de8``    tag **1.8.1**, with uncommited changes
+``1.8.2~1+gdaffe9c``                        tag **1.8.1**, with one commit on top of it (**~1**)
+``1.8.2~1+dirty20200609152429+g4dbb6b4``    tag **1.8.1**, with one commit on top of it, as well as uncommitted changes
 =========================================== ==================================================
 
 .. option:: PUBLISH_VERSION
