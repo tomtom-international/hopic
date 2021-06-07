@@ -644,7 +644,15 @@ ${shell_quote(venv)}/bin/python -m pip install ${shell_quote(this.repo)}
     }
 
     def (build_name, build_identifier) = get_build_id()
-    return steps.withEnv(["BUILD_NAME=${build_name}", "BUILD_NUMBER=${build_identifier}"]) {
+    def environment = [
+      "BUILD_NAME=${build_name}",
+      "BUILD_NUMBER=${build_identifier}",
+    ]
+    try {
+      environment.add("JENKINS_VERSION=${Jenkins.VERSION}")
+    } catch (RejectedAccessException e) {
+    }
+    return steps.withEnv(environment) {
       return closure(this.base_cmds[executor_identifier])
     }
   }

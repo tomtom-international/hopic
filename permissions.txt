@@ -14,6 +14,7 @@ method hudson.model.ParametersDefinitionProperty getParameterDefinitions
 method hudson.model.Run delete
 method hudson.model.Run getParent
 new java.io.File java.lang.String
+staticField jenkins.model.Jenkins VERSION
 staticMethod groovy.json.JsonOutput toJson java.lang.Object
 staticMethod org.codehaus.groovy.runtime.DefaultGroovyMethods getAt java.util.List java.util.Collection
 staticMethod org.codehaus.groovy.runtime.DefaultGroovyMethods getAt java.lang.Object java.lang.String
