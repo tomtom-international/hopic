@@ -554,16 +554,8 @@ class CiDriver {
               )]) {
           }
         } catch (CredentialNotFoundException e1) {
-          try {
-            steps.withCredentials([steps.usernamePassword(
-                credentialsId: httpServiceCredential,
-                keystoreVariable: 'KEYSTORE',
-                )]) {
-            }
-          } catch (CredentialNotFoundException e2) {
-            /* Fall back when this credential isn't usable for HTTP(S) Basic Auth */
-            httpServiceCredential = this.bitbucket_api_credential_id
-          }
+          /* Fall back when this credential isn't usable for HTTP(S) Basic Auth */
+          httpServiceCredential = this.bitbucket_api_credential_id
         }
         this.change = new BitbucketPullRequest(steps, steps.env.CHANGE_URL, httpServiceCredential, this.scm.refspec)
       }
