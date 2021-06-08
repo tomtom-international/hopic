@@ -20,6 +20,7 @@ from collections.abc import (
         Mapping,
         Sequence,
     )
+from decimal import Decimal
 from enum import Enum
 import errno
 from functools import lru_cache
@@ -27,6 +28,7 @@ import inspect
 import io
 import json
 import logging
+from numbers import Real
 import os
 from pathlib import Path
 import re
@@ -82,6 +84,7 @@ _supported_post_submit_meta = frozenset({
     'node-label',
     'run-on-change',
     'sh',
+    "timeout",
     'volumes',
     'with-credentials',
 })
@@ -895,6 +898,13 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
                         raise ConfigurationError(
                                 f"'ssh-command-variable' in with-credentials block `{cred['id']}` for "
                                 f"`{phase}.{variant}` is not a string", file=config_file)
+
+        if cmd_key == "timeout":
+            if not isinstance(cmd[cmd_key], (Decimal, Real)) or isinstance(cmd[cmd_key], bool) or cmd[cmd_key] <= 0:
+                raise ConfigurationError(
+                    f"`timeout` member of `{phase}.{variant}` must be a positive real number",
+                    file=config_file,
+                )
 
         if cmd_key == "image":
             if not isinstance(cmd[cmd_key], _basic_image_types):

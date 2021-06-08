@@ -112,3 +112,11 @@ class GitNotesMismatchError(ClickException):
 
     def __str__(self):
         return self.format_message()
+
+
+class StepTimeoutExpiredError(ClickException):
+    exit_code = 40
+
+    def __init__(self, timeout):
+        super().__init__(f"Timeout of {timeout} seconds expired while executing build step")
+        self.timeout = timeout

@@ -169,6 +169,7 @@ Only the following subset of options however, is permitted to be used within the
 * :option:`node-label`
 * :option:`run-on-change`
 * :option:`sh`
+* :option:`timeout`
 * :option:`volumes`
 * :option:`with-credentials`
 
@@ -776,6 +777,24 @@ Restricting Steps to Changes or Not
 
 .. literalinclude:: ../../examples/run-on-change.yaml
     :language: yaml
+
+
+Limiting Execution Time for Steps
+---------------------------------
+
+.. option:: timeout
+
+The option ``timeout`` allows specifying an upper limit to how long a step is allowed to execute.
+When this time gets exceeded the process will get aborted and the build will stop with an error.
+
+The current implementation only accepts timeouts expressed as positive real numbers interpreted as seconds.
+In the future other units may be added as a suffix.
+Without an explicit unit present or some other notation the interpretation will always be as seconds.
+
+**example:**
+
+.. literalinclude:: ../../examples/timeout.yaml
+   :language: yaml
 
 Sharing Output Data Between Variants
 ------------------------------------

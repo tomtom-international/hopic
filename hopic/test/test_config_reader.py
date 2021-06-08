@@ -1527,3 +1527,23 @@ def test_ci_locks_on_phase_forward():
     )
     out = cfg['ci-locks'][0]
     assert 'from-phase-onward' in out
+
+
+@pytest.mark.parametrize("timeout", (-1, 0, "yes", "mooh"))
+def test_non_positive_timeout(timeout):
+    with pytest.raises(ConfigurationError, match=r"`timeout` member of `a\.x` must be a positive real number"):
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    f"""\
+                    phases:
+                      a:
+                        x:
+                          - timeout: {timeout}
+                            sh: echo mooh
+                    """
+                ),
+            ),
+            {"WORKSPACE": None},
+        )

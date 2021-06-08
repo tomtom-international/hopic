@@ -22,6 +22,7 @@ from ..errors import (
     ConfigurationError,
     MissingFileError,
     UnknownPhaseError,
+    StepTimeoutExpiredError,
     VersioningError,
 )
 
@@ -1498,3 +1499,26 @@ def test_build_identifiers(capfd, run_hopic):
     assert build_name == expected_build_name
     assert build_number == expected_build_number
     assert build_url == expected_build_url
+
+
+@pytest.mark.parametrize("sleep", (0.002, 0.004, 0.006, 0.008), ids=lambda n: f"sleep={n}")
+@pytest.mark.parametrize("timeout", (0.001, 0.003, 0.005, 0.007), ids=lambda n: f"timeout={n}")
+def test_local_timeout(run_hopic, sleep, timeout):
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(
+            f"""\
+            phases:
+              a:
+                x:
+                  - timeout: {timeout}
+                    sh: sleep {sleep}
+            """
+        ),
+    )
+    if sleep < timeout:
+        assert result.exception is None
+    else:
+        assert result.exception is not None
+        if not isinstance(result.exception, StepTimeoutExpiredError):
+            raise result.exception

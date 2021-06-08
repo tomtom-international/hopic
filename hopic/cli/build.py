@@ -59,6 +59,7 @@ from ..config_reader import (
 from ..errors import (
     MissingCredentialVarError,
     MissingFileError,
+    StepTimeoutExpiredError,
     UnknownPhaseError,
 )
 from ..execution import echo_cmd_click as echo_cmd
@@ -142,6 +143,11 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                 pass
             else:
                 log.info('Performing: %s', click.style(desc, fg='cyan'))
+
+            try:
+                timeout = cmd["timeout"]
+            except (KeyError, TypeError):
+                timeout = None
 
             try:
                 cmd_volumes_from = cmd['volumes-from']
@@ -383,11 +389,11 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
 
                     old_handlers = dict((num, signal.signal(num, signal_handler)) for num in (signal.SIGINT, signal.SIGTERM))
                     try:
-                        echo_cmd(subprocess.check_call, final_cmd, env=new_env, cwd=ctx.obj.code_dir, obfuscate=variant_credentials)
+                        echo_cmd(subprocess.check_call, final_cmd, env=new_env, cwd=ctx.obj.code_dir, obfuscate=variant_credentials, timeout=timeout)
                     except subprocess.CalledProcessError as e:
                         log.error("Command fatally terminated with exit code %d", e.returncode)
                         ctx.exit(e.returncode)
-                    except FatalSignal as signal_exc:
+                    except (FatalSignal, subprocess.TimeoutExpired) as exc:
                         if cidfile and os.path.isfile(cidfile):
                             # If we're being signalled to shut down ensure the spawned docker container also gets cleaned up.
                             with open(cidfile) as f:
@@ -405,7 +411,11 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                                 signal.signal(signal.SIGTERM, signal.SIG_IGN)
                                 log.warning('Interrupted while stopping Docker container; killing..')
                                 echo_cmd(subprocess.check_call, ('docker', 'kill', cid))
-                        ctx.exit(128 + signal_exc.signal)
+                        if isinstance(exc, FatalSignal):
+                            ctx.exit(128 + exc.signal)
+                        else:
+                            assert isinstance(exc, subprocess.TimeoutExpired)
+                            raise StepTimeoutExpiredError(timeout)
                     for num, old_handler in old_handlers.items():
                         signal.signal(num, old_handler)
                 finally:
