@@ -1565,3 +1565,9 @@ def test_global_timeout_expire(monkeypatch, run_hopic):
         ),
     )
     assert isinstance(result.exception, StepTimeoutExpiredError)
+
+    timeout_msg_re = re.compile(r"\brestrict.*?\bmax.*\bseconds?\b")
+    timeout_msgs = tuple(msg for _, msg in result.logs if timeout_msg_re.search(msg))
+    assert timeout_msgs, f"Didn't find any timeout related messages matching '{timeout_msg_re.pattern}'"
+
+    assert "global" in timeout_msgs[-1], "timeout expiration wasn't caused by the _global_ timeout"
