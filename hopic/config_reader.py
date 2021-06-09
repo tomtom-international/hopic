@@ -993,8 +993,37 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
 
 
 def process_variant_cmds(phase, variant, cmds, volume_vars, config_file=None):
-    for cmd in cmds:
-        yield process_variant_cmd(phase, variant, cmd, volume_vars, config_file)
+    seen_sh = False
+    global_timeout = None
+    summed_timeout = 0
+    for cmd_idx, cmd in enumerate(cmds):
+        cmd = process_variant_cmd(phase, variant, cmd, volume_vars, config_file)
+
+        if "sh" in cmd:
+            seen_sh = True
+
+        if "timeout" in cmd:
+            if not seen_sh:
+                if global_timeout is not None:
+                    raise ConfigurationError(
+                        f"`{phase}.{variant}[{cmd_idx}]` attempting to define global `timeout` multiple times",
+                        file=config_file,
+                    )
+                global_timeout = cmd["timeout"]
+            elif "sh" not in cmd:
+                raise ConfigurationError(
+                    f"`{phase}.{variant}[{cmd_idx}]` attempting to define global `timeout` after an 'sh' command has already been given",
+                    file=config_file,
+                )
+            else:
+                summed_timeout += cmd["timeout"]
+            if global_timeout is not None and global_timeout <= summed_timeout:
+                raise ConfigurationError(
+                    f"`{phase}.{variant}[0].timeout` ({global_timeout} seconds) is not greater than summed per-command timeouts ({summed_timeout} seconds)",
+                    file=config_file,
+                )
+
+        yield cmd
 
 
 def read(config, volume_vars, extension_installer=lambda *args: None):

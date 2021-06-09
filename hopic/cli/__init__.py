@@ -1159,7 +1159,10 @@ def getinfo(ctx, phase, variant, post_submit):
         info = info.copy()
 
         for key, val in cmd.items():
-            if key not in permitted_fields:
+            if key == "timeout" and "sh" not in cmd:
+                # Return _global_ timeout (not "sh"-specific) only
+                pass
+            elif key not in permitted_fields:
                 continue
 
             try:
@@ -1167,7 +1170,12 @@ def getinfo(ctx, phase, variant, post_submit):
             except KeyError:
                 pass
             else:
-                if isinstance(info.get(key), Mapping):
+                if key == "timeout":
+                    if key in info:
+                        info[key] += val
+                    else:
+                        info[key] = val
+                elif isinstance(info.get(key), Mapping):
                     assert isinstance(info[key], MutableMapping)
                     for subkey, subval in val.items():
                         info[key].setdefault(subkey, subval)

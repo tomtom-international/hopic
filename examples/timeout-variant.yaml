@@ -1,0 +1,13 @@
+phases:
+  build:
+    x64-release:
+      - timeout: 180
+      - timeout: 15
+        sh: ./configure
+      - make
+      - make test
+
+post-submit:
+  upload:
+    - timeout: 30
+    - make upload

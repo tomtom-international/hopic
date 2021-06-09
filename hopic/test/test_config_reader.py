@@ -1547,3 +1547,68 @@ def test_non_positive_timeout(timeout):
             ),
             {"WORKSPACE": None},
         )
+
+
+def test_global_timeout_multiple_definitions():
+    with pytest.raises(ConfigurationError, match=r"`a\.x\[1\]` .*?\bdefine global `timeout` multiple"):
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    """\
+                    phases:
+                      a:
+                        x:
+                          - timeout: 1
+                          - timeout: 2
+                    """
+                ),
+            ),
+            {"WORKSPACE": None},
+        )
+
+
+def test_global_timeout_after_sh():
+    with pytest.raises(ConfigurationError, match=r"`a\.x\[1\]` .*?\bdefine global `timeout` after\b.*? 'sh' .*?\balready .*?\bgiven"):
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    """\
+                    phases:
+                      a:
+                        x:
+                          - echo mooh
+                          - timeout: 2
+                    """
+                ),
+            ),
+            {"WORKSPACE": None},
+        )
+
+
+@pytest.mark.parametrize("global_timeout", (3, 4))
+@pytest.mark.parametrize("location", ("phases", "post-submit"))
+def test_global_timeout_less_or_equal_than_sum_of_local_timeouts(global_timeout, location):
+    with pytest.raises(
+        ConfigurationError,
+        match=fr"(?:`a\.x|post-submit\.a)\[0\]\.timeout` \({global_timeout} seconds\) .*?\bnot greater than summed .*?\btimeouts\b",
+    ):
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    f"""\
+                    {location}:
+                      a:
+                        {"x:" if location == "phases" else ""}
+                          - timeout: {global_timeout}
+                          - timeout: 2
+                            sh: echo mooh
+                          - timeout: 2
+                            sh: echo beeh
+                    """
+                ),
+            ),
+            {"WORKSPACE": None},
+        )

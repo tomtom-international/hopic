@@ -21,6 +21,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.parse
 from collections.abc import (
     Mapping,
@@ -115,6 +116,8 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
         # this condition. For build phase, run_on_change is set to 'always' by default, so build will always happen.
         is_publish_allowed = is_publish_branch(ctx, hopic_git_info)
         volumes = cfg['volumes'].copy()
+        global_timeout = None
+        global_timeout_expire_time = None
         for cmd in cmds:
             worktrees = {}
             foreach = None
@@ -144,10 +147,31 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
             else:
                 log.info('Performing: %s', click.style(desc, fg='cyan'))
 
-            try:
-                timeout = cmd["timeout"]
-            except (KeyError, TypeError):
-                timeout = None
+            if "sh" not in cmd and "timeout" in cmd:
+                assert global_timeout is None, "there should only be a single global per-variant timeout and config_reader should have enforced that"
+                global_timeout = cmd["timeout"]
+                global_timeout_expire_time = time.monotonic() + global_timeout
+                log.debug("restricting all commands combined to a maximum time of %f seconds", cmd["timeout"])
+
+            timeout = None
+            if "sh" in cmd:
+                if "timeout" in cmd:
+                    timeout = cmd["timeout"]
+                global_timeout_remainder = None if global_timeout_expire_time is None else global_timeout_expire_time - time.monotonic()
+                if global_timeout_remainder is not None and global_timeout_remainder <= 0:
+                    log.warning("global timeout (%f seconds) expired already", global_timeout)
+                    raise StepTimeoutExpiredError(global_timeout)
+                if global_timeout_remainder is not None and timeout is None:
+                    timeout = global_timeout_remainder
+                    log.debug("restricting current command to a maximum of %f seconds remaining from global timeout", timeout)
+                elif global_timeout_remainder is not None and timeout > global_timeout_remainder:
+                    log.debug(
+                        "restricting current command to a maximum of %f seconds remaining from global timeout (clamped from %f)",
+                        global_timeout_remainder,
+                        timeout,
+                    )
+                elif timeout is not None:
+                    log.debug("restricting current command to a maximum of %f seconds", timeout)
 
             try:
                 cmd_volumes_from = cmd['volumes-from']

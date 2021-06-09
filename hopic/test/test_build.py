@@ -1522,3 +1522,23 @@ def test_local_timeout(run_hopic, sleep, timeout):
         assert result.exception is not None
         if not isinstance(result.exception, StepTimeoutExpiredError):
             raise result.exception
+
+
+def test_global_timeout_expire(run_hopic):
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(
+            """\
+            phases:
+              a:
+                x:
+                  - timeout: 0.006
+                  - timeout: 0.002
+                    sh: sleep 0.001
+                  - timeout: 0.002
+                    sh: sleep 0.001
+                  - sh: sleep 0.003
+            """
+        ),
+    )
+    assert isinstance(result.exception, StepTimeoutExpiredError)
