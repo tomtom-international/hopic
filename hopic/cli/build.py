@@ -147,19 +147,23 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
             else:
                 log.info('Performing: %s', click.style(desc, fg='cyan'))
 
+            monotonic_now = time.monotonic()
             if "sh" not in cmd and "timeout" in cmd:
                 assert global_timeout is None, "there should only be a single global per-variant timeout and config_reader should have enforced that"
                 global_timeout = cmd["timeout"]
-                global_timeout_expire_time = time.monotonic() + global_timeout
+                global_timeout_expire_time = monotonic_now + global_timeout
                 log.debug("restricting all commands combined to a maximum time of %f seconds", cmd["timeout"])
 
             timeout = None
             if "sh" in cmd:
                 if "timeout" in cmd:
                     timeout = cmd["timeout"]
-                global_timeout_remainder = None if global_timeout_expire_time is None else global_timeout_expire_time - time.monotonic()
-                if global_timeout_remainder is not None and global_timeout_remainder <= 0:
-                    raise StepTimeoutExpiredError(global_timeout, cmd=" ".join(cmd["sh"]), before=True)
+                global_timeout_remainder = None
+                if global_timeout_expire_time is not None:
+                    global_timeout_remainder = global_timeout_expire_time - monotonic_now
+                    if global_timeout_remainder <= 0:
+                        raise StepTimeoutExpiredError(global_timeout, cmd=" ".join(cmd["sh"]), before=True)
+
                 if global_timeout_remainder is not None and timeout is None:
                     timeout = global_timeout_remainder
                     log.debug("restricting current command to a maximum of %f seconds remaining from global timeout", timeout)
