@@ -21,6 +21,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.parse
 from collections.abc import (
     Mapping,
@@ -59,6 +60,7 @@ from ..config_reader import (
 from ..errors import (
     MissingCredentialVarError,
     MissingFileError,
+    StepTimeoutExpiredError,
     UnknownPhaseError,
 )
 from ..execution import echo_cmd_click as echo_cmd
@@ -114,6 +116,8 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
         # this condition. For build phase, run_on_change is set to 'always' by default, so build will always happen.
         is_publish_allowed = is_publish_branch(ctx, hopic_git_info)
         volumes = cfg['volumes'].copy()
+        global_timeout = None
+        global_timeout_expire_time = None
         for cmd in cmds:
             worktrees = {}
             foreach = None
@@ -142,6 +146,35 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                 pass
             else:
                 log.info('Performing: %s', click.style(desc, fg='cyan'))
+
+            monotonic_now = time.monotonic()
+            if "sh" not in cmd and "timeout" in cmd:
+                assert global_timeout is None, "there should only be a single global per-variant timeout and config_reader should have enforced that"
+                global_timeout = cmd["timeout"]
+                global_timeout_expire_time = monotonic_now + global_timeout
+                log.debug("restricting all commands combined to a maximum time of %f seconds", cmd["timeout"])
+
+            timeout = None
+            if "sh" in cmd:
+                if "timeout" in cmd:
+                    timeout = cmd["timeout"]
+                global_timeout_remainder = None
+                if global_timeout_expire_time is not None:
+                    global_timeout_remainder = global_timeout_expire_time - monotonic_now
+                    if global_timeout_remainder <= 0:
+                        raise StepTimeoutExpiredError(global_timeout, cmd=" ".join(cmd["sh"]), before=True)
+
+                if global_timeout_remainder is not None and timeout is None:
+                    timeout = global_timeout_remainder
+                    log.debug("restricting current command to a maximum of %f seconds remaining from global timeout", timeout)
+                elif global_timeout_remainder is not None and timeout > global_timeout_remainder:
+                    log.debug(
+                        "restricting current command to a maximum of %f seconds remaining from global timeout (clamped from %f)",
+                        global_timeout_remainder,
+                        timeout,
+                    )
+                elif timeout is not None:
+                    log.debug("restricting current command to a maximum of %f seconds", timeout)
 
             try:
                 cmd_volumes_from = cmd['volumes-from']
@@ -383,11 +416,11 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
 
                     old_handlers = dict((num, signal.signal(num, signal_handler)) for num in (signal.SIGINT, signal.SIGTERM))
                     try:
-                        echo_cmd(subprocess.check_call, final_cmd, env=new_env, cwd=ctx.obj.code_dir, obfuscate=variant_credentials)
+                        echo_cmd(subprocess.check_call, final_cmd, env=new_env, cwd=ctx.obj.code_dir, obfuscate=variant_credentials, timeout=timeout)
                     except subprocess.CalledProcessError as e:
                         log.error("Command fatally terminated with exit code %d", e.returncode)
                         ctx.exit(e.returncode)
-                    except FatalSignal as signal_exc:
+                    except (FatalSignal, subprocess.TimeoutExpired) as exc:
                         if cidfile and os.path.isfile(cidfile):
                             # If we're being signalled to shut down ensure the spawned docker container also gets cleaned up.
                             with open(cidfile) as f:
@@ -405,7 +438,11 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                                 signal.signal(signal.SIGTERM, signal.SIG_IGN)
                                 log.warning('Interrupted while stopping Docker container; killing..')
                                 echo_cmd(subprocess.check_call, ('docker', 'kill', cid))
-                        ctx.exit(128 + signal_exc.signal)
+                        if isinstance(exc, FatalSignal):
+                            ctx.exit(128 + exc.signal)
+                        else:
+                            assert isinstance(exc, subprocess.TimeoutExpired)
+                            raise StepTimeoutExpiredError(timeout, cmd=" ".join(cmd))
                     for num, old_handler in old_handlers.items():
                         signal.signal(num, old_handler)
                 finally:

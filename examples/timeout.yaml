@@ -1,0 +1,18 @@
+phases:
+  build:
+    x64-release:
+      - timeout: 180
+        sh: cmake --build build-x64-release
+    x64-debug:
+      - timeout: 300
+        sh: cmake --build build-x64-debug
+
+  upload:
+    x64-release:
+      - run-on-change: only
+        timeout: 30.5
+        sh: build-x64-release/do-upload.sh
+    x64-debug:
+      - run-on-change: only
+        timeout: 45.75
+        sh: build-x64-debug/do-upload.sh

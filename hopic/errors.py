@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from textwrap import dedent
+from typing import Optional
 
 from click import ClickException
 
@@ -112,3 +113,14 @@ class GitNotesMismatchError(ClickException):
 
     def __str__(self):
         return self.format_message()
+
+
+class StepTimeoutExpiredError(ClickException):
+    exit_code = 40
+
+    def __init__(self, timeout, *, cmd: Optional[str] = None, before: bool = False):
+        msg = f"Timeout of {timeout} seconds expired {'before' if before else 'while'} executing build command"
+        if cmd:
+            msg += f": {cmd}"
+        super().__init__(msg)
+        self.timeout = timeout

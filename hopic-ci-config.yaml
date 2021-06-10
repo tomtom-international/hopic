@@ -35,55 +35,69 @@ pip:
 
 phases:
   style:
-    commit-messages: !template "commisery"
+    commit-messages:
+      - timeout: 10
+      - !template "commisery"
     flake8:
+      - timeout: 120
       - docker build --network=host --build-arg=PYTHON_VERSION=3.9 -t hopic-python:3.9-slim-git hopic/test/docker-images/python
       - junit: flake8.xml
         image: hopic-python:3.9-slim-git
         sh: tox -e flake8
+        timeout: 30
 
   docker:
     python3.6:
+      - timeout: 300
       - docker build --network=host --build-arg=PYTHON_VERSION=3.6 -t hopic-python:3.6-slim-git hopic/test/docker-images/python
 
     python3.7:
+      - timeout: 300
       - docker build --network=host --build-arg=PYTHON_VERSION=3.7 -t hopic-python:3.7-slim-git hopic/test/docker-images/python
 
     python3.8:
+      - timeout: 300
       - docker build --network=host --build-arg=PYTHON_VERSION=3.8 -t hopic-python:3.8-slim-git hopic/test/docker-images/python
 
     python3.9:
+      - timeout: 300
       - docker build --network=host --build-arg=PYTHON_VERSION=3.9 -t hopic-python:3.9-slim-git hopic/test/docker-images/python
 
     python3.10:
+      - timeout: 300
       - docker build --network=host --build-arg=PYTHON_VERSION=3.10.0b1 -t hopic-python:3.10.0b1-slim-git hopic/test/docker-images/python
 
   static:
     python3.6:
+      - timeout: 90
       - junit: mypy-test.xml
         image: hopic-python:3.6-slim-git
         wait-on-full-previous-phase: no
         sh: tox -r -e py36-types
 
     python3.7:
+      - timeout: 90
       - junit: mypy-test.xml
         image: hopic-python:3.7-slim-git
         wait-on-full-previous-phase: no
         sh: tox -r -e py37-types
 
     python3.8:
+      - timeout: 90
       - junit: mypy-test.xml
         image: hopic-python:3.8-slim-git
         wait-on-full-previous-phase: no
         sh: tox -r -e py38-types
 
     python3.9:
+      - timeout: 90
       - junit: mypy-test.xml
         image: hopic-python:3.9-slim-git
         wait-on-full-previous-phase: no
         sh: tox -r -e py39-types
 
     python3.10:
+      - timeout: 90
       - junit: mypy-test.xml
         image: hopic-python:3.10.0b1-slim-git
         wait-on-full-previous-phase: no
@@ -91,6 +105,7 @@ phases:
 
   test:
     python3.6:
+      - timeout: 180
       - junit: junit-test.xml
         image: hopic-python:3.6-slim-git
         docker-in-docker: yes
@@ -98,6 +113,7 @@ phases:
         sh: tox -r -e py36
 
     python3.7:
+      - timeout: 180
       - junit: junit-test.xml
         image: hopic-python:3.7-slim-git
         docker-in-docker: yes
@@ -105,6 +121,7 @@ phases:
         sh: tox -r -e py37
 
     python3.8:
+      - timeout: 180
       - junit: junit-test.xml
         image: hopic-python:3.8-slim-git
         docker-in-docker: yes
@@ -112,6 +129,7 @@ phases:
         sh: tox -r -e py38
 
     python3.9:
+      - timeout: 180
       - junit: junit-test.xml
         image: hopic-python:3.9-slim-git
         docker-in-docker: yes
@@ -119,6 +137,7 @@ phases:
         sh: tox -r -e py39
 
     python3.10:
+      - timeout: 180
       - junit: junit-test.xml
         image: hopic-python:3.10.0b1-slim-git
         docker-in-docker: yes
@@ -127,6 +146,7 @@ phases:
 
   build:
     sphinx-doc:
+      - timeout: 180
       - rm -rf doc/build/venv
       - python3 -m venv --clear doc/build/venv
       - doc/build/venv/bin/python -m pip install --upgrade setuptools setuptools_scm setuptools_scm_git_archive . -r doc-requirements.txt
@@ -149,6 +169,7 @@ phases:
 post-submit:
   publish:
     - run-on-change: new-version-only
+      timeout: 300 # should be done much quicker (~ 30s avg), but we're giving post-submit a big grace period
       with-credentials:
         id: hopic-pypi
         type: username-password
