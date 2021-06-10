@@ -29,6 +29,7 @@ from ..errors import (
 from datetime import datetime
 from textwrap import dedent
 from typing import Pattern
+import functools
 import logging
 import os
 import pytest
@@ -1502,19 +1503,27 @@ def test_build_identifiers(capfd, run_hopic):
     assert build_url == expected_build_url
 
 
+def _timeout_mock_time_monotonic(clock_state):
+    clock_state["time"] = clock_state.get("time", 0) + 1e-6
+    return clock_state["time"]
+
+
+def _timeout_mock_check_call(clock_state, args, *popenargs, timeout=None, **kwargs):
+    cmd, delay = args
+    assert cmd == "sleep"
+    delay = float(delay)
+    assert delay > 0
+    if timeout is not None and delay > timeout:
+        raise subprocess.TimeoutExpired(args, timeout)
+    clock_state["time"] = clock_state.get("time", 0) + delay
+
+
 @pytest.mark.parametrize("sleep", (0.002, 0.004, 0.006, 0.008), ids=lambda n: f"sleep={n}")
 @pytest.mark.parametrize("timeout", (0.001, 0.003, 0.005, 0.007), ids=lambda n: f"timeout={n}")
 def test_local_timeout(monkeypatch, run_hopic, sleep, timeout):
-    def mock_check_call(args, *popenargs, timeout=None, **kwargs):
-        cmd, delay = args
-        assert cmd == "sleep"
-        delay = float(delay)
-        assert delay > 0
-        if timeout is not None and delay > timeout:
-            raise subprocess.TimeoutExpired(args, timeout)
-        time.sleep(delay)
-
-    monkeypatch.setattr(subprocess, "check_call", mock_check_call)
+    clock_state = {}
+    monkeypatch.setattr(time, "monotonic", functools.partial(_timeout_mock_time_monotonic, clock_state))
+    monkeypatch.setattr(subprocess, "check_call", functools.partial(_timeout_mock_check_call, clock_state))
 
     (result,) = run_hopic(
         ("build",),
@@ -1537,16 +1546,9 @@ def test_local_timeout(monkeypatch, run_hopic, sleep, timeout):
 
 
 def test_global_timeout_expire(monkeypatch, run_hopic):
-    def mock_check_call(args, *popenargs, timeout=None, **kwargs):
-        cmd, delay = args
-        assert cmd == "sleep"
-        delay = float(delay)
-        assert delay > 0
-        if timeout is not None and delay > timeout:
-            raise subprocess.TimeoutExpired(args, timeout)
-        time.sleep(delay)
-
-    monkeypatch.setattr(subprocess, "check_call", mock_check_call)
+    clock_state = {}
+    monkeypatch.setattr(time, "monotonic", functools.partial(_timeout_mock_time_monotonic, clock_state))
+    monkeypatch.setattr(subprocess, "check_call", functools.partial(_timeout_mock_check_call, clock_state))
 
     (result,) = run_hopic(
         ("build",),
