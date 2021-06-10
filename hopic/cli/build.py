@@ -159,8 +159,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                     timeout = cmd["timeout"]
                 global_timeout_remainder = None if global_timeout_expire_time is None else global_timeout_expire_time - time.monotonic()
                 if global_timeout_remainder is not None and global_timeout_remainder <= 0:
-                    log.warning("global timeout (%f seconds) expired already", global_timeout)
-                    raise StepTimeoutExpiredError(global_timeout)
+                    raise StepTimeoutExpiredError(global_timeout, cmd=" ".join(cmd["sh"]), before=True)
                 if global_timeout_remainder is not None and timeout is None:
                     timeout = global_timeout_remainder
                     log.debug("restricting current command to a maximum of %f seconds remaining from global timeout", timeout)
@@ -439,7 +438,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                             ctx.exit(128 + exc.signal)
                         else:
                             assert isinstance(exc, subprocess.TimeoutExpired)
-                            raise StepTimeoutExpiredError(timeout)
+                            raise StepTimeoutExpiredError(timeout, cmd=" ".join(cmd))
                     for num, old_handler in old_handlers.items():
                         signal.signal(num, old_handler)
                 finally:
