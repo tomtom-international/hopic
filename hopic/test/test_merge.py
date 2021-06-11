@@ -543,12 +543,15 @@ def test_modality_merge_commit_message(run_hopic, monkeypatch):
                     policy: conventional-commits
                     strict: yes
 
+                pass-through-environment-vars:
+                  - CUSTOM_VAR
+
                 modality-source-preparation:
                   AUTO_MERGE:
                     - git fetch origin release/0
                     - sh: git merge --no-commit --no-ff FETCH_HEAD
                       changed-files: []
-                      commit-message: "feat: merge branch 'release/0'"
+                      commit-message: "feat: merge branch 'release/0': $CUSTOM_VAR"
                 '''))
 
         repo.index.add(('hopic-ci-config.yaml',))
@@ -574,6 +577,7 @@ def test_modality_merge_commit_message(run_hopic, monkeypatch):
 
     monkeypatch.setenv('GIT_COMMITTER_NAME' , 'My Name is Nobody')
     monkeypatch.setenv('GIT_COMMITTER_EMAIL', 'nobody@example.com')
+    monkeypatch.setenv('CUSTOM_VAR', 'custom value')
     (*_, result) = run_hopic(
             ('checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'),
             ('prepare-source-tree',
@@ -590,6 +594,8 @@ def test_modality_merge_commit_message(run_hopic, monkeypatch):
         repo.git.describe() == expected_version
 
     assert result.exit_code == 0
+    with git.Repo(run_hopic.toprepo, expand_vars=False) as repo:
+        assert repo.heads.master.commit.message.startswith("feat: merge branch 'release/0': custom value")
 
 
 @pytest.mark.parametrize('modality_message, expected_version', (

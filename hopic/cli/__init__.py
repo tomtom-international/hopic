@@ -1025,6 +1025,11 @@ def apply_modality_change(
 
         volume_vars = ctx.obj.volume_vars.copy()
         volume_vars.setdefault('HOME', os.path.expanduser('~'))
+        vars_from_env = {key: value for key, value in os.environ.items() if key in ctx.obj.config["pass-through-environment-vars"]}
+        vars_from_env.update(volume_vars)
+        volume_vars = vars_from_env
+
+        commit_message = expand_vars(volume_vars, commit_message)
 
         for cmd in modality_cmds:
             if isinstance(cmd, str):
