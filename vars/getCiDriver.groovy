@@ -560,9 +560,9 @@ class CiDriver {
         this.change = new BitbucketPullRequest(steps, steps.env.CHANGE_URL, httpServiceCredential, this.scm.refspec)
       }
       // FIXME: Don't rely on hard-coded build parameter, externalize this instead.
-      else if (steps.params.MODALITY != null && steps.params.MODALITY != "NORMAL")
+      else if (steps.env.MODALITY != null && steps.env.MODALITY != "NORMAL")
       {
-        this.change = new ModalityRequest(steps, steps.params.MODALITY)
+        this.change = new ModalityRequest(steps, steps.env.MODALITY)
       }
     }
 
