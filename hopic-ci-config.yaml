@@ -105,7 +105,7 @@ phases:
 
   test:
     python3.6:
-      - timeout: 180
+      - timeout: 300
       - junit: junit-test.xml
         image: hopic-python:3.6-slim-git
         docker-in-docker: yes
@@ -113,7 +113,7 @@ phases:
         sh: tox -r -e py36
 
     python3.7:
-      - timeout: 180
+      - timeout: 300
       - junit: junit-test.xml
         image: hopic-python:3.7-slim-git
         docker-in-docker: yes
@@ -121,7 +121,7 @@ phases:
         sh: tox -r -e py37
 
     python3.8:
-      - timeout: 180
+      - timeout: 300
       - junit: junit-test.xml
         image: hopic-python:3.8-slim-git
         docker-in-docker: yes
@@ -129,7 +129,7 @@ phases:
         sh: tox -r -e py38
 
     python3.9:
-      - timeout: 180
+      - timeout: 300
       - junit: junit-test.xml
         image: hopic-python:3.9-slim-git
         docker-in-docker: yes
@@ -137,7 +137,7 @@ phases:
         sh: tox -r -e py39
 
     python3.10:
-      - timeout: 180
+      - timeout: 300
       - junit: junit-test.xml
         image: hopic-python:3.10.0b1-slim-git
         docker-in-docker: yes
