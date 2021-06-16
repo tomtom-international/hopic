@@ -21,6 +21,14 @@ import os
 import logging
 import math
 import sys
+from typing import (
+    Any,
+    Iterable,
+    Mapping,
+    Optional,
+    Tuple,
+    Union,
+)
 
 from dateutil.tz import (
         tzlocal,
@@ -28,10 +36,14 @@ from dateutil.tz import (
     )
 import git
 
+from .types import (
+    PathLike,
+)
 from .versioning import (
-        GitVersion,
-        read_version,
-    )
+    GitVersion,
+    Version,
+    read_version,
+)
 
 log = logging.getLogger(__name__)
 
@@ -53,7 +65,7 @@ def to_git_time(date: datetime) -> str:
     return f"{utctime} {date:%z}"
 
 
-def determine_source_date(workspace):
+def determine_source_date(workspace: Union[git.Repo, PathLike]) -> Optional[datetime]:
     """
     Determine the date of most recent change to the sources in the given workspace
     """
@@ -106,7 +118,7 @@ _max_git_objects = 100e6
 _git_abbrev_len = math.ceil(math.log2(_max_git_objects) / 2)
 
 
-def determine_git_version(repo):
+def determine_git_version(repo: git.Repo) -> GitVersion:
     """
     Determines the current version of a git repository based on its tags.
     """
@@ -116,7 +128,11 @@ def determine_git_version(repo):
     )
 
 
-def determine_version(version_info, config_dir, code_dir=None):
+def determine_version(
+    version_info: Mapping[str, Any],
+    config_dir: Optional[PathLike],
+    code_dir: Optional[PathLike] = None,
+) -> Tuple[Optional[Version], Optional[str]]:
     """
     Determines the current version for the given version configuration snippet.
     """
@@ -127,6 +143,7 @@ def determine_version(version_info, config_dir, code_dir=None):
         params = {}
         if 'format' in version_info:
             params['format'] = version_info['format']
+        assert config_dir is not None
         fname = os.path.join(config_dir, version_info['file'])
         if os.path.isfile(fname):
             version = read_version(fname, **params)
@@ -158,7 +175,11 @@ class GitObjectType(Enum):
     gitlink = 0b1110
 
 
-def determine_mtime_from_git(repo, files=None, author_time=False):
+def determine_mtime_from_git(
+    repo: git.Repo,
+    files: Optional[Iterable[Union[bytes, str]]] = None,
+    author_time: bool = False,
+) -> Iterable[Tuple[PathLike, GitObjectType, int]]:
     encoding = sys.getfilesystemencoding() or sys.getdefaultencoding()
 
     if files is None:
@@ -207,7 +228,7 @@ def determine_mtime_from_git(repo, files=None, author_time=False):
         pass
 
 
-def restore_mtime_from_git(repo, files=None):
+def restore_mtime_from_git(repo: git.Repo, files: Optional[Iterable[Union[bytes, str]]] = None) -> None:
     for filename, object_type, mtime in determine_mtime_from_git(repo, files):
         path = os.path.join(repo.working_tree_dir, filename)
         if object_type == GitObjectType.symlink:
