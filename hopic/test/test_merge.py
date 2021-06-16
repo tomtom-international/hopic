@@ -1512,3 +1512,42 @@ def test_new_version_only(branch_name, run_hopic, monkeypatch, version_file):
     assert result.exit_code == 0
     assert not expected_build_commands
     assert not expected_post_submit_commands
+
+
+def test_no_initial_version(run_hopic):
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        (run_hopic.toprepo / "something.txt").write_text("usable")
+        repo.index.add(("something.txt",))
+        base_commit = repo.index.commit(message="Initial commit", **_commitargs)
+
+        # PR branch
+        repo.head.reference = repo.create_head("something-useful", base_commit)
+        assert not repo.head.is_detached
+        repo.head.reset(index=True, working_tree=True)
+
+        (run_hopic.toprepo / "hopic-ci-config.yaml").write_text(
+            dedent(
+                """\
+                version:
+                  format: semver
+                  tag: true
+                  bump:
+                    policy: conventional-commits
+                    strict: yes
+                """
+            )
+        )
+
+        repo.index.add(("hopic-ci-config.yaml",))
+        repo.index.commit(message="chore: add hopic config file", **_commitargs)
+
+    # Successful checkout and build
+    (*_, result) = run_hopic(
+        ("checkout-source-tree", "--target-remote", run_hopic.toprepo, "--target-ref", "master"),
+        ("prepare-source-tree", "--author-name", _author.name, "--author-email", _author.email,
+            "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", "something-useful", "--title", "ci: add hopic"),
+        ("build",),
+    )
+    assert isinstance(result.exception, VersioningError)
+    err = result.exception.format_message()
+    assert "Failed to determine the current version while attempting to bump the version" in err
