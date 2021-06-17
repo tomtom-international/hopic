@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from pathlib import Path
 import re
 from setuptools import setup
 
-with open('README.rst', encoding='UTF-8') as fh:
-    long_description = fh.read()
+long_description = (Path(__file__).parent / "README.rst").read_text(encoding="UTF-8")
 
 # Remove directives
 description = re.sub(r'^[ \t]*\.\.(?:[ \t]+[^\n]*)?\n(?:[ \t]+[^\n]*\n)*', r'', long_description, flags=re.DOTALL|re.MULTILINE)
