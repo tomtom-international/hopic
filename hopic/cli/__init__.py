@@ -44,8 +44,7 @@ from ..git_time import (
 )
 from .global_obj import initialize_global_variables_from_config
 from ..versioning import (
-    CarusoVer,
-    SemVer,
+    Version,
     hotfix_id,
     replace_version,
 )
@@ -831,7 +830,7 @@ def is_version_bump_enabled(bump_config: Mapping, ctx: Optional[click.Context] =
     return is_publish_from_branch_allowed and bump_config["policy"] != "disabled" and bump_config["on-every-change"]
 
 
-def get_current_version(ctx: click.Context) -> Union[CarusoVer, SemVer]:
+def get_current_version(ctx: click.Context) -> Version:
     version_info = ctx.obj.config["version"]
     if ctx.obj.version is None:
         if "file" in version_info:

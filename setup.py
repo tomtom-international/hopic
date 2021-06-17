@@ -52,6 +52,7 @@ setup(
       'PyYAML',
       'setuptools',
       'typeguard>=2.10,<2.11,<3', # <2.11 should be removed after https://github.com/agronholm/typeguard/issues/175 is fixed
+      'typing_extensions >= 3.6.4; python_version < "3.8"',
     ),
     setup_requires=(
       'setuptools_scm',
