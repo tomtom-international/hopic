@@ -329,3 +329,54 @@ def test_mark_nops(run_hopic):
 
     assert output["x"]["a"]["nop"] is True
     assert output["y"]["a"]["nop"] is True
+
+
+def test_variant_timeout(run_hopic):
+    (result,) = run_hopic(
+        ("getinfo",),
+        config=dedent(
+            """\
+            phases:
+              x:
+                a:
+                  - timeout: 90
+                b: []
+                c:
+                  - timeout: 5
+                    sh: echo mooh
+                d:
+                  - timeout: 4.2
+                  - sh: echo mooh
+            """
+        ),
+    )
+
+    assert result.exit_code == 0
+    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
+
+    assert output["x"]["a"]["timeout"] == 90
+    assert "timeout" not in output["x"]["b"]
+    assert "timeout" not in output["x"]["c"]
+    assert output["x"]["d"]["timeout"] == 4.2
+
+
+def test_post_submit_summed_timeout(run_hopic):
+    (result,) = run_hopic(
+        ("getinfo", "--post-submit"),
+        config=dedent(
+            """\
+            post-submit:
+              a:
+                - timeout: 42
+                - timeout: 7
+                  sh: echo mooh
+              b:
+                - timeout: 37
+            """
+        ),
+    )
+
+    assert result.exit_code == 0
+    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
+
+    assert output["timeout"] == 79

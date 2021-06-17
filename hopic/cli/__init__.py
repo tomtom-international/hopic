@@ -25,7 +25,7 @@ from .utils import (
         get_package_version,
         is_publish_branch,
     )
-from commisery.commit import parse_commit_message
+from commisery.commit import CommitMessage, parse_commit_message
 from ..build import (
     HopicGitInfo,
 )
@@ -44,6 +44,8 @@ from ..git_time import (
 )
 from .global_obj import initialize_global_variables_from_config
 from ..versioning import (
+    CarusoVer,
+    SemVer,
     hotfix_id,
     replace_version,
 )
@@ -79,10 +81,12 @@ import shutil
 import subprocess
 import sys
 from typing import (
+    Iterable,
     List,
     Optional,
     Tuple,
     Union,
+    overload,
 )
 from textwrap import dedent
 from yaml.error import YAMLError
@@ -494,20 +498,9 @@ def process_prepare_source_tree(
 
         bump = version_info['bump'].copy()
         bump.update(commit_params.pop('bump-override', {}))
-        strict = bump.get('strict', False)
 
-        source_commits = (
-                () if source_commit is None and base_commit is None
-                else [
-                    parse_commit_message(commit, policy=bump['policy'], strict=strict)
-                    for commit in git.Commit.list_items(
-                        repo,
-                        (f"{base_commit}..{target_commit}"
-                            if base_commit is not None
-                            else f"{target_commit}..{source_commit}"),
-                        first_parent=bump.get('first-parent', True),
-                        no_merges=bump.get('no-merges', True),
-                    )])
+        commit_from, commit_to = (base_commit, target_commit) if base_commit else (target_commit, source_commit)
+        source_commits = list(parse_commit_range(repo, commit_from, commit_to, bump))
 
         hotfix = hotfix_id(version_info["hotfix-branch"], target_ref)
 
@@ -543,18 +536,8 @@ def process_prepare_source_tree(
                 )
 
         version_bumped = False
-        if is_publish_allowed and bump['policy'] != 'disabled' and bump['on-every-change']:
-            if ctx.obj.version is None:
-                if 'file' in version_info:
-                    raise VersioningError(f"Failed to read the current version (from {version_info['file']}) while attempting to bump the version")
-                else:
-                    msg = "Failed to determine the current version while attempting to bump the version"
-                    log.error(msg)
-                    # TODO: PIPE-309: provide an initial starting point instead
-                    log.info("If this is a new repository you may wish to create a 0.0.0 tag for Hopic to start bumping from")
-                    raise VersioningError(msg)
-
-            cur_version = ctx.obj.version
+        if is_version_bump_enabled(bump, is_publish_from_branch_allowed=is_publish_allowed):
+            cur_version = get_current_version(ctx)
             if hotfix:
                 base_version = cur_version
 
@@ -597,7 +580,7 @@ def process_prepare_source_tree(
             elif bump['policy'] in ('conventional-commits',):
                 all_commits = source_commits
                 if 'message' in commit_params:
-                    all_commits = (*source_commits, parse_commit_message(commit_params['message'], policy=bump['policy'], strict=strict))
+                    all_commits = (*source_commits, parse_commit_message(commit_params['message'], policy=bump['policy'], strict=bump.get("strict", False)))
 
                 if log.isEnabledFor(logging.DEBUG):
                     log.debug("bumping based on conventional commits:")
@@ -828,6 +811,59 @@ def process_prepare_source_tree(
             click.echo(ctx.obj.version)
 
 
+@overload
+def is_version_bump_enabled(bump_config: Mapping, ctx: Optional[click.Context] = None, *, is_publish_from_branch_allowed: bool) -> bool: ...
+
+
+@overload
+def is_version_bump_enabled(bump_config: Mapping, ctx: click.Context, *, is_publish_from_branch_allowed: Optional[bool] = None) -> bool: ...
+
+
+def is_version_bump_enabled(bump_config: Mapping, ctx: Optional[click.Context] = None, *, is_publish_from_branch_allowed: Optional[bool] = None) -> bool:
+    """
+    Check if current branch with version configuration is allowed to bump version
+    To avoid multiple is_publish_branch calls this can optionally be passed to this function
+    """
+
+    assert ctx is not None or is_publish_from_branch_allowed is not None
+    if is_publish_from_branch_allowed is None:
+        is_publish_from_branch_allowed = is_publish_branch(ctx)
+    return is_publish_from_branch_allowed and bump_config["policy"] != "disabled" and bump_config["on-every-change"]
+
+
+def get_current_version(ctx: click.Context) -> Union[CarusoVer, SemVer]:
+    version_info = ctx.obj.config["version"]
+    if ctx.obj.version is None:
+        if "file" in version_info:
+            raise VersioningError(f"Failed to read the current version (from {version_info['file']}) while attempting to bump the version")
+
+        msg = "Failed to determine the current version while attempting to bump the version"
+        log.error(msg)
+        # TODO: PIPE-309: provide an initial starting point instead
+        log.info("If this is a new repository you may wish to create a 0.0.0 tag for Hopic to start bumping from")
+        raise VersioningError(msg)
+
+    return ctx.obj.version
+
+
+def parse_commit_range(
+    repo: git.Repo,
+    from_commit: Optional[git.objects.commit.Commit],
+    to_commit: Optional[git.objects.commit.Commit],
+    bump_config: Mapping,
+) -> Iterable[CommitMessage]:
+    if from_commit is None or to_commit is None:
+        return
+
+    for commit in git.Commit.list_items(
+        repo,
+        f"{from_commit}..{to_commit}",
+        first_parent=bump_config.get("first-parent", True),
+        no_merges=bump_config.get("no-merges", True),
+    ):
+        yield parse_commit_message(commit, policy=bump_config["policy"], strict=bump_config.get("strict", False))
+
+
 @prepare_source_tree.command()
 @click.pass_context
 # git
@@ -961,17 +997,11 @@ def merge_change_request(
                 ctx.exit(1)
             raise
 
-        if bump['policy'] in ('conventional-commits',) and strict and bump['on-every-change']:
-            source_commits = ([
-                parse_commit_message(commit, policy=bump['policy'], strict=False)
-                for commit in git.Commit.list_items(
-                    repo,
-                    (f"{repo.head.commit}..{source_commit}"),
-                    first_parent=bump.get('first-parent', True),
-                    no_merges=bump.get('no-merges', True),
-                )])
-            new_version = ctx.obj.version.next_version_for_commits(source_commits)
-            merge_commit_next_version = ctx.obj.version.next_version_for_commits([merge_commit])
+        if is_version_bump_enabled(bump, ctx) and strict:
+            source_commits = parse_commit_range(repo, repo.head.commit, source_commit, bump)
+            base_version = get_current_version(ctx)
+            new_version = base_version.next_version_for_commits(source_commits)
+            merge_commit_next_version = base_version.next_version_for_commits([merge_commit])
             if new_version != merge_commit_next_version:
                 raise VersionBumpMismatchError(new_version, merge_commit_next_version)
 
@@ -1025,6 +1055,11 @@ def apply_modality_change(
 
         volume_vars = ctx.obj.volume_vars.copy()
         volume_vars.setdefault('HOME', os.path.expanduser('~'))
+        vars_from_env = {key: value for key, value in os.environ.items() if key in ctx.obj.config["pass-through-environment-vars"]}
+        vars_from_env.update(volume_vars)
+        volume_vars = vars_from_env
+
+        commit_message = expand_vars(volume_vars, commit_message)
 
         for cmd in modality_cmds:
             if isinstance(cmd, str):
@@ -1159,7 +1194,10 @@ def getinfo(ctx, phase, variant, post_submit):
         info = info.copy()
 
         for key, val in cmd.items():
-            if key not in permitted_fields:
+            if key == "timeout" and "sh" not in cmd:
+                # Return _global_ timeout (not "sh"-specific) only
+                pass
+            elif key not in permitted_fields:
                 continue
 
             try:
@@ -1167,7 +1205,12 @@ def getinfo(ctx, phase, variant, post_submit):
             except KeyError:
                 pass
             else:
-                if isinstance(info.get(key), Mapping):
+                if key == "timeout":
+                    if key in info:
+                        info[key] += val
+                    else:
+                        info[key] = val
+                elif isinstance(info.get(key), Mapping):
                     assert isinstance(info[key], MutableMapping)
                     for subkey, subval in val.items():
                         info[key].setdefault(subkey, subval)

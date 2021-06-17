@@ -22,12 +22,14 @@ from ..errors import (
     ConfigurationError,
     MissingFileError,
     UnknownPhaseError,
+    StepTimeoutExpiredError,
     VersioningError,
 )
 
 from datetime import datetime
 from textwrap import dedent
 from typing import Pattern
+import functools
 import logging
 import os
 import pytest
@@ -36,6 +38,7 @@ import signal
 import stat
 import subprocess
 import sys
+import time
 
 if sys.version_info[:2] >= (3, 10):
     from importlib import metadata
@@ -1498,3 +1501,75 @@ def test_build_identifiers(capfd, run_hopic):
     assert build_name == expected_build_name
     assert build_number == expected_build_number
     assert build_url == expected_build_url
+
+
+def _timeout_mock_time_monotonic(clock_state):
+    clock_state["time"] = clock_state.get("time", 0) + 1e-6
+    return clock_state["time"]
+
+
+def _timeout_mock_check_call(clock_state, args, *popenargs, timeout=None, **kwargs):
+    cmd, delay = args
+    assert cmd == "sleep"
+    delay = float(delay)
+    assert delay > 0
+    if timeout is not None and delay > timeout:
+        raise subprocess.TimeoutExpired(args, timeout)
+    clock_state["time"] = clock_state.get("time", 0) + delay
+
+
+@pytest.mark.parametrize("sleep", (0.002, 0.004, 0.006, 0.008), ids=lambda n: f"sleep={n}")
+@pytest.mark.parametrize("timeout", (0.001, 0.003, 0.005, 0.007), ids=lambda n: f"timeout={n}")
+def test_local_timeout(monkeypatch, run_hopic, sleep, timeout):
+    clock_state = {}
+    monkeypatch.setattr(time, "monotonic", functools.partial(_timeout_mock_time_monotonic, clock_state))
+    monkeypatch.setattr(subprocess, "check_call", functools.partial(_timeout_mock_check_call, clock_state))
+
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(
+            f"""\
+            phases:
+              a:
+                x:
+                  - timeout: {timeout}
+                    sh: sleep {sleep}
+            """
+        ),
+    )
+    if sleep < timeout:
+        assert result.exception is None
+    else:
+        assert result.exception is not None
+        if not isinstance(result.exception, StepTimeoutExpiredError):
+            raise result.exception
+
+
+def test_global_timeout_expire(monkeypatch, run_hopic):
+    clock_state = {}
+    monkeypatch.setattr(time, "monotonic", functools.partial(_timeout_mock_time_monotonic, clock_state))
+    monkeypatch.setattr(subprocess, "check_call", functools.partial(_timeout_mock_check_call, clock_state))
+
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(
+            """\
+            phases:
+              a:
+                x:
+                  - timeout: 0.006
+                  - timeout: 0.002
+                    sh: sleep 0.001
+                  - timeout: 0.002
+                    sh: sleep 0.001
+                  - sh: sleep 0.004
+            """
+        ),
+    )
+    assert isinstance(result.exception, StepTimeoutExpiredError)
+
+    timeout_msg_re = re.compile(r"\brestrict.*?\bmax.*\bseconds?\b")
+    timeout_msgs = tuple(msg for _, msg in result.logs if timeout_msg_re.search(msg))
+    assert timeout_msgs, f"Didn't find any timeout related messages matching '{timeout_msg_re.pattern}'"
+
+    assert "global" in timeout_msgs[-1], "timeout expiration wasn't caused by the _global_ timeout"

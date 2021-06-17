@@ -543,12 +543,15 @@ def test_modality_merge_commit_message(run_hopic, monkeypatch):
                     policy: conventional-commits
                     strict: yes
 
+                pass-through-environment-vars:
+                  - CUSTOM_VAR
+
                 modality-source-preparation:
                   AUTO_MERGE:
                     - git fetch origin release/0
                     - sh: git merge --no-commit --no-ff FETCH_HEAD
                       changed-files: []
-                      commit-message: "feat: merge branch 'release/0'"
+                      commit-message: "feat: merge branch 'release/0': $CUSTOM_VAR"
                 '''))
 
         repo.index.add(('hopic-ci-config.yaml',))
@@ -574,6 +577,7 @@ def test_modality_merge_commit_message(run_hopic, monkeypatch):
 
     monkeypatch.setenv('GIT_COMMITTER_NAME' , 'My Name is Nobody')
     monkeypatch.setenv('GIT_COMMITTER_EMAIL', 'nobody@example.com')
+    monkeypatch.setenv('CUSTOM_VAR', 'custom value')
     (*_, result) = run_hopic(
             ('checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'),
             ('prepare-source-tree',
@@ -590,6 +594,8 @@ def test_modality_merge_commit_message(run_hopic, monkeypatch):
         repo.git.describe() == expected_version
 
     assert result.exit_code == 0
+    with git.Repo(run_hopic.toprepo, expand_vars=False) as repo:
+        assert repo.heads.master.commit.message.startswith("feat: merge branch 'release/0': custom value")
 
 
 @pytest.mark.parametrize('modality_message, expected_version', (
@@ -1506,3 +1512,42 @@ def test_new_version_only(branch_name, run_hopic, monkeypatch, version_file):
     assert result.exit_code == 0
     assert not expected_build_commands
     assert not expected_post_submit_commands
+
+
+def test_no_initial_version(run_hopic):
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        (run_hopic.toprepo / "something.txt").write_text("usable")
+        repo.index.add(("something.txt",))
+        base_commit = repo.index.commit(message="Initial commit", **_commitargs)
+
+        # PR branch
+        repo.head.reference = repo.create_head("something-useful", base_commit)
+        assert not repo.head.is_detached
+        repo.head.reset(index=True, working_tree=True)
+
+        (run_hopic.toprepo / "hopic-ci-config.yaml").write_text(
+            dedent(
+                """\
+                version:
+                  format: semver
+                  tag: true
+                  bump:
+                    policy: conventional-commits
+                    strict: yes
+                """
+            )
+        )
+
+        repo.index.add(("hopic-ci-config.yaml",))
+        repo.index.commit(message="chore: add hopic config file", **_commitargs)
+
+    # Successful checkout and build
+    (*_, result) = run_hopic(
+        ("checkout-source-tree", "--target-remote", run_hopic.toprepo, "--target-ref", "master"),
+        ("prepare-source-tree", "--author-name", _author.name, "--author-email", _author.email,
+            "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", "something-useful", "--title", "ci: add hopic"),
+        ("build",),
+    )
+    assert isinstance(result.exception, VersioningError)
+    err = result.exception.format_message()
+    assert "Failed to determine the current version while attempting to bump the version" in err

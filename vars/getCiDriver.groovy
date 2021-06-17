@@ -560,9 +560,9 @@ class CiDriver {
         this.change = new BitbucketPullRequest(steps, steps.env.CHANGE_URL, httpServiceCredential, this.scm.refspec)
       }
       // FIXME: Don't rely on hard-coded build parameter, externalize this instead.
-      else if (steps.params.MODALITY != null && steps.params.MODALITY != "NORMAL")
+      else if (steps.env.MODALITY != null && steps.env.MODALITY != "NORMAL")
       {
-        this.change = new ModalityRequest(steps, steps.params.MODALITY)
+        this.change = new ModalityRequest(steps, steps.env.MODALITY)
       }
     }
 
@@ -1395,15 +1395,25 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
         ))
 
       def error_occurred = false
+      def maybe_timeout = { Closure closure ->
+        if (meta.containsKey('timeout')) {
+          return steps.timeout(time: meta['timeout'], unit: 'SECONDS') {
+            return closure()
+          }
+        }
+        return closure()
+      }
       try {
-        this.subcommand_with_credentials(
-            cmd + hopic_extra_arguments,
-            'build'
-          + ' --phase=' + shell_quote(phase)
-          + ' --variant=' + shell_quote(variant)
-          , meta.getOrDefault('with-credentials', []),
-          , "Hopic: running build for phase '" + phase + "',  variant '" + variant + "'"
-          )
+        maybe_timeout {
+          this.subcommand_with_credentials(
+              cmd + hopic_extra_arguments,
+              'build'
+            + ' --phase=' + shell_quote(phase)
+            + ' --variant=' + shell_quote(variant)
+            , meta.getOrDefault('with-credentials', []),
+            , "Hopic: running build for phase '" + phase + "',  variant '" + variant + "'"
+            )
+        }
       } catch(Exception e) {
         error_occurred = true // Jenkins only sets its currentResult to Failure after all user code is executed
         throw e
@@ -1617,11 +1627,21 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
         steps.stage('submit') {
           this.with_git_credentials() {
             this.get_change().abort_if_changed(this.scm.url)
-            this.subcommand_with_credentials(
-                cmd + hopic_extra_arguments,
-                'submit'
-              , submit_meta.getOrDefault('with-credentials', []),
-              'Hopic: submitting merge')
+            def maybe_timeout = { Closure closure ->
+              if (submit_meta.containsKey('timeout')) {
+                return steps.timeout(time: submit_meta['timeout'], unit: 'SECONDS') {
+                  return closure()
+                }
+              }
+              return closure()
+            }
+            maybe_timeout {
+              this.subcommand_with_credentials(
+                  cmd + hopic_extra_arguments,
+                  'submit'
+                , submit_meta.getOrDefault('with-credentials', []),
+                'Hopic: submitting merge')
+            }
           }
         }
       }

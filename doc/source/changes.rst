@@ -17,6 +17,38 @@
 Changelog
 =========
 
+1.41.1-8+gec19e87f53e49c
+======
+
+* fix(ciDriver): test MODALITY from env, not from params (#375)
+* fix: raise error when initial version couldn't be found (#365)
+
+1.41.0
+======
+
+New features
+------------
+
+* feat: use change applicator message to determine version bump (#367)
+* feat(groovy): expose Jenkins' version in environment variable JENKINS_VERSION (#372)
+* feat(build): support a per-command and per-variant timeout (#373)
+
+Improvements
+------------
+
+* improvement(build): log reason for skipping run-on-change steps (#366)
+
+Bug fixes
+---------
+
+* fix(build): run new-version-only steps whenever the version is actually bumped (#366)
+* fix(modality): expand vars in commit message (#370)
+
+Documentation improvements
+--------------------------
+
+* docs: repair list in configuration:PUBLISH_VERSION (#368)
+
 1.40.2
 ======
 

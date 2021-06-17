@@ -20,6 +20,7 @@ from collections.abc import (
         Mapping,
         Sequence,
     )
+from decimal import Decimal
 from enum import Enum
 import errno
 from functools import lru_cache
@@ -27,6 +28,7 @@ import inspect
 import io
 import json
 import logging
+from numbers import Real
 import os
 from pathlib import Path
 import re
@@ -82,6 +84,7 @@ _supported_post_submit_meta = frozenset({
     'node-label',
     'run-on-change',
     'sh',
+    "timeout",
     'volumes',
     'with-credentials',
 })
@@ -886,6 +889,13 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
                                 f"'ssh-command-variable' in with-credentials block `{cred['id']}` for "
                                 f"`{phase}.{variant}` is not a string", file=config_file)
 
+        if cmd_key == "timeout":
+            if not isinstance(cmd[cmd_key], (Decimal, Real)) or isinstance(cmd[cmd_key], bool) or cmd[cmd_key] <= 0:
+                raise ConfigurationError(
+                    f"`timeout` member of `{phase}.{variant}` must be a positive real number",
+                    file=config_file,
+                )
+
         if cmd_key == "image":
             if not isinstance(cmd[cmd_key], _basic_image_types):
                 raise ConfigurationError(
@@ -973,8 +983,37 @@ def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
 
 
 def process_variant_cmds(phase, variant, cmds, volume_vars, config_file=None):
-    for cmd in cmds:
-        yield process_variant_cmd(phase, variant, cmd, volume_vars, config_file)
+    seen_sh = False
+    global_timeout = None
+    summed_timeout = 0
+    for cmd_idx, cmd in enumerate(cmds):
+        cmd = process_variant_cmd(phase, variant, cmd, volume_vars, config_file)
+
+        if "sh" in cmd:
+            seen_sh = True
+
+        if "timeout" in cmd:
+            if not seen_sh:
+                if global_timeout is not None:
+                    raise ConfigurationError(
+                        f"`{phase}.{variant}[{cmd_idx}]` attempting to define global `timeout` multiple times",
+                        file=config_file,
+                    )
+                global_timeout = cmd["timeout"]
+            elif "sh" not in cmd:
+                raise ConfigurationError(
+                    f"`{phase}.{variant}[{cmd_idx}]` attempting to define global `timeout` after an 'sh' command has already been given",
+                    file=config_file,
+                )
+            else:
+                summed_timeout += cmd["timeout"]
+            if global_timeout is not None and global_timeout <= summed_timeout:
+                raise ConfigurationError(
+                    f"`{phase}.{variant}[0].timeout` ({global_timeout} seconds) is not greater than summed per-command timeouts ({summed_timeout} seconds)",
+                    file=config_file,
+                )
+
+        yield cmd
 
 
 def read(config, volume_vars, extension_installer=lambda *args: None):
