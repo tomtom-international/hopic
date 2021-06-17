@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    <title>Configuration &#8212; Hopic 1.41.1.dev8+gec19e87f documentation</title>
+    <title>Configuration &#8212; Hopic 1.41.1.dev167+g79b9e263 documentation</title>
     <link rel="stylesheet" href="_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
     <link rel="stylesheet" type="text/css" href="_static/banner.css" />
@@ -34,7 +34,7 @@
         <li class="right" >
           <a href="intro.html" title="Introduction"
              accesskey="P">previous</a> |</li>
-        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.41.1.dev8+gec19e87f documentation</a> &#187;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.41.1.dev167+g79b9e263 documentation</a> &#187;</li> 
       </ul>
     </div>  
 
@@ -345,6 +345,7 @@ Only the following subset of options however, is permitted to be used within the
 <li><a class="reference internal" href="#cmdoption-arg-node-label"><code class="xref std std-option docutils literal notranslate"><span class="pre">node-label</span></code></a></li>
 <li><a class="reference internal" href="#cmdoption-arg-run-on-change"><code class="xref std std-option docutils literal notranslate"><span class="pre">run-on-change</span></code></a></li>
 <li><code class="xref std std-option docutils literal notranslate"><span class="pre">sh</span></code></li>
+<li><a class="reference internal" href="#cmdoption-arg-timeout"><code class="xref std std-option docutils literal notranslate"><span class="pre">timeout</span></code></a></li>
 <li><a class="reference internal" href="#cmdoption-arg-volumes"><code class="xref std std-option docutils literal notranslate"><span class="pre">volumes</span></code></a></li>
 <li><a class="reference internal" href="#cmdoption-arg-with-credentials"><code class="xref std std-option docutils literal notranslate"><span class="pre">with-credentials</span></code></a></li>
 </ul>
@@ -1212,6 +1213,58 @@ The value of this option can be one of:</p>
 </pre></div>
 </div>
 </div>
+<div class="section" id="limiting-execution-time-for-steps">
+<h2>Limiting Execution Time for Steps<a class="headerlink" href="#limiting-execution-time-for-steps" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="cmdoption-arg-timeout">
+<code class="descname">timeout</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-timeout" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>The option <code class="docutils literal notranslate"><span class="pre">timeout</span></code> allows specifying an upper limit to how long a step is allowed to execute.
+When this time gets exceeded the process will get aborted and the build will stop with an error.</p>
+<p>When this option is specified combined with a command the timeout applies to that command’s execution only.
+Otherwise this option has to be specified separately <em>and</em> before any command, in which case it applies to every command in that variant.</p>
+<p>The current implementation only accepts timeouts expressed as positive real numbers interpreted as seconds.
+In the future other units may be added as a suffix.
+Without an explicit unit present or some other notation the interpretation will always be as seconds.</p>
+<p><strong>example timeout combined with command:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span>
+  <span class="nt">build</span><span class="p">:</span>
+    <span class="nt">x64-release</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">timeout</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">180</span>
+        <span class="nt">sh</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-release</span>
+    <span class="nt">x64-debug</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">timeout</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">300</span>
+        <span class="nt">sh</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-debug</span>
+
+  <span class="nt">upload</span><span class="p">:</span>
+    <span class="nt">x64-release</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">run-on-change</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">only</span>
+        <span class="nt">timeout</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">30.5</span>
+        <span class="nt">sh</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">build-x64-release/do-upload.sh</span>
+    <span class="nt">x64-debug</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">run-on-change</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">only</span>
+        <span class="nt">timeout</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">45.75</span>
+        <span class="nt">sh</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">build-x64-debug/do-upload.sh</span>
+</pre></div>
+</div>
+<p><strong>example timeout per variant:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span>
+  <span class="nt">build</span><span class="p">:</span>
+    <span class="nt">x64-release</span><span class="p">:</span>
+      <span class="p p-Indicator">-</span> <span class="nt">timeout</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">180</span>
+      <span class="p p-Indicator">-</span> <span class="nt">timeout</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">15</span>
+        <span class="nt">sh</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">./configure</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">make</span>
+      <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">make test</span>
+
+<span class="nt">post-submit</span><span class="p">:</span>
+  <span class="nt">upload</span><span class="p">:</span>
+    <span class="p p-Indicator">-</span> <span class="nt">timeout</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">30</span>
+    <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">make upload</span>
+</pre></div>
+</div>
+</div>
 <div class="section" id="sharing-output-data-between-variants">
 <h2>Sharing Output Data Between Variants<a class="headerlink" href="#sharing-output-data-between-variants" title="Permalink to this headline">¶</a></h2>
 <dl class="option">
@@ -1623,7 +1676,7 @@ The command should output the part of the configuration file to standard output.
         <li class="right" >
           <a href="intro.html" title="Introduction"
              >previous</a> |</li>
-        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.41.1.dev8+gec19e87f documentation</a> &#187;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.41.1.dev167+g79b9e263 documentation</a> &#187;</li> 
       </ul>
     </div>
     <div class="footer" role="contentinfo">
