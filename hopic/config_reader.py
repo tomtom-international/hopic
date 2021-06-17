@@ -1229,6 +1229,16 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
                 phase[variant][0]['wait-on-full-previous-phase'] = True
         previous_phase = phasename
 
+    modalities = cfg.setdefault("modality-source-preparation", OrderedDict())
+    for modality in modalities:
+        modalities[modality] = tuple(process_variant_cmds(
+            "modality-source-preparation",
+            modality,
+            flatten_command_list("modality-source-preparation", modality, modalities[modality], config_file=config),
+            volume_vars,
+            config_file=config,
+        ))
+
     lock_names = []
     for ci_lock in ci_locks:
         if 'from-phase-onward' in ci_lock:

@@ -1016,7 +1016,6 @@ def merge_change_request(
     return change_applicator
 
 
-_env_var_re = re.compile(r'^(?P<var>[A-Za-z_][0-9A-Za-z_]*)=(?P<val>.*)$')
 @prepare_source_tree.command()  # noqa: E302 'expected 2 blank lines'
 @click.argument('modality', autocompletion=autocomplete.modality_from_config)
 @click.pass_context
@@ -1031,7 +1030,7 @@ def apply_modality_change(
     # Ensure any required extensions are available
     install_extensions_and_parse_config()
 
-    modality_cmds = ctx.obj.config.get('modality-source-preparation', {}).get(modality, ())
+    modality_cmds = ctx.obj.config["modality-source-preparation"][modality]
 
     def change_applicator(repo, author, committer):
         has_changed_files = False
@@ -1061,24 +1060,21 @@ def apply_modality_change(
         commit_message = expand_vars(volume_vars, commit_message)
 
         for cmd in modality_cmds:
-            if isinstance(cmd, str):
-                cmd = {"sh": cmd}
+            assert not isinstance(cmd, str)
 
             if 'description' in cmd:
                 desc = cmd['description']
                 log.info('Performing: %s', click.style(desc, fg='cyan'))
 
             if 'sh' in cmd:
-                args = shlex.split(cmd['sh'])
                 env = os.environ.copy()
-                while args:
-                    m = _env_var_re.match(args[0])
-                    if not m:
-                        break
-                    env[m.group('var')] = expand_vars(volume_vars, m.group('val'))
-                    args.pop(0)
+                for k, v in cmd["environment"].items():
+                    if v is None:
+                        env.pop(k, None)
+                    else:
+                        env[k] = expand_vars(volume_vars, v)
 
-                args = [expand_vars(volume_vars, arg) for arg in args]
+                args = [expand_vars(volume_vars, arg) for arg in cmd["sh"]]
                 try:
                     echo_cmd(subprocess.check_call, args, cwd=repo.working_dir, env=env, stdout=sys.__stderr__)
                 except subprocess.CalledProcessError as e:
