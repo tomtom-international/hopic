@@ -1033,19 +1033,9 @@ def apply_modality_change(
     modality_cmds = ctx.obj.config["modality-source-preparation"][modality]
 
     def change_applicator(repo, author, committer):
-        has_changed_files = False
-        commit_message = modality
-        for cmd in modality_cmds:
-            try:
-                cmd["changed-files"]
-            except (KeyError, TypeError):
-                pass
-            else:
-                has_changed_files = True
-            try:
-                commit_message = cmd["commit-message"]
-            except (KeyError, TypeError):
-                pass
+        has_changed_files = any("changed-files" in cmd for cmd in modality_cmds)
+
+        (commit_message,) = (cmd["commit-message"] for cmd in modality_cmds if "commit-message" in cmd)
 
         if not has_changed_files:
             # Force clean builds when we don't know how to discover changed files
@@ -1063,8 +1053,7 @@ def apply_modality_change(
             assert not isinstance(cmd, str)
 
             if 'description' in cmd:
-                desc = cmd['description']
-                log.info('Performing: %s', click.style(desc, fg='cyan'))
+                log.info("Performing: %s", click.style(cmd["description"], fg="cyan"))
 
             if 'sh' in cmd:
                 env = os.environ.copy()

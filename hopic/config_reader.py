@@ -1108,6 +1108,23 @@ class ModalitySourcePreparationCmd(VariantCmd):
     def __init__(self, *, modality: str, config_file: PathLike, volume_vars: typing.Mapping):
         super().__init__(phase="modality-source-preparation", variant=modality, config_file=config_file, volume_vars=volume_vars)
 
+    def process_cmd_list(self, cmds: typing.Iterable) -> typing.Iterable:
+        seen_commit_message = False
+
+        for cmd_idx, cmd in enumerate(super().process_cmd_list(cmds)):
+            if "commit-message" in cmd:
+                if seen_commit_message:
+                    raise ConfigurationError(
+                        f"`{self._phase}.{self._variant}[{cmd_idx}]` attempting to define `commit-message` multiple times",
+                        file=self._config_file,
+                    )
+                seen_commit_message = True
+
+            yield cmd
+
+        if not seen_commit_message:
+            yield {"commit-message": self._variant}
+
 
 def read(config, volume_vars, extension_installer=lambda *args: None):
     if isinstance(config, io.TextIOBase):
