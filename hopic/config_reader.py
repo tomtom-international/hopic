@@ -1068,43 +1068,45 @@ class VariantCmd:
             )
         )
 
+    def process_cmd_list(self, cmds: typing.Iterable) -> typing.Iterable:
+        seen_sh = False
+        global_timeout = None
+        summed_timeout = 0
 
-def process_variant_cmds(phase: str, variant: str, cmds, volume_vars, config_file=None, cmd_proc=None):
-    seen_sh = False
-    global_timeout = None
-    summed_timeout = 0
+        for cmd_idx, cmd in enumerate(cmds):
+            cmd = self.process_cmd(cmd)
 
-    if cmd_proc is None:
-        cmd_proc = VariantCmd(phase=phase, variant=variant, config_file=config_file, volume_vars=volume_vars)
+            if "sh" in cmd:
+                seen_sh = True
 
-    for cmd_idx, cmd in enumerate(cmds):
-        cmd = cmd_proc.process_cmd(cmd)
-
-        if "sh" in cmd:
-            seen_sh = True
-
-        if "timeout" in cmd:
-            if not seen_sh:
-                if global_timeout is not None:
+            if "timeout" in cmd:
+                if not seen_sh:
+                    if global_timeout is not None:
+                        raise ConfigurationError(
+                            f"`{self._phase}.{self._variant}[{cmd_idx}]` attempting to define global `timeout` multiple times",
+                            file=self._config_file,
+                        )
+                    global_timeout = cmd["timeout"]
+                elif "sh" not in cmd:
                     raise ConfigurationError(
-                        f"`{phase}.{variant}[{cmd_idx}]` attempting to define global `timeout` multiple times",
-                        file=config_file,
+                        f"`{self._phase}.{self._variant}[{cmd_idx}]` attempting to define global `timeout` after an 'sh' command has already been given",
+                        file=self._config_file,
                     )
-                global_timeout = cmd["timeout"]
-            elif "sh" not in cmd:
-                raise ConfigurationError(
-                    f"`{phase}.{variant}[{cmd_idx}]` attempting to define global `timeout` after an 'sh' command has already been given",
-                    file=config_file,
-                )
-            else:
-                summed_timeout += cmd["timeout"]
-            if global_timeout is not None and global_timeout <= summed_timeout:
-                raise ConfigurationError(
-                    f"`{phase}.{variant}[0].timeout` ({global_timeout} seconds) is not greater than summed per-command timeouts ({summed_timeout} seconds)",
-                    file=config_file,
-                )
+                else:
+                    summed_timeout += cmd["timeout"]
+                if global_timeout is not None and global_timeout <= summed_timeout:
+                    raise ConfigurationError(
+                        f"`{self._phase}.{self._variant}[0].timeout` ({global_timeout} seconds) is not greater than summed per-command timeouts"
+                        f" ({summed_timeout} seconds)",
+                        file=self._config_file,
+                    )
 
-        yield cmd
+            yield cmd
+
+
+class ModalitySourcePreparationCmd(VariantCmd):
+    def __init__(self, *, modality: str, config_file: PathLike, volume_vars: typing.Mapping):
+        super().__init__(phase="modality-source-preparation", variant=modality, config_file=config_file, volume_vars=volume_vars)
 
 
 def read(config, volume_vars, extension_installer=lambda *args: None):
@@ -1215,13 +1217,11 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
         for variant in phase:
             if variant == 'post-submit':
                 raise ConfigurationError(f"variant name 'post-submit', used in phase `{phasename}`, is reserved for internal use", file=config)
-            phase[variant] = list(process_variant_cmds(
-                phasename,
-                variant,
-                flatten_command_list(phasename, variant, phase[variant], config_file=config),
-                volume_vars,
-                config_file=config,
-            ))
+            phase[variant] = list(
+                VariantCmd(phase=phasename, variant=variant, config_file=config, volume_vars=volume_vars).process_cmd_list(
+                    flatten_command_list(phasename, variant, phase[variant], config_file=config)
+                )
+            )
             wait_on_full_previous_phase = None
             run_on_change = None
             for cmd_idx, cmd in enumerate(phase[variant]):
@@ -1312,13 +1312,11 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
 
     modalities = cfg.setdefault("modality-source-preparation", OrderedDict())
     for modality in modalities:
-        modalities[modality] = tuple(process_variant_cmds(
-            "modality-source-preparation",
-            modality,
-            flatten_command_list("modality-source-preparation", modality, modalities[modality], config_file=config),
-            volume_vars,
-            config_file=config,
-        ))
+        modalities[modality] = tuple(
+            ModalitySourcePreparationCmd(modality=modality, config_file=config, volume_vars=volume_vars).process_cmd_list(
+                flatten_command_list("modality-source-preparation", modality, modalities[modality], config_file=config)
+            )
+        )
 
     lock_names = []
     for ci_lock in ci_locks:
@@ -1352,13 +1350,11 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
     post_submit_node_label_phase = None
     post_submit_node_label_idx = None
     for phase in post_submit:
-        post_submit[phase] = list(process_variant_cmds(
-            'post-submit',
-            phase,
-            flatten_command_list('post-submit', phase, post_submit[phase], config_file=config),
-            volume_vars,
-            config_file=config,
-        ))
+        post_submit[phase] = list(
+            VariantCmd(phase="post-submit", variant=phase, config_file=config, volume_vars=volume_vars).process_cmd_list(
+                flatten_command_list("post-submit", phase, post_submit[phase], config_file=config)
+            )
+        )
         for cmd_idx, cmd in enumerate(post_submit[phase]):
             for field_name in cmd:
                 if field_name in _unpermitted_post_submit_meta:
