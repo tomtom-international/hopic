@@ -784,6 +784,15 @@ class VariantCmd:
 
         yield name, value
 
+    def description(self, value, *, name: str, keys: typing.AbstractSet[str]):
+        if not isinstance(value, str):
+            raise ConfigurationError(
+                f"'{self._phase}.{self._variant}.{name}' is not a string",
+                file=self._config_file,
+            )
+
+        yield name, value
+
     def run_on_change(self, value, *, name: str, keys: typing.AbstractSet[str]) -> typing.Iterable[typing.Tuple[str, RunOnChange]]:
         try:
             yield name, RunOnChange(value)
