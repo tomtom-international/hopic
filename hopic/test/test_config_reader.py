@@ -1091,8 +1091,43 @@ def test_wait_on_full_previous_phase_dependency_default_yes():
     assert 'wait-on-full-previous-phase' not in y_c
 
 
-def test_docker_run_extra_arguments_wrong_type(capfd):
-    with pytest.raises(ConfigurationError, match="`extra-docker-args` argument `hostname` for `v-one` should be a str, not a float"):
+def test_docker_run_extra_arguments_forbidden_option():
+    with pytest.raises(
+        ConfigurationError,
+        match="`extra-docker-args` member of `v-one` contains one or more options that are not allowed:",
+    ) as exc:
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    """\
+                    phases:
+                      p-one:
+                        v-one:
+                          - image: buildpack-deps:18.04
+                            extra-docker-args:
+                              hostname: TESTBAK
+                              user: root
+                              workspace: /dev
+                          - echo This build shall fail
+                    """
+                )
+            ),
+            {"WORKSPACE": None},
+        )
+
+    err = exc.value.format_message()
+    for option in ("user", "workspace"):
+        assert option in err.splitlines()[2], f'expected {option} in error message'
+
+
+def test_docker_run_extra_arguments_wrong_type():
+    with pytest.raises(
+        ConfigurationError,
+        match=r"`(?:p-one\.v-one\.)?extra-docker-args` (?:is not a valid mapping of extra docker arguments: )?"
+        r'(?:argument|type of dict item) [`"]hostname[`"] for (?:`v-one`|extra-docker-args) (?:should|must) be (?:a\b)?\s*str[,;] '
+        r"(?:not a float|got float instead)",
+    ):
         config_reader.read(
             config_file(
                 "test-hopic-config.yaml",
@@ -1174,7 +1209,7 @@ def test_ci_locks_wrong_branch_value():
 
 
 def test_mutiple_options_on_archive():
-    with pytest.raises(ConfigurationError, match=r"are not allowed in the same Archive configuration, use only 'allow-missing"):
+    with pytest.raises(ConfigurationError, match=r"are not allowed in the same [Aa]rchive configuration, use only 'allow-missing"):
         config_reader.read(
             config_file(
                 "test-hopic-config.yaml",
