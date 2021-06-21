@@ -31,7 +31,7 @@ except ImportError:
     import importlib_metadata as metadata  # type: ignore # mypy is buggy for this try-except import style: https://github.com/python/mypy/issues/1153
 
 
-def is_publish_branch(ctx, hopic_git_info=None):
+def is_publish_branch(ctx, hopic_git_info=None) -> bool:
     """
     Check if the branch name is allowed to publish, if publish-from-branch is not defined in the config file, all the branches should be allowed to publish
     """
@@ -47,7 +47,7 @@ def is_publish_branch(ctx, hopic_git_info=None):
         return True
 
     publish_branch_pattern = re.compile(f"(?:{publish_from_branch})$")
-    return publish_branch_pattern.match(hopic_git_info.submit_ref)
+    return publish_branch_pattern.match(hopic_git_info.submit_ref) is not None
 
 
 def determine_config_file_name(ctx, workspace: Optional[Path] = None):

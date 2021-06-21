@@ -1581,7 +1581,6 @@ def test_merge_to_non_publishable_branch(run_hopic):
         repo.index.add(("something.txt",))
         repo.index.commit(message="fix: work around oom kill due to memory leak", **_commitargs)
 
-
     (*_, result) = run_hopic(
         ("checkout-source-tree", "--target-remote", run_hopic.toprepo, "--target-ref", 'master'),
         ("prepare-source-tree", "--author-name", _author.name, "--author-email", _author.email,
