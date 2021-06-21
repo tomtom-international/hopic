@@ -1551,3 +1551,40 @@ def test_no_initial_version(run_hopic):
     assert isinstance(result.exception, VersioningError)
     err = result.exception.format_message()
     assert "Failed to determine the current version while attempting to bump the version" in err
+
+
+def test_merge_to_non_publishable_branch(run_hopic):
+    pr_branch = "fix/mem-leak"
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        (run_hopic.toprepo / "hopic-ci-config.yaml").write_text(
+            dedent(
+                """\
+                version:
+                  format: semver
+                  tag: true
+                  bump:
+                    policy: conventional-commits
+                    strict: yes
+
+                publish-from-branch: 'frietjes'
+                """
+            )
+        )
+        repo.index.add(("hopic-ci-config.yaml",))
+        base_commit = repo.index.commit(message="chore: initial commit", **_commitargs)
+
+        repo.head.reference = repo.create_head(pr_branch, base_commit)
+        assert not repo.head.is_detached
+        repo.head.reset(index=True, working_tree=True)
+
+        (run_hopic.toprepo / "something.txt").write_text("usable")
+        repo.index.add(("something.txt",))
+        repo.index.commit(message="fix: work around oom kill due to memory leak", **_commitargs)
+
+
+    (*_, result) = run_hopic(
+        ("checkout-source-tree", "--target-remote", run_hopic.toprepo, "--target-ref", 'master'),
+        ("prepare-source-tree", "--author-name", _author.name, "--author-email", _author.email,
+            "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", pr_branch, "--title", "chore: not interesting"),
+    )
+    assert result.exit_code == 0
