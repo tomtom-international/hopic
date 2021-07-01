@@ -512,7 +512,7 @@ class CiDriver {
   private scm                = [:]
   private stashes            = [:]
   private worktree_bundles   = [:]
-  private submit_version     = null
+  private submit_info        = [:]
   private change             = null
   private source_commit      = "HEAD"
   private target_commit      = null
@@ -894,9 +894,11 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           }
 
           steps.error('No changes to build')
+        } else if (this.submit_info && submit_info.commit != this.submit_info.commit) {
+          steps.currentBuild.result = 'ABORTED'
+          steps.error("""HEAD commit (${submit_info.commit}) does not match initial HEAD commit (${this.submit_info.commit}) of this build. Aborting build!""")
         }
-
-        this.submit_version = submit_info.version
+        this.submit_info = submit_info
         return submit_info.commit
       }
       return this.target_commit
@@ -916,7 +918,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   }
 
   public def get_submit_version() {
-    return this.submit_version
+    return this.submit_info.version
   }
 
   public def has_change() {
