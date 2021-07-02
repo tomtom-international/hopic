@@ -81,24 +81,6 @@ _interphase_dependent_meta = frozenset({
     'stash',
     'worktrees',
 })
-_unpermitted_post_submit_meta = frozenset({
-    'archive',
-    'fingerprint',
-    'stash',
-    'worktrees',
-})
-_supported_post_submit_meta = frozenset({
-    'environment',
-    'description',
-    'docker-in-docker',
-    'image',
-    'node-label',
-    'run-on-change',
-    'sh',
-    "timeout",
-    'volumes',
-    'with-credentials',
-})
 _env_var_re = re.compile(r'^(?P<var>[A-Za-z_][0-9A-Za-z_]*)=(?P<val>.*)$')
 
 
@@ -756,6 +738,7 @@ AllowedDockerOptions = TypedDict(
 
 class VariantCmd:
     cmd_rejected_fields: typing.ClassVar[typing.AbstractSet[str]] = frozenset()
+    cmd_supported_fields: typing.ClassVar[typing.Optional[typing.AbstractSet[str]]] = None
 
     def __init__(self, *, phase: str, variant: str, config_file: PathLike, volume_vars: typing.Mapping):
         self._phase = phase
@@ -1082,6 +1065,12 @@ class VariantCmd:
                     f"`{self._phase}.{self._variant}[{cmd_idx}]` contains forbidden fields {', '.join(rejected_fields)}",
                     file=self._config_file,
                 )
+            unsupported_fields = frozenset() if self.cmd_supported_fields is None else (cmd.keys() - self.cmd_supported_fields)
+            if unsupported_fields:
+                raise ConfigurationError(
+                    f"`{self._phase}.{self._variant}[{cmd_idx}]` contains unsupported fields {', '.join(unsupported_fields)}",
+                    file=self._config_file,
+                )
 
             cmd = self.process_cmd(cmd)
 
@@ -1137,6 +1126,30 @@ class ModalitySourcePreparationCmd(VariantCmd):
 
         if not seen_commit_message:
             yield {"commit-message": self._variant}
+
+
+class PostSubmitCmd(VariantCmd):
+    cmd_rejected_fields = frozenset({
+        "archive",
+        "fingerprint",
+        "stash",
+        "worktrees",
+    })
+    cmd_supported_fields = frozenset({
+        "environment",
+        "description",
+        "docker-in-docker",
+        "image",
+        "node-label",
+        "run-on-change",
+        "sh",
+        "timeout",
+        "volumes",
+        "with-credentials",
+    })
+
+    def __init__(self, *, phase: str, config_file: PathLike, volume_vars: typing.Mapping):
+        super().__init__(phase="post-submit", variant=phase, config_file=config_file, volume_vars=volume_vars)
 
 
 def read(config, volume_vars, extension_installer=lambda *args: None):
@@ -1381,16 +1394,11 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
     post_submit_node_label_idx = None
     for phase in post_submit:
         post_submit[phase] = list(
-            VariantCmd(phase="post-submit", variant=phase, config_file=config, volume_vars=volume_vars).process_cmd_list(
+            PostSubmitCmd(phase=phase, config_file=config, volume_vars=volume_vars).process_cmd_list(
                 flatten_command_list("post-submit", phase, post_submit[phase], config_file=config)
             )
         )
         for cmd_idx, cmd in enumerate(post_submit[phase]):
-            for field_name in cmd:
-                if field_name in _unpermitted_post_submit_meta:
-                    raise ConfigurationError(f"`post-submit`.`{phase}` contains not permitted field `{field_name}`", file=config)
-                if field_name not in _supported_post_submit_meta:
-                    raise ConfigurationError(f"`post-submit`.`{phase}` contains unsupported field `{field_name}`", file=config)
             if 'node-label' in cmd:
                 if post_submit_node_label is None:
                     post_submit_node_label = cmd['node-label']

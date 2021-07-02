@@ -1676,6 +1676,32 @@ def test_rejected_cmd_fields(block, field, value):
         )
 
 
+@pytest.mark.parametrize(
+    "block, field, value",
+    (
+        ("post-submit", "junit", "result.xml"),
+    ),
+    ids=lambda v: (v if isinstance(v, str) else json.dumps(v)),
+)
+def test_unsupported_cmd_fields(block, field, value):
+    with pytest.raises(ConfigurationError, match=fr"`{re.escape(block)}`?\.`?ALPHA(?:\[0\])?` contains? \b(?:unsupport|not support).*?\bfields?\b"
+                                                 fr".*?\b{re.escape(field)}\b"):
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    f"""\
+                    {block}:
+                      ALPHA:
+                        - {field}: {json.dumps(value)}
+                          sh: touch new-file.txt
+                    """
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
 def test_post_submit_type_error():
     with pytest.raises(ConfigurationError, match=r"`post-submit` doesn't contain a mapping but a list"):
         config_reader.read(
