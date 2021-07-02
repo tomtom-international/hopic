@@ -1647,3 +1647,32 @@ def test_global_timeout_less_or_equal_than_sum_of_local_timeouts(global_timeout,
             ),
             {"WORKSPACE": None},
         )
+
+
+@pytest.mark.parametrize(
+    "block, field, value",
+    (
+        ("modality-source-preparation", "run-on-change", config_reader.RunOnChange.only),
+    ),
+    ids=lambda v: (v if isinstance(v, str) else json.dumps(v)),
+)
+def test_rejected_cmd_fields(block, field, value):
+    with pytest.raises(ConfigurationError, match=fr"`{re.escape(block)}`?\.`?ALPHA(?:\[0\])?` contains? (?:forbidden|not permit).*?\bfields?\b"
+                                                 fr".*?\b{re.escape(field)}\b"):
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    f"""\
+                    {block}:
+                      ALPHA:
+                        - {field}: {json.dumps(value)}
+                          sh: touch new-file.txt
+                          changed-files:
+                            - new-file.txt
+                          commit-message: Add new file
+                    """
+                )
+            ),
+            {'WORKSPACE': None},
+        )

@@ -755,6 +755,8 @@ AllowedDockerOptions = TypedDict(
 
 
 class VariantCmd:
+    cmd_rejected_fields: typing.ClassVar[typing.AbstractSet[str]] = frozenset()
+
     def __init__(self, *, phase: str, variant: str, config_file: PathLike, volume_vars: typing.Mapping):
         self._phase = phase
         self._variant = variant
@@ -1074,6 +1076,13 @@ class VariantCmd:
         summed_timeout = 0
 
         for cmd_idx, cmd in enumerate(cmds):
+            rejected_fields = cmd.keys() & self.cmd_rejected_fields
+            if rejected_fields:
+                raise ConfigurationError(
+                    f"`{self._phase}.{self._variant}[{cmd_idx}]` contains forbidden fields {', '.join(rejected_fields)}",
+                    file=self._config_file,
+                )
+
             cmd = self.process_cmd(cmd)
 
             if "sh" in cmd:
@@ -1105,6 +1114,10 @@ class VariantCmd:
 
 
 class ModalitySourcePreparationCmd(VariantCmd):
+    cmd_rejected_fields = frozenset({
+        "run-on-change",
+    })
+
     def __init__(self, *, modality: str, config_file: PathLike, volume_vars: typing.Mapping):
         super().__init__(phase="modality-source-preparation", variant=modality, config_file=config_file, volume_vars=volume_vars)
 
