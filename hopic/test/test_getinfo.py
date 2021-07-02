@@ -379,4 +379,4 @@ def test_post_submit_summed_timeout(run_hopic):
     assert result.exit_code == 0
     output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
 
-    assert output["timeout"] == 79
+    assert output["timeout"] == 42 + 37

@@ -1653,6 +1653,7 @@ def test_global_timeout_less_or_equal_than_sum_of_local_timeouts(global_timeout,
     "block, field, value",
     (
         ("modality-source-preparation", "run-on-change", config_reader.RunOnChange.only),
+        ("post-submit", "stash", {"includes": "stash/stash.txt"}),
     ),
     ids=lambda v: (v if isinstance(v, str) else json.dumps(v)),
 )
@@ -1668,11 +1669,43 @@ def test_rejected_cmd_fields(block, field, value):
                       ALPHA:
                         - {field}: {json.dumps(value)}
                           sh: touch new-file.txt
-                          changed-files:
-                            - new-file.txt
-                          commit-message: Add new file
                     """
                 )
             ),
             {'WORKSPACE': None},
         )
+
+
+def test_post_submit_type_error():
+    with pytest.raises(ConfigurationError, match=r"`post-submit` doesn't contain a mapping but a list"):
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    """\
+                            post-submit:
+                                - echo 'hello Bob'
+                    """
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_post_submit():
+    cfg = config_reader.read(
+        config_file(
+            "test-hopic-config.yaml",
+            dedent(
+                """\
+                post-submit:
+                    some-phase:
+                        - echo 'hello Bob'
+                """
+            )
+        ),
+        {'WORKSPACE': None},
+    )
+
+    (out,) = cfg["post-submit"]["some-phase"]
+    assert out["sh"] == ["echo", "hello Bob"]
