@@ -896,6 +896,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           steps.error('No changes to build')
         } else if (this.submit_info && submit_info.commit != this.submit_info.commit) {
           steps.currentBuild.result = 'ABORTED'
+          steps.currentBuild.description = "Aborted: applied change resulted in different HEAD"
           steps.error("""HEAD commit (${submit_info.commit}) does not match initial HEAD commit (${this.submit_info.commit}) of this build. Aborting build!""")
         }
         this.submit_info = submit_info
