@@ -1729,9 +1729,10 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
               },
             ]
           }
-          // Clear the target commit hash that we determined outside of 'lock_if_necessary' because the target branch
+          // Clear the target commit hash and submit hash that we determined outside of 'lock_if_necessary' because the target branch
           // may have moved forward while we didn't hold the lock.
           this.target_commit = null
+          this.submit_info = [:]
           this.build_phases(phases, clean, artifactoryBuildInfo, hopic_extra_arguments, submit_meta, locks['from-phase'])
         }
 
