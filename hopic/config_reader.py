@@ -1104,7 +1104,13 @@ class VariantCmd:
 
 class ModalitySourcePreparationCmd(VariantCmd):
     cmd_rejected_fields = frozenset({
+        "archive",
+        "fingerprint",
+        "junit",
+        "node-label",
         "run-on-change",
+        "stash",
+        "worktrees",
     })
 
     def __init__(self, *, modality: str, config_file: PathLike, volume_vars: typing.Mapping):
