@@ -1091,8 +1091,43 @@ def test_wait_on_full_previous_phase_dependency_default_yes():
     assert 'wait-on-full-previous-phase' not in y_c
 
 
-def test_docker_run_extra_arguments_wrong_type(capfd):
-    with pytest.raises(ConfigurationError, match="`extra-docker-args` argument `hostname` for `v-one` should be a str, not a float"):
+def test_docker_run_extra_arguments_forbidden_option():
+    with pytest.raises(
+        ConfigurationError,
+        match="`extra-docker-args` member of `v-one` contains one or more options that are not allowed:",
+    ) as exc:
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    """\
+                    phases:
+                      p-one:
+                        v-one:
+                          - image: buildpack-deps:18.04
+                            extra-docker-args:
+                              hostname: TESTBAK
+                              user: root
+                              workspace: /dev
+                          - echo This build shall fail
+                    """
+                )
+            ),
+            {"WORKSPACE": None},
+        )
+
+    err = exc.value.format_message()
+    for option in ("user", "workspace"):
+        assert option in err.splitlines()[2], f'expected {option} in error message'
+
+
+def test_docker_run_extra_arguments_wrong_type():
+    with pytest.raises(
+        ConfigurationError,
+        match=r"`(?:p-one\.v-one\.)?extra-docker-args` (?:is not a valid mapping of extra docker arguments: )?"
+        r'(?:argument|type of dict item) [`"]hostname[`"] for (?:`v-one`|extra-docker-args) (?:should|must) be (?:a\b)?\s*str[,;] '
+        r"(?:not a float|got float instead)",
+    ):
         config_reader.read(
             config_file(
                 "test-hopic-config.yaml",
@@ -1174,7 +1209,7 @@ def test_ci_locks_wrong_branch_value():
 
 
 def test_mutiple_options_on_archive():
-    with pytest.raises(ConfigurationError, match=r"are not allowed in the same Archive configuration, use only 'allow-missing"):
+    with pytest.raises(ConfigurationError, match=r"are not allowed in the same [Aa]rchive configuration, use only 'allow-missing"):
         config_reader.read(
             config_file(
                 "test-hopic-config.yaml",
@@ -1612,3 +1647,91 @@ def test_global_timeout_less_or_equal_than_sum_of_local_timeouts(global_timeout,
             ),
             {"WORKSPACE": None},
         )
+
+
+@pytest.mark.parametrize(
+    "block, field, value",
+    (
+        ("modality-source-preparation", "run-on-change", config_reader.RunOnChange.only),
+        ("post-submit", "stash", {"includes": "stash/stash.txt"}),
+    ),
+    ids=lambda v: (v if isinstance(v, str) else json.dumps(v)),
+)
+def test_rejected_cmd_fields(block, field, value):
+    with pytest.raises(ConfigurationError, match=fr"`{re.escape(block)}`?\.`?ALPHA(?:\[0\])?` contains? (?:forbidden|not permit).*?\bfields?\b"
+                                                 fr".*?\b{re.escape(field)}\b"):
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    f"""\
+                    {block}:
+                      ALPHA:
+                        - {field}: {json.dumps(value)}
+                          sh: touch new-file.txt
+                    """
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+@pytest.mark.parametrize(
+    "block, field, value",
+    (
+        ("post-submit", "junit", "result.xml"),
+    ),
+    ids=lambda v: (v if isinstance(v, str) else json.dumps(v)),
+)
+def test_unsupported_cmd_fields(block, field, value):
+    with pytest.raises(ConfigurationError, match=fr"`{re.escape(block)}`?\.`?ALPHA(?:\[0\])?` contains? \b(?:unsupport|not support).*?\bfields?\b"
+                                                 fr".*?\b{re.escape(field)}\b"):
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    f"""\
+                    {block}:
+                      ALPHA:
+                        - {field}: {json.dumps(value)}
+                          sh: touch new-file.txt
+                    """
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_post_submit_type_error():
+    with pytest.raises(ConfigurationError, match=r"`post-submit` doesn't contain a mapping but a list"):
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    """\
+                            post-submit:
+                                - echo 'hello Bob'
+                    """
+                )
+            ),
+            {'WORKSPACE': None},
+        )
+
+
+def test_post_submit():
+    cfg = config_reader.read(
+        config_file(
+            "test-hopic-config.yaml",
+            dedent(
+                """\
+                post-submit:
+                    some-phase:
+                        - echo 'hello Bob'
+                """
+            )
+        ),
+        {'WORKSPACE': None},
+    )
+
+    (out,) = cfg["post-submit"]["some-phase"]
+    assert out["sh"] == ["echo", "hello Bob"]

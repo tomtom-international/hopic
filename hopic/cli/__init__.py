@@ -1016,7 +1016,6 @@ def merge_change_request(
     return change_applicator
 
 
-_env_var_re = re.compile(r'^(?P<var>[A-Za-z_][0-9A-Za-z_]*)=(?P<val>.*)$')
 @prepare_source_tree.command()  # noqa: E302 'expected 2 blank lines'
 @click.argument('modality', autocompletion=autocomplete.modality_from_config)
 @click.pass_context
@@ -1031,22 +1030,12 @@ def apply_modality_change(
     # Ensure any required extensions are available
     install_extensions_and_parse_config()
 
-    modality_cmds = ctx.obj.config.get('modality-source-preparation', {}).get(modality, ())
+    modality_cmds = ctx.obj.config["modality-source-preparation"][modality]
 
     def change_applicator(repo, author, committer):
-        has_changed_files = False
-        commit_message = modality
-        for cmd in modality_cmds:
-            try:
-                cmd["changed-files"]
-            except (KeyError, TypeError):
-                pass
-            else:
-                has_changed_files = True
-            try:
-                commit_message = cmd["commit-message"]
-            except (KeyError, TypeError):
-                pass
+        has_changed_files = any("changed-files" in cmd for cmd in modality_cmds)
+
+        (commit_message,) = (cmd["commit-message"] for cmd in modality_cmds if "commit-message" in cmd)
 
         if not has_changed_files:
             # Force clean builds when we don't know how to discover changed files
@@ -1061,24 +1050,20 @@ def apply_modality_change(
         commit_message = expand_vars(volume_vars, commit_message)
 
         for cmd in modality_cmds:
-            if isinstance(cmd, str):
-                cmd = {"sh": cmd}
+            assert not isinstance(cmd, str)
 
             if 'description' in cmd:
-                desc = cmd['description']
-                log.info('Performing: %s', click.style(desc, fg='cyan'))
+                log.info("Performing: %s", click.style(cmd["description"], fg="cyan"))
 
             if 'sh' in cmd:
-                args = shlex.split(cmd['sh'])
                 env = os.environ.copy()
-                while args:
-                    m = _env_var_re.match(args[0])
-                    if not m:
-                        break
-                    env[m.group('var')] = expand_vars(volume_vars, m.group('val'))
-                    args.pop(0)
+                for k, v in cmd["environment"].items():
+                    if v is None:
+                        env.pop(k, None)
+                    else:
+                        env[k] = expand_vars(volume_vars, v)
 
-                args = [expand_vars(volume_vars, arg) for arg in args]
+                args = [expand_vars(volume_vars, arg) for arg in cmd["sh"]]
                 try:
                     echo_cmd(subprocess.check_call, args, cwd=repo.working_dir, env=env, stdout=sys.__stderr__)
                 except subprocess.CalledProcessError as e:
@@ -1331,17 +1316,14 @@ def submit(ctx, target_remote):
     """
 
     with git.Repo(ctx.obj.workspace) as repo:
-        section = f"hopic.{repo.head.commit}"
-        with repo.config_reader() as cfg:
-            if target_remote is None:
-                target_remote = cfg.get_value(section, 'remote')
-            refspecs = shlex.split(cfg.get_value(section, 'refspecs'))
-
-        repo.git.push(target_remote, refspecs, atomic=True)
-
         hopic_git_info = HopicGitInfo.from_repo(repo)
+        if target_remote is None:
+            target_remote = hopic_git_info.submit_remote
+
+        repo.git.push(target_remote, hopic_git_info.refspecs, atomic=True)
+
         with repo.config_writer() as cfg:
-            cfg.remove_section(section)
+            cfg.remove_section(f"hopic.{repo.head.commit}")
 
     for phase in ctx.obj.config['post-submit'].values():
         build.build_variant(variant='post-submit', cmds=phase, hopic_git_info=hopic_git_info)
