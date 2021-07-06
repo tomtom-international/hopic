@@ -736,6 +736,16 @@ AllowedDockerOptions = TypedDict(
 )
 
 
+WorkTreeOptions = TypedDict(
+    "WorkTreeOptions",
+    {
+        "commit-message": str,
+        "changed-files": typing.Optional[typing.Union[typing.List[PathLike], typing.Tuple[PathLike, ...]]],
+    },
+    total=True,
+)
+
+
 class VariantCmd:
     cmd_rejected_fields: typing.ClassVar[typing.AbstractSet[str]] = frozenset()
     cmd_supported_fields: typing.ClassVar[typing.Optional[typing.AbstractSet[str]]] = None
@@ -1026,6 +1036,46 @@ class VariantCmd:
                 )
 
         yield name, env
+
+    def worktrees(self, trees, *, name: str, keys: typing.AbstractSet[str]) -> typing.Iterable[typing.Tuple[str, typing.Mapping[PathLike, WorkTreeOptions]]]:
+        if not isinstance(trees, Mapping):
+            raise ConfigurationError(
+                f"`{name}` member of `{self._phase}.{self._variant}` should be a Mapping with string keys and values, not a {type(trees).__name__}",
+                file=self._config_file,
+            )
+
+        new_trees: typing.Dict[PathLike, WorkTreeOptions] = OrderedDict()
+        for tree_idx, (subdir, worktree) in enumerate(trees.items()):
+            if isinstance(subdir, str):
+                subdir = Path(subdir)
+            if not isinstance(subdir, Path) or subdir.is_absolute():
+                raise ConfigurationError(
+                    f"{tree_idx}th member of `{self._phase}.{self._variant}.{name}` should be a string representing a relative path",
+                    file=self._config_file,
+                )
+
+            if not isinstance(worktree, Mapping):
+                raise ConfigurationError(
+                    f"`{self._phase}.{self._variant}.{name}.{subdir}` should be a Mapping",
+                    file=self._config_file,
+                )
+
+            worktree = typing.cast(WorkTreeOptions, OrderedDict(worktree))
+            changed_files = worktree.setdefault("changed-files", None)
+            if isinstance(changed_files, str):
+                worktree["changed-files"] = (changed_files,)
+
+            try:
+                typeguard.check_type(argname="`{self._phase}.{self._variant}.{name}.{subdir}", value=worktree, expected_type=WorkTreeOptions)
+            except TypeError as exc:
+                raise ConfigurationError(
+                    f"`{self._phase}.{self._variant}.{name}.{subdir}` is not a valid mapping of worktree options: {exc}",
+                    file=self._config_file,
+                ) from exc
+
+            new_trees[subdir] = worktree
+
+        yield name, new_trees
 
     def process_unknown_cmd_item(self, name, value, keys: typing.AbstractSet[str]):
         yield name, value
