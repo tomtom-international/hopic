@@ -30,6 +30,7 @@ from datetime import datetime
 from textwrap import dedent
 from typing import Pattern
 import functools
+import json
 import logging
 import os
 import pytest
@@ -39,6 +40,7 @@ import stat
 import subprocess
 import sys
 import time
+import typing
 
 if sys.version_info[:2] >= (3, 10):
     from importlib import metadata
@@ -358,103 +360,87 @@ phases:
     assert not expected_image_command
 
 
-@pytest.mark.parametrize('extra_docker_run_args', (
-    {
-        'config-lines': ('device: /dev/special-test-device',),
-        'expected-args': ('--device=/dev/special-test-device',),
-    }, {
-        'config-lines': (
-            'add-host:',
-            '  - my-test-host:10.13.37.254',
-            '  - my-other-test-host:10.13.37.253',
+@pytest.mark.parametrize(
+    "extra_args, expected_args",
+    (
+        (
+            {"device": "/dev/special-test-device"},
+            ("--device=/dev/special-test-device",),
         ),
-        'expected-args': (
-            '--add-host=my-test-host:10.13.37.254',
-            '--add-host=my-other-test-host:10.13.37.253',
+        (
+            {
+                "add-host": (
+                    "my-test-host:10.13.37.254",
+                    "my-other-test-host:10.13.37.253",
+                ),
+            },
+            (
+                "--add-host=my-test-host:10.13.37.254",
+                "--add-host=my-other-test-host:10.13.37.253",
+            ),
         ),
-    }, {
-        'config-lines': (
-            'hostname: TESTBAK',
-            'init: true',
-            'device:',
-            '  - /dev/null',
-            '  - /dev/special-test-device',
-            'add-host: my-test-host:10.13.37.254', 'dns: 9.9.9.9',
+        (
+            {
+                "hostname": "TESTBAK",
+                "init": True,
+                "device": (
+                    "/dev/null",
+                    "/dev/special-test-device",
+                ),
+                "add-host": "my-test-host:10.13.37.254",
+                "dns": "9.9.9.9",
+            },
+            (
+                "--hostname=TESTBAK",
+                "--init",
+                "--device=/dev/null",
+                "--device=/dev/special-test-device",
+                "--add-host=my-test-host:10.13.37.254",
+                "--dns=9.9.9.9",
+            ),
         ),
-        'expected-args': (
-            '--hostname=TESTBAK',
-            '--init',
-            '--device=/dev/null',
-            '--device=/dev/special-test-device',
-            '--add-host=my-test-host:10.13.37.254',
-            '--dns=9.9.9.9',
-        ),
-    },
-    ), ids=('single-device', 'multiple-hosts', 'all-options'),
+    ),
+    ids=("single-device", "multiple-hosts", "all-options"),
 )
-def test_docker_run_extra_arguments(capfd, monkeypatch, run_hopic, extra_docker_run_args):
-    mock_state = {'times_called': 0}
-
+def test_docker_run_extra_arguments(monkeypatch, run_hopic, extra_args: typing.Mapping[str, typing.Any], expected_args: typing.Tuple[str, ...]):
     def mock_check_call(args, *popenargs, **kwargs):
-        mock_state['times_called'] += 1
+        cmd, arg = args[-2:]
+        assert cmd == "echo"
+
         monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
-        for argument in extra_docker_run_args['expected-args']:
-            # Expect only the first two calls to contain the extra docker-run arguments
-            if mock_state['times_called'] < 3:
+        for argument in expected_args:
+            if arg == "Should contain extra args":
                 assert argument in args
             else:
+                assert arg == "Should not contain extra args"
                 assert argument not in args
 
     monkeypatch.setattr(subprocess, 'check_call', mock_check_call)
-    config_lines = ''.join([f'{10 * " "}{line}\n' for line in extra_docker_run_args['config-lines']])
     (result,) = run_hopic(
         ("build",),
-        config=dedent('''\
-        image:
-          default: buildpack-deps:18.04
+        config=dedent(
+            f"""\
+            image:
+              default: buildpack-deps:18.04
 
-        phases:
-          p-one:
-            v-one:
-              - extra-docker-args:
-        {extra_args}
-              - sh -c 'echo Should contain extra args'
-              - sh -c 'echo Should contain extra args'
-            v-two:
-              - sh -c 'echo Should not contain extra args'
-          p-two:
-            v-one:
-              - sh -c 'echo Should not contain extra args'
-        ''').format(extra_args=config_lines),
-    )
-
-    assert result.exit_code == 0
-    out, err = capfd.readouterr()
-    sys.stdout.write(out)
-    sys.stderr.write(err)
-
-
-def test_docker_run_extra_arguments_forbidden_option(run_hopic):
-    (result,) = run_hopic(
-        ("build",),
-        config=dedent('''\
             phases:
               p-one:
                 v-one:
-                  - image: buildpack-deps:18.04
-                    extra-docker-args:
-                      hostname: TESTBAK
-                      user: root
-                      workspace: /dev
-                  - echo This build shall fail
-            '''),
+                  - extra-docker-args: {json.dumps(extra_args)}
+                  - echo 'Should contain extra args'
+                  - echo 'Should contain extra args'
+                v-two:
+                  - echo 'Should not contain extra args'
+              p-two:
+                v-one:
+                  - echo 'Should not contain extra args'
+            """
+        ),
     )
 
-    assert isinstance(result.exception, ConfigurationError)
-    err = result.exception.format_message()
-    assert '`extra-docker-args` member of `v-one` contains one or more options that are not allowed:' in err.splitlines()[1]
-    for option in ('user', 'workspace'):
-        assert option in err.splitlines()[2], f'expected {option} in error message'
+    if result.exception is not None:
+        raise result.exception
+    assert result.exit_code == 0
 
 
 def test_docker_run_extra_arguments_whitespace_in_option(run_hopic):

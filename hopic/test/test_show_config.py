@@ -395,55 +395,6 @@ def test_global_config_block(run_hopic):
     assert isinstance(output['phases']['test-phase']['test-variant'], Sequence)
 
 
-def test_post_submit_type_error(run_hopic):
-    (result,) = run_hopic(
-        ("show-config",),
-        config=dedent(
-            """\
-                            post-submit:
-                                - echo 'hello Bob'
-            """
-        ),
-    )
-
-    assert isinstance(result.exception, ConfigurationError)
-    err = result.exception.format_message()
-    assert re.search(r"^configuration error in '.*?\bhopic-ci-config\.yaml': `post-submit` doesn't contain a mapping but a list", err, re.MULTILINE)
-
-
-def test_post_submit_forbidden_field(run_hopic):
-    (result,) = run_hopic(
-        ("show-config",),
-        config=dedent(
-            """\
-                            post-submit:
-                              stash-phase:
-                                - stash:
-                                    includes: stash/stash.tx
-                                - echo 'hello Bob'
-            """
-        ),
-    )
-
-    assert isinstance(result.exception, ConfigurationError)
-    assert "`post-submit`.`stash-phase` contains not permitted field `stash`" in result.exception.format_message()
-
-
-def test_post_submit(run_hopic):
-    (result,) = run_hopic(
-        ("show-config",),
-        config=dedent(
-            """\
-                            post-submit:
-                                some-phase:
-                                    - echo 'hello Bob'
-            """
-        ),
-    )
-
-    assert result.exit_code == 0
-
-
 def test_config_is_mapping_failure(run_hopic):
     (result,) = run_hopic(
         ("show-config",),

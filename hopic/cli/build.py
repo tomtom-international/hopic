@@ -215,16 +215,16 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
             if not ctx.obj.dry_run:
                 try:
                     worktrees = cmd['worktrees']
-
-                    # Force clean builds when we don't know how to discover changed files
-                    for subdir, worktree in worktrees.items():
-                        if 'changed-files' not in worktree:
-                            with git.Repo(ctx.obj.workspace / subdir) as repo:
-                                clean_output = repo.git.clean('-xd', subdir, force=True)
-                                if clean_output:
-                                    log.info('%s', clean_output)
                 except KeyError:
                     pass
+                else:
+                    # Force clean builds when we don't know how to discover changed files
+                    for subdir, worktree in worktrees.items():
+                        if worktree["changed-files"] is None:
+                            with git.Repo(ctx.obj.workspace / subdir) as repo:
+                                clean_output = repo.git.clean(subdir, x=True, d=True, force=True)
+                                if clean_output:
+                                    log.info('%s', clean_output)
 
             try:
                 foreach = cmd['foreach']
@@ -459,12 +459,9 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                         str(repo.head.commit),
                     ])
 
-                    if 'changed-files' in worktree:
-                        changed_files = worktree["changed-files"]
-                        if isinstance(changed_files, str):
-                            changed_files = [changed_files]
-                        changed_files = [expand_vars(volume_vars, f) for f in changed_files]
-                        repo.index.add(changed_files)
+                    changed_files = worktree["changed-files"]
+                    if changed_files is not None:
+                        repo.index.add(expand_vars(volume_vars, f) for f in changed_files)
                     else:
                         # 'git add --all' equivalent (excluding the code_dir)
                         add_files = set(repo.untracked_files)

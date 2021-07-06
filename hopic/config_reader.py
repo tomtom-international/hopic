@@ -26,6 +26,7 @@ import errno
 from functools import lru_cache
 import inspect
 import io
+import itertools
 import json
 import logging
 from numbers import Real
@@ -46,12 +47,22 @@ if sys.version_info[:2] >= (3, 10):
 else:
     import importlib_metadata as metadata  # type: ignore # mypy is buggy for this try-except import style: https://github.com/python/mypy/issues/1153
 
+if sys.version_info[:2] >= (3, 8):
+    from typing import (
+        TypedDict,
+    )
+else:
+    from typing_extensions import (
+        TypedDict,
+    )
+
 if sys.version_info[:2] >= (3, 7):
     from typing import ForwardRef
 else:
     from typing import _ForwardRef as ForwardRef  # type: ignore[attr-defined]
 
 from .errors import ConfigurationError
+from .types import PathLike
 
 __all__ = (
     'RunOnChange',
@@ -69,24 +80,6 @@ _interphase_dependent_meta = frozenset({
     'run-on-change',
     'stash',
     'worktrees',
-})
-_unpermitted_post_submit_meta = frozenset({
-    'archive',
-    'fingerprint',
-    'stash',
-    'worktrees',
-})
-_supported_post_submit_meta = frozenset({
-    'environment',
-    'description',
-    'docker-in-docker',
-    'image',
-    'node-label',
-    'run-on-change',
-    'sh',
-    "timeout",
-    'volumes',
-    'with-credentials',
 })
 _env_var_re = re.compile(r'^(?P<var>[A-Za-z_][0-9A-Za-z_]*)=(?P<val>.*)$')
 
@@ -719,301 +712,490 @@ def flatten_command_list(phase, variant, cmds, config_file=None):
             yield cmd
 
 
-def process_variant_cmd(phase, variant, cmd, volume_vars, config_file=None):
-    assert not isinstance(cmd, str), "internal error: string commands should have been converted to 'sh' dictionary format"
-    assert isinstance(cmd, Mapping)
+AllowedDockerOptions = TypedDict(
+    "AllowedDockerOptions",
+    {
+        "device": typing.Union[typing.List[str], typing.Tuple[str], str],
+        "add-host": typing.Union[typing.List[str], typing.Tuple[str], str],
+        "hostname": str,
+        "entrypoint": str,
+        "dns": str,
+        "init": bool,
+    },
+    total=False,
+)
 
-    cmd = cmd.copy()
 
-    for cmd_key in cmd:
-        if cmd_key == 'sh':
-            if isinstance(cmd[cmd_key], str):
-                cmd[cmd_key] = shlex.split(cmd[cmd_key])
-            if not isinstance(cmd[cmd_key], Sequence) or not all(isinstance(x, str) for x in cmd[cmd_key]):
-                raise ConfigurationError(
-                        "'sh' member is not a command string, nor a list of argument strings",
-                        file=config_file)
-        if cmd_key == 'run-on-change':
-            try:
-                cmd['run-on-change'] = RunOnChange(cmd['run-on-change'])
-            except ValueError as exc:
-                raise ConfigurationError(
-                        f"'run-on-change' member's value of {cmd['run-on-change']!r} is not among the valid options ({', '.join(RunOnChange)})",
-                        file=config_file) from exc
-        if cmd_key in ('archive', 'fingerprint'):
-            if not isinstance(cmd[cmd_key], (OrderedDict, dict)):
-                raise ConfigurationError(
-                    f"'{phase}.{variant}.{cmd_key}' member is not a mapping",
-                    file=config_file,
-                )
-            try:
-                artifacts = cmd[cmd_key]['artifacts']
-            except KeyError:
-                raise ConfigurationError(
-                    f"'{phase}.{variant}.{cmd_key}' lacks the mandatory 'artifacts' member",
-                    file=config_file,
-                )
+WorkTreeOptions = TypedDict(
+    "WorkTreeOptions",
+    {
+        "commit-message": str,
+        "changed-files": typing.Optional[typing.Union[typing.List[PathLike], typing.Tuple[PathLike, ...]]],
+    },
+    total=True,
+)
 
-            # Convert single artifact string to list of single artifact specification
-            if isinstance(artifacts, str):
-                artifacts = [{'pattern': artifacts}]
 
-            # Expand short hand notation of just the artifact pattern to a full dictionary
-            artifacts = [({'pattern': artifact} if isinstance(artifact, str) else artifact) for artifact in artifacts]
+class VariantCmd:
+    cmd_rejected_fields: typing.ClassVar[typing.AbstractSet[str]] = frozenset()
+    cmd_supported_fields: typing.ClassVar[typing.Optional[typing.AbstractSet[str]]] = None
 
-            try:
-                target = cmd[cmd_key]['upload-artifactory'].pop('target')
-            except (KeyError, TypeError):
-                pass
-            else:
-                for artifact in artifacts:
-                    artifact.setdefault('target', target)
+    def __init__(self, *, phase: str, variant: str, config_file: PathLike, volume_vars: typing.Mapping):
+        self._phase = phase
+        self._variant = variant
+        self._config_file = config_file
+        self._volume_vars = volume_vars
 
-            for artifact_idx, artifact in enumerate(artifacts):
-                try:
-                    pattern = artifact["pattern"]
-                except KeyError:
-                    raise ConfigurationError(
-                        f"'{phase}.{variant}.{cmd_key}[{artifact_idx}]' lacks the mandatory 'pattern' member",
-                        file=config_file,
-                    )
-                if not isinstance(pattern, str):
-                    raise ConfigurationError(
-                        f"'{phase}.{variant}.{cmd_key}[{artifact_idx}].pattern' is not a string but a `{type(pattern).__name__}",
-                        file=config_file,
-                    )
-                try:
-                    for _ in Path(os.path.devnull).glob(pattern.replace("(*)", "*")):
-                        break
-                except ValueError as exc:
-                    raise ConfigurationError(
-                        f"'{phase}.{variant}.{cmd_key}[{artifact_idx}].pattern' value of {pattern!r} is not a valid glob pattern: {exc}",
-                        file=config_file,
-                    ) from exc
+    def sh(self, value, *, name: str, keys: typing.AbstractSet[str]):
+        if isinstance(value, str):
+            value = shlex.split(value)
 
-            cmd[cmd_key]['artifacts'] = artifacts
+        if not isinstance(value, Sequence) or not all(isinstance(x, str) for x in value):
+            raise ConfigurationError(
+                f"'{name}' member is not a command string, nor a list of argument strings",
+                file=self._config_file,
+            )
 
-            if 'allow-empty-archive' in cmd[cmd_key]:
-                if 'allow-missing' in cmd[cmd_key]:
-                    raise ConfigurationError(
-                        "'allow-empty-archive' and 'allow-missing' are not allowed in the same "
-                        "Archive configuration, use only 'allow-missing'",
-                        file=config_file,
-                    )
-
-                allow_empty_archive = cmd[cmd_key]['allow-empty-archive']
-                cmd[cmd_key].pop('allow-empty-archive')
-                cmd[cmd_key]['allow-missing'] = allow_empty_archive
-
-            allow_missing = cmd[cmd_key].setdefault("allow-missing", False)
-            if not isinstance(allow_missing, bool):
-                raise ConfigurationError(
-                    f"'{phase}.{variant}.{cmd_key}.allow-missing' should be a boolean, not a {type(allow_missing).__name__}",
-                    file=config_file,
-                )
-        if cmd_key == 'junit':
-            if isinstance(cmd[cmd_key], list):
-                cmd[cmd_key] = OrderedDict([('test-results', cmd[cmd_key])])
-            if isinstance(cmd[cmd_key], str):
-                cmd[cmd_key] = OrderedDict([('test-results', [cmd[cmd_key]])])
-
-            try:
-                test_results = cmd[cmd_key]['test-results']
-            except KeyError:
-                raise ConfigurationError("JUnit configuration did not contain mandatory field 'test-results'", file=config_file)
-            if isinstance(test_results, str):
-                test_results = cmd[cmd_key]['test-results'] = [test_results]
-            try:
-                typeguard.check_type(argname=f"{phase}.{variant}.{cmd_key}.test-results", value=test_results, expected_type=typing.Sequence[str])
-            except TypeError as exc:
-                raise ConfigurationError(
-                    "'{phase}.{variant}.{cmd_key}.test-results' member is not a list of file pattern strings",
-                    file=config_file,
-                ) from exc
-            allow_missing = cmd[cmd_key].setdefault("allow-missing", False)
-            if not isinstance(allow_missing, bool):
-                raise ConfigurationError(
-                    f"'{phase}.{variant}.{cmd_key}.allow-missing' should be a boolean, not a {type(allow_missing).__name__}",
-                    file=config_file,
-                )
-            for pattern_idx, pattern in enumerate(test_results):
-                try:
-                    for _ in Path(os.path.devnull).glob(pattern):
-                        break
-                except ValueError as exc:
-                    raise ConfigurationError(
-                        f"'{phase}.{variant}.{cmd_key}[{pattern_idx}]' value of {pattern!r} is not a valid glob pattern: {exc}",
-                        file=config_file,
-                    ) from exc
-        if cmd_key == 'with-credentials':
-            if isinstance(cmd[cmd_key], str):
-                cmd[cmd_key] = OrderedDict([('id', cmd[cmd_key])])
-            if not isinstance(cmd[cmd_key], Sequence):
-                cmd[cmd_key] = [cmd[cmd_key]]
-            for cred_idx, cred in enumerate(cmd[cmd_key]):
-                try:
-                    cred_type = cred['type'] = CredentialType(cred.get('type', CredentialType.default))
-                except ValueError as exc:
-                    raise ConfigurationError(
-                            f"'with-credentials[{cred_idx}].type' value of {cred['type']!r} is not among the valid options ({', '.join(CredentialType)})",
-                            file=config_file) from exc
-                if cred_type == CredentialType.username_password:
-                    try:
-                        cred['encoding'] = CredentialEncoding(cred.get('encoding', CredentialEncoding.default))
-                    except ValueError as exc:
-                        raise ConfigurationError(
-                                f"'with-credentials[{cred_idx}].encoding' value of {cred['encoding']!r} is not among the valid options "
-                                f"({', '.join(CredentialEncoding)})",
-                                file=config_file) from exc
-                    if not isinstance(cred.setdefault('username-variable', 'USERNAME'), str):
-                        raise ConfigurationError(
-                                f"'username-variable' in with-credentials block `{cred['id']}` for "
-                                f"`{phase}.{variant}` is not a string", file=config_file)
-                    if not isinstance(cred.setdefault('password-variable', 'PASSWORD'), str):
-                        raise ConfigurationError(
-                                f"'password-variable' in with-credentials block `{cred['id']}` for "
-                                f"`{phase}.{variant}` is not a string", file=config_file)
-                elif cred_type == CredentialType.file:
-                    if not isinstance(cred.setdefault('filename-variable', 'SECRET_FILE'), str):
-                        raise ConfigurationError(
-                                f"'filename-variable' in with-credentials block `{cred['id']}` for "
-                                f"`{phase}.{variant}` is not a string", file=config_file)
-                elif cred_type == CredentialType.string:
-                    if not isinstance(cred.setdefault('string-variable'  , 'SECRET'), str):  # noqa: E203
-                        raise ConfigurationError(
-                                f"'string-variable' in with-credentials block `{cred['id']}` for "
-                                f"`{phase}.{variant}` is not a string", file=config_file)
-                elif cred['type'] == CredentialType.ssh_key:
-                    if not isinstance(cred.setdefault('ssh-command-variable', 'SSH'), str):
-                        raise ConfigurationError(
-                                f"'ssh-command-variable' in with-credentials block `{cred['id']}` for "
-                                f"`{phase}.{variant}` is not a string", file=config_file)
-
-        if cmd_key == "timeout":
-            if not isinstance(cmd[cmd_key], (Decimal, Real)) or isinstance(cmd[cmd_key], bool) or cmd[cmd_key] <= 0:
-                raise ConfigurationError(
-                    f"`timeout` member of `{phase}.{variant}` must be a positive real number",
-                    file=config_file,
-                )
-
-        if cmd_key == "image":
-            if not isinstance(cmd[cmd_key], _basic_image_types):
-                raise ConfigurationError(
-                    f"`image` member of `{variant}` must be a string or `!image-from-ivy-manifest`",
-                    file=config_file)
-
-        if cmd_key == 'volumes-from':
-            cmd[cmd_key] = expand_docker_volumes_from(volume_vars, cmd[cmd_key])
-
-        if cmd_key == 'extra-docker-args':
-            args = cmd[cmd_key]
-            if not isinstance(args, Mapping):
-                raise ConfigurationError(
-                    f"`extra-docker-args` member of `{variant}` should be a Mapping, not a {type(cmd[cmd_key]).__name__}",
-                    file=config_file)
-
-            allowed_options = {
-                'device': typing.Sequence[str],
-                'add-host': typing.Sequence[str],
-                'hostname': str,
-                'entrypoint': str,
-                'dns': str,
-                'init': bool,
-            }
-            disallowed_options = args.keys() - allowed_options
-            if disallowed_options != set():
-                raise ConfigurationError(dedent('''
-                    `extra-docker-args` member of `{}` contains one or more options that are not allowed:
-                      {}
-                    Allowed options:
-                      {}
-                    '''.format(
-                         variant,
-                         ', '.join(disallowed_options),
-                         ', '.join(allowed_options)
-                    )),
-                    file=config_file)
-            for k, v in args.items():
-                try:
-                    typeguard.check_type(argname=k, value=v, expected_type=allowed_options[k])
-                except TypeError:
-                    raise ConfigurationError(
-                        f"`extra-docker-args` argument `{k}` for `{variant}` should be a {allowed_options[k].__name__}, not a {type(v).__name__}",
-                        file=config_file)
-                if isinstance(v, str) and ' ' in v:
-                    raise ConfigurationError(
-                        f"`extra-docker-args` argument `{k}` for `{variant}` contains whitespace, which is not permitted.",
-                        file=config_file)
-
-    if 'environment' in cmd and 'sh' not in cmd:
-        raise ConfigurationError(
-            "Trying to set 'environment' member for a command entry that doesn't have 'sh'",
-            file=config_file,
-        )
-    if 'sh' in cmd:
-        if 'environment' not in cmd:
+        if "environment" not in keys:
             # Strip off prefixed environment variables from this command-line and apply them
-            env = cmd['environment'] = OrderedDict()
-            while cmd['sh']:
-                m = _env_var_re.match(cmd['sh'][0])
+            env = OrderedDict()
+            while value:
+                m = _env_var_re.match(value[0])
                 if not m:
                     break
-                env[m.group('var')] = m.group('val')
-                cmd['sh'].pop(0)
+                env[m.group("var")] = m.group("val")
+                value = value[1:]
+            yield "environment", env
 
-        env = cmd['environment']
+        yield name, value
+
+    def description(self, value, *, name: str, keys: typing.AbstractSet[str]):
+        if not isinstance(value, str):
+            raise ConfigurationError(
+                f"'{self._phase}.{self._variant}.{name}' is not a string",
+                file=self._config_file,
+            )
+
+        yield name, value
+
+    def run_on_change(self, value, *, name: str, keys: typing.AbstractSet[str]) -> typing.Iterable[typing.Tuple[str, RunOnChange]]:
+        try:
+            yield name, RunOnChange(value)
+        except ValueError as exc:
+            raise ConfigurationError(
+                f"'{name}' member's value of {value!r} is not among the valid options ({', '.join(RunOnChange)})",
+                file=self._config_file,
+            ) from exc
+
+    def archive(self, value, *, name: str, keys: typing.AbstractSet[str]):
+        if not isinstance(value, (OrderedDict, dict)):
+            raise ConfigurationError(
+                f"'{self._phase}.{self._variant}.{name}' member is not a mapping",
+                file=self._config_file,
+            )
+        try:
+            artifacts = value["artifacts"]
+        except KeyError:
+            raise ConfigurationError(
+                f"'{self._phase}.{self._variant}.{name}' lacks the mandatory 'artifacts' member",
+                file=self._config_file,
+            )
+
+        # Convert single artifact string to list of single artifact specification
+        if isinstance(artifacts, str):
+            artifacts = [{"pattern": artifacts}]
+
+        # Expand short hand notation of just the artifact pattern to a full dictionary
+        artifacts = [({"pattern": artifact} if isinstance(artifact, str) else artifact) for artifact in artifacts]
+
+        try:
+            target = value["upload-artifactory"].pop("target")
+        except (KeyError, TypeError):
+            pass
+        else:
+            for artifact in artifacts:
+                artifact.setdefault("target", target)
+
+        for artifact_idx, artifact in enumerate(artifacts):
+            try:
+                pattern = artifact["pattern"]
+            except KeyError:
+                raise ConfigurationError(
+                    f"'{self._phase}.{self._variant}.{name}[{artifact_idx}]' lacks the mandatory 'pattern' member",
+                    file=self._config_file,
+                )
+            if not isinstance(pattern, str):
+                raise ConfigurationError(
+                    f"'{self._phase}.{self._variant}.{name}[{artifact_idx}].pattern' is not a string but a `{type(pattern).__name__}",
+                    file=self._config_file,
+                )
+            try:
+                for _ in Path(os.path.devnull).glob(pattern.replace("(*)", "*")):
+                    break
+            except ValueError as exc:
+                raise ConfigurationError(
+                    f"'{self._phase}.{self._variant}.{name}[{artifact_idx}].pattern' value of {pattern!r} is not a valid glob pattern: {exc}",
+                    file=self._config_file,
+                ) from exc
+
+        value["artifacts"] = artifacts
+
+        if "allow-empty-archive" in value:
+            if "allow-missing" in value:
+                raise ConfigurationError(
+                    f"'allow-empty-archive' and 'allow-missing' are not allowed in the same {name} configuration, use only 'allow-missing'",
+                    file=self._config_file,
+                )
+
+            allow_empty_archive = value.pop("allow-empty-archive")
+            value["allow-missing"] = allow_empty_archive
+
+        allow_missing = value.setdefault("allow-missing", False)
+        if not isinstance(allow_missing, bool):
+            raise ConfigurationError(
+                f"'{self._phase}.{self._variant}.{name}.allow-missing' should be a boolean, not a {type(allow_missing).__name__}",
+                file=self._config_file,
+            )
+
+        yield name, value
+
+    def fingerprint(self, value, *, name: str, keys: typing.AbstractSet[str]):
+        yield from self.archive(value, name=name, keys=keys)
+
+    def junit(self, value, *, name: str, keys: typing.AbstractSet[str]):
+        if isinstance(value, list):
+            value = OrderedDict([("test-results", value)])
+        elif isinstance(value, str):
+            value = OrderedDict([("test-results", [value])])
+
+        try:
+            test_results = value["test-results"]
+        except KeyError:
+            raise ConfigurationError("JUnit configuration did not contain mandatory field 'test-results'", file=self._config_file)
+        if isinstance(test_results, str):
+            test_results = value["test-results"] = [test_results]
+        try:
+            typeguard.check_type(argname=f"{self._phase}.{self._variant}.{name}.test-results", value=test_results, expected_type=typing.Sequence[str])
+        except TypeError as exc:
+            raise ConfigurationError(
+                "'{self._phase}.{self._variant}.{name}.test-results' member is not a list of file pattern strings",
+                file=self._config_file,
+            ) from exc
+        allow_missing = value.setdefault("allow-missing", False)
+        if not isinstance(allow_missing, bool):
+            raise ConfigurationError(
+                f"'{self._phase}.{self._variant}.{name}.allow-missing' should be a boolean, not a {type(allow_missing).__name__}",
+                file=self._config_file,
+            )
+        for pattern_idx, pattern in enumerate(test_results):
+            try:
+                for _ in Path(os.path.devnull).glob(pattern):
+                    break
+            except ValueError as exc:
+                raise ConfigurationError(
+                    f"'{self._phase}.{self._variant}.{name}[{pattern_idx}]' value of {pattern!r} is not a valid glob pattern: {exc}",
+                    file=self._config_file,
+                ) from exc
+
+        yield name, value
+
+    def with_credentials(self, value, *, name: str, keys: typing.AbstractSet[str]):
+        if isinstance(value, str):
+            value = OrderedDict([("id", value)])
+        if not isinstance(value, Sequence):
+            value = [value]
+        for cred_idx, cred in enumerate(value):
+            try:
+                cred_type = cred["type"] = CredentialType(cred.get("type", CredentialType.default))
+            except ValueError as exc:
+                raise ConfigurationError(
+                    f"'{name}[{cred_idx}].type' value of {cred['type']!r} is not among the valid options ({', '.join(CredentialType)})",
+                    file=self._config_file,
+                ) from exc
+            if cred_type == CredentialType.username_password:
+                try:
+                    cred['encoding'] = CredentialEncoding(cred.get('encoding', CredentialEncoding.default))
+                except ValueError as exc:
+                    raise ConfigurationError(
+                            f"'{name}[{cred_idx}].encoding' value of {cred['encoding']!r} is not among the valid options "
+                            f"({', '.join(CredentialEncoding)})",
+                            file=self._config_file) from exc
+                if not isinstance(cred.setdefault('username-variable', 'USERNAME'), str):
+                    raise ConfigurationError(
+                            f"'username-variable' in {name} block `{cred['id']}` for "
+                            f"`{self._phase}.{self._variant}` is not a string", file=self._config_file)
+                if not isinstance(cred.setdefault('password-variable', 'PASSWORD'), str):
+                    raise ConfigurationError(
+                            f"'password-variable' in {name} block `{cred['id']}` for "
+                            f"`{self._phase}.{self._variant}` is not a string", file=self._config_file)
+            elif cred_type == CredentialType.file:
+                if not isinstance(cred.setdefault('filename-variable', 'SECRET_FILE'), str):
+                    raise ConfigurationError(
+                            f"'filename-variable' in {name} block `{cred['id']}` for "
+                            f"`{self._phase}.{self._variant}` is not a string", file=self._config_file)
+            elif cred_type == CredentialType.string:
+                if not isinstance(cred.setdefault('string-variable'  , 'SECRET'), str):  # noqa: E203
+                    raise ConfigurationError(
+                            f"'string-variable' in {name} block `{cred['id']}` for "
+                            f"`{self._phase}.{self._variant}` is not a string", file=self._config_file)
+            elif cred['type'] == CredentialType.ssh_key:
+                if not isinstance(cred.setdefault('ssh-command-variable', 'SSH'), str):
+                    raise ConfigurationError(
+                            f"'ssh-command-variable' in {name} block `{cred['id']}` for "
+                            f"`{self._phase}.{self._variant}` is not a string", file=self._config_file)
+
+        yield name, value
+
+    def timeout(self, value, *, name: str, keys: typing.AbstractSet[str]):
+        if not isinstance(value, (Decimal, Real)) or isinstance(value, bool) or value <= 0:
+            raise ConfigurationError(
+                f"`{name}` member of `{self._phase}.{self._variant}` must be a positive real number",
+                file=self._config_file,
+            )
+
+        yield name, value
+
+    def image(self, value, *, name: str, keys: typing.AbstractSet[str]):
+        if not isinstance(value, _basic_image_types):
+            raise ConfigurationError(
+                f"`{name}` member of `{self._variant}` must be a string or `!image-from-ivy-manifest`",
+                file=self._config_file)
+
+        yield name, value
+
+    def volumes_from(self, value, *, name: str, keys: typing.AbstractSet[str]):
+        yield name, expand_docker_volumes_from(self._volume_vars, value)
+
+    def extra_docker_args(self, args, *, name: str, keys: typing.AbstractSet[str]):
+        if not isinstance(args, Mapping) or not all(isinstance(key, str) for key in args):
+            raise ConfigurationError(
+                f"`{name}` member of `{self._variant}` should be a Mapping with string keys, not a {type(args).__name__}",
+                file=self._config_file)
+
+        disallowed_options = args.keys() - AllowedDockerOptions.__annotations__.keys()
+        if disallowed_options != set():
+            raise ConfigurationError(dedent('''
+                `extra-docker-args` member of `{}` contains one or more options that are not allowed:
+                  {}
+                Allowed options:
+                  {}
+                '''.format(
+                     self._variant,
+                     ', '.join(disallowed_options),
+                     ', '.join(AllowedDockerOptions.__annotations__)
+                )),
+                file=self._config_file)
+        try:
+            typeguard.check_type(argname="extra-docker-args", value=args, expected_type=AllowedDockerOptions)
+        except TypeError as exc:
+            raise ConfigurationError(
+                f"`{self._phase}.{self._variant}.{name}` is not a valid mapping of extra docker arguments: {exc}",
+                file=self._config_file,
+            ) from exc
+        for k, v in args.items():
+            if isinstance(v, str) and " " in v:
+                raise ConfigurationError(
+                    f"`{self._phase}.{self._variant}.{name}` argument `{k}` for `{self._variant}` contains whitespace, which is not permitted.",
+                    file=self._config_file,
+                )
+
+        yield name, args
+
+    def environment(self, env, *, name: str, keys: typing.AbstractSet[str]):
+        if "sh" not in keys:
+            raise ConfigurationError(
+                f"Trying to set '{name}' member for a command entry that doesn't have 'sh'",
+                file=self._config_file,
+            )
+
         if not isinstance(env, Mapping):
             raise ConfigurationError(
-                "'environment' member is not a mapping of strings to strings",
-                file=config_file,
+                f"'{name}' member is not a mapping of strings to strings",
+                file=self._config_file,
             )
         for i, (k, v) in enumerate(env.items()):
             if not isinstance(k, str):
                 raise ConfigurationError(
-                    f"'environment' member has key `{k!r}` at index {i} that is not a string but a `{type(k).__name__}`",
-                    file=config_file,
+                    f"'{name}' member has key `{k!r}` at index {i} that is not a string but a `{type(k).__name__}`",
+                    file=self._config_file,
                 )
             if v is not None and not isinstance(v, str):
                 raise ConfigurationError(
-                    f"`environment[{k!r}]` is not a string or null but a `{type(v).__name__}`",
-                    file=config_file,
+                    f"`{name}[{k!r}]` is not a string or null but a `{type(v).__name__}`",
+                    file=self._config_file,
                 )
 
-    return cmd
+        yield name, env
 
+    def worktrees(self, trees, *, name: str, keys: typing.AbstractSet[str]) -> typing.Iterable[typing.Tuple[str, typing.Mapping[PathLike, WorkTreeOptions]]]:
+        if not isinstance(trees, Mapping):
+            raise ConfigurationError(
+                f"`{name}` member of `{self._phase}.{self._variant}` should be a Mapping with string keys and values, not a {type(trees).__name__}",
+                file=self._config_file,
+            )
 
-def process_variant_cmds(phase, variant, cmds, volume_vars, config_file=None):
-    seen_sh = False
-    global_timeout = None
-    summed_timeout = 0
-    for cmd_idx, cmd in enumerate(cmds):
-        cmd = process_variant_cmd(phase, variant, cmd, volume_vars, config_file)
-
-        if "sh" in cmd:
-            seen_sh = True
-
-        if "timeout" in cmd:
-            if not seen_sh:
-                if global_timeout is not None:
-                    raise ConfigurationError(
-                        f"`{phase}.{variant}[{cmd_idx}]` attempting to define global `timeout` multiple times",
-                        file=config_file,
-                    )
-                global_timeout = cmd["timeout"]
-            elif "sh" not in cmd:
+        new_trees: typing.Dict[PathLike, WorkTreeOptions] = OrderedDict()
+        for tree_idx, (subdir, worktree) in enumerate(trees.items()):
+            if isinstance(subdir, str):
+                subdir = Path(subdir)
+            if not isinstance(subdir, Path) or subdir.is_absolute():
                 raise ConfigurationError(
-                    f"`{phase}.{variant}[{cmd_idx}]` attempting to define global `timeout` after an 'sh' command has already been given",
-                    file=config_file,
+                    f"{tree_idx}th member of `{self._phase}.{self._variant}.{name}` should be a string representing a relative path",
+                    file=self._config_file,
                 )
+
+            if not isinstance(worktree, Mapping):
+                raise ConfigurationError(
+                    f"`{self._phase}.{self._variant}.{name}.{subdir}` should be a Mapping",
+                    file=self._config_file,
+                )
+
+            worktree = typing.cast(WorkTreeOptions, OrderedDict(worktree))
+            changed_files = worktree.setdefault("changed-files", None)
+            if isinstance(changed_files, str):
+                worktree["changed-files"] = (changed_files,)
+
+            try:
+                typeguard.check_type(argname="`{self._phase}.{self._variant}.{name}.{subdir}", value=worktree, expected_type=WorkTreeOptions)
+            except TypeError as exc:
+                raise ConfigurationError(
+                    f"`{self._phase}.{self._variant}.{name}.{subdir}` is not a valid mapping of worktree options: {exc}",
+                    file=self._config_file,
+                ) from exc
+
+            new_trees[subdir] = worktree
+
+        yield name, new_trees
+
+    def process_unknown_cmd_item(self, name, value, keys: typing.AbstractSet[str]):
+        yield name, value
+
+    def process_cmd_item(self, name, value, keys: typing.AbstractSet[str]):
+        if "_" not in name:
+            try:
+                key_proc = getattr(self, name.replace("-", "_"))
+            except AttributeError:
+                pass
             else:
-                summed_timeout += cmd["timeout"]
-            if global_timeout is not None and global_timeout <= summed_timeout:
+                yield from key_proc(value, name=name, keys=keys)
+                return
+
+        yield from self.process_unknown_cmd_item(name=name, value=value, keys=keys)
+
+    def process_cmd(self, cmd):
+        assert not isinstance(cmd, str), "internal error: string commands should have been converted to 'sh' dictionary format"
+        assert isinstance(cmd, Mapping)
+
+        return dict(
+            itertools.chain.from_iterable(
+                self.process_cmd_item(name, value, keys=cmd.keys())
+                for name, value in cmd.items()
+            )
+        )
+
+    def process_cmd_list(self, cmds: typing.Iterable) -> typing.Iterable:
+        seen_sh = False
+        global_timeout = None
+        summed_timeout = 0
+
+        for cmd_idx, cmd in enumerate(cmds):
+            rejected_fields = cmd.keys() & self.cmd_rejected_fields
+            if rejected_fields:
                 raise ConfigurationError(
-                    f"`{phase}.{variant}[0].timeout` ({global_timeout} seconds) is not greater than summed per-command timeouts ({summed_timeout} seconds)",
-                    file=config_file,
+                    f"`{self._phase}.{self._variant}[{cmd_idx}]` contains forbidden fields {', '.join(rejected_fields)}",
+                    file=self._config_file,
+                )
+            unsupported_fields = frozenset() if self.cmd_supported_fields is None else (cmd.keys() - self.cmd_supported_fields)
+            if unsupported_fields:
+                raise ConfigurationError(
+                    f"`{self._phase}.{self._variant}[{cmd_idx}]` contains unsupported fields {', '.join(unsupported_fields)}",
+                    file=self._config_file,
                 )
 
-        yield cmd
+            cmd = self.process_cmd(cmd)
+
+            if "sh" in cmd:
+                seen_sh = True
+
+            if "timeout" in cmd:
+                if not seen_sh:
+                    if global_timeout is not None:
+                        raise ConfigurationError(
+                            f"`{self._phase}.{self._variant}[{cmd_idx}]` attempting to define global `timeout` multiple times",
+                            file=self._config_file,
+                        )
+                    global_timeout = cmd["timeout"]
+                elif "sh" not in cmd:
+                    raise ConfigurationError(
+                        f"`{self._phase}.{self._variant}[{cmd_idx}]` attempting to define global `timeout` after an 'sh' command has already been given",
+                        file=self._config_file,
+                    )
+                else:
+                    summed_timeout += cmd["timeout"]
+                if global_timeout is not None and global_timeout <= summed_timeout:
+                    raise ConfigurationError(
+                        f"`{self._phase}.{self._variant}[0].timeout` ({global_timeout} seconds) is not greater than summed per-command timeouts"
+                        f" ({summed_timeout} seconds)",
+                        file=self._config_file,
+                    )
+
+            yield cmd
+
+
+class ModalitySourcePreparationCmd(VariantCmd):
+    cmd_rejected_fields = frozenset({
+        "archive",
+        "fingerprint",
+        "junit",
+        "node-label",
+        "run-on-change",
+        "stash",
+        "worktrees",
+    })
+
+    def __init__(self, *, modality: str, config_file: PathLike, volume_vars: typing.Mapping):
+        super().__init__(phase="modality-source-preparation", variant=modality, config_file=config_file, volume_vars=volume_vars)
+
+    def process_cmd_list(self, cmds: typing.Iterable) -> typing.Iterable:
+        seen_commit_message = False
+
+        for cmd_idx, cmd in enumerate(super().process_cmd_list(cmds)):
+            if "commit-message" in cmd:
+                if seen_commit_message:
+                    raise ConfigurationError(
+                        f"`{self._phase}.{self._variant}[{cmd_idx}]` attempting to define `commit-message` multiple times",
+                        file=self._config_file,
+                    )
+                seen_commit_message = True
+
+            yield cmd
+
+        if not seen_commit_message:
+            yield {"commit-message": self._variant}
+
+
+class PostSubmitCmd(VariantCmd):
+    cmd_rejected_fields = frozenset({
+        "archive",
+        "fingerprint",
+        "stash",
+        "worktrees",
+    })
+    cmd_supported_fields = frozenset({
+        "environment",
+        "description",
+        "docker-in-docker",
+        "image",
+        "node-label",
+        "run-on-change",
+        "sh",
+        "timeout",
+        "volumes",
+        "with-credentials",
+    })
+
+    def __init__(self, *, phase: str, config_file: PathLike, volume_vars: typing.Mapping):
+        super().__init__(phase="post-submit", variant=phase, config_file=config_file, volume_vars=volume_vars)
 
 
 def read(config, volume_vars, extension_installer=lambda *args: None):
@@ -1124,13 +1306,11 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
         for variant in phase:
             if variant == 'post-submit':
                 raise ConfigurationError(f"variant name 'post-submit', used in phase `{phasename}`, is reserved for internal use", file=config)
-            phase[variant] = list(process_variant_cmds(
-                phasename,
-                variant,
-                flatten_command_list(phasename, variant, phase[variant], config_file=config),
-                volume_vars,
-                config_file=config,
-            ))
+            phase[variant] = list(
+                VariantCmd(phase=phasename, variant=variant, config_file=config, volume_vars=volume_vars).process_cmd_list(
+                    flatten_command_list(phasename, variant, phase[variant], config_file=config)
+                )
+            )
             wait_on_full_previous_phase = None
             run_on_change = None
             for cmd_idx, cmd in enumerate(phase[variant]):
@@ -1219,6 +1399,14 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
                 phase[variant][0]['wait-on-full-previous-phase'] = True
         previous_phase = phasename
 
+    modalities = cfg.setdefault("modality-source-preparation", OrderedDict())
+    for modality in modalities:
+        modalities[modality] = tuple(
+            ModalitySourcePreparationCmd(modality=modality, config_file=config, volume_vars=volume_vars).process_cmd_list(
+                flatten_command_list("modality-source-preparation", modality, modalities[modality], config_file=config)
+            )
+        )
+
     lock_names = []
     for ci_lock in ci_locks:
         if 'from-phase-onward' in ci_lock:
@@ -1251,19 +1439,12 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
     post_submit_node_label_phase = None
     post_submit_node_label_idx = None
     for phase in post_submit:
-        post_submit[phase] = list(process_variant_cmds(
-            'post-submit',
-            phase,
-            flatten_command_list('post-submit', phase, post_submit[phase], config_file=config),
-            volume_vars,
-            config_file=config,
-        ))
+        post_submit[phase] = list(
+            PostSubmitCmd(phase=phase, config_file=config, volume_vars=volume_vars).process_cmd_list(
+                flatten_command_list("post-submit", phase, post_submit[phase], config_file=config)
+            )
+        )
         for cmd_idx, cmd in enumerate(post_submit[phase]):
-            for field_name in cmd:
-                if field_name in _unpermitted_post_submit_meta:
-                    raise ConfigurationError(f"`post-submit`.`{phase}` contains not permitted field `{field_name}`", file=config)
-                if field_name not in _supported_post_submit_meta:
-                    raise ConfigurationError(f"`post-submit`.`{phase}` contains unsupported field `{field_name}`", file=config)
             if 'node-label' in cmd:
                 if post_submit_node_label is None:
                     post_submit_node_label = cmd['node-label']
