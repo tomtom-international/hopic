@@ -1316,17 +1316,14 @@ def submit(ctx, target_remote):
     """
 
     with git.Repo(ctx.obj.workspace) as repo:
-        section = f"hopic.{repo.head.commit}"
-        with repo.config_reader() as cfg:
-            if target_remote is None:
-                target_remote = cfg.get_value(section, 'remote')
-            refspecs = shlex.split(cfg.get_value(section, 'refspecs'))
-
-        repo.git.push(target_remote, refspecs, atomic=True)
-
         hopic_git_info = HopicGitInfo.from_repo(repo)
+        if target_remote is None:
+            target_remote = hopic_git_info.submit_remote
+
+        repo.git.push(target_remote, hopic_git_info.refspecs, atomic=True)
+
         with repo.config_writer() as cfg:
-            cfg.remove_section(section)
+            cfg.remove_section(f"hopic.{repo.head.commit}")
 
     for phase in ctx.obj.config['post-submit'].values():
         build.build_variant(variant='post-submit', cmds=phase, hopic_git_info=hopic_git_info)

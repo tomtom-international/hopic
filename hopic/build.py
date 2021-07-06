@@ -86,6 +86,7 @@ class DockerContainers(object):
 class HopicGitInfo(NamedTuple):
     submit_commit        : git.Commit
     submit_ref           : Optional[str] = None
+    submit_remote        : Optional[str] = None
     refspecs             : Sequence[str] = ()
     target_commit        : Optional[git.Commit] = None
     source_commit        : Optional[git.Commit] = None
@@ -103,6 +104,7 @@ class HopicGitInfo(NamedTuple):
 
         try:
             submit_ref, version_bumped, target_commit, source_commit, autosquashed_commit = None, None, None, None, None
+            submit_remote = None
             refspecs: Tuple[str, ...] = ()
             source_commits: Tuple[git.Commit, ...] = ()
             autosquashed_commits: Tuple[git.Commit, ...] = ()
@@ -113,6 +115,7 @@ class HopicGitInfo(NamedTuple):
                 try:
                     # Determine remote ref for current commit
                     submit_ref = git_cfg.get(section, 'ref', fallback=None)
+                    submit_remote = git_cfg.get(section, "remote", fallback=None)
 
                     version_bumped = git_cfg.getboolean(section, "version-bumped", fallback=None)
 
@@ -151,6 +154,7 @@ class HopicGitInfo(NamedTuple):
         return cls(
             submit_commit        = submit_commit,         # noqa: E251 "unexpected spaces around '='"
             submit_ref           = submit_ref,            # noqa: E251 "unexpected spaces around '='"
+            submit_remote        = submit_remote,         # noqa: E251 "unexpected spaces around '='"
             refspecs             = refspecs,              # noqa: E251 "unexpected spaces around '='"
             source_commits       = source_commits,        # noqa: E251 "unexpected spaces around '='"
             autosquashed_commits = autosquashed_commits,  # noqa: E251 "unexpected spaces around '='"
