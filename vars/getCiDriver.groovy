@@ -929,6 +929,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           steps.error('No changes to build')
         } else if (this.submit_info && submit_info.commit != this.submit_info.commit) {
           steps.currentBuild.result = 'ABORTED'
+          steps.currentBuild.description = "Aborted: applied change resulted in different HEAD"
           steps.error("""HEAD commit (${submit_info.commit}) does not match initial HEAD commit (${this.submit_info.commit}) of this build. Aborting build!""")
         }
         this.submit_info = submit_info
@@ -1762,9 +1763,10 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
               },
             ]
           }
-          // Clear the target commit hash that we determined outside of 'lock_if_necessary' because the target branch
+          // Clear the target commit hash and submit hash that we determined outside of 'lock_if_necessary' because the target branch
           // may have moved forward while we didn't hold the lock.
           this.target_commit = null
+          this.submit_info = [:]
           this.build_phases(phases, clean, artifactoryBuildInfo, hopic_extra_arguments, submit_meta, locks['from-phase'])
         }
 
