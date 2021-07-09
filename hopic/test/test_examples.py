@@ -12,14 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
+
 from .. import config_reader
 
 
 def test_example(example_file):
-    config_reader.read(
+    cfg = config_reader.read(
         example_file,
         {
             'WORKSPACE': '.',
             'CT_DEVENV_HOME': '/tools/devenv',
         },
     )
+
+    json.dumps(cfg, cls=config_reader.JSONEncoder)
