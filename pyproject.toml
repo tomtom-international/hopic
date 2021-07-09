@@ -11,3 +11,11 @@ build-backend = "setuptools.build_meta"
 include = "hopic"
 line-length = 160
 target-version = ["py36", "py39"]
+
+[tool.isort]
+force_grid_wrap = 2
+line_length = 160
+profile = "black"
+src_paths = [
+    "hopic",
+]
