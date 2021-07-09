@@ -12,15 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from functools import wraps
 import logging
 import os
 import os.path
+import sys
+from functools import (
+    partial,
+    wraps,
+)
 from pathlib import (
     Path,
     PurePath,
 )
-import sys
 from typing import (
     AbstractSet,
     Any,
@@ -38,19 +41,19 @@ try:
 except ImportError:
     import importlib_metadata as metadata
 
-from click import ClickException
-from click.testing import CliRunner
 import click_log
 import git
 import pytest
+from click import ClickException
+from click.testing import CliRunner
 from typeguard import typechecked
 
+from ..cli import utils
 from . import (
     hopic_cli,
     sgr_re,
     source_date_epoch,
 )
-from ..cli import utils
 
 try:
     # Only available from Python >= 3.8 onwards
@@ -219,6 +222,11 @@ def _data_file_paths(
 
         yield entry
 
+    if recurse and datadir == _example_dir:
+        from ..cli.utils import determine_config_file_name
+
+        yield determine_config_file_name(None, _root_dir)
+
 
 def _data_file_path_id(
     datadir: Union[str, PurePath],
@@ -241,5 +249,5 @@ def pytest_generate_tests(metafunc):
             metafunc.parametrize(
                 fixture,
                 _data_file_paths(datadir, recurse=not dir_prefix, suffices={'.yml', '.yaml'}),
-                ids=lambda entry: _data_file_path_id(_example_dir, entry),
+                ids=partial(_data_file_path_id, _example_dir),
             )
