@@ -276,7 +276,7 @@ def load_embedded_command(volume_vars, loader, node):
 
 class JSONEncoder(json.JSONEncoder):
     def default(self, o):
-        if isinstance(o, IvyManifestImage):
+        if isinstance(o, (IvyManifestImage, Path)):
             return str(o)
         elif isinstance(o, Pattern):
             return o.pattern
@@ -1027,18 +1027,16 @@ class VariantCmd:
 
         yield name, env
 
-    def worktrees(self, trees, *, name: str, keys: typing.AbstractSet[str]) -> typing.Iterable[typing.Tuple[str, typing.Mapping[PathLike, WorkTreeOptions]]]:
+    def worktrees(self, trees, *, name: str, keys: typing.AbstractSet[str]) -> typing.Iterable[typing.Tuple[str, typing.Mapping[str, WorkTreeOptions]]]:
         if not isinstance(trees, Mapping):
             raise ConfigurationError(
                 f"`{name}` member of `{self._phase}.{self._variant}` should be a Mapping with string keys and values, not a {type(trees).__name__}",
                 file=self._config_file,
             )
 
-        new_trees: typing.Dict[PathLike, WorkTreeOptions] = OrderedDict()
+        new_trees: typing.Dict[str, WorkTreeOptions] = OrderedDict()
         for tree_idx, (subdir, worktree) in enumerate(trees.items()):
-            if isinstance(subdir, str):
-                subdir = Path(subdir)
-            if not isinstance(subdir, Path) or subdir.is_absolute():
+            if not isinstance(subdir, str) or os.path.isabs(subdir):
                 raise ConfigurationError(
                     f"{tree_idx}th member of `{self._phase}.{self._variant}.{name}` should be a string representing a relative path",
                     file=self._config_file,
