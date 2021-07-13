@@ -79,10 +79,15 @@ import shlex
 import shutil
 import subprocess
 import sys
+import typing
 from typing import (
+    AbstractSet,
+    Any,
+    Dict,
     Iterable,
     List,
     Optional,
+    Sequence,
     Tuple,
     Union,
     overload,
@@ -1133,11 +1138,20 @@ def bump_version(ctx):
 
 
 @main.command()
+# fmt: off
 @click.option('--phase'      , '-p' , metavar='<phase>'  , multiple=True, help='''Build phase''', autocompletion=autocomplete.phase_from_config)
 @click.option('--variant'    , '-v' , metavar='<variant>', multiple=True, help='''Configuration variant''', autocompletion=autocomplete.variant_from_config)
+@click.option("--modality"   , "-m" , metavar="<modality>",               help='''Display only meta-data for the specified modality.''')
 @click.option('--post-submit'       , is_flag=True       ,                help='''Display only post-submit meta-data.''')
+# fmt: on
 @click.pass_context
-def getinfo(ctx, phase, variant, post_submit):
+def getinfo(
+    ctx: click.Context,
+    phase: Sequence[str],
+    variant: Sequence[str],
+    modality: Optional[str],
+    post_submit: Optional[str],
+):
     """
     Display meta-data associated with each (or the specified) variant in each (or the specified) phase.
 
@@ -1146,9 +1160,9 @@ def getinfo(ctx, phase, variant, post_submit):
     If a phase or variant filter is specified the name of that will not be present in the output.
     Otherwise this is a nested dictionary of phases and variants.
     """
-    info = OrderedDict()
+    info: Dict[str, Any] = OrderedDict()
 
-    def append_meta_from_cmd(info, cmd, permitted_fields: Set):
+    def append_meta_from_cmd(info, cmd: typing.Mapping[str, Any], permitted_fields: Set):
         assert isinstance(cmd, Mapping)
 
         info = info.copy()
@@ -1181,7 +1195,25 @@ def getinfo(ctx, phase, variant, post_submit):
 
         return info
 
-    if post_submit:
+    if modality and post_submit:
+        log.error("--modality and --post-submit are mutually exclusive options")
+        ctx.exit(1)
+    if phase or variant:
+        if modality:
+            log.error("--modality is mutually exclusive with --phase and --variant")
+            ctx.exit(1)
+        if post_submit:
+            log.error("--post-submit is mutually exclusive with --phase and --variant")
+            ctx.exit(1)
+
+    permitted_fields: AbstractSet[str]
+    if modality:
+        permitted_fields = {
+            "with-credentials",
+        }
+        for cmd in ctx.obj.config["modality-source-preparation"].get(modality, ()):
+            info.update(append_meta_from_cmd(info, cmd, permitted_fields))
+    elif post_submit:
         permitted_fields = frozenset({
             'node-label',
             'with-credentials',
