@@ -446,7 +446,7 @@ def process_prepare_source_tree(
 
         target_commit = repo.head.commit
 
-        with repo.config_writer() as cfg:
+        with repo.config_reader() as cfg:
             section = f"hopic.{target_commit}"
             target_ref    = cfg.get(section, 'ref', fallback=None)
             target_remote = cfg.get(section, 'remote', fallback=None)
@@ -1039,7 +1039,7 @@ def apply_modality_change(
 
         if not has_changed_files:
             # Force clean builds when we don't know how to discover changed files
-            repo.git.clean('-xd', force=True)
+            repo.git.clean(x=True, d=True, force=True)
 
         volume_vars = ctx.obj.volume_vars.copy()
         volume_vars.setdefault('HOME', os.path.expanduser('~'))
@@ -1049,33 +1049,9 @@ def apply_modality_change(
 
         commit_message = expand_vars(volume_vars, commit_message)
 
-        for cmd in modality_cmds:
-            assert not isinstance(cmd, str)
-
-            if 'description' in cmd:
-                log.info("Performing: %s", click.style(cmd["description"], fg="cyan"))
-
-            if 'sh' in cmd:
-                env = os.environ.copy()
-                for k, v in cmd["environment"].items():
-                    if v is None:
-                        env.pop(k, None)
-                    else:
-                        env[k] = expand_vars(volume_vars, v)
-
-                args = [expand_vars(volume_vars, arg) for arg in cmd["sh"]]
-                try:
-                    echo_cmd(subprocess.check_call, args, cwd=repo.working_dir, env=env, stdout=sys.__stderr__)
-                except subprocess.CalledProcessError as e:
-                    log.error("Command fatally terminated with exit code %d", e.returncode)
-                    ctx.exit(e.returncode)
-
-            if 'changed-files' in cmd:
-                changed_files = cmd["changed-files"]
-                if isinstance(changed_files, str):
-                    changed_files = [changed_files]
-                changed_files = [expand_vars(volume_vars, f) for f in changed_files]
-                repo.index.add(changed_files)
+        # Set submit_commit to None to indicate that we haven't got a submittable commit (yet).
+        hopic_git_info = HopicGitInfo.from_repo(repo)._replace(submit_commit=None)
+        build.build_variant(variant=modality, cmds=modality_cmds, hopic_git_info=hopic_git_info, exec_stdout=sys.__stderr__)
 
         if not has_changed_files:
             # 'git add --all' equivalent (excluding the code_dir)
