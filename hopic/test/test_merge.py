@@ -28,6 +28,7 @@ import pytest
 from .. import credentials
 from ..cli import utils
 from ..errors import VersionBumpMismatchError, VersioningError
+from ..template.utils import command
 
 _git_time = f"{42 * 365 * 24 * 3600} +0000"
 _author = git.Actor('Bob Tester', 'bob@example.net')
@@ -596,6 +597,60 @@ def test_modality_merge_commit_message(run_hopic, monkeypatch):
     assert result.exit_code == 0
     with git.Repo(run_hopic.toprepo, expand_vars=False) as repo:
         assert repo.heads.master.commit.message.startswith("feat: merge branch 'release/0': custom value")
+
+
+def test_modality_merge_nop(capfd, run_hopic, monkeypatch):
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        (run_hopic.toprepo / "hopic-ci-config.yaml").write_text(
+            dedent(
+                """\
+                    modality-source-preparation:
+                      AUTO_MERGE:
+                        - git fetch origin release/0
+                        - sh: git merge --no-commit --no-ff FETCH_HEAD
+                          changed-files: []
+                          commit-message: "Merge branch 'release/0'"
+                """
+            )
+        )
+
+        repo.index.add(("hopic-ci-config.yaml",))
+        base_commit = repo.index.commit(message="chore: initial commit", **_commitargs)
+
+        # release branch from just before the main branch's HEAD, with nothing changed on it
+        repo.head.reference = repo.create_head("release/0", base_commit)
+        assert not repo.head.is_detached
+        repo.head.reset(index=True, working_tree=True)
+
+    monkeypatch.setenv("GIT_COMMITTER_NAME", "My Name is Nobody")
+    monkeypatch.setenv("GIT_COMMITTER_EMAIL", "nobody@example.com")
+
+    (*_,) = run_hopic(
+        command("checkout-source-tree", target_remote=run_hopic.toprepo, target_ref="master"),
+    )
+
+    # just flush
+    capfd.readouterr()
+
+    (result,) = run_hopic(
+        command(
+            "prepare-source-tree",
+            author_name=_author.name,
+            author_email=_author.email,
+            author_date=f"@{_git_time}",
+            commit_date=f"@{_git_time}",
+        )
+        + command(
+            "apply-modality-change",
+            "AUTO_MERGE",
+        ),
+    )
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    assert out == "", "'prepare-source-tree apply-modality-change' should give empty stdout when there's nothing to merge"
 
 
 @pytest.mark.parametrize('modality_message, expected_version', (
