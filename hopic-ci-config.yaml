@@ -50,9 +50,13 @@ phases:
       - rm -rf venv3
       - python3 -m virtualenv --clear venv3
       - venv3/bin/python -m pip install --upgrade darker>=1.2.5.dev6,<2
+      - mkdir -p build/output/darker
       - foreach: AUTOSQUASHED_COMMIT
-        sh: venv3/bin/python -m darker --diff --check --revision '${AUTOSQUASHED_COMMIT}^1..${AUTOSQUASHED_COMMIT}'
+        sh: sh -c "venv3/bin/python -m darker --diff --revision '${AUTOSQUASHED_COMMIT}^1..${AUTOSQUASHED_COMMIT}' | tee build/output/darker/${AUTOSQUASHED_COMMIT}.diff"
         timeout: 10
+      - foreach: AUTOSQUASHED_COMMIT
+        sh: "test ! -s build/output/darker/${AUTOSQUASHED_COMMIT}.diff"
+        timeout: 1
 
   docker:
     python3.6:
