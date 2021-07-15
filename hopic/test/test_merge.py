@@ -653,6 +653,74 @@ def test_modality_merge_nop(capfd, run_hopic, monkeypatch):
     assert out == "", "'prepare-source-tree apply-modality-change' should give empty stdout when there's nothing to merge"
 
 
+def test_modality_with_credentials(run_hopic, monkeypatch):
+    username = "test_username"
+    password = "super_secret"
+    credential_id = "test_credentialId"
+    project_name = "test-project"
+
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        (run_hopic.toprepo / "hopic-ci-config.yaml").write_text(
+            dedent(
+                f"""\
+                    version:
+                      bump: no
+                    project-name: {project_name}
+                    modality-source-preparation:
+                      ALPHA:
+                        - with-credentials:
+                            id: {credential_id}
+                          sh: sh -c 'echo -n "$USERNAME:$PASSWORD" > creds.txt'
+                          changed-files:
+                            - creds.txt
+                          commit-message: "chore: embed secret"
+                """
+            )
+        )
+        repo.index.add(("hopic-ci-config.yaml",))
+        repo.index.commit(message="chore: initial commit", **_commitargs)
+        repo.git.branch("master", move=True)
+
+        # switch branch to allow 'master' to get updated
+        repo.head.reference = repo.create_head("something-useless")
+        assert not repo.head.is_detached
+
+        def get_credential_id(project_name_arg, cred_id):
+            assert credential_id == cred_id
+            assert project_name == project_name_arg
+            return username, password
+
+        monkeypatch.setattr(credentials, "get_credential_by_id", get_credential_id)
+
+        (*_, result) = run_hopic(
+            command(
+                "checkout-source-tree",
+                target_remote=run_hopic.toprepo,
+                target_ref="master",
+            ),
+            command(
+                "prepare-source-tree",
+                author_date=f"@{_git_time}",
+                commit_date=f"@{_git_time}",
+                author_name=_author.name,
+                author_email=_author.email,
+            )
+            + command(
+                "apply-modality-change",
+                "ALPHA",
+            ),
+            command("submit"),
+        )
+
+        assert result.exit_code == 0
+
+        repo.head.reference = repo.branches["master"]
+        repo.head.reset(index=True, working_tree=True)
+
+    creds_content = (run_hopic.toprepo / "creds.txt").read_text()
+    assert creds_content == f"{username}:{password}"
+
+
 @pytest.mark.parametrize('modality_message, expected_version', (
     ('feat: some feature', '0.1.0'),
     ('chore: non bumping', '0.0.0'),
