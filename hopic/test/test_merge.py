@@ -1148,6 +1148,13 @@ def test_add_hopic_config_file(run_hopic):
 
 @pytest.mark.parametrize("version_file", ("version.txt", None), ids=lambda fn: fn or "{tag}")
 @pytest.mark.parametrize(
+    "prepare_source_tree",
+    (
+        "merge-change-request",
+        "apply-modality-change",
+    ),
+)
+@pytest.mark.parametrize(
     "bump_policy",
     (
         {"policy": "constant", "field": "patch"},
@@ -1155,7 +1162,7 @@ def test_add_hopic_config_file(run_hopic):
     ),
     ids=lambda bp: bp["policy"],
 )
-def test_hotfix_pr_on_release(bump_policy, run_hopic, version_file):
+def test_hotfix_change_on_release(bump_policy, prepare_source_tree, run_hopic, version_file):
     init_version = "1.2.3"
     hotfix_id = "vindyne.mem-leak"
     expected_version = f"1.2.4-hotfix.{hotfix_id}"
@@ -1172,6 +1179,13 @@ def test_hotfix_pr_on_release(bump_policy, run_hopic, version_file):
                   bump: {json.dumps(bump_policy)}
                   hotfix-branch: '^hotfix/\\d+\\.\\d+\\.\\d+-(?P<id>[a-zA-Z](?:[-.a-zA-Z0-9]*[a-zA-Z0-9])?)$'
                   {("file: " + version_file) if version_file else ""}
+
+                modality-source-preparation:
+                  CHANGE:
+                    - sh: touch new-file.txt
+                      changed-files:
+                        - new-file.txt
+                      commit-message: "fix: add new file"
                 """
             )
         )
@@ -1195,18 +1209,50 @@ def test_hotfix_pr_on_release(bump_policy, run_hopic, version_file):
         repo.index.commit(message="fix: work around oom kill due to memory leak", **_commitargs)
 
     # Successful checkout and build
-    (*_, result) = run_hopic(
-        ("checkout-source-tree", "--target-remote", run_hopic.toprepo, "--target-ref", hotfix_branch),
-        ("prepare-source-tree", "--author-name", _author.name, "--author-email", _author.email,
-            "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", "fix/mem-leak",
-            "--change-request", "42", "--title", "fix: work around oom kill due to memory leak"),
+    (result,) = run_hopic(
+        command("checkout-source-tree", target_remote=run_hopic.toprepo, target_ref=hotfix_branch),
     )
+    if not isinstance(result.exception, (type(None), SystemExit)):
+        raise result.exception
+    assert result.exit_code == 0
+
+    prepare_source_tree_params = {
+        subcmd: (subcmd, *args)
+        for (subcmd, *args) in (
+            command(
+                "merge-change-request",
+                source_remote=run_hopic.toprepo,
+                source_ref="fix/mem-leak",
+                change_request="42",
+                title="fix: work around oom kill due to memory leak",
+            ),
+            command(
+                "apply-modality-change",
+                "CHANGE",
+            ),
+        )
+    }
+
+    (result,) = run_hopic(
+        command(
+            "prepare-source-tree",
+            author_name=_author.name,
+            author_email=_author.email,
+            author_date=f"@{_git_time}",
+            commit_date=f"@{_git_time}",
+        )
+        + prepare_source_tree_params[prepare_source_tree],
+    )
+    if not isinstance(result.exception, (type(None), SystemExit)):
+        raise result.exception
     assert result.exit_code == 0
     assert result.stdout.splitlines()[-1].split("+")[0] == expected_version
 
     (result,) = run_hopic(
-        ("submit",),
+        ("submit", "--target-remote", run_hopic.toprepo),
     )
+    if not isinstance(result.exception, (type(None), SystemExit)):
+        raise result.exception
     assert result.exit_code == 0
 
     with git.Repo(run_hopic.toprepo) as repo:
@@ -1217,7 +1263,7 @@ def test_hotfix_pr_on_release(bump_policy, run_hopic, version_file):
 
 
 @pytest.mark.parametrize("unrelated_tag", (None, "1.2.4-rc1"), ids=lambda t: t or "{no-tag}")
-def test_hotfix_pr_off_release(run_hopic, unrelated_tag):
+def test_hotfix_change_off_release(run_hopic, unrelated_tag):
     init_version = "1.2.3"
     hotfix_id = "vindyne.mem-leak"
     hotfix_branch = f"hotfix/{init_version}-{hotfix_id}"
