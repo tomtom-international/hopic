@@ -506,6 +506,10 @@ def process_prepare_source_tree(
         commit_from, commit_to = (base_commit, target_commit) if base_commit else (target_commit, source_commit)
         source_commits = list(parse_commit_range(repo, commit_from, commit_to, bump))
 
+        change_message = None
+        if "message" in commit_params:
+            change_message = parse_commit_message(commit_params["message"], policy=bump["policy"], strict=bump.get("strict", False))
+
         hotfix = hotfix_id(version_info["hotfix-branch"], target_ref)
 
         def _is_valid_hotfix_base(version) -> bool:
@@ -533,6 +537,9 @@ def process_prepare_source_tree(
                             f"New features are not allowed on hotfix branch '{target_ref}', but commit '{commit.hexsha}' contains one:\n{commit.message}")
                 if commit.has_fix():
                     has_fix = True
+            # intended to deal with apply-modality-change
+            if not source_commits and change_message is not None and change_message.has_fix():
+                has_fix = True
             if hotfix and bump["on-every-change"] and not has_fix:
                 raise VersioningError(
                     f"The presence of a 'fix' commit is mandatory on hotfix branch '{target_ref}', but none of these commits contains one:\n"
@@ -583,8 +590,8 @@ def process_prepare_source_tree(
                 new_version = cur_version.next_version(**params)
             elif bump['policy'] in ('conventional-commits',):
                 all_commits = source_commits
-                if 'message' in commit_params:
-                    all_commits = (*source_commits, parse_commit_message(commit_params['message'], policy=bump['policy'], strict=bump.get("strict", False)))
+                if change_message is not None:
+                    all_commits = (*source_commits, change_message)
 
                 if log.isEnabledFor(logging.DEBUG):
                     log.debug("bumping based on conventional commits:")
