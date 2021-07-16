@@ -1649,6 +1649,25 @@ def test_global_timeout_less_or_equal_than_sum_of_local_timeouts(global_timeout,
         )
 
 
+def test_modality_sh_array():
+    cfg = config_reader.read(
+        config_file(
+            "test-hopic-config.yaml",
+            dedent(
+                """\
+                modality-source-preparation:
+                  ALPHA:
+                    - sh: [touch, new-file.txt]
+                """
+            ),
+        ),
+        {"WORKSPACE": None},
+    )
+
+    (cmd, *_) = cfg["modality-source-preparation"]["ALPHA"]
+    assert cmd["sh"] == ["touch", "new-file.txt"]
+
+
 @pytest.mark.parametrize(
     "block, field, value",
     (

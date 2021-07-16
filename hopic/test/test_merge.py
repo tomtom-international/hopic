@@ -28,6 +28,7 @@ import pytest
 from .. import credentials
 from ..cli import utils
 from ..errors import VersionBumpMismatchError, VersioningError
+from ..template.utils import command
 
 _git_time = f"{42 * 365 * 24 * 3600} +0000"
 _author = git.Actor('Bob Tester', 'bob@example.net')
@@ -598,6 +599,128 @@ def test_modality_merge_commit_message(run_hopic, monkeypatch):
         assert repo.heads.master.commit.message.startswith("feat: merge branch 'release/0': custom value")
 
 
+def test_modality_merge_nop(capfd, run_hopic, monkeypatch):
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        (run_hopic.toprepo / "hopic-ci-config.yaml").write_text(
+            dedent(
+                """\
+                    modality-source-preparation:
+                      AUTO_MERGE:
+                        - git fetch origin release/0
+                        - sh: git merge --no-commit --no-ff FETCH_HEAD
+                          changed-files: []
+                          commit-message: "Merge branch 'release/0'"
+                """
+            )
+        )
+
+        repo.index.add(("hopic-ci-config.yaml",))
+        base_commit = repo.index.commit(message="chore: initial commit", **_commitargs)
+
+        # release branch from just before the main branch's HEAD, with nothing changed on it
+        repo.head.reference = repo.create_head("release/0", base_commit)
+        assert not repo.head.is_detached
+        repo.head.reset(index=True, working_tree=True)
+
+    monkeypatch.setenv("GIT_COMMITTER_NAME", "My Name is Nobody")
+    monkeypatch.setenv("GIT_COMMITTER_EMAIL", "nobody@example.com")
+
+    (*_,) = run_hopic(
+        command("checkout-source-tree", target_remote=run_hopic.toprepo, target_ref="master"),
+    )
+
+    # just flush
+    capfd.readouterr()
+
+    (result,) = run_hopic(
+        command(
+            "prepare-source-tree",
+            author_name=_author.name,
+            author_email=_author.email,
+            author_date=f"@{_git_time}",
+            commit_date=f"@{_git_time}",
+        )
+        + command(
+            "apply-modality-change",
+            "AUTO_MERGE",
+        ),
+    )
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    assert out == "", "'prepare-source-tree apply-modality-change' should give empty stdout when there's nothing to merge"
+
+
+def test_modality_with_credentials(run_hopic, monkeypatch):
+    username = "test_username"
+    password = "super_secret"
+    credential_id = "test_credentialId"
+    project_name = "test-project"
+
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        (run_hopic.toprepo / "hopic-ci-config.yaml").write_text(
+            dedent(
+                f"""\
+                    version:
+                      bump: no
+                    project-name: {project_name}
+                    modality-source-preparation:
+                      ALPHA:
+                        - with-credentials:
+                            id: {credential_id}
+                          sh: sh -c 'echo -n "$USERNAME:$PASSWORD" > creds.txt'
+                          changed-files:
+                            - creds.txt
+                          commit-message: "chore: embed secret"
+                """
+            )
+        )
+        repo.index.add(("hopic-ci-config.yaml",))
+        repo.index.commit(message="chore: initial commit", **_commitargs)
+        repo.git.branch("master", move=True)
+
+        # switch branch to allow 'master' to get updated
+        repo.head.reference = repo.create_head("something-useless")
+        assert not repo.head.is_detached
+
+        def get_credential_id(project_name_arg, cred_id):
+            assert credential_id == cred_id
+            assert project_name == project_name_arg
+            return username, password
+
+        monkeypatch.setattr(credentials, "get_credential_by_id", get_credential_id)
+
+        (*_, result) = run_hopic(
+            command(
+                "checkout-source-tree",
+                target_remote=run_hopic.toprepo,
+                target_ref="master",
+            ),
+            command(
+                "prepare-source-tree",
+                author_date=f"@{_git_time}",
+                commit_date=f"@{_git_time}",
+                author_name=_author.name,
+                author_email=_author.email,
+            )
+            + command(
+                "apply-modality-change",
+                "ALPHA",
+            ),
+            command("submit"),
+        )
+
+        assert result.exit_code == 0
+
+        repo.head.reference = repo.branches["master"]
+        repo.head.reset(index=True, working_tree=True)
+
+    creds_content = (run_hopic.toprepo / "creds.txt").read_text()
+    assert creds_content == f"{username}:{password}"
+
+
 @pytest.mark.parametrize('modality_message, expected_version', (
     ('feat: some feature', '0.1.0'),
     ('chore: non bumping', '0.0.0'),
@@ -1093,6 +1216,13 @@ def test_add_hopic_config_file(run_hopic):
 
 @pytest.mark.parametrize("version_file", ("version.txt", None), ids=lambda fn: fn or "{tag}")
 @pytest.mark.parametrize(
+    "prepare_source_tree",
+    (
+        "merge-change-request",
+        "apply-modality-change",
+    ),
+)
+@pytest.mark.parametrize(
     "bump_policy",
     (
         {"policy": "constant", "field": "patch"},
@@ -1100,7 +1230,7 @@ def test_add_hopic_config_file(run_hopic):
     ),
     ids=lambda bp: bp["policy"],
 )
-def test_hotfix_pr_on_release(bump_policy, run_hopic, version_file):
+def test_hotfix_change_on_release(bump_policy, prepare_source_tree, run_hopic, version_file):
     init_version = "1.2.3"
     hotfix_id = "vindyne.mem-leak"
     expected_version = f"1.2.4-hotfix.{hotfix_id}"
@@ -1117,6 +1247,13 @@ def test_hotfix_pr_on_release(bump_policy, run_hopic, version_file):
                   bump: {json.dumps(bump_policy)}
                   hotfix-branch: '^hotfix/\\d+\\.\\d+\\.\\d+-(?P<id>[a-zA-Z](?:[-.a-zA-Z0-9]*[a-zA-Z0-9])?)$'
                   {("file: " + version_file) if version_file else ""}
+
+                modality-source-preparation:
+                  CHANGE:
+                    - sh: touch new-file.txt
+                      changed-files:
+                        - new-file.txt
+                      commit-message: "fix: add new file"
                 """
             )
         )
@@ -1140,18 +1277,50 @@ def test_hotfix_pr_on_release(bump_policy, run_hopic, version_file):
         repo.index.commit(message="fix: work around oom kill due to memory leak", **_commitargs)
 
     # Successful checkout and build
-    (*_, result) = run_hopic(
-        ("checkout-source-tree", "--target-remote", run_hopic.toprepo, "--target-ref", hotfix_branch),
-        ("prepare-source-tree", "--author-name", _author.name, "--author-email", _author.email,
-            "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", "fix/mem-leak",
-            "--change-request", "42", "--title", "fix: work around oom kill due to memory leak"),
+    (result,) = run_hopic(
+        command("checkout-source-tree", target_remote=run_hopic.toprepo, target_ref=hotfix_branch),
     )
+    if not isinstance(result.exception, (type(None), SystemExit)):
+        raise result.exception
+    assert result.exit_code == 0
+
+    prepare_source_tree_params = {
+        subcmd: (subcmd, *args)
+        for (subcmd, *args) in (
+            command(
+                "merge-change-request",
+                source_remote=run_hopic.toprepo,
+                source_ref="fix/mem-leak",
+                change_request="42",
+                title="fix: work around oom kill due to memory leak",
+            ),
+            command(
+                "apply-modality-change",
+                "CHANGE",
+            ),
+        )
+    }
+
+    (result,) = run_hopic(
+        command(
+            "prepare-source-tree",
+            author_name=_author.name,
+            author_email=_author.email,
+            author_date=f"@{_git_time}",
+            commit_date=f"@{_git_time}",
+        )
+        + prepare_source_tree_params[prepare_source_tree],
+    )
+    if not isinstance(result.exception, (type(None), SystemExit)):
+        raise result.exception
     assert result.exit_code == 0
     assert result.stdout.splitlines()[-1].split("+")[0] == expected_version
 
     (result,) = run_hopic(
-        ("submit",),
+        ("submit", "--target-remote", run_hopic.toprepo),
     )
+    if not isinstance(result.exception, (type(None), SystemExit)):
+        raise result.exception
     assert result.exit_code == 0
 
     with git.Repo(run_hopic.toprepo) as repo:
@@ -1162,7 +1331,7 @@ def test_hotfix_pr_on_release(bump_policy, run_hopic, version_file):
 
 
 @pytest.mark.parametrize("unrelated_tag", (None, "1.2.4-rc1"), ids=lambda t: t or "{no-tag}")
-def test_hotfix_pr_off_release(run_hopic, unrelated_tag):
+def test_hotfix_change_off_release(run_hopic, unrelated_tag):
     init_version = "1.2.3"
     hotfix_id = "vindyne.mem-leak"
     hotfix_branch = f"hotfix/{init_version}-{hotfix_id}"
