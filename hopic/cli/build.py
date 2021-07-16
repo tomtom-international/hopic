@@ -22,6 +22,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import typing
 import urllib.parse
 from collections.abc import (
     Mapping,
@@ -68,13 +69,14 @@ from ..git_time import (
     restore_mtime_from_git,
     to_git_time,
 )
+from ..types import PathLike
 from .global_obj import initialize_global_variables_from_config
 
 log = logging.getLogger(__name__)
 
 
 @click.pass_context
-def build_variant(ctx, variant, cmds, hopic_git_info):
+def build_variant(ctx, variant, cmds, hopic_git_info, exec_stdout=None):
     cfg = ctx.obj.config
 
     images = cfg['image']
@@ -86,13 +88,16 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
     docker_in_docker = False
 
     volume_vars = ctx.obj.volume_vars.copy()
-    # Give commands executing inside a container image a different view than outside
-    volume_vars['GIT_COMMIT'] = str(hopic_git_info.submit_commit)
     if hopic_git_info.submit_ref is not None:
         volume_vars['GIT_BRANCH'] = hopic_git_info.submit_ref
-    git_commit_time = hopic_git_info.submit_commit.committed_datetime
-    # RFC 3339 formatted (strict subset of ISO 8601)
-    volume_vars["GIT_COMMIT_TIME"] = f"{git_commit_time:%Y-%m-%dT%H:%M:%S.%f%z}"
+    if hopic_git_info.submit_commit is not None:
+        # Give commands executing inside a container image a different view than outside
+        volume_vars["GIT_COMMIT"] = str(hopic_git_info.submit_commit)
+        git_commit_time = hopic_git_info.submit_commit.committed_datetime
+        # RFC 3339 formatted (strict subset of ISO 8601)
+        volume_vars["GIT_COMMIT_TIME"] = f"{git_commit_time:%Y-%m-%dT%H:%M:%S.%f%z}"
+    else:
+        git_commit_time = None
 
     volume_vars["BUILD_NAME"] = os.environ.get("BUILD_NAME", "unknown")
     volume_vars["BUILD_NUMBER"] = os.environ.get("BUILD_NUMBER", "NaN")
@@ -226,6 +231,8 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                                 if clean_output:
                                     log.info('%s', clean_output)
 
+            changed_files: typing.Sequence[PathLike] = cmd.get("changed-files", ())
+
             try:
                 foreach = cmd['foreach']
             except KeyError:
@@ -341,13 +348,14 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                             'AUTOSQUASHED_COMMIT',
                         ):
                     cfg_vars[foreach] = str(foreach_item)
-                try:
-                    # Be compatible with reproducible-builds.org
-                    now = datetime.utcfromtimestamp(float(os.environ["SOURCE_DATE_EPOCH"])).replace(tzinfo=tzutc())
-                except (KeyError, TypeError):
-                    now = datetime.utcnow().replace(tzinfo=tzutc())
-                duration = now - git_commit_time
-                cfg_vars["BUILD_DURATION"] = f"{duration.total_seconds():.6f}"
+                if git_commit_time is not None:
+                    try:
+                        # Be compatible with reproducible-builds.org
+                        now = datetime.utcfromtimestamp(float(os.environ["SOURCE_DATE_EPOCH"])).replace(tzinfo=tzutc())
+                    except (KeyError, TypeError):
+                        now = datetime.utcnow().replace(tzinfo=tzutc())
+                    duration = now - git_commit_time
+                    cfg_vars["BUILD_DURATION"] = f"{duration.total_seconds():.6f}"
 
                 final_env = env.copy()
                 for k, v in cmd_env.items():
@@ -416,7 +424,15 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
 
                     old_handlers = dict((num, signal.signal(num, signal_handler)) for num in (signal.SIGINT, signal.SIGTERM))
                     try:
-                        echo_cmd(subprocess.check_call, final_cmd, env=new_env, cwd=ctx.obj.code_dir, obfuscate=variant_credentials, timeout=timeout)
+                        echo_cmd(
+                            subprocess.check_call,
+                            final_cmd,
+                            env=new_env,
+                            cwd=ctx.obj.code_dir,
+                            obfuscate=variant_credentials,
+                            timeout=timeout,
+                            stdout=exec_stdout,
+                        )
                     except subprocess.CalledProcessError as e:
                         log.error("Command fatally terminated with exit code %d", e.returncode)
                         ctx.exit(e.returncode)
@@ -452,6 +468,11 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                         except FileNotFoundError:
                             pass
 
+            with git.Repo(ctx.obj.workspace) as repo:
+                source_commit = repo.head.commit
+                if changed_files:
+                    repo.index.add(expand_vars(volume_vars, f) for f in changed_files)
+
             for subdir, worktree in worktrees.items():
                 with git.Repo(ctx.obj.workspace / subdir) as repo:
                     worktree_commits.setdefault(subdir, [
@@ -479,13 +500,15 @@ def build_variant(ctx, variant, cmds, hopic_git_info):
                     commit_message = expand_vars(volume_vars, worktree['commit-message'])
                     if not commit_message.endswith(u'\n'):
                         commit_message += u'\n'
+                    # fmt: off
                     submit_commit = repo.index.commit(
-                            message     = commit_message,                                                # noqa: E251 "unexpected spaces around '='"
-                            author      = hopic_git_info.submit_commit.author,                           # noqa: E251 "unexpected spaces around '='"
-                            committer   = hopic_git_info.submit_commit.committer,                        # noqa: E251 "unexpected spaces around '='"
-                            author_date = to_git_time(hopic_git_info.submit_commit.authored_datetime),   # noqa: E251 "unexpected spaces around '='"
-                            commit_date = to_git_time(hopic_git_info.submit_commit.committed_datetime),  # noqa: E251 "unexpected spaces around '='"
-                        )
+                        message     = commit_message,                                 # noqa: E251 "unexpected spaces around '='"
+                        author      = source_commit.author,                           # noqa: E251 "unexpected spaces around '='"
+                        committer   = source_commit.committer,                        # noqa: E251 "unexpected spaces around '='"
+                        author_date = to_git_time(source_commit.authored_datetime),   # noqa: E251 "unexpected spaces around '='"
+                        commit_date = to_git_time(source_commit.committed_datetime),  # noqa: E251 "unexpected spaces around '='"
+                    )
+                    # fmt: on
                     restore_mtime_from_git(repo)
                     worktree_commits[subdir][1] = str(submit_commit)
                     log.info('%s', repo.git.show(submit_commit, format='fuller', stat=True))

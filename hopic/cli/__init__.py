@@ -79,10 +79,15 @@ import shlex
 import shutil
 import subprocess
 import sys
+import typing
 from typing import (
+    AbstractSet,
+    Any,
+    Dict,
     Iterable,
     List,
     Optional,
+    Sequence,
     Tuple,
     Union,
     overload,
@@ -446,7 +451,7 @@ def process_prepare_source_tree(
 
         target_commit = repo.head.commit
 
-        with repo.config_writer() as cfg:
+        with repo.config_reader() as cfg:
             section = f"hopic.{target_commit}"
             target_ref    = cfg.get(section, 'ref', fallback=None)
             target_remote = cfg.get(section, 'remote', fallback=None)
@@ -501,6 +506,10 @@ def process_prepare_source_tree(
         commit_from, commit_to = (base_commit, target_commit) if base_commit else (target_commit, source_commit)
         source_commits = list(parse_commit_range(repo, commit_from, commit_to, bump))
 
+        change_message = None
+        if "message" in commit_params:
+            change_message = parse_commit_message(commit_params["message"], policy=bump["policy"], strict=bump.get("strict", False))
+
         hotfix = hotfix_id(version_info["hotfix-branch"], target_ref)
 
         def _is_valid_hotfix_base(version) -> bool:
@@ -528,6 +537,9 @@ def process_prepare_source_tree(
                             f"New features are not allowed on hotfix branch '{target_ref}', but commit '{commit.hexsha}' contains one:\n{commit.message}")
                 if commit.has_fix():
                     has_fix = True
+            # intended to deal with apply-modality-change
+            if not source_commits and change_message is not None and change_message.has_fix():
+                has_fix = True
             if hotfix and bump["on-every-change"] and not has_fix:
                 raise VersioningError(
                     f"The presence of a 'fix' commit is mandatory on hotfix branch '{target_ref}', but none of these commits contains one:\n"
@@ -578,8 +590,8 @@ def process_prepare_source_tree(
                 new_version = cur_version.next_version(**params)
             elif bump['policy'] in ('conventional-commits',):
                 all_commits = source_commits
-                if 'message' in commit_params:
-                    all_commits = (*source_commits, parse_commit_message(commit_params['message'], policy=bump['policy'], strict=bump.get("strict", False)))
+                if change_message is not None:
+                    all_commits = (*source_commits, change_message)
 
                 if log.isEnabledFor(logging.DEBUG):
                     log.debug("bumping based on conventional commits:")
@@ -1039,7 +1051,7 @@ def apply_modality_change(
 
         if not has_changed_files:
             # Force clean builds when we don't know how to discover changed files
-            repo.git.clean('-xd', force=True)
+            repo.git.clean(x=True, d=True, force=True)
 
         volume_vars = ctx.obj.volume_vars.copy()
         volume_vars.setdefault('HOME', os.path.expanduser('~'))
@@ -1049,33 +1061,9 @@ def apply_modality_change(
 
         commit_message = expand_vars(volume_vars, commit_message)
 
-        for cmd in modality_cmds:
-            assert not isinstance(cmd, str)
-
-            if 'description' in cmd:
-                log.info("Performing: %s", click.style(cmd["description"], fg="cyan"))
-
-            if 'sh' in cmd:
-                env = os.environ.copy()
-                for k, v in cmd["environment"].items():
-                    if v is None:
-                        env.pop(k, None)
-                    else:
-                        env[k] = expand_vars(volume_vars, v)
-
-                args = [expand_vars(volume_vars, arg) for arg in cmd["sh"]]
-                try:
-                    echo_cmd(subprocess.check_call, args, cwd=repo.working_dir, env=env, stdout=sys.__stderr__)
-                except subprocess.CalledProcessError as e:
-                    log.error("Command fatally terminated with exit code %d", e.returncode)
-                    ctx.exit(e.returncode)
-
-            if 'changed-files' in cmd:
-                changed_files = cmd["changed-files"]
-                if isinstance(changed_files, str):
-                    changed_files = [changed_files]
-                changed_files = [expand_vars(volume_vars, f) for f in changed_files]
-                repo.index.add(changed_files)
+        # Set submit_commit to None to indicate that we haven't got a submittable commit (yet).
+        hopic_git_info = HopicGitInfo.from_repo(repo)._replace(submit_commit=None)
+        build.build_variant(variant=modality, cmds=modality_cmds, hopic_git_info=hopic_git_info, exec_stdout=sys.__stderr__)
 
         if not has_changed_files:
             # 'git add --all' equivalent (excluding the code_dir)
@@ -1157,11 +1145,20 @@ def bump_version(ctx):
 
 
 @main.command()
+# fmt: off
 @click.option('--phase'      , '-p' , metavar='<phase>'  , multiple=True, help='''Build phase''', autocompletion=autocomplete.phase_from_config)
 @click.option('--variant'    , '-v' , metavar='<variant>', multiple=True, help='''Configuration variant''', autocompletion=autocomplete.variant_from_config)
+@click.option("--modality"   , "-m" , metavar="<modality>",               help='''Display only meta-data for the specified modality.''')
 @click.option('--post-submit'       , is_flag=True       ,                help='''Display only post-submit meta-data.''')
+# fmt: on
 @click.pass_context
-def getinfo(ctx, phase, variant, post_submit):
+def getinfo(
+    ctx: click.Context,
+    phase: Sequence[str],
+    variant: Sequence[str],
+    modality: Optional[str],
+    post_submit: Optional[str],
+):
     """
     Display meta-data associated with each (or the specified) variant in each (or the specified) phase.
 
@@ -1170,9 +1167,9 @@ def getinfo(ctx, phase, variant, post_submit):
     If a phase or variant filter is specified the name of that will not be present in the output.
     Otherwise this is a nested dictionary of phases and variants.
     """
-    info = OrderedDict()
+    info: Dict[str, Any] = OrderedDict()
 
-    def append_meta_from_cmd(info, cmd, permitted_fields: Set):
+    def append_meta_from_cmd(info, cmd: typing.Mapping[str, Any], permitted_fields: Set):
         assert isinstance(cmd, Mapping)
 
         info = info.copy()
@@ -1205,7 +1202,25 @@ def getinfo(ctx, phase, variant, post_submit):
 
         return info
 
-    if post_submit:
+    if modality and post_submit:
+        log.error("--modality and --post-submit are mutually exclusive options")
+        ctx.exit(1)
+    if phase or variant:
+        if modality:
+            log.error("--modality is mutually exclusive with --phase and --variant")
+            ctx.exit(1)
+        if post_submit:
+            log.error("--post-submit is mutually exclusive with --phase and --variant")
+            ctx.exit(1)
+
+    permitted_fields: AbstractSet[str]
+    if modality:
+        permitted_fields = {
+            "with-credentials",
+        }
+        for cmd in ctx.obj.config["modality-source-preparation"].get(modality, ()):
+            info.update(append_meta_from_cmd(info, cmd, permitted_fields))
+    elif post_submit:
         permitted_fields = frozenset({
             'node-label',
             'with-credentials',

@@ -84,7 +84,8 @@ class DockerContainers(object):
 
 
 class HopicGitInfo(NamedTuple):
-    submit_commit        : git.Commit
+    # fmt: off
+    submit_commit        : Optional[git.Commit] = None
     submit_ref           : Optional[str] = None
     submit_remote        : Optional[str] = None
     refspecs             : Sequence[str] = ()
@@ -94,6 +95,7 @@ class HopicGitInfo(NamedTuple):
     source_commits       : Sequence[git.Commit] = ()
     autosquashed_commits : Sequence[git.Commit] = ()
     version_bumped       : Optional[bool] = None
+    # fmt: on
 
     @classmethod
     def from_repo(cls, repo_ctx: Union[git.Repo, str, PurePath]) -> 'HopicGitInfo':

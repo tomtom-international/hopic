@@ -59,6 +59,10 @@ class ChangeRequest {
   public void abort_if_changed(String source_remote) {
   }
 
+  public Map getinfo(String cmd) {
+    return [:]
+  }
+
   public Map apply(String cmd, String source_remote) {
     assert false : "Change request instance does not override apply()"
   }
@@ -451,10 +455,23 @@ class BitbucketPullRequest extends ChangeRequest {
 
 class ModalityRequest extends ChangeRequest {
   private modality
+  private info = null
 
   ModalityRequest(steps, modality) {
     super(steps)
     this.modality = modality
+  }
+
+  @Override
+  public Map getinfo(String cmd) {
+    if (this.info == null) {
+      this.info = steps.readJSON(text: steps.sh(
+        script: "${cmd} getinfo --modality=${shell_quote(modality)}",
+        label: "Hopic: retrieving configuration for modality '${modality}'",
+        returnStdout: true,
+      ))
+    }
+    return this.info
   }
 
   @Override
@@ -880,7 +897,25 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
                                     label: 'Hopic: checking out source tree',
                                     returnStdout: true).trim()
       if (this.get_change() != null) {
-        def submit_info = this.get_change().apply(cmd, this.scm.url)
+        def meta = this.get_change().getinfo(cmd)
+        def maybe_timeout = { Closure closure ->
+          if (meta.containsKey('timeout')) {
+            return steps.timeout(time: meta['timeout'], unit: 'SECONDS') {
+              return closure()
+            }
+          }
+          return closure()
+        }
+
+        def submit_info = this.with_credentials(meta.getOrDefault('with-credentials', [])) { creds_info ->
+          maybe_timeout {
+            def white_listed_vars = creds_info*.white_listed_vars.flatten().findAll{it}
+            this.get_change().apply(
+              cmd + white_listed_vars.collect{" --whitelisted-var=${shell_quote(it)}"}.join(''),
+              this.scm.url,
+            )
+          }
+        }
         if (submit_info == null)
         {
           // Marking the build as ABORTED _before_ deleting it to prevent an exception from reincarnating it

@@ -31,7 +31,10 @@ import json
 import logging
 from numbers import Real
 import os
-from pathlib import Path
+from pathlib import (
+    Path,
+    PurePath,
+)
 import re
 import shlex
 import subprocess
@@ -747,7 +750,11 @@ WorkTreeOptions = TypedDict(
 
 
 class VariantCmd:
-    cmd_rejected_fields: typing.ClassVar[typing.AbstractSet[str]] = frozenset()
+    cmd_rejected_fields: typing.ClassVar[typing.AbstractSet[str]] = frozenset(
+        {
+            "changed-files",
+        }
+    )
     cmd_supported_fields: typing.ClassVar[typing.Optional[typing.AbstractSet[str]]] = None
 
     def __init__(self, *, phase: str, variant: str, config_file: PathLike, volume_vars: typing.Mapping):
@@ -1151,15 +1158,18 @@ class VariantCmd:
 
 
 class ModalitySourcePreparationCmd(VariantCmd):
-    cmd_rejected_fields = frozenset({
-        "archive",
-        "fingerprint",
-        "junit",
-        "node-label",
-        "run-on-change",
-        "stash",
-        "worktrees",
-    })
+    cmd_rejected_fields = frozenset(
+        {
+            "archive",
+            "fingerprint",
+            "foreach",
+            "junit",
+            "node-label",
+            "run-on-change",
+            "stash",
+            "worktrees",
+        }
+    )
 
     def __init__(self, *, modality: str, config_file: PathLike, volume_vars: typing.Mapping):
         super().__init__(phase="modality-source-preparation", variant=modality, config_file=config_file, volume_vars=volume_vars)
@@ -1181,14 +1191,30 @@ class ModalitySourcePreparationCmd(VariantCmd):
         if not seen_commit_message:
             yield {"commit-message": self._variant}
 
+    def changed_files(self, value, *, name: str, keys: typing.AbstractSet[str]) -> typing.Iterable[typing.Tuple[str, typing.Sequence[PathLike]]]:
+        if isinstance(value, (str, PurePath)):
+            value = (value,)
+
+        try:
+            typeguard.check_type(argname=f"{self._phase}.{self._variant}.{name}", value=value, expected_type=typing.Sequence[PathLike])
+        except TypeError as exc:
+            raise ConfigurationError(
+                "'{self._phase}.{self._variant}.{name}' member is not a list of path strings",
+                file=self._config_file,
+            ) from exc
+
+        yield name, value
+
 
 class PostSubmitCmd(VariantCmd):
-    cmd_rejected_fields = frozenset({
-        "archive",
-        "fingerprint",
-        "stash",
-        "worktrees",
-    })
+    cmd_rejected_fields = VariantCmd.cmd_rejected_fields | frozenset(
+        {
+            "archive",
+            "fingerprint",
+            "stash",
+            "worktrees",
+        }
+    )
     cmd_supported_fields = frozenset({
         "environment",
         "description",
