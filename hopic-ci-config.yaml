@@ -13,6 +13,10 @@ scm:
     worktrees:
       doc/build/html: pages
 
+ci-locks:
+  - branch: "pages"
+    repo-name: "PIPE/hopic"
+
 pass-through-environment-vars:
   - GIT_COMMITTER_NAME
   - GIT_COMMITTER_EMAIL
