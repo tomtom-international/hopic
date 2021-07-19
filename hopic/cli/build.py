@@ -28,6 +28,10 @@ from collections.abc import (
     Mapping,
     Sequence,
 )
+from typing import (
+    Dict,
+    List,
+)
 
 import click
 from dateutil.tz import tzutc
@@ -76,7 +80,15 @@ log = logging.getLogger(__name__)
 
 
 @click.pass_context
-def build_variant(ctx, variant, cmds, hopic_git_info, exec_stdout=None):
+def build_variant(
+    ctx,
+    variant,
+    cmds,
+    hopic_git_info,
+    *,
+    exec_stdout=None,
+    cwd: str = "${WORKSPACE}",
+):
     cfg = ctx.obj.config
 
     images = cfg['image']
@@ -113,7 +125,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info, exec_stdout=None):
     mandatory_artifacts = []
     mandatory_junit = []
     optional_artifacts = []
-    worktree_commits = {}
+    worktree_commits: Dict[PathLike, List[str]] = {}
     variant_credentials = {}
     extra_docker_run_args = []
     with DockerContainers() as volumes_from:
@@ -374,17 +386,18 @@ def build_variant(ctx, variant, cmds, hopic_git_info, exec_stdout=None):
                         os.close(fd)
                         # Docker wants this file to not exist (yet) when starting a container
                         os.unlink(cidfile)
-                        docker_run = ['docker', 'run',
-                                      '--rm',
-                                      f"--cidfile={cidfile}",
-                                      '--net=host',
-                                      '--cap-add=SYS_PTRACE',
-                                      f"--tmpfs={final_env['HOME']}:exec,uid={uid},gid={gid}",
-                                      f"--user={uid}:{gid}",
-                                      '--workdir=/code',
-                                      ] + [
-                                          f"--env={k}={v}" for k, v in final_env.items()
-                                      ]
+                        docker_run = [
+                            "docker",
+                            "run",
+                            "--rm",
+                            f"--cidfile={cidfile}",
+                            "--net=host",
+                            "--cap-add=SYS_PTRACE",
+                            f"--tmpfs={final_env['HOME']}:exec,uid={uid},gid={gid}",
+                            f"--user={uid}:{gid}",
+                            f"--workdir={expand_vars(volume_vars, cwd)}",
+                            *(f"--env={k}={v}" for k, v in final_env.items()),
+                        ]
 
                         if all(hasattr(fd, 'isatty') and fd.isatty() for fd in [sys.stderr, sys.stdout, sys.stdin]):
                             docker_run += ['--tty']
@@ -428,7 +441,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info, exec_stdout=None):
                             subprocess.check_call,
                             final_cmd,
                             env=new_env,
-                            cwd=ctx.obj.code_dir,
+                            cwd=expand_vars(ctx.obj.volume_vars, cwd),
                             obfuscate=variant_credentials,
                             timeout=timeout,
                             stdout=exec_stdout,
