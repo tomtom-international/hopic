@@ -1063,7 +1063,7 @@ def apply_modality_change(
 
         # Set submit_commit to None to indicate that we haven't got a submittable commit (yet).
         hopic_git_info = HopicGitInfo.from_repo(repo)._replace(submit_commit=None)
-        build.build_variant(variant=modality, cmds=modality_cmds, hopic_git_info=hopic_git_info, exec_stdout=sys.__stderr__)
+        build.build_variant(variant=modality, cmds=modality_cmds, hopic_git_info=hopic_git_info, exec_stdout=sys.__stderr__, cwd="${CFGDIR}")
 
         if not has_changed_files:
             # 'git add --all' equivalent (excluding the code_dir)
