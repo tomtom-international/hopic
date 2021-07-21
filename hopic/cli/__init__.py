@@ -507,7 +507,7 @@ def process_prepare_source_tree(
         source_commits = list(parse_commit_range(repo, commit_from, commit_to, bump))
 
         change_message = None
-        if "message" in commit_params:
+        if "message" in commit_params and bump["on-every-change"]:
             change_message = parse_commit_message(commit_params["message"], policy=bump["policy"], strict=bump.get("strict", False))
 
         hotfix = hotfix_id(version_info["hotfix-branch"], target_ref)
