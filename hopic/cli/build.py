@@ -377,6 +377,10 @@ def build_variant(
                         final_env[k] = expand_vars(cfg_vars, v)
                 final_cmd = [expand_vars(cfg_vars, arg) for arg in cmd]
 
+                if final_cmd == [":"]:
+                    # NOP: skip. This command, on *nix, would always do nothing and return with exit code 0. So abuse it for a NOP.
+                    continue
+
                 # Handle execution inside docker
                 cidfile = None
                 try:

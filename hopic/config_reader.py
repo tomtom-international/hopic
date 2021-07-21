@@ -52,10 +52,12 @@ else:
 
 if sys.version_info[:2] >= (3, 8):
     from typing import (
+        Literal,
         TypedDict,
     )
 else:
     from typing_extensions import (
+        Literal,
         TypedDict,
     )
 
@@ -77,6 +79,7 @@ __all__ = (
 log = logging.getLogger(__name__)
 
 Pattern = type(re.compile(''))
+EmptyDict = TypedDict("EmptyDict", {}, total=True)
 
 
 _interphase_dependent_meta = frozenset({
@@ -1191,7 +1194,9 @@ class ModalitySourcePreparationCmd(VariantCmd):
         if not seen_commit_message:
             yield {"commit-message": self._variant}
 
-    def changed_files(self, value, *, name: str, keys: typing.AbstractSet[str]) -> typing.Iterable[typing.Tuple[str, typing.Sequence[PathLike]]]:
+    def changed_files(
+        self, value, *, name: str, keys: typing.AbstractSet[str]
+    ) -> typing.Iterable[typing.Tuple[str, typing.Union[typing.Sequence[PathLike], Literal[":"], EmptyDict]]]:
         if isinstance(value, (str, PurePath)):
             value = (value,)
 
@@ -1204,6 +1209,10 @@ class ModalitySourcePreparationCmd(VariantCmd):
             ) from exc
 
         yield name, value
+
+        if "sh" not in keys:
+            # Add a NOP command to ensure 'changed-files' gets picked up during the build loop
+            yield from self.sh((":",), name="sh", keys=keys)
 
 
 class PostSubmitCmd(VariantCmd):
