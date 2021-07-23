@@ -59,6 +59,6 @@ def echo_cmd(fun, cmd, *args, dry_run=False, obfuscate=None, **kwargs):
         raise
 
 
-@click.pass_context
-def echo_cmd_click(ctx, fun, cmd, *args, obfuscate=None, **kwargs):
+def echo_cmd_click(fun, cmd, *args, obfuscate=None, **kwargs):
+    ctx = click.get_current_context()
     return echo_cmd(fun, cmd, *args, **kwargs, obfuscate=obfuscate, dry_run=getattr(ctx.obj, 'dry_run', False))

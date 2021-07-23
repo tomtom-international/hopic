@@ -532,17 +532,25 @@ def test_modality_merge_has_all_parents(run_hopic, monkeypatch):
             )
 
 
-def test_modality_merge_commit_message(run_hopic, monkeypatch):
-    expected_version = "0.1.0"
+@pytest.mark.parametrize(
+    "msg_prefix, expected_version",
+    (
+        ("feat: merge", "0.1.0"),
+        ("Merge", None),
+    ),
+)
+def test_modality_merge_commit_message(expected_version, msg_prefix, run_hopic, monkeypatch):
     with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
-        with open(run_hopic.toprepo / 'hopic-ci-config.yaml', 'w') as f:
-            f.write(dedent('''\
+        (run_hopic.toprepo / "hopic-ci-config.yaml").write_text(
+            dedent(
+                f"""\
                 version:
                   format: semver
                   tag: true
                   bump:
                     policy: conventional-commits
                     strict: yes
+                    on-every-change: {json.dumps(expected_version is not None)}
 
                 pass-through-environment-vars:
                   - CUSTOM_VAR
@@ -552,8 +560,10 @@ def test_modality_merge_commit_message(run_hopic, monkeypatch):
                     - git fetch origin release/0
                     - sh: git merge --no-commit --no-ff FETCH_HEAD
                       changed-files: []
-                      commit-message: "feat: merge branch 'release/0': $CUSTOM_VAR"
-                '''))
+                      commit-message: "{msg_prefix} branch 'release/0': $CUSTOM_VAR"
+                """
+            )
+        )
 
         repo.index.add(('hopic-ci-config.yaml',))
         base_commit = repo.index.commit(message='Initial commit', **_commitargs)
@@ -590,13 +600,12 @@ def test_modality_merge_commit_message(run_hopic, monkeypatch):
             ('submit',),
         )
 
-    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
-        repo.git.checkout('master')
-        repo.git.describe() == expected_version
-
     assert result.exit_code == 0
-    with git.Repo(run_hopic.toprepo, expand_vars=False) as repo:
-        assert repo.heads.master.commit.message.startswith("feat: merge branch 'release/0': custom value")
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        if expected_version is not None:
+            assert repo.git.describe("master") == expected_version
+
+        assert repo.heads.master.commit.message.startswith(f"{msg_prefix} branch 'release/0': custom value")
 
 
 def test_modality_merge_nop(capfd, run_hopic, monkeypatch):
