@@ -777,6 +777,45 @@ def test_modality_version_bump(run_hopic, monkeypatch, modality_message, expecte
     assert result.exit_code == 0
 
 
+def test_modality_separate_changed_files(run_hopic, monkeypatch):
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        (run_hopic.toprepo / "hopic-ci-config.yaml").write_text(
+            dedent(
+                """\
+                version:
+                  bump: no
+
+                modality-source-preparation:
+                  ALPHA:
+                    - sh: touch test.txt
+                    - changed-files: test.txt
+                      commit-message: "chore: ensure file exists"
+                """
+            )
+        )
+
+        repo.index.add(("hopic-ci-config.yaml",))
+        base_commit = repo.index.commit(message="chore: initial commit", **_commitargs)
+        repo.head.reference = repo.create_head("release/0", base_commit)
+
+    (*_, result) = run_hopic(
+        command("checkout-source-tree", target_remote=run_hopic.toprepo, target_ref="master"),
+        command(
+            "prepare-source-tree",
+            author_date=f"@{_git_time}",
+            commit_date=f"@{_git_time}",
+            author_name=_author.name,
+            author_email=_author.email,
+        )
+        + command(
+            "apply-modality-change",
+            "ALPHA",
+        ),
+    )
+    assert result.exit_code == 0
+    assert re.match(r"^(?:[A-Fa-f0-9]{40}|[A-Fa-f0-9]{64})\n", result.stdout)
+
+
 @pytest.mark.parametrize('strict, commit_message, merge_message, expected_result', (
     (True , 'feat: some feature', 'feat: some feature', {'version': '0.1.0'}),
     (False, 'chore: non bumping', 'feat: some feature', {'version': '0.1.0'}),
