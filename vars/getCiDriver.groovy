@@ -669,6 +669,12 @@ RUN mkdir -p /hopic-reqs/hopic/cli /hopic-reqs/hopic/template \\
 RUN pip install --no-cache-dir --upgrade ${shell_quote(this.repo)}
 EOF
 cp -p setup.py hopic/test/docker-images/python/
+if [ -s /etc/pip.conf ]; then
+  cp -p /etc/pip.conf hopic/test/docker-images/python/
+  cat >> hopic/test/docker-images/python/Dockerfile <<EOF
+ADD pip.conf /etc/pip.conf
+EOF
+fi
 docker build --build-arg=PYTHON_VERSION=3.6 --iidfile=${shell_quote(docker_src)}/id.txt hopic/test/docker-images/python
 """,
                  label: 'Hopic: installing Hopic',
