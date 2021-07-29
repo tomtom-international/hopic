@@ -23,10 +23,10 @@ from typing import (
     Optional,
 )
 
-try:
+if sys.version_info[:2] >= (3, 8):
     from importlib import metadata
-except ImportError:
-    import importlib_metadata as metadata  # type: ignore # mypy is buggy for this try-except import style: https://github.com/python/mypy/issues/1153
+else:
+    import importlib_metadata as metadata  # mypy is buggy for this try-except import style: https://github.com/python/mypy/issues/1153
 
 import click
 
