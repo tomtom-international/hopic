@@ -535,8 +535,6 @@ class CiDriver {
   private target_commit      = null
   private may_submit_result  = null
   private may_publish_result = null
-  private pip_constraints    = null
-  private virtualenvs        = [:]
   private config_file
   private bitbucket_api_credential_id  = null
   private LinkedHashMap<String, LinkedHashMap<Integer, NodeExecution[]>> nodes_usage = [:]
@@ -660,7 +658,6 @@ ${shell_quote(venv)}/bin/python -m pip install ${shell_quote(this.repo)}
         cmd += ' --config=' + "${config_file_path}"
       }
       this.base_cmds[executor_identifier] = cmd
-      this.virtualenvs[executor_identifier] = venv
     }
 
     def (build_name, build_identifier) = get_build_id()
@@ -673,7 +670,7 @@ ${shell_quote(venv)}/bin/python -m pip install ${shell_quote(this.repo)}
     } catch (RejectedAccessException e) {
     }
     return steps.withEnv(environment) {
-      return closure(this.base_cmds[executor_identifier], this.virtualenvs[executor_identifier])
+      return closure(this.base_cmds[executor_identifier])
     }
   }
 
@@ -944,16 +941,8 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     }
 
     // Ensure any required extensions are available
-    def install_extensions_param = ""
-    if (this.pip_constraints) {
-      def pip_constraints_file = tmpdir + '/pip-constraints.txt'
-      steps.writeFile(
-          file: pip_constraints_file,
-          text: pip_constraints,
-      )
-      install_extensions_param = "--constraints ${shell_quote(pip_constraints_file)}"
-    }
-    steps.sh(script: "${cmd} install-extensions ${install_extensions_param}", label: 'Hopic: installing extensions')
+    steps.sh(script: "${cmd} install-extensions",
+             label: 'Hopic: installing extensions')
 
     def code_dir_output = tmpdir + '/code-dir.txt'
     if (steps.sh(script: 'LC_ALL=C.UTF-8 TZ=UTC git config --get hopic.code.dir > ' + shell_quote(code_dir_output), returnStatus: true,
@@ -1672,7 +1661,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     this.extend_build_properties()
     this.decorate_output {
       def (phases, is_publishable_change, submit_meta, locks) = this.on_node(node_expr: default_node, exec_name: "hopic-init") {
-        return this.with_hopic { cmd, venv ->
+        return this.with_hopic { cmd ->
           def workspace = steps.pwd()
 
           /*
@@ -1699,13 +1688,6 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           // Force a full based checkout & change application, instead of relying on the checkout done above, to ensure that we're building the list of phases and
           // variants to execute (below) using the final config file.
           this.ensure_checkout(cmd, clean)
-
-          // Pin the currently installed pip packages to ensure all variants use the same templates
-          this.pip_constraints = steps.sh(
-              script: "${venv}/bin/python -m pip freeze",
-              label: "Get list of installed pip packages",
-              returnStdout: true,
-          )
 
           def phases = steps.readJSON(text: steps.sh(
               script: "${cmd} getinfo",
