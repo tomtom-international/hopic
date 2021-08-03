@@ -648,7 +648,7 @@ export LC_ALL TZ
 rm -rf ${shell_quote(venv)}
 python3 -m virtualenv --clear ${shell_quote(venv)}
 cd /
-${shell_quote(venv)}/bin/python -m pip install --prefer-binary ${shell_quote(this.repo)}
+${shell_quote(venv)}/bin/python -m pip install --prefer-binary --upgrade ${shell_quote("pip>=21.1")} ${shell_quote(this.repo)}
 """,
                  label: 'Hopic: installing Hopic')
       }
