@@ -14,6 +14,7 @@
 
 import importlib
 import logging
+import re
 import subprocess
 import sys
 import tempfile
@@ -75,7 +76,9 @@ def install_extensions_with_config(pip_cfg, input_constraints_file: Optional[str
         # Prevent changing the Hopic version and add constraints that were passed in, if any
         constraints_text = f"{PACKAGE}=={get_package_version(PACKAGE)}\n"
         if input_constraints_file:
-            constraints_text += Path(input_constraints_file).read_text()
+            input_constraints = Path(input_constraints_file).read_text()
+            # Remove any existing references to Hopic
+            constraints_text += re.sub(f"(?m)^{PACKAGE}[^A-Za-z0-9._-].*?\n", "", input_constraints)
 
         constraints_file = Path(td) / "constraints.txt"
         constraints_file.write_text(constraints_text)
