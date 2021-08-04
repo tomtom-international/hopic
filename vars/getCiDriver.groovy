@@ -540,6 +540,7 @@ class CiDriver {
   private LinkedHashMap<String, LinkedHashMap<Integer, NodeExecution[]>> nodes_usage = [:]
   private ArrayList<LockWaitingTime> lock_times = []
   private printMetrics
+  private config_file_content = null
 
   private final default_node_expr = "Linux && Docker"
 
@@ -547,7 +548,11 @@ class CiDriver {
     this.repo = repo
     this.steps = steps
     this.change = params.change
-    this.config_file = params.config
+    this.config_file_content = params.config_file_content
+    if (params.config_file_content && params.config) {
+      steps.println("WARNING: ignoring config_file as config content has been provided")
+    }
+    this.config_file = params.config_file_content ? 'hopic-internal-config.yaml' : params.config
     this.bitbucket_api_credential_id = params.getOrDefault('bb_api_cred_id', 'tt_service_account_creds')
     this.scm = [
       credentialsId: steps.scm.userRemoteConfigs[0].credentialsId,
@@ -654,7 +659,15 @@ ${shell_quote(venv)}/bin/python -m pip install --prefer-binary ${shell_quote(thi
       def cmd = 'LC_ALL=C.UTF-8 TZ=UTC ' + shell_quote("${venv}/bin/python") + ' ' + shell_quote("${venv}/bin/hopic") + ' --color=always'
       if (this.config_file != null) {
         cmd += ' --workspace=' + shell_quote(workspace)
-        def config_file_path = shell_quote(this.config_file.startsWith('/') ? "${config_file}" : "${workspace}/${config_file}")
+        def cfg_file = this.config_file
+        if (this.config_file_content) {
+          cfg_file = steps.pwd(tmp: true) + "/${this.config_file}"
+          steps.writeFile(
+            file: cfg_file,
+            text: this.config_file_content
+          )
+        }
+        def config_file_path = shell_quote(cfg_file.startsWith('/') ? cfg_file : "${workspace}/${cfg_file}")
         cmd += ' --config=' + "${config_file_path}"
       }
       this.base_cmds[executor_identifier] = cmd
