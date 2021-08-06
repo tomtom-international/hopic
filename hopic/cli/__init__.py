@@ -102,6 +102,7 @@ from ..errors import (
     VersionBumpMismatchError,
     VersioningError,
 )
+from ..types import PathLike
 
 
 PACKAGE : str = __package__.split('.')[0]
@@ -405,11 +406,14 @@ def checkout_source_tree(
 
 
 @main.group()
+# fmt: off
 # git
 @click.option('--author-name'               , metavar='<name>'                 , help='''Name of change-request's author''')
 @click.option('--author-email'              , metavar='<email>'                , help='''E-mail address of change-request's author''')
 @click.option('--author-date'               , metavar='<date>', type=DateTime(), help='''Time of last update to the change-request''')
 @click.option('--commit-date'               , metavar='<date>', type=DateTime(), help='''Time of starting to build this change-request''')
+@click.option("--bundle"                    , metavar="<file>", type=click.Path(file_okay=True, dir_okay=False, writable=True))
+# fmt: on
 def prepare_source_tree(*args, **kwargs):
     """
     Prepares the source tree for building a change performed by a subcommand.
@@ -421,13 +425,14 @@ def prepare_source_tree(*args, **kwargs):
 @prepare_source_tree.resultcallback()
 @click.pass_context
 def process_prepare_source_tree(
-            ctx,
-            change_applicator,
-            author_name,
-            author_email,
-            author_date,
-            commit_date,
-        ):
+    ctx,
+    change_applicator,
+    author_name,
+    author_email,
+    author_date,
+    commit_date,
+    bundle: Optional[PathLike],
+):
     with git.Repo(ctx.obj.workspace) as repo:
         if author_name is None or author_email is None:
             # This relies on /etc/passwd entries as a fallback, which might contain the info we need
@@ -797,6 +802,10 @@ def process_prepare_source_tree(
             push_commit = new_index.commit(**commit_params)
             log.info('%s', repo.git.show(push_commit, format='fuller', stat=True))
 
+        bundle_excludes = [
+            target_commit,
+        ]
+        bundle_refs: List[Tuple[str, Any]] = []
         with repo.config_writer() as cfg:
             cfg.remove_section(f"hopic.{target_commit}")
             section = f"hopic.{submit_commit}"
@@ -807,10 +816,16 @@ def process_prepare_source_tree(
             if target_ref is not None:
                 cfg.set_value(section, 'ref', target_ref)
                 refspecs.append(f"{push_commit}:{target_ref}")
+                bundle_refs.append((target_ref, push_commit))
             if tagref is not None:
                 refspecs.append(f"{tagref.object}:{tagref.path}")
+                bundle_refs.append((tagref.path, tagref.object))
             if notes_ref is not None:
                 refspecs.append(notes_ref)
+                notes_commit_name, notes_ref_name = notes_ref.split(":", 1)
+                notes_commit = repo.commit(notes_commit_name)
+                bundle_excludes.extend(notes_commit.parents)
+                bundle_refs.append((notes_ref_name, notes_commit))
             if refspecs:
                 cfg.set_value(section, 'refspecs', ' '.join(shlex.quote(refspec) for refspec in refspecs))
             if source_commit:
@@ -818,6 +833,23 @@ def process_prepare_source_tree(
                 cfg.set_value(section, 'source-commit', str(source_commit))
             if autosquashed_commit:
                 cfg.set_value(section, 'autosquashed-commit', str(autosquashed_commit))
+
+        if bundle is not None and bundle_refs:
+            bundle_names = []
+
+            bundle_ref_dir = Path(repo.git_dir) / "refs" / "bundle"
+            for ref, obj in bundle_refs:
+                if not ref.startswith("refs/") and not ref.startswith("heads/") and not ref.startswith("tags/"):
+                    ref = f"heads/{ref}"
+                elif ref.startswith("refs/"):
+                    ref = ref[len("refs/") :]
+                ref_path = bundle_ref_dir / ref
+                ref_path.parent.mkdir(parents=True, exist_ok=True)
+                ref_path.write_text(str(obj), encoding="UTF-8")
+                bundle_names.append(f"refs/bundle/{ref}")
+
+            repo.git.bundle("create", bundle, *bundle_excludes, *bundle_names)
+
         if ctx.obj.version is not None:
             click.echo(ctx.obj.version)
 
