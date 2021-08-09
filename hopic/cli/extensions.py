@@ -24,10 +24,7 @@ from typing import (
     Optional,
 )
 
-if sys.version_info[:2] >= (3, 8):
-    from importlib import metadata
-else:
-    import importlib_metadata as metadata  # mypy is buggy for this try-except import style: https://github.com/python/mypy/issues/1153
+from ..compat import metadata
 
 import click
 

@@ -35,11 +35,7 @@ from typing import (
     Union,
 )
 
-try:
-    # Python >= 3.8
-    from importlib import metadata
-except ImportError:
-    import importlib_metadata as metadata
+from ..compat import metadata
 
 import click_log
 import git

@@ -29,11 +29,7 @@ from ..build import (
     HopicGitInfo,
 )
 
-try:
-    # Python >= 3.8
-    from importlib import metadata
-except ImportError:
-    import importlib_metadata as metadata  # type: ignore # mypy is buggy for this try-except import style: https://github.com/python/mypy/issues/1153
+from ..compat import metadata
 
 
 def is_publish_branch(ctx, hopic_git_info=None) -> bool:
