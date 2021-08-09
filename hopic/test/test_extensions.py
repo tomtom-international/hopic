@@ -14,6 +14,7 @@
 
 import click
 import json
+import logging
 import re
 import subprocess
 import sys
@@ -24,11 +25,8 @@ from textwrap import dedent
 import git
 import pytest
 
-if sys.version_info[:2] >= (3, 10):
-    from importlib import metadata
-else:
-    import importlib_metadata as metadata
-
+from ..cli import utils
+from ..compat import metadata
 from ..errors import ConfigurationError
 
 _git_time = f"{42 * 365 * 24 * 3600} +0000"
@@ -755,5 +753,47 @@ def test_extension_constraints_functionality(monkeypatch, run_hopic, tmp_path):
             ("build",),
             config=config,
         )
+
+    assert result.exit_code == 0
+
+
+@pytest.mark.parametrize(
+    "installed_pip_version, expected_result",
+    (
+        ("21.2.0", 0),
+        ("0.0.0", 1),
+        (None, 2),
+    ),
+)
+def test_extension_constraints_pip_version(monkeypatch, run_hopic, tmp_path, installed_pip_version, expected_result):
+    TEST_PACKAGE = "pip"
+
+    def mock_check(package):
+        if package == TEST_PACKAGE:
+            if not installed_pip_version:
+                raise metadata.PackageNotFoundError
+            return installed_pip_version
+        return original_pkg_version(package)
+
+    monkeypatch.setattr(subprocess, "check_call", lambda *x, **_: None)
+
+    original_pkg_version = monkeypatch.setattr(utils, "get_package_version", mock_check)
+
+    run_hopic.toprepo.mkdir()
+    constraints_file = run_hopic.toprepo / "constraints.txt"
+    constraints_file.touch()
+
+    options = ("--constraints", constraints_file.resolve())
+    config = f"pip: [ packages: [ {TEST_PACKAGE} ] ]"
+
+    (result,) = run_hopic(
+        ("install-extensions", *options),
+        config=config,
+    )
+
+    if expected_result == 1:
+        assert any(level == logging.WARNING and "upgrade your pip package" in line for level, line in result.logs)
+    elif expected_result == 2:
+        assert any(level == logging.WARNING and "is not installed" in line for level, line in result.logs)
 
     assert result.exit_code == 0

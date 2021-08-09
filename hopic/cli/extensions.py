@@ -37,26 +37,52 @@ from ..config_reader import (
 )
 from ..execution import echo_cmd_click as echo_cmd
 from .utils import (
-        determine_config_file_name,
-        get_package_version,
-        )
+    determine_config_file_name,
+    get_package_version,
+    check_minimum_package_version,
+)
 
 PACKAGE : str = __package__.split('.')[0]
 log = logging.getLogger(__name__)
 
 
+def check_minimum_pip_version():
+    """Check the installed version of pip and issue a warning if it's lower than recommended."""
+    MINIMUM_PIP_VERSION = "21.1.0"
+    success, version = check_minimum_package_version("pip", MINIMUM_PIP_VERSION)
+    if success:
+        return
+
+    if not version:
+        log.warning("Package 'pip' is not installed")
+    else:
+        log.warning(
+            dedent(
+                """
+            The installed 'pip' version (%s) does not meet the recommended minimum of %s.
+            You may encounter fatal pip errors related to URL constraints.
+            It is strongly recommended to upgrade your pip package:
+
+              pip install --upgrade pip>=21.0
+            """
+            ),
+            version,
+            MINIMUM_PIP_VERSION,
+        )
+
+
 @click.command()
 # fmt: off
-@click.option("--constraints", type=click.Path(exists=True, dir_okay=False, readable=True), help="""Apply the provided constraints file to pip operations""")  # noqa: 501
-@click.option("--upgrade", is_flag=True, help="""Request for already installed packages to be upgraded to newer versions, can't be combined with "constraints" option""")  # noqa: 501
+@click.option("--constraints", type=click.Path(exists=True, dir_okay=False, readable=True), help="""Apply the provided constraints file to pip operations""")
+@click.option("--upgrade", is_flag=True, help="""Request for already installed packages to be upgraded to newer versions, can't be combined with "constraints" option""")
 # fmt: on
 @click.pass_context
-def install_extensions(ctx, constraints: Optional[str] = None, upgrade: bool = False):
+def install_extensions(ctx, constraints: Optional[str] = None, *, upgrade: bool = False):
     if constraints and upgrade:
         raise click.BadOptionUsage("upgrade", 'options "constraints" and "upgrade" are mutually exclusive')
 
     def installer(pip_cfg):
-        return install_extensions_with_config(pip_cfg, constraints, upgrade)
+        return install_extensions_with_config(pip_cfg, constraints, upgrade=upgrade)
 
     # Read the config file and install all templates available
     return read_config(
@@ -66,7 +92,7 @@ def install_extensions(ctx, constraints: Optional[str] = None, upgrade: bool = F
     )
 
 
-def install_extensions_with_config(pip_cfg, input_constraints_file: Optional[str], upgrade: bool):
+def install_extensions_with_config(pip_cfg, input_constraints_file: Optional[str], *, upgrade: bool):
     if not pip_cfg:
         return
 
@@ -76,8 +102,12 @@ def install_extensions_with_config(pip_cfg, input_constraints_file: Optional[str
         # Prevent changing the Hopic version and add constraints that were passed in, if any
         constraints_text = f"{PACKAGE}=={get_package_version(PACKAGE)}\n"
         if input_constraints_file:
+            # Issue a warning if a constraints file is provided and the pip version is not prepared
+            # to handle URL constraints.
+            check_minimum_pip_version()
+
             input_constraints = Path(input_constraints_file).read_text()
-            # Remove any existing references to Hopic
+            # Remove any existing references to the Hopic package itself from the input
             constraints_text += re.sub(f"(?m)^{PACKAGE}[^A-Za-z0-9._-].*?\n", "", input_constraints)
 
         constraints_file = Path(td) / "constraints.txt"
