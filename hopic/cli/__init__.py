@@ -298,6 +298,24 @@ def install_extensions_and_parse_config():
     initialize_global_variables_from_config(extensions.install_extensions.callback())
 
 
+def store_commit_meta(repo: git.Repo, commit_meta: Dict[str, Any], *, commit: git.Commit, old_commit: Optional[git.Commit] = None) -> None:
+    with repo.config_writer() as cfg:
+        if old_commit is not None:
+            cfg.remove_section(f"hopic.{old_commit}")
+        section = f"hopic.{commit}"
+        for key, val in commit_meta.items():
+            if val is None:
+                continue
+            if isinstance(val, bool):
+                cfg.set_value(section, key, "true" if val else "false")
+            elif isinstance(val, git.Object):
+                cfg.set_value(section, key, str(val))
+            elif isinstance(val, list):
+                cfg.set_value(section, "refspecs", " ".join(shlex.quote(refspec) for refspec in val))
+            else:
+                cfg.set_value(section, key, val)
+
+
 @main.command()
 @click.option('--target-remote'     , metavar='<url>')
 @click.option('--target-ref'        , metavar='<ref>')
@@ -804,37 +822,36 @@ def process_prepare_source_tree(
             push_commit = new_index.commit(**commit_params)
             log.info('%s', repo.git.show(push_commit, format='fuller', stat=True))
 
+        refspecs = []
         bundle_excludes = [
             target_commit,
         ]
         bundle_refs: List[Tuple[str, Any]] = []
-        with repo.config_writer() as cfg:
-            cfg.remove_section(f"hopic.{target_commit}")
-            section = f"hopic.{submit_commit}"
-            if target_remote is not None:
-                cfg.set_value(section, 'remote', target_remote)
-            cfg.set_value(section, "version-bumped", str(version_bumped))
-            refspecs = []
-            if target_ref is not None:
-                cfg.set_value(section, 'ref', target_ref)
-                refspecs.append(f"{push_commit}:{target_ref}")
-                bundle_refs.append((target_ref, push_commit))
-            if tagref is not None:
-                refspecs.append(f"{tagref.object}:{tagref.path}")
-                bundle_refs.append((tagref.path, tagref.object))
-            if notes_ref is not None:
-                refspecs.append(notes_ref)
-                notes_commit_name, notes_ref_name = notes_ref.split(":", 1)
-                notes_commit = repo.commit(notes_commit_name)
-                bundle_excludes.extend(notes_commit.parents)
-                bundle_refs.append((notes_ref_name, notes_commit))
-            if refspecs:
-                cfg.set_value(section, 'refspecs', ' '.join(shlex.quote(refspec) for refspec in refspecs))
-            if source_commit:
-                cfg.set_value(section, 'target-commit', str(target_commit))
-                cfg.set_value(section, 'source-commit', str(source_commit))
-            if autosquashed_commit:
-                cfg.set_value(section, 'autosquashed-commit', str(autosquashed_commit))
+
+        if target_ref is not None:
+            refspecs.append(f"{push_commit}:{target_ref}")
+            bundle_refs.append((target_ref, push_commit))
+        if tagref is not None:
+            refspecs.append(f"{tagref.object}:{tagref.path}")
+            bundle_refs.append((tagref.path, tagref.object))
+        if notes_ref is not None:
+            refspecs.append(notes_ref)
+            notes_commit_name, notes_ref_name = notes_ref.split(":", 1)
+            notes_commit = repo.commit(notes_commit_name)
+            bundle_excludes.extend(notes_commit.parents)
+            bundle_refs.append((notes_ref_name, notes_commit))
+
+        commit_meta = {
+            "remote": target_remote,
+            "version-bumped": version_bumped,
+            "ref": target_ref,
+            "refspecs": refspecs,
+            "target-commit": str(target_commit) if target_commit is not None else None,
+            "source-commit": str(source_commit) if source_commit is not None else None,
+            "autosquashed-commit": str(autosquashed_commit) if autosquashed_commit is not None else None,
+        }
+
+        store_commit_meta(repo, commit_meta, commit=submit_commit, old_commit=target_commit)
 
         if bundle is not None and bundle_refs:
             bundle_names = []
@@ -855,6 +872,30 @@ def process_prepare_source_tree(
                 autosquashed_ref.parent.mkdir(parents=True, exist_ok=True)
                 autosquashed_ref.write_text(str(autosquashed_commit), encoding="UTF-8")
                 bundle_names.append("refs/hopic/bundle/autosquashed")
+
+            commit_meta_data = json.dumps(commit_meta).encode("UTF-8")
+            commit_meta_blob = git.Blob(
+                repo=repo,
+                binsha=repo.odb.store(gitdb.IStream(git.Blob.type, len(commit_meta_data), BytesIO(commit_meta_data))).binsha,
+                mode=0o100644,
+                path="hopic-meta",
+            )
+
+            meta_index = repo.index.new(repo)
+            meta_index.add([commit_meta_blob], write=False)
+
+            commit_params["message"] = f"Hopic meta data for {submit_commit}"
+            commit_params["parent_commits"] = ()
+            # Prevent advancing HEAD
+            commit_params["head"] = False
+
+            meta_commit = meta_index.commit(
+                **commit_params,
+            )
+            meta_ref = Path(repo.git_dir) / "refs" / "hopic" / "bundle" / "meta"
+            meta_ref.parent.mkdir(parents=True, exist_ok=True)
+            meta_ref.write_text(str(meta_commit), encoding="UTF-8")
+            bundle_names.append("refs/hopic/bundle/meta")
 
             repo.git.bundle("create", bundle, *bundle_excludes, *bundle_names)
 
