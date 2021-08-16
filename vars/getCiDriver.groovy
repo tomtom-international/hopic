@@ -1718,7 +1718,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
               script: "${venv}/bin/python -m pip freeze",
               label: "Get list of installed pip packages",
               returnStdout: true,
-          )
+          ).replaceAll(/(?m)^[A-Za-z0-9-_.]+ *@.+$/, "") // Remove any URL constraints, as adding support for those has proven troublesome
 
           def phases = steps.readJSON(text: steps.sh(
               script: "${cmd} getinfo",
