@@ -850,6 +850,12 @@ def process_prepare_source_tree(
                 ref_path.write_text(str(obj), encoding="UTF-8")
                 bundle_names.append(f"refs/bundle/{ref}")
 
+            if autosquashed_commit is not None:
+                autosquashed_ref = Path(repo.git_dir) / "refs" / "hopic" / "bundle" / "autosquashed"
+                autosquashed_ref.parent.mkdir(parents=True, exist_ok=True)
+                autosquashed_ref.write_text(str(autosquashed_commit), encoding="UTF-8")
+                bundle_names.append("refs/hopic/bundle/autosquashed")
+
             repo.git.bundle("create", bundle, *bundle_excludes, *bundle_names)
 
         if ctx.obj.version is not None:
