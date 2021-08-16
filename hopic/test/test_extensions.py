@@ -12,20 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import click
 import json
+import logging
+import re
 import subprocess
 import sys
 from collections import OrderedDict
+from pathlib import Path
 from textwrap import dedent
 
 import git
 import pytest
 
-if sys.version_info[:2] >= (3, 10):
-    from importlib import metadata
-else:
-    import importlib_metadata as metadata
-
+from ..cli import utils
+from ..compat import metadata
 from ..errors import ConfigurationError
 
 _git_time = f"{42 * 365 * 24 * 3600} +0000"
@@ -670,3 +671,129 @@ def test_add_hopic_config_with_template_in_pr(capfd, monkeypatch, run_hopic):
     sys.stdout.write(out)
     sys.stderr.write(err)
     out.splitlines()[-1] = 'Hello World!'
+
+
+@pytest.mark.parametrize("constraints", (True, False))
+@pytest.mark.parametrize("upgrade", (True, False))
+def test_extension_constraints_upgrade_mutual_exclusivity(monkeypatch, run_hopic, constraints, upgrade):
+    def mock_check_call(args, *popenargs, **kwargs):
+        if args[2:4] == ["pip", "install"]:
+            if upgrade:
+                assert "--upgrade" in args and "--constraints" not in args
+            elif constraints:
+                assert "--constraints" in args and "--upgrade" not in args
+            else:
+                assert "--constraints" not in args and "--upgrade" not in args
+
+    monkeypatch.setattr(subprocess, "check_call", mock_check_call)
+
+    options = []
+    if constraints:
+        run_hopic.toprepo.mkdir()
+        constraints_file = run_hopic.toprepo / "constraints.txt"
+        constraints_file.write_text("test==1.2.3")
+        options.extend(["--constraints", constraints_file.resolve()])
+    if upgrade:
+        options.append("--upgrade")
+
+    (result,) = run_hopic(
+        ("install-extensions", *options),
+        config="",
+    )
+    if constraints and upgrade:
+        assert isinstance(result.exception, click.BadOptionUsage)
+        assert "mutually exclusive" in result.exception.format_message()
+    else:
+        assert result.exit_code == 0
+
+
+def test_extension_constraints_functionality(monkeypatch, run_hopic, tmp_path):
+    packages = (
+        "commisery>=0.8.0",
+        "somepackage==2.3.4",
+        "someotherpackage==4.5.6",
+    )
+    constraint = "commisery==0.8.2"
+
+    run_hopic.toprepo.mkdir()
+    constraints_file = run_hopic.toprepo / "constraints.txt"
+    constraints_file.write_text(constraint)
+
+    options = ("--constraints", constraints_file.resolve())
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        if args[2:4] == ["pip", "install"]:
+            assert re.search(r"-c /[^ ]*/constraints.txt\b", " ".join(args)) is not None
+            assert all(pkg in args for pkg in packages)
+
+    monkeypatch.setattr(subprocess, "check_call", mock_check_call)
+
+    with monkeypatch.context() as write_text_m:
+        # The first `Path.write_text` we encounter will be from `install-extensions`,
+        # so check that our input constraint is logged.
+
+        def mock_write_text(f, text, *args, **kwargs):
+            assert constraint in text
+            write_text_m.undo()
+
+        write_text_m.setattr(Path, "write_text", mock_write_text)
+
+        config = dedent(
+            f"""\
+            pip:
+              - packages: {json.dumps(packages)}
+            """
+        )
+
+        (_, result) = run_hopic(
+            (
+                "install-extensions",
+                *options,
+            ),
+            ("build",),
+            config=config,
+        )
+
+    assert result.exit_code == 0
+
+
+@pytest.mark.parametrize(
+    "installed_pip_version, expected_result",
+    (
+        ("21.2.0", 0),
+        ("0.0.0", 1),
+        (None, 2),
+    ),
+)
+def test_extension_constraints_pip_version(monkeypatch, run_hopic, tmp_path, installed_pip_version, expected_result):
+    TEST_PACKAGE = "pip"
+
+    def mock_check(package):
+        if package == TEST_PACKAGE:
+            if not installed_pip_version:
+                raise metadata.PackageNotFoundError
+            return installed_pip_version
+        return original_pkg_version(package)
+
+    monkeypatch.setattr(subprocess, "check_call", lambda *x, **_: None)
+
+    original_pkg_version = monkeypatch.setattr(utils, "get_package_version", mock_check)
+
+    run_hopic.toprepo.mkdir()
+    constraints_file = run_hopic.toprepo / "constraints.txt"
+    constraints_file.touch()
+
+    options = ("--constraints", constraints_file.resolve())
+    config = f"pip: [ packages: [ {TEST_PACKAGE} ] ]"
+
+    (result,) = run_hopic(
+        ("install-extensions", *options),
+        config=config,
+    )
+
+    if expected_result == 1:
+        assert any(level == logging.WARNING and "upgrade your pip package" in line for level, line in result.logs)
+    elif expected_result == 2:
+        assert any(level == logging.WARNING and "is not installed" in line for level, line in result.logs)
+
+    assert result.exit_code == 0
