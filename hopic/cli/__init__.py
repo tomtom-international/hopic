@@ -1362,6 +1362,101 @@ def getinfo(
 
 
 @main.command()
+@click.argument("bundle", type=click.Path(file_okay=True, dir_okay=False, readable=True))
+@click.pass_context
+def unbundle(ctx, *, bundle: PathLike):
+    """
+    Unbundle the specified git bundle and setup all included refs for pushing.
+    """
+
+    with git.Repo(ctx.obj.workspace) as repo:
+        target_commit = repo.head.commit
+
+        with repo.config_reader() as cfg:
+            section = f"hopic.{target_commit}"
+            target_ref = cfg.get(section, "ref", fallback=None)
+            target_remote = cfg.get(section, "remote", fallback=None)
+            code_clean = cfg.getboolean("hopic.code", "cfg-clean", fallback=False)
+
+        submit_commit: Optional[git.Commit] = None
+        commit_meta: Dict[str, Any] = {}
+        bundle_path = "refs/bundle/"
+        head_path = "heads/"
+        unbundle_proc = repo.git.bundle("unbundle", bundle, as_process=True)
+        for headline in unbundle_proc.stdout:
+            obj, ref = headline.decode("UTF-8").rstrip("\n").split(" ", 1)
+            if ref == "refs/hopic/bundle/meta":
+                meta_commit = repo.commit(obj)
+
+                m = re.match(r"^Hopic meta\s*data for \b([0-9a-fA-F]+)\b", meta_commit.message)
+                if not m:
+                    continue
+                submit_commit = repo.commit(m.group(1))
+
+                if "hopic-meta" not in meta_commit.tree:
+                    continue
+                commit_meta = json.load(meta_commit.tree["hopic-meta"].data_stream)
+                store_commit_meta(repo, commit_meta, commit=submit_commit, old_commit=target_commit)
+            if not ref.startswith(bundle_path):
+                continue
+            ref = ref[len(bundle_path) :]
+            if not ref.startswith(head_path):
+                ref_path = Path(repo.git_dir) / "refs" / ref
+                ref_path.parent.mkdir(parents=True, exist_ok=True)
+                ref_path.write_text(str(obj), encoding="UTF-8")
+        try:
+            unbundle_proc.terminate()
+        except OSError:
+            pass
+
+    if not submit_commit or not commit_meta:
+        log.error("Couldn't find Hopic meta data inside given bundle")
+        ctx.exit(1)
+
+    workspace = ctx.obj.workspace
+    # Check out specified repository
+    checkout_tree(
+        ctx.obj.workspace,
+        remote=None,
+        ref=commit_meta["ref"],
+        commit=submit_commit,
+        clean=code_clean,
+    )
+
+    try:
+        ctx.obj.config = read_config(determine_config_file_name(ctx), ctx.obj.volume_vars)
+        if code_clean:
+            with git.Repo(workspace) as repo:
+                clean_repo(repo, ctx.obj.config["clean"])
+        git_cfg = ctx.obj.config["scm"]["git"]
+    except (click.BadParameter, KeyError, TypeError, OSError, IOError, YAMLError):
+        return
+
+    log.info("%s", repo.git.show(submit_commit, format="fuller", stat=True, notes="*"))
+
+    if "remote" not in git_cfg and "ref" not in git_cfg:
+        return
+
+    code_dir = find_code_dir(workspace)
+
+    # Check out configured repository and mark it as the code directory of this one
+    with git.Repo(workspace) as repo, repo.config_writer() as cfg:
+        cfg.remove_section("hopic.code")
+        cfg.set_value("hopic.code", "dir", str(code_dir))
+        cfg.set_value("hopic.code", "cfg-remote", target_remote)
+        cfg.set_value("hopic.code", "cfg-ref", target_ref)
+        cfg.set_value("hopic.code", "cfg-clean", str(code_clean))
+
+    checkout_tree(
+        code_dir,
+        git_cfg.get("remote", target_remote),
+        git_cfg.get("ref", target_ref),
+        clean=code_clean,
+        clean_config=ctx.obj.config["clean"],
+    )
+
+
+@main.command()
 @click.option('--bundle', metavar='<file>', help='Git bundle to use', type=click.Path(file_okay=True, dir_okay=False, readable=True, resolve_path=True))
 @click.pass_context
 def unbundle_worktrees(ctx, bundle):
