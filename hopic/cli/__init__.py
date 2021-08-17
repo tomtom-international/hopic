@@ -59,7 +59,6 @@ from configparser import (
         NoOptionError,
         NoSectionError,
     )
-from copy import copy
 from datetime import datetime
 from dateutil.parser import parse as date_parse
 from dateutil.tz import (tzoffset, tzlocal)
@@ -509,7 +508,7 @@ def process_prepare_source_tree(
         bump.update(commit_params.pop('bump-override', {}))
 
         commit_from, commit_to = (base_commit, target_commit) if base_commit else (target_commit, source_commit)
-        source_commits = list(parse_commit_range(repo, commit_from, commit_to, bump))
+        source_commits = tuple(parse_commit_range(repo, commit_from, commit_to, bump))
 
         change_message = None
         if "message" in commit_params and bump["on-every-change"]:
@@ -569,18 +568,20 @@ def process_prepare_source_tree(
 
                     # strip dirty state from version to ensure we're not complaining about that in the _is_valid_hotfix_base check below
                     gitversion = GitVersion(tag_name=gitversion.tag_name, commit_hash=gitversion.commit_hash, commit_count=gitversion.commit_count)
-                    base_version = gitversion.to_version(**params)
+                    parse_version = gitversion.to_version(**params)
+                    assert parse_version is not None
+                    base_version = parse_version
 
                     # strip commit distance from version to ensure we're bumping the hotfix suffix instead of the commit distance suffix
                     gitversion = GitVersion(tag_name=gitversion.tag_name, commit_hash=gitversion.commit_hash)
-                    cur_version = gitversion.to_version(**params)
+                    parse_version = gitversion.to_version(**params)
+                    assert parse_version is not None
+                    cur_version = parse_version
 
                 if not _is_valid_hotfix_base(base_version):
                     raise VersioningError(f"Creating hotfixes on anything but a full release is not supported. Currently on: {base_version}")
 
-                release_part = copy(cur_version)
-                release_part.build = ()
-                release_part = str(release_part)
+                release_part = str(cur_version.without_meta())
                 if re.search(f"\\b{re.escape(release_part)}\\b", str(hotfix)):
                     raise VersioningError(f"Hotfix ID '{hotfix}' is not allowed to contain the base version '{release_part}'")
 
@@ -739,6 +740,7 @@ def process_prepare_source_tree(
         version_tag = version_info.get('tag', False)
         if version_bumped and _is_valid_hotfix_base(ctx.obj.version) and version_tag and is_publish_allowed:
             if not isinstance(version_tag, str):
+                assert ctx.obj.version is not None
                 version_tag = ctx.obj.version.default_tag_name
             tagname = version_tag.format(
                     version        = ctx.obj.version,                                           # noqa: E251 "unexpected spaces around '='"
@@ -779,15 +781,15 @@ def process_prepare_source_tree(
 
             new_version_file = StringIO()
             replace_version(ctx.obj.config_dir / version_info['file'], after_submit_version, outfile=new_version_file)
-            new_version_file = new_version_file.getvalue().encode(sys.getdefaultencoding())
+            new_version_data = new_version_file.getvalue().encode(sys.getdefaultencoding())
 
             old_version_blob = submit_commit.tree[relative_version_file]
             new_version_blob = git.Blob(
-                    repo=repo,
-                    binsha=repo.odb.store(gitdb.IStream(git.Blob.type, len(new_version_file), BytesIO(new_version_file))).binsha,
-                    mode=old_version_blob.mode,
-                    path=old_version_blob.path,
-                )
+                repo=repo,
+                binsha=repo.odb.store(gitdb.IStream(git.Blob.type, len(new_version_data), BytesIO(new_version_data))).binsha,
+                mode=old_version_blob.mode,
+                path=old_version_blob.path,
+            )
             new_index = repo.index.from_tree(repo, submit_commit)
             new_index.add([new_version_blob], write=False)
 
