@@ -168,11 +168,11 @@ def may_publish(ctx):
 
 
 def checkout_tree(
-    tree,
-    remote,
-    ref,
+    tree: PathLike,
+    remote: Optional[str],
+    ref: str,
     *,
-    commit: Optional[str] = None,
+    commit: Union[str, git.Commit, None] = None,
     clean: bool = False,
     remote_name: str = 'origin',
     tags: bool = True,
@@ -202,6 +202,7 @@ def checkout_tree(
                 else:
                     os.remove(path)
 
+        assert remote is not None
         repo = git.Repo.clone_from(remote, tree)
 
     with repo:
@@ -210,32 +211,37 @@ def checkout_tree(
             cfg.set_value('color', 'ui', 'always')
             cfg.set_value('hopic.code', 'cfg-clean', str(clean))
 
-        clean_tags = tags and repo.tags
-        if clean_tags:
-            repo.delete_tag(*clean_tags)
+        if remote is not None:
+            clean_tags = tags and repo.tags
+            if clean_tags:
+                repo.delete_tag(*clean_tags)
 
-        try:
-            # Delete, instead of update, existing remotes.
-            # This is because of https://github.com/gitpython-developers/GitPython/issues/719
-            repo.delete_remote(remote_name)
-        except git.GitCommandError:
-            pass
-        origin = repo.create_remote(remote_name, remote)
+            try:
+                # Delete, instead of update, existing remotes.
+                # This is because of https://github.com/gitpython-developers/GitPython/issues/719
+                repo.delete_remote(remote_name)
+            except git.GitCommandError:
+                pass
+            origin = repo.create_remote(remote_name, remote)
 
-        fetch_info, *_ = origin.fetch(ref, tags=tags)
+            fetch_info, *_ = origin.fetch(ref, tags=tags)
 
-        if commit is not None and not repo.is_ancestor(commit, fetch_info.commit):
-            raise CommitAncestorMismatchError(commit, fetch_info.commit, ref)
+            if commit is not None and not repo.is_ancestor(commit, fetch_info.commit):
+                raise CommitAncestorMismatchError(commit, fetch_info.commit, ref)
 
-        commit = repo.commit(commit) if commit else fetch_info.commit
+            commit = repo.commit(commit) if commit else fetch_info.commit
+
+            # Ensure we have the exact same view of all Hopic notes as are present upstream
+            origin.fetch("+refs/notes/hopic/*:refs/notes/hopic/*", prune=True)
+        else:
+            assert commit is not None
+            if isinstance(commit, str):
+                commit = repo.commit(commit)
 
         repo.head.reference = commit
         repo.head.reset(index=True, working_tree=True)
         # Remove potentially moved submodules
         repo.git.submodule(["deinit", "--all", "--force"])
-
-        # Ensure we have the exact same view of all Hopic notes as are present upstream
-        origin.fetch("+refs/notes/hopic/*:refs/notes/hopic/*", prune=True)
 
         try:
             update_submodules(repo, clean)
@@ -253,7 +259,8 @@ def checkout_tree(
         with repo.config_writer() as cfg:
             section = f"hopic.{commit}"
             cfg.set_value(section, 'ref', ref)
-            cfg.set_value(section, 'remote', remote)
+            if remote is not None:
+                cfg.set_value(section, "remote", remote)
 
     return commit
 
