@@ -298,6 +298,28 @@ def install_extensions_and_parse_config():
     initialize_global_variables_from_config(extensions.install_extensions.callback())
 
 
+_code_dir_re = re.compile(r"^code(?:-\d+)$")
+
+
+def find_code_dir(workspace: PathLike) -> Path:
+    code_dirs = sorted(Path(dir) for dir in os.listdir(workspace) if _code_dir_re.match(dir))
+    for dir in code_dirs:
+        try:
+            with git.Repo(workspace / dir):
+                pass
+        except (git.InvalidGitRepositoryError, git.NoSuchPathError):
+            pass
+        else:
+            return dir
+    else:
+        seq = 0
+        while True:
+            dir = Path("code" if seq == 0 else f"code-{seq:03}")
+            seq += 1
+            if dir not in code_dirs:
+                return dir
+
+
 def store_commit_meta(repo: git.Repo, commit_meta: Dict[str, Any], *, commit: git.Commit, old_commit: Optional[git.Commit] = None) -> None:
     with repo.config_writer() as cfg:
         if old_commit is not None:
@@ -384,25 +406,7 @@ def checkout_source_tree(
     if 'remote' not in git_cfg and 'ref' not in git_cfg:
         return
 
-    code_dir_re = re.compile(r'^code(?:-\d+)$')
-    code_dirs = sorted(Path(dir) for dir in os.listdir(workspace) if code_dir_re.match(dir))
-    for dir in code_dirs:
-        try:
-            with git.Repo(workspace / dir):
-                pass
-        except (git.InvalidGitRepositoryError, git.NoSuchPathError):
-            pass
-        else:
-            code_dir = dir
-            break
-    else:
-        seq = 0
-        while True:
-            dir = Path('code' if seq == 0 else f"code-{seq:03}")
-            seq += 1
-            if dir not in code_dirs:
-                code_dir = dir
-                break
+    code_dir = find_code_dir(workspace)
 
     # Check out configured repository and mark it as the code directory of this one
     ctx.obj.code_dir = workspace / code_dir
