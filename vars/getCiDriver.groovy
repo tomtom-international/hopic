@@ -1489,7 +1489,8 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
             meta.junit['test-results'].each { result ->
               steps.junit(
                 testResults: result,
-                allowEmptyResults: meta.junit['allow-missing'])
+                allowEmptyResults: meta.junit['allow-missing'],
+                skipMarkingBuildUnstable: meta.junit['allow-failures'])
             }
           }
         }

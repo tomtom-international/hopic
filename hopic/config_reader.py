@@ -903,6 +903,12 @@ class VariantCmd:
                 f"'{self._phase}.{self._variant}.{name}.allow-missing' should be a boolean, not a {type(allow_missing).__name__}",
                 file=self._config_file,
             )
+        allow_failures = value.setdefault("allow-failures", False)
+        if not isinstance(allow_failures, bool):
+            raise ConfigurationError(
+                f"'{self._phase}.{self._variant}.{name}.allow-failures' should be a boolean, not a {type(allow_failures).__name__}",
+                file=self._config_file,
+            )
         for pattern_idx, pattern in enumerate(test_results):
             try:
                 for _ in Path(os.path.devnull).glob(pattern):
