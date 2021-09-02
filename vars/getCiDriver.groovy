@@ -1801,7 +1801,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           // Perform a checkout to ensure the creation of a 'git bundle' containing the change once, instead of multiple times when
           // we've got multiple parallel variants at the start.
           if (phases && phases.values().first().size() != 1 && this.change_bundle == null && this.has_change()) {
-            this.on_node(exec_name: 'hopic-bundle-init') {
+            this.on_node(exec_name: 'hopic-bundle-init', node_expr: default_node) {
               this.with_hopic { cmd ->
                 // perform a checkout to ensure the creation of a 'git bundle' containing the change.
                 this.ensure_checkout(cmd, clean)
