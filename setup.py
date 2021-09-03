@@ -55,8 +55,7 @@ setup(
       'typing_extensions >= 3.6.4; python_version < "3.8"',
     ),
     setup_requires=(
-      'setuptools_scm < 6.1.1',  # 6.1.1 is broken as it added an implicit dependency, should be removed
-                                 # after https://github.com/pypa/setuptools_scm/issues/608 is fixed
+      'setuptools_scm',
       'setuptools_scm_git_archive',
     ),
     extras_require={
