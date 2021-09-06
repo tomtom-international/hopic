@@ -92,6 +92,7 @@ def run_hopic(caplog, monkeypatch, tmp_path):
         commit_count: int = 0,
         dirty: Union[bool, str] = False,
         tag: Optional[str] = None,
+        rundir: Optional[Path] = None,
     ):
         result = None
         commit = None
@@ -99,7 +100,8 @@ def run_hopic(caplog, monkeypatch, tmp_path):
         umask = os.umask(umask)
         try:
             with monkeypatch.context() as dir_ctx:
-                rundir = tmp_path / "rundir"
+                if rundir is None:
+                    rundir = tmp_path / "rundir"
                 if not rundir.exists():
                     rundir.mkdir(parents=True)
                 dir_ctx.chdir(rundir)

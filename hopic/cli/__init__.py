@@ -59,7 +59,6 @@ from configparser import (
         NoOptionError,
         NoSectionError,
     )
-from copy import copy
 from datetime import datetime
 from dateutil.parser import parse as date_parse
 from dateutil.tz import (tzoffset, tzlocal)
@@ -102,6 +101,7 @@ from ..errors import (
     VersionBumpMismatchError,
     VersioningError,
 )
+from ..types import PathLike
 
 
 PACKAGE : str = __package__.split('.')[0]
@@ -168,11 +168,11 @@ def may_publish(ctx):
 
 
 def checkout_tree(
-    tree,
-    remote,
-    ref,
+    tree: PathLike,
+    remote: Optional[str],
+    ref: str,
     *,
-    commit: Optional[str] = None,
+    commit: Union[str, git.Commit, None] = None,
     clean: bool = False,
     remote_name: str = 'origin',
     tags: bool = True,
@@ -202,6 +202,7 @@ def checkout_tree(
                 else:
                     os.remove(path)
 
+        assert remote is not None
         repo = git.Repo.clone_from(remote, tree)
 
     with repo:
@@ -210,32 +211,37 @@ def checkout_tree(
             cfg.set_value('color', 'ui', 'always')
             cfg.set_value('hopic.code', 'cfg-clean', str(clean))
 
-        clean_tags = tags and repo.tags
-        if clean_tags:
-            repo.delete_tag(*clean_tags)
+        if remote is not None:
+            clean_tags = tags and repo.tags
+            if clean_tags:
+                repo.delete_tag(*clean_tags)
 
-        try:
-            # Delete, instead of update, existing remotes.
-            # This is because of https://github.com/gitpython-developers/GitPython/issues/719
-            repo.delete_remote(remote_name)
-        except git.GitCommandError:
-            pass
-        origin = repo.create_remote(remote_name, remote)
+            try:
+                # Delete, instead of update, existing remotes.
+                # This is because of https://github.com/gitpython-developers/GitPython/issues/719
+                repo.delete_remote(remote_name)
+            except git.GitCommandError:
+                pass
+            origin = repo.create_remote(remote_name, remote)
 
-        fetch_info, *_ = origin.fetch(ref, tags=tags)
+            fetch_info, *_ = origin.fetch(ref, tags=tags)
 
-        if commit is not None and not repo.is_ancestor(commit, fetch_info.commit):
-            raise CommitAncestorMismatchError(commit, fetch_info.commit, ref)
+            if commit is not None and not repo.is_ancestor(commit, fetch_info.commit):
+                raise CommitAncestorMismatchError(commit, fetch_info.commit, ref)
 
-        commit = repo.commit(commit) if commit else fetch_info.commit
+            commit = repo.commit(commit) if commit else fetch_info.commit
+
+            # Ensure we have the exact same view of all Hopic notes as are present upstream
+            origin.fetch("+refs/notes/hopic/*:refs/notes/hopic/*", prune=True)
+        else:
+            assert commit is not None
+            if isinstance(commit, str):
+                commit = repo.commit(commit)
 
         repo.head.reference = commit
         repo.head.reset(index=True, working_tree=True)
         # Remove potentially moved submodules
         repo.git.submodule(["deinit", "--all", "--force"])
-
-        # Ensure we have the exact same view of all Hopic notes as are present upstream
-        origin.fetch("+refs/notes/hopic/*:refs/notes/hopic/*", prune=True)
 
         try:
             update_submodules(repo, clean)
@@ -253,7 +259,8 @@ def checkout_tree(
         with repo.config_writer() as cfg:
             section = f"hopic.{commit}"
             cfg.set_value(section, 'ref', ref)
-            cfg.set_value(section, 'remote', remote)
+            if remote is not None:
+                cfg.set_value(section, "remote", remote)
 
     return commit
 
@@ -296,6 +303,46 @@ def clean_repo(repo, clean_config=[]):
 
 def install_extensions_and_parse_config():
     initialize_global_variables_from_config(extensions.install_extensions.callback())
+
+
+_code_dir_re = re.compile(r"^code(?:-\d+)$")
+
+
+def find_code_dir(workspace: PathLike) -> Path:
+    code_dirs = sorted(Path(dir) for dir in os.listdir(workspace) if _code_dir_re.match(dir))
+    for dir in code_dirs:
+        try:
+            with git.Repo(workspace / dir):
+                pass
+        except (git.InvalidGitRepositoryError, git.NoSuchPathError):
+            pass
+        else:
+            return dir
+    else:
+        seq = 0
+        while True:
+            dir = Path("code" if seq == 0 else f"code-{seq:03}")
+            seq += 1
+            if dir not in code_dirs:
+                return dir
+
+
+def store_commit_meta(repo: git.Repo, commit_meta: Dict[str, Any], *, commit: git.Commit, old_commit: Optional[git.Commit] = None) -> None:
+    with repo.config_writer() as cfg:
+        if old_commit is not None:
+            cfg.remove_section(f"hopic.{old_commit}")
+        section = f"hopic.{commit}"
+        for key, val in commit_meta.items():
+            if val is None:
+                continue
+            if isinstance(val, bool):
+                cfg.set_value(section, key, "true" if val else "false")
+            elif isinstance(val, git.Object):
+                cfg.set_value(section, key, str(val))
+            elif isinstance(val, list):
+                cfg.set_value(section, "refspecs", " ".join(shlex.quote(refspec) for refspec in val))
+            else:
+                cfg.set_value(section, key, val)
 
 
 @main.command()
@@ -366,25 +413,7 @@ def checkout_source_tree(
     if 'remote' not in git_cfg and 'ref' not in git_cfg:
         return
 
-    code_dir_re = re.compile(r'^code(?:-\d+)$')
-    code_dirs = sorted(Path(dir) for dir in os.listdir(workspace) if code_dir_re.match(dir))
-    for dir in code_dirs:
-        try:
-            with git.Repo(workspace / dir):
-                pass
-        except (git.InvalidGitRepositoryError, git.NoSuchPathError):
-            pass
-        else:
-            code_dir = dir
-            break
-    else:
-        seq = 0
-        while True:
-            dir = Path('code' if seq == 0 else f"code-{seq:03}")
-            seq += 1
-            if dir not in code_dirs:
-                code_dir = dir
-                break
+    code_dir = find_code_dir(workspace)
 
     # Check out configured repository and mark it as the code directory of this one
     ctx.obj.code_dir = workspace / code_dir
@@ -405,11 +434,14 @@ def checkout_source_tree(
 
 
 @main.group()
+# fmt: off
 # git
 @click.option('--author-name'               , metavar='<name>'                 , help='''Name of change-request's author''')
 @click.option('--author-email'              , metavar='<email>'                , help='''E-mail address of change-request's author''')
 @click.option('--author-date'               , metavar='<date>', type=DateTime(), help='''Time of last update to the change-request''')
 @click.option('--commit-date'               , metavar='<date>', type=DateTime(), help='''Time of starting to build this change-request''')
+@click.option("--bundle"                    , metavar="<file>", type=click.Path(file_okay=True, dir_okay=False, writable=True))
+# fmt: on
 def prepare_source_tree(*args, **kwargs):
     """
     Prepares the source tree for building a change performed by a subcommand.
@@ -421,13 +453,14 @@ def prepare_source_tree(*args, **kwargs):
 @prepare_source_tree.resultcallback()
 @click.pass_context
 def process_prepare_source_tree(
-            ctx,
-            change_applicator,
-            author_name,
-            author_email,
-            author_date,
-            commit_date,
-        ):
+    ctx,
+    change_applicator,
+    author_name,
+    author_email,
+    author_date,
+    commit_date,
+    bundle: Optional[PathLike],
+):
     with git.Repo(ctx.obj.workspace) as repo:
         if author_name is None or author_email is None:
             # This relies on /etc/passwd entries as a fallback, which might contain the info we need
@@ -504,7 +537,7 @@ def process_prepare_source_tree(
         bump.update(commit_params.pop('bump-override', {}))
 
         commit_from, commit_to = (base_commit, target_commit) if base_commit else (target_commit, source_commit)
-        source_commits = list(parse_commit_range(repo, commit_from, commit_to, bump))
+        source_commits = tuple(parse_commit_range(repo, commit_from, commit_to, bump))
 
         change_message = None
         if "message" in commit_params and bump["on-every-change"]:
@@ -564,18 +597,20 @@ def process_prepare_source_tree(
 
                     # strip dirty state from version to ensure we're not complaining about that in the _is_valid_hotfix_base check below
                     gitversion = GitVersion(tag_name=gitversion.tag_name, commit_hash=gitversion.commit_hash, commit_count=gitversion.commit_count)
-                    base_version = gitversion.to_version(**params)
+                    parse_version = gitversion.to_version(**params)
+                    assert parse_version is not None
+                    base_version = parse_version
 
                     # strip commit distance from version to ensure we're bumping the hotfix suffix instead of the commit distance suffix
                     gitversion = GitVersion(tag_name=gitversion.tag_name, commit_hash=gitversion.commit_hash)
-                    cur_version = gitversion.to_version(**params)
+                    parse_version = gitversion.to_version(**params)
+                    assert parse_version is not None
+                    cur_version = parse_version
 
                 if not _is_valid_hotfix_base(base_version):
                     raise VersioningError(f"Creating hotfixes on anything but a full release is not supported. Currently on: {base_version}")
 
-                release_part = copy(cur_version)
-                release_part.build = ()
-                release_part = str(release_part)
+                release_part = str(cur_version.without_meta())
                 if re.search(f"\\b{re.escape(release_part)}\\b", str(hotfix)):
                     raise VersioningError(f"Hotfix ID '{hotfix}' is not allowed to contain the base version '{release_part}'")
 
@@ -734,6 +769,7 @@ def process_prepare_source_tree(
         version_tag = version_info.get('tag', False)
         if version_bumped and _is_valid_hotfix_base(ctx.obj.version) and version_tag and is_publish_allowed:
             if not isinstance(version_tag, str):
+                assert ctx.obj.version is not None
                 version_tag = ctx.obj.version.default_tag_name
             tagname = version_tag.format(
                     version        = ctx.obj.version,                                           # noqa: E251 "unexpected spaces around '='"
@@ -774,15 +810,15 @@ def process_prepare_source_tree(
 
             new_version_file = StringIO()
             replace_version(ctx.obj.config_dir / version_info['file'], after_submit_version, outfile=new_version_file)
-            new_version_file = new_version_file.getvalue().encode(sys.getdefaultencoding())
+            new_version_data = new_version_file.getvalue().encode(sys.getdefaultencoding())
 
             old_version_blob = submit_commit.tree[relative_version_file]
             new_version_blob = git.Blob(
-                    repo=repo,
-                    binsha=repo.odb.store(gitdb.IStream(git.Blob.type, len(new_version_file), BytesIO(new_version_file))).binsha,
-                    mode=old_version_blob.mode,
-                    path=old_version_blob.path,
-                )
+                repo=repo,
+                binsha=repo.odb.store(gitdb.IStream(git.Blob.type, len(new_version_data), BytesIO(new_version_data))).binsha,
+                mode=old_version_blob.mode,
+                path=old_version_blob.path,
+            )
             new_index = repo.index.from_tree(repo, submit_commit)
             new_index.add([new_version_blob], write=False)
 
@@ -797,27 +833,83 @@ def process_prepare_source_tree(
             push_commit = new_index.commit(**commit_params)
             log.info('%s', repo.git.show(push_commit, format='fuller', stat=True))
 
-        with repo.config_writer() as cfg:
-            cfg.remove_section(f"hopic.{target_commit}")
-            section = f"hopic.{submit_commit}"
-            if target_remote is not None:
-                cfg.set_value(section, 'remote', target_remote)
-            cfg.set_value(section, "version-bumped", str(version_bumped))
-            refspecs = []
-            if target_ref is not None:
-                cfg.set_value(section, 'ref', target_ref)
-                refspecs.append(f"{push_commit}:{target_ref}")
-            if tagref is not None:
-                refspecs.append(f"{tagref.object}:{tagref.path}")
-            if notes_ref is not None:
-                refspecs.append(notes_ref)
-            if refspecs:
-                cfg.set_value(section, 'refspecs', ' '.join(shlex.quote(refspec) for refspec in refspecs))
-            if source_commit:
-                cfg.set_value(section, 'target-commit', str(target_commit))
-                cfg.set_value(section, 'source-commit', str(source_commit))
-            if autosquashed_commit:
-                cfg.set_value(section, 'autosquashed-commit', str(autosquashed_commit))
+        refspecs = []
+        bundle_excludes = [
+            target_commit,
+        ]
+        bundle_refs: List[Tuple[str, Any]] = []
+
+        if target_ref is not None:
+            refspecs.append(f"{push_commit}:{target_ref}")
+            bundle_refs.append((target_ref, push_commit))
+        if tagref is not None:
+            refspecs.append(f"{tagref.object}:{tagref.path}")
+            bundle_refs.append((tagref.path, tagref.object))
+        if notes_ref is not None:
+            refspecs.append(notes_ref)
+            notes_commit_name, notes_ref_name = notes_ref.split(":", 1)
+            notes_commit = repo.commit(notes_commit_name)
+            bundle_excludes.extend(notes_commit.parents)
+            bundle_refs.append((notes_ref_name, notes_commit))
+
+        commit_meta = {
+            "remote": target_remote,
+            "version-bumped": version_bumped,
+            "ref": target_ref,
+            "refspecs": refspecs,
+            "target-commit": str(target_commit) if target_commit is not None else None,
+            "source-commit": str(source_commit) if source_commit is not None else None,
+            "autosquashed-commit": str(autosquashed_commit) if autosquashed_commit is not None else None,
+        }
+
+        store_commit_meta(repo, commit_meta, commit=submit_commit, old_commit=target_commit)
+
+        if bundle is not None and bundle_refs:
+            bundle_names = []
+
+            bundle_ref_dir = Path(repo.git_dir) / "refs" / "bundle"
+            for ref, obj in bundle_refs:
+                if not ref.startswith("refs/") and not ref.startswith("heads/") and not ref.startswith("tags/"):
+                    ref = f"heads/{ref}"
+                elif ref.startswith("refs/"):
+                    ref = ref[len("refs/") :]
+                ref_path = bundle_ref_dir / ref
+                ref_path.parent.mkdir(parents=True, exist_ok=True)
+                ref_path.write_text(str(obj), encoding="UTF-8")
+                bundle_names.append(f"refs/bundle/{ref}")
+
+            if autosquashed_commit is not None:
+                autosquashed_ref = Path(repo.git_dir) / "refs" / "hopic" / "bundle" / "autosquashed"
+                autosquashed_ref.parent.mkdir(parents=True, exist_ok=True)
+                autosquashed_ref.write_text(str(autosquashed_commit), encoding="UTF-8")
+                bundle_names.append("refs/hopic/bundle/autosquashed")
+
+            commit_meta_data = json.dumps(commit_meta).encode("UTF-8")
+            commit_meta_blob = git.Blob(
+                repo=repo,
+                binsha=repo.odb.store(gitdb.IStream(git.Blob.type, len(commit_meta_data), BytesIO(commit_meta_data))).binsha,
+                mode=0o100644,
+                path="hopic-meta",
+            )
+
+            meta_index = repo.index.new(repo)
+            meta_index.add([commit_meta_blob], write=False)
+
+            commit_params["message"] = f"Hopic meta data for {submit_commit}"
+            commit_params["parent_commits"] = ()
+            # Prevent advancing HEAD
+            commit_params["head"] = False
+
+            meta_commit = meta_index.commit(
+                **commit_params,
+            )
+            meta_ref = Path(repo.git_dir) / "refs" / "hopic" / "bundle" / "meta"
+            meta_ref.parent.mkdir(parents=True, exist_ok=True)
+            meta_ref.write_text(str(meta_commit), encoding="UTF-8")
+            bundle_names.append("refs/hopic/bundle/meta")
+
+            repo.git.bundle("create", bundle, *bundle_excludes, *bundle_names)
+
         if ctx.obj.version is not None:
             click.echo(ctx.obj.version)
 
@@ -1267,6 +1359,101 @@ def getinfo(
                 ):
                     var_info["nop"] = True
     click.echo(json.dumps(info, indent=4, separators=(',', ': '), cls=JSONEncoder))
+
+
+@main.command()
+@click.argument("bundle", type=click.Path(file_okay=True, dir_okay=False, readable=True))
+@click.pass_context
+def unbundle(ctx, *, bundle: PathLike):
+    """
+    Unbundle the specified git bundle and setup all included refs for pushing.
+    """
+
+    with git.Repo(ctx.obj.workspace) as repo:
+        target_commit = repo.head.commit
+
+        with repo.config_reader() as cfg:
+            section = f"hopic.{target_commit}"
+            target_ref = cfg.get(section, "ref", fallback=None)
+            target_remote = cfg.get(section, "remote", fallback=None)
+            code_clean = cfg.getboolean("hopic.code", "cfg-clean", fallback=False)
+
+        submit_commit: Optional[git.Commit] = None
+        commit_meta: Dict[str, Any] = {}
+        bundle_path = "refs/bundle/"
+        head_path = "heads/"
+        unbundle_proc = repo.git.bundle("unbundle", bundle, as_process=True)
+        for headline in unbundle_proc.stdout:
+            obj, ref = headline.decode("UTF-8").rstrip("\n").split(" ", 1)
+            if ref == "refs/hopic/bundle/meta":
+                meta_commit = repo.commit(obj)
+
+                m = re.match(r"^Hopic meta\s*data for \b([0-9a-fA-F]+)\b", meta_commit.message)
+                if not m:
+                    continue
+                submit_commit = repo.commit(m.group(1))
+
+                if "hopic-meta" not in meta_commit.tree:
+                    continue
+                commit_meta = json.load(meta_commit.tree["hopic-meta"].data_stream)
+                store_commit_meta(repo, commit_meta, commit=submit_commit, old_commit=target_commit)
+            if not ref.startswith(bundle_path):
+                continue
+            ref = ref[len(bundle_path) :]
+            if not ref.startswith(head_path):
+                ref_path = Path(repo.git_dir) / "refs" / ref
+                ref_path.parent.mkdir(parents=True, exist_ok=True)
+                ref_path.write_text(str(obj), encoding="UTF-8")
+        try:
+            unbundle_proc.terminate()
+        except OSError:
+            pass
+
+    if not submit_commit or not commit_meta:
+        log.error("Couldn't find Hopic meta data inside given bundle")
+        ctx.exit(1)
+
+    workspace = ctx.obj.workspace
+    # Check out specified repository
+    checkout_tree(
+        ctx.obj.workspace,
+        remote=None,
+        ref=commit_meta["ref"],
+        commit=submit_commit,
+        clean=code_clean,
+    )
+
+    try:
+        ctx.obj.config = read_config(determine_config_file_name(ctx), ctx.obj.volume_vars)
+        if code_clean:
+            with git.Repo(workspace) as repo:
+                clean_repo(repo, ctx.obj.config["clean"])
+        git_cfg = ctx.obj.config["scm"]["git"]
+    except (click.BadParameter, KeyError, TypeError, OSError, IOError, YAMLError):
+        return
+
+    log.info("%s", repo.git.show(submit_commit, format="fuller", stat=True, notes="*"))
+
+    if "remote" not in git_cfg and "ref" not in git_cfg:
+        return
+
+    code_dir = find_code_dir(workspace)
+
+    # Check out configured repository and mark it as the code directory of this one
+    with git.Repo(workspace) as repo, repo.config_writer() as cfg:
+        cfg.remove_section("hopic.code")
+        cfg.set_value("hopic.code", "dir", str(code_dir))
+        cfg.set_value("hopic.code", "cfg-remote", target_remote)
+        cfg.set_value("hopic.code", "cfg-ref", target_ref)
+        cfg.set_value("hopic.code", "cfg-clean", str(code_clean))
+
+    checkout_tree(
+        code_dir,
+        git_cfg.get("remote", target_remote),
+        git_cfg.get("ref", target_ref),
+        clean=code_clean,
+        clean_config=ctx.obj.config["clean"],
+    )
 
 
 @main.command()

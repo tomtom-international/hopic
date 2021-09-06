@@ -26,6 +26,7 @@ import git
 import pytest
 
 from .. import credentials
+from ..build import HopicGitInfo
 from ..cli import utils
 from ..errors import VersionBumpMismatchError, VersioningError
 from ..template.utils import command
@@ -905,6 +906,115 @@ def test_separate_modality_change(run_hopic):
     with git.Repo(run_hopic.toprepo, expand_vars=False) as repo:
         assert repo.head.commit != base_commit
         assert repo.head.commit.parents == (base_commit,)
+
+
+def test_bundle_prepare_source_tree(run_hopic, tmp_path):
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        src = run_hopic.toprepo / "widget.h"
+        src.write_text(
+            dedent(
+                """\
+                    #pragma once
+                    extern int sqrt(int);
+                """
+            )
+        )
+
+        repo.index.add(("widget.h",))
+        repo.index.commit(message="chore: initial commit", **_commitargs)
+        repo.create_tag("1.0.0")
+
+        with src.open("a") as f:
+            f.write("extern float sqrt(float);\n")
+
+        repo.index.add(("widget.h",))
+        repo.index.commit(message="feat: support float too", **_commitargs)
+        repo.create_tag("1.1.0")
+
+        # throw away HEAD to allow creating a new "initial commit" for Hopic config repo
+        repo.git.update_ref(d="HEAD")
+        repo.head.reset(index=True, working_tree=True)
+
+        hopic_cfg = run_hopic.toprepo / "hopic-ci-config.yaml"
+        hopic_cfg.write_text(
+            dedent(
+                """\
+                    version:
+                      file: version.txt
+                      tag:  true
+                      bump: minor
+                      format: semver
+                      after-submit:
+                        bump: prerelease
+                        prerelease-seed: SNAPSHOT
+
+                    scm:
+                      git:
+                        ref: 1.0.0
+                """
+            )
+        )
+        (run_hopic.toprepo / "version.txt").write_text(
+            dedent(
+                """\
+                blabla
+                version=1.0.0
+                mooh
+                """
+            )
+        )
+        repo.index.add(("hopic-ci-config.yaml", "version.txt"))
+        repo.index.commit(message="chore: initial commit", **_commitargs)
+        repo.git.branch("master", move=True)
+
+        # PR branch
+        repo.head.reference = repo.create_head("something-useful")
+        assert not repo.head.is_detached
+        repo.head.reset(index=True, working_tree=True)
+
+        # Some change
+        hopic_cfg.write_text(hopic_cfg.read_text().replace("1.0.0", "1.1.0"))
+        repo.index.add(("hopic-ci-config.yaml",))
+        repo.index.commit(message="feat: get new float widget", **_commitargs)
+
+        # A fixup on top of that change
+        repo.index.commit(message="fixup! feat: get new float widget", **_commitargs)
+
+    transfer_bundle = tmp_path / "transfer.bundle"
+    orig_rundir = tmp_path / "rundir-orig"
+    (*_, result) = run_hopic(
+        command("checkout-source-tree", target_remote=run_hopic.toprepo, target_ref="master"),
+        command(
+            "prepare-source-tree",
+            author_name=_author.name,
+            author_email=_author.email,
+            author_date=f"@{_git_time}",
+            commit_date=f"@{_git_time}",
+            bundle=transfer_bundle,
+        )
+        + command(
+            "merge-change-request",
+            source_remote=run_hopic.toprepo,
+            source_ref="something-useful",
+            change_request="42",
+            title="feat: get new float widget",
+        ),
+        rundir=orig_rundir,
+    )
+    assert result.exit_code == 0
+
+    unbundle_rundir = tmp_path / "rundir-unbundle"
+    (*_, result) = run_hopic(
+        command("checkout-source-tree", target_remote=run_hopic.toprepo, target_ref="master"),
+        command("unbundle", transfer_bundle),
+        rundir=unbundle_rundir,
+    )
+    assert result.exit_code == 0
+
+    orig_info = HopicGitInfo.from_repo(orig_rundir)
+    unbundle_info = HopicGitInfo.from_repo(unbundle_rundir)
+
+    assert orig_info == unbundle_info
 
 
 @pytest.mark.parametrize('run_on_change, commit_message, expected_version, expect_publish', (
