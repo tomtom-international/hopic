@@ -57,7 +57,6 @@ setup(
     extras_require={
         'interactive': ['keyring>=21.5.0,<22', 'netstruct>=1.1.2<2'],
     },
-    use_scm_version={"relative_to": __file__, "local_scheme": "node-and-timestamp"},
     entry_points='''
       [console_scripts]
       hopic=hopic.cli.main:main
