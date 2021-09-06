@@ -42,10 +42,7 @@ import sys
 import time
 import typing
 
-if sys.version_info[:2] >= (3, 10):
-    from importlib import metadata
-else:
-    import importlib_metadata as metadata
+from ..compat import metadata
 
 from dateutil.parser import parse as parse_date
 from dateutil.tz import tzutc

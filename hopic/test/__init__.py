@@ -13,13 +13,9 @@
 # limitations under the License.
 
 import re
-import sys
 from io import StringIO
 
-if sys.version_info[:2] >= (3, 10):
-    from importlib import metadata
-else:
-    import importlib_metadata as metadata
+from ..compat import metadata
 
 PACKAGE : str = __package__.split('.')[0]
 

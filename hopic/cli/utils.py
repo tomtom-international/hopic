@@ -13,10 +13,15 @@
 # limitations under the License.
 
 from pathlib import Path
+from pkg_resources import parse_version
 import re
 import subprocess
 import sys
-from typing import Optional
+from typing import (
+    Optional,
+    Tuple,
+    Union,
+)
 
 import click
 
@@ -24,11 +29,7 @@ from ..build import (
     HopicGitInfo,
 )
 
-try:
-    # Python >= 3.8
-    from importlib import metadata
-except ImportError:
-    import importlib_metadata as metadata  # type: ignore # mypy is buggy for this try-except import style: https://github.com/python/mypy/issues/1153
+from ..compat import metadata
 
 
 def is_publish_branch(ctx, hopic_git_info=None) -> bool:
@@ -81,3 +82,18 @@ def get_package_version(package):
     Consults Python's `importlib.metadata` or `importlib_metadata` package and returns the target package version.
     """
     return metadata.version(package)
+
+
+def check_minimum_package_version(package: str, min_version: str) -> Tuple[bool, Union[str, None]]:
+    """
+    Checks whether the indicated package name is installed and meets the supplied minimum version triplet.
+    Returns the result as well as the installed package version (if any, None otherwise).
+    """
+    try:
+        version = get_package_version(package)
+    except metadata.PackageNotFoundError:
+        return False, None
+
+    result = parse_version(version) >= parse_version(min_version)
+
+    return result, version

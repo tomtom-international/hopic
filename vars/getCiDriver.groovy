@@ -370,12 +370,14 @@ class BitbucketPullRequest extends ChangeRequest {
       this.source_commit = this.current_source_commit(source_remote)
     }
     def cr_author = change_request.getOrDefault('author', [:]).getOrDefault('user', [:])
+    def merge_bundle = steps.pwd(tmp: true) + '/merge-transfer.bundle'
     def output = line_split(steps.sh(script: cmd
                                 + ' prepare-source-tree'
                                 + ' --author-name=' + shell_quote(cr_author.getOrDefault('displayName', steps.env.CHANGE_AUTHOR))
                                 + ' --author-email=' + shell_quote(cr_author.getOrDefault('emailAddress', steps.env.CHANGE_AUTHOR_EMAIL))
                                 + ' --author-date=' + shell_quote(String.format("@%.3f", change_request.author_time))
                                 + ' --commit-date=' + shell_quote(String.format("@%.3f", change_request.commit_time))
+                                + ' --bundle=' + shell_quote(merge_bundle)
                                 + ' merge-change-request'
                                 + ' --source-remote=' + shell_quote(source_remote)
                                 + ' --source-ref=' + shell_quote(this.source_commit)
@@ -389,6 +391,7 @@ class BitbucketPullRequest extends ChangeRequest {
     }
     def rv = [
         commit: output.remove(0),
+        bundle: merge_bundle,
       ]
     if (output.size() > 0) {
       rv.version = output.remove(0)
@@ -478,10 +481,12 @@ class ModalityRequest extends ChangeRequest {
   public Map apply(String cmd, String source_remote) {
     def author_time = steps.currentBuild.timeInMillis / 1000.0
     def commit_time = steps.currentBuild.startTimeInMillis / 1000.0
+    def modality_bundle = steps.pwd(tmp: true) + '/modality-transfer.bundle'
     def prepare_cmd = (cmd
       + ' prepare-source-tree'
       + ' --author-date=' + shell_quote(String.format("@%.3f", author_time))
       + ' --commit-date=' + shell_quote(String.format("@%.3f", commit_time))
+      + ' --bundle=' + shell_quote(modality_bundle)
     )
     def full_cmd = "${prepare_cmd} apply-modality-change ${shell_quote(modality)}"
     if (modality == 'BUMP_VERSION') {
@@ -495,6 +500,7 @@ class ModalityRequest extends ChangeRequest {
     }
     def rv = [
         commit: output.remove(0),
+        bundle: modality_bundle,
       ]
     if (output.size() > 0) {
       rv.version = output.remove(0)
@@ -529,17 +535,20 @@ class CiDriver {
   private scm                = [:]
   private stashes            = [:]
   private worktree_bundles   = [:]
+  private change_bundle      = null
   private submit_info        = [:]
   private change             = null
   private source_commit      = "HEAD"
   private target_commit      = null
   private may_submit_result  = null
   private may_publish_result = null
+  private pip_constraints    = null
   private config_file
   private bitbucket_api_credential_id  = null
   private LinkedHashMap<String, LinkedHashMap<Integer, NodeExecution[]>> nodes_usage = [:]
   private ArrayList<LockWaitingTime> lock_times = []
   private printMetrics
+  private config_file_content = null
 
   private final default_node_expr = "Linux && Docker"
 
@@ -547,7 +556,11 @@ class CiDriver {
     this.repo = repo
     this.steps = steps
     this.change = params.change
-    this.config_file = params.config
+    this.config_file_content = params.config_file_content
+    if (params.config_file_content && params.config) {
+      steps.println("WARNING: ignoring config_file as config content has been provided")
+    }
+    this.config_file = params.config_file_content ? 'hopic-internal-config.yaml' : params.config
     this.bitbucket_api_credential_id = params.getOrDefault('bb_api_cred_id', 'tt_service_account_creds')
     this.scm = [
       credentialsId: steps.scm.userRemoteConfigs[0].credentialsId,
@@ -666,7 +679,7 @@ RUN mkdir -p /hopic-reqs/hopic/cli /hopic-reqs/hopic/template \\
  && pip install --no-cache-dir --upgrade virtualenv --requirement /hopic-reqs/hopic.dist-info/requires.txt \\
  && rm -rf /hopic-reqs
 
-RUN pip install --no-cache-dir --upgrade ${shell_quote(this.repo)}
+RUN pip install --no-cache-dir --prefer-binary --upgrade ${shell_quote("pip>=21.1")} ${shell_quote(this.repo)}
 EOF
 cp -p setup.py hopic/test/docker-images/python/
 if [ -s /etc/pip.conf ]; then
@@ -698,7 +711,15 @@ docker build --build-arg=PYTHON_VERSION=3.6 --iidfile=${shell_quote(docker_src)}
       def cmd = 'LC_ALL=C.UTF-8 TZ=UTC hopic --color=always'
       if (this.config_file != null) {
         cmd += ' --workspace=' + shell_quote(workspace)
-        def config_file_path = shell_quote(this.config_file.startsWith('/') ? "${config_file}" : "${workspace}/${config_file}")
+        def cfg_file = this.config_file
+        if (this.config_file_content) {
+          cfg_file = steps.pwd(tmp: true) + "/${this.config_file}"
+          steps.writeFile(
+            file: cfg_file,
+            text: this.config_file_content
+          )
+        }
+        def config_file_path = shell_quote(cfg_file.startsWith('/') ? cfg_file : "${workspace}/${cfg_file}")
         cmd += ' --config=' + "${config_file_path}"
       }
 
@@ -708,7 +729,7 @@ docker build --build-arg=PYTHON_VERSION=3.6 --iidfile=${shell_quote(docker_src)}
         "BUILD_NUMBER=${build_identifier}",
         "JENKINS_VERSION=${Jenkins.VERSION}",
       ]) {
-        return closure(cmd)
+        return closure(cmd, '/usr')
       }
     }
   }
@@ -904,7 +925,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     }
   }
 
-  private def checkout(String cmd, clean = false) {
+  private def checkout(String cmd, boolean clean = false) {
     def tmpdir = steps.pwd(tmp: true)
     def workspace = steps.pwd()
 
@@ -935,7 +956,17 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
                                           + params,
                                     label: 'Hopic: checking out source tree',
                                     returnStdout: true).trim()
-      if (this.get_change() != null) {
+      if (this.change_bundle != null) {
+        steps.dir(tmpdir) {
+          steps.unstash(name: 'change-transfer.bundle')
+        }
+
+        steps.sh(
+          script: "${cmd} unbundle "
+            + shell_quote("${tmpdir}/${this.change_bundle}"),
+          label: 'Hopic (internal): unbundle change',
+        )
+      } else if (this.get_change() != null) {
         def meta = this.get_change().getinfo(cmd)
         def maybe_timeout = { Closure closure ->
           if (meta.containsKey('timeout')) {
@@ -974,14 +1005,32 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           steps.error("""HEAD commit (${submit_info.commit}) does not match initial HEAD commit (${this.submit_info.commit}) of this build. Aborting build!""")
         }
         this.submit_info = submit_info
+        if (submit_info.bundle != null) {
+          def dir_index = submit_info.bundle.lastIndexOf('/')
+          steps.dir(dir_index >= 0 ? submit_info.bundle[0..dir_index] : '.') {
+            this.change_bundle = submit_info.bundle[dir_index+1..-1]
+            steps.stash(
+              name: 'change-transfer.bundle',
+              includes: this.change_bundle,
+            )
+          }
+        }
         return submit_info.commit
       }
       return this.target_commit
     }
 
     // Ensure any required extensions are available
-    steps.sh(script: "${cmd} install-extensions",
-             label: 'Hopic: installing extensions')
+    def install_extensions_param = ""
+    if (this.pip_constraints) {
+      def pip_constraints_file = tmpdir + '/pip-constraints.txt'
+      steps.writeFile(
+          file: pip_constraints_file,
+          text: pip_constraints,
+      )
+      install_extensions_param = "--constraints ${shell_quote(pip_constraints_file)}"
+    }
+    steps.sh(script: "${cmd} install-extensions ${install_extensions_param}", label: 'Hopic: installing extensions')
 
     def code_dir_output = tmpdir + '/code-dir.txt'
     if (steps.sh(script: 'LC_ALL=C.UTF-8 TZ=UTC git config --get hopic.code.dir > ' + shell_quote(code_dir_output), returnStatus: true,
@@ -1700,7 +1749,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     this.extend_build_properties()
     this.decorate_output {
       def (phases, is_publishable_change, submit_meta, locks) = this.on_node(node_expr: default_node, exec_name: "hopic-init") {
-        return this.with_hopic { cmd ->
+        return this.with_hopic { cmd, venv ->
           def workspace = steps.pwd()
 
           /*
@@ -1727,6 +1776,13 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           // Force a full based checkout & change application, instead of relying on the checkout done above, to ensure that we're building the list of phases and
           // variants to execute (below) using the final config file.
           this.ensure_checkout(cmd, clean)
+
+          // Pin the currently installed pip packages to ensure all variants use the same templates
+          this.pip_constraints = steps.sh(
+              script: "${venv}/bin/python -m pip freeze",
+              label: "Get list of installed pip packages",
+              returnStdout: true,
+          ).replaceAll(/(?m)^[A-Za-z0-9-_.]+ *@.+$/, "") // Remove any URL constraints, as adding support for those has proven troublesome
 
           def phases = steps.readJSON(text: steps.sh(
               script: "${cmd} getinfo",
@@ -1759,6 +1815,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
             // Ensure a new checkout is performed because the target repository may change while waiting for the lock
             final executor_identifier = get_executor_identifier()
             this.checkouts.remove(executor_identifier)
+            this.change_bundle = null
           }
 
           // Report start of build. _Must_ come after having determined whether this build is submittable and
@@ -1808,6 +1865,18 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           // may have moved forward while we didn't hold the lock.
           this.target_commit = null
           this.submit_info = [:]
+
+          // Perform a checkout to ensure the creation of a 'git bundle' containing the change once, instead of multiple times when
+          // we've got multiple parallel variants at the start.
+          if (phases && phases.values().first().size() != 1 && this.change_bundle == null && this.has_change()) {
+            this.on_node(exec_name: 'hopic-bundle-init', node_expr: default_node) {
+              this.with_hopic { cmd ->
+                // perform a checkout to ensure the creation of a 'git bundle' containing the change.
+                this.ensure_checkout(cmd, clean)
+              }
+            }
+          }
+
           this.build_phases(phases, clean, artifactoryBuildInfo, hopic_extra_arguments, submit_meta, locks['from-phase'])
         }
 

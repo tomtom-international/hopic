@@ -54,14 +54,9 @@ setup(
       'typeguard>=2.10,<2.11,<3', # <2.11 should be removed after https://github.com/agronholm/typeguard/issues/175 is fixed
       'typing_extensions >= 3.6.4; python_version < "3.8"',
     ),
-    setup_requires=(
-      'setuptools_scm',
-      'setuptools_scm_git_archive',
-    ),
     extras_require={
         'interactive': ['keyring>=21.5.0,<22', 'netstruct>=1.1.2<2'],
     },
-    use_scm_version={"relative_to": __file__, "local_scheme": "node-and-timestamp"},
     entry_points='''
       [console_scripts]
       hopic=hopic.cli.main:main

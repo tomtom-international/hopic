@@ -37,7 +37,7 @@ phases:
       - timeout: 10
       - !template "commisery"
     flake8:
-      - timeout: 120
+      - timeout: 300
       - docker build --network=host --build-arg=PYTHON_VERSION=3.9 -t hopic-python:3.9-slim-git hopic/test/docker-images/python
       - junit: flake8.xml
         image: hopic-python:3.9-slim-git
@@ -75,7 +75,7 @@ phases:
 
     python3.10:
       - timeout: 300
-      - docker build --network=host --build-arg=PYTHON_VERSION=3.10.0b1 -t hopic-python:3.10.0b1-slim-git hopic/test/docker-images/python
+      - docker build --network=host --build-arg=PYTHON_VERSION=3.10-rc -t hopic-python:3.10-slim-git hopic/test/docker-images/python
 
   static:
     python3.6:
@@ -109,7 +109,7 @@ phases:
     python3.10:
       - timeout: 90
       - junit: mypy-test.xml
-        image: hopic-python:3.10.0b1-slim-git
+        image: hopic-python:3.10-slim-git
         wait-on-full-previous-phase: no
         sh: tox -r -e py310-types
 
@@ -149,7 +149,7 @@ phases:
     python3.10:
       - timeout: 300
       - junit: junit-test.xml
-        image: hopic-python:3.10.0b1-slim-git
+        image: hopic-python:3.10-slim-git
         docker-in-docker: yes
         wait-on-full-previous-phase: no
         sh: tox -r -e py310
