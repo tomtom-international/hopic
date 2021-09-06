@@ -65,6 +65,7 @@ setup(
     url='https://github.com/tomtom-international/hopic',
     project_urls={
       'Documentation': 'https://tomtom-international.github.io/hopic/',
+      "Change Log": "https://tomtom-international.github.io/hopic/changes.html",
       'Source Code': 'https://github.com/tomtom-international/hopic',
     },
     classifiers=(
