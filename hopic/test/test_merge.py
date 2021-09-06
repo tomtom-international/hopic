@@ -930,6 +930,7 @@ def test_bundle_prepare_source_tree(run_hopic, tmp_path):
         repo.index.add(("widget.h",))
         repo.index.commit(message="feat: support float too", **_commitargs)
         repo.create_tag("1.1.0")
+        repo.git.branch("data")
 
         # throw away HEAD to allow creating a new "initial commit" for Hopic config repo
         repo.git.update_ref(d="HEAD")
@@ -950,7 +951,16 @@ def test_bundle_prepare_source_tree(run_hopic, tmp_path):
 
                     scm:
                       git:
+                        worktrees:
+                          output/folder: data
                         ref: 1.0.0
+                    phases:
+                      a:
+                        x:
+                          - worktrees:
+                              output/folder:
+                                commit-message: "Update documentation for ${VERSION}"
+                            sh: ":"
                 """
             )
         )
@@ -1007,6 +1017,7 @@ def test_bundle_prepare_source_tree(run_hopic, tmp_path):
     (*_, result) = run_hopic(
         command("checkout-source-tree", target_remote=run_hopic.toprepo, target_ref="master"),
         command("unbundle", transfer_bundle),
+        command("build"),
         rundir=unbundle_rundir,
     )
     assert result.exit_code == 0
@@ -1014,7 +1025,15 @@ def test_bundle_prepare_source_tree(run_hopic, tmp_path):
     orig_info = HopicGitInfo.from_repo(orig_rundir)
     unbundle_info = HopicGitInfo.from_repo(unbundle_rundir)
 
-    assert orig_info == unbundle_info
+    # Compare all info _except_ refspecs (which differs due to worktrees)
+    orig_dict = orig_info._asdict()
+    del orig_dict["refspecs"]
+    unbundle_dict = unbundle_info._asdict()
+    del unbundle_dict["refspecs"]
+    assert orig_dict == unbundle_dict
+
+    # Compare everything except for the worktree refspec
+    assert orig_info.refspecs == tuple(x for x in unbundle_info.refspecs if not x.endswith(":data"))
 
 
 @pytest.mark.parametrize('run_on_change, commit_message, expected_version, expect_publish', (

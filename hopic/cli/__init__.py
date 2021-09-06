@@ -327,6 +327,31 @@ def find_code_dir(workspace: PathLike) -> Path:
                 return dir
 
 
+def checkout_worktrees(workspace: Path, worktrees: Dict[PathLike, str]):
+    if not worktrees:
+        return
+
+    with git.Repo(workspace) as repo:
+        fetch_result = repo.remotes.origin.fetch([ref for subdir, ref in worktrees.items()])
+
+        worktree_refs = {Path(subdir): fetchinfo.ref for (subdir, refname), fetchinfo in zip(worktrees.items(), fetch_result)}
+        log.debug("Worktree config: %s", worktree_refs)
+
+        for subdir, ref in worktree_refs.items():
+            try:
+                os.remove(workspace / subdir / ".git")
+            except (OSError, IOError):
+                pass
+            clean_output = repo.git.clean("-xd", subdir, force=True)
+            if clean_output:
+                log.info("%s", clean_output)
+
+        repo.git.worktree("prune")
+
+        for subdir, ref in worktree_refs.items():
+            repo.git.worktree("add", subdir, ref.commit)
+
+
 def store_commit_meta(repo: git.Repo, commit_meta: Dict[str, Any], *, commit: git.Commit, old_commit: Optional[git.Commit] = None) -> None:
     with repo.config_writer() as cfg:
         if old_commit is not None:
@@ -387,28 +412,7 @@ def checkout_source_tree(
     except (click.BadParameter, KeyError, TypeError, OSError, IOError, YAMLError):
         return
 
-    if 'worktrees' in git_cfg:
-        with git.Repo(workspace) as repo:
-
-            worktrees = git_cfg['worktrees'].items()
-            fetch_result = repo.remotes.origin.fetch([ref for subdir, ref in worktrees])
-
-            worktrees = dict((subdir, fetchinfo.ref) for (subdir, refname), fetchinfo in zip(worktrees, fetch_result))
-            log.debug("Worktree config: %s", worktrees)
-
-            for subdir, ref in worktrees.items():
-                try:
-                    os.remove(workspace / subdir / '.git')
-                except (OSError, IOError):
-                    pass
-                clean_output = repo.git.clean('-xd', subdir, force=True)
-                if clean_output:
-                    log.info('%s', clean_output)
-
-            repo.git.worktree('prune')
-
-            for subdir, ref in worktrees.items():
-                repo.git.worktree('add', subdir, ref.commit)
+    checkout_worktrees(workspace, git_cfg["worktrees"])
 
     if 'remote' not in git_cfg and 'ref' not in git_cfg:
         return
@@ -1433,6 +1437,8 @@ def unbundle(ctx, *, bundle: PathLike):
         return
 
     log.info("%s", repo.git.show(submit_commit, format="fuller", stat=True, notes="*"))
+
+    checkout_worktrees(workspace, git_cfg["worktrees"])
 
     if "remote" not in git_cfg and "ref" not in git_cfg:
         return
