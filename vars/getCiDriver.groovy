@@ -543,6 +543,7 @@ class CiDriver {
   private may_submit_result  = null
   private may_publish_result = null
   private pip_constraints    = null
+  private virtualenvs        = [:]
   private config_file
   private bitbucket_api_credential_id  = null
   private LinkedHashMap<String, LinkedHashMap<Integer, NodeExecution[]>> nodes_usage = [:]
@@ -723,13 +724,21 @@ docker build --build-arg=PYTHON_VERSION=3.6 --iidfile=${shell_quote(docker_src)}
         cmd += ' --config=' + "${config_file_path}"
       }
 
+      if (!this.virtualenvs.containsKey(executor_identifier)) {
+        this.virtualenvs[executor_identifier] = steps.sh(
+          script: 'dirname "$(dirname "$(which python)")"',
+          label: 'Hopic (internal): determining Python environment location',
+          returnStdout: true,
+        ).trim()
+      }
+
       def (build_name, build_identifier) = get_build_id()
       return steps.withEnv([
         "BUILD_NAME=${build_name}",
         "BUILD_NUMBER=${build_identifier}",
         "JENKINS_VERSION=${Jenkins.VERSION}",
       ]) {
-        return closure(cmd, '/usr')
+        return closure(cmd, this.virtualenvs[executor_identifier])
       }
     }
   }
