@@ -17,7 +17,7 @@
 Changelog
 =========
 
-1.46.0-13+gcd509ee29cb22a
+1.46.0
 ======
 
 New features
