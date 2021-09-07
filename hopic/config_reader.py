@@ -1321,6 +1321,20 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
     if 'project-name' in cfg and not isinstance(cfg['project-name'], str):
         raise ConfigurationError('`project-name` setting must be a string', file=config)
 
+    scm = cfg.setdefault("scm", OrderedDict())
+    if not isinstance(scm, Mapping):
+        raise ConfigurationError(f"`scm` doesn't contain a mapping but a {type(scm).__name__}", file=config)
+
+    git_cfg = scm.setdefault("git", OrderedDict())
+    if not isinstance(git_cfg, Mapping):
+        raise ConfigurationError(f"`scm.git` doesn't contain a mapping but a {type(git_cfg).__name__}", file=config)
+
+    worktrees = git_cfg.setdefault("worktrees", OrderedDict())
+    try:
+        typeguard.check_type(argname="scm.git.worktrees", value=worktrees, expected_type=typing.Mapping[PathLike, str], globals=globals, locals=locals)
+    except TypeError as exc:
+        raise ConfigurationError(f"`scm.git.worktrees` is not a valid mapping of worktree paths to branches: {exc}", file=config) from exc
+
     # Convert multiple different syntaxes into a single one
     variant_node_label = OrderedDict()
     variant_node_label_phase = OrderedDict()

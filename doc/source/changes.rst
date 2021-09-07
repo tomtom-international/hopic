@@ -17,8 +17,135 @@
 Changelog
 =========
 
-1.41.1-8+gec19e87f53e49c
+1.46.0
 ======
+
+New features
+------------
+
+* feat: bundle prepare-source-tree and reproduce same state in unbundle (#393)
+
+Improvements
+------------
+
+* build: use PEP-517 frontend "build" for building packages
+
+Bug fixes
+---------
+
+* fix: ensure worktrees are checked out on 'unbundle' too (#400)
+
+1.45.1
+======
+
+Improvements
+------------
+
+* build: rely on pyproject.toml for setup's dependencies
+
+Bug fixes
+---------
+
+* fix: avoid setuptools_scm 6.1.1
+* fix: don't call Protocol's __init__ (#399)
+
+1.45.0
+======
+
+New features
+------------
+
+* feat: pin pip packages on first hopic installation (#392)
+
+Bug fixes
+---------
+
+* fix: don't allow URL constraints (#394)
+
+1.44.0
+======
+
+New features
+------------
+
+* feat: add support to provide hopic config file content as string (#390)
+
+1.43.1
+======
+
+Bug fixes
+---------
+
+* fix: make pip prefer binary packages over source packages (#382)
+
+1.43.0
+======
+
+Bug fixes
+---------
+
+* fix(modality): ensure to pick up all changed-files declarations (#388)
+
+1.42.1
+======
+
+Bug fixes
+---------
+
+* fix(modality): keep building with CFGDIR as CWD (#386)
+* fix(modality-merge): don't parse commit message as strict when not bumping (#387)
+
+1.42.0
+======
+
+New features
+------------
+
+* feat(modality): allow credentials to be used by modality changes (#385)
+
+Improvements
+------------
+
+* ci: use 'darker' to enforce Black coding style on changed lines only (#383)
+
+1.41.3
+======
+
+Improvements
+------------
+
+* improvement: abort build when HEAD commit changes during build (#380)
+* refactor(apply-modality-change): let config_reader handle modality cfg parsing (#378)
+
+Bug fixes
+---------
+
+* fix: only cache submit HEAD after locks are acquired (#381)
+* fix: make JSON encoder able to encode Path's and avoid them as keys (#384)
+
+1.41.2
+======
+
+Bug fixes
+---------
+
+* fix: always return boolean when asking if branch is publishable (#379)
+
+Documentation improvements
+--------------------------
+
+* docs(config): revise VERSION variable docs (#371)
+
+1.41.1
+======
+
+Improvements
+------------
+
+* refactor(versioning): create 'Version' protocol class and annotate implementors (#377)
+
+Bug fixes
+---------
 
 * fix(ciDriver): test MODALITY from env, not from params (#375)
 * fix: raise error when initial version couldn't be found (#365)
