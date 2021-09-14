@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import json
+import os
 import re
 from textwrap import dedent
 import typing
@@ -226,6 +227,18 @@ def test_version_build(version_build):
 def test_version_build_non_semver():
     with pytest.raises(ConfigurationError, match=r'version.build'):
         config_reader.read_version_info({}, {'format': 'carver', 'build': '1.0.0'})
+
+
+def test_default_version_bumping_config():
+    version_info = config_reader.read_version_info(os.devnull, {})
+    assert version_info["bump"]["policy"] == "constant"
+
+
+def test_default_version_bumping_backwards_compatible_policy():
+    version_info = config_reader.read_version_info(os.devnull, {"bump": "patch"})
+
+    assert version_info["bump"]["policy"] == "constant"
+    assert version_info["bump"]["field"] == "patch"
 
 
 def test_environment_without_cmd():
