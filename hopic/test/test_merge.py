@@ -609,6 +609,84 @@ def test_modality_merge_commit_message(expected_version, msg_prefix, run_hopic, 
         assert repo.heads.master.commit.message.startswith(f"{msg_prefix} branch 'release/0': custom value")
 
 
+@pytest.mark.parametrize(
+    "msg_tag, expected_version",
+    (
+        ("refactor!", "1.0.0"),
+        ("feat", "0.1.0"),
+        ("fix", "0.0.1"),
+        ("chore", None),
+    ),
+)
+def test_modality_merge_commit_message_dynamic(expected_version, msg_tag, run_hopic, monkeypatch):
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        (run_hopic.toprepo / "hopic-ci-config.yaml").write_text(
+            dedent(
+                """\
+                version:
+                  format: semver
+                  tag: true
+                  bump:
+                    policy: conventional-commits
+                    strict: yes
+                    on-every-change: yes
+
+                modality-source-preparation:
+                  AUTO_MERGE:
+                    - git fetch origin release/0
+                    - sh: git merge --no-commit --no-ff FETCH_HEAD
+                      changed-files: []
+                      # Reuse merged commit's commit message tag for the produced merge commit
+                      commit-message-cmd: >
+                        sh -c 'git show -q --format=%s MERGE_HEAD | sed "s|: .*|: merge branch '"'"'release/0'"'"'|"'
+                """
+            )
+        )
+
+        repo.index.add(("hopic-ci-config.yaml",))
+        base_commit = repo.index.commit(message="Initial commit", **_commitargs)
+        repo.create_tag("0.0.0")
+
+        # Main branch moves on
+        (run_hopic.toprepo / "A.txt").write_text("A")
+        repo.index.add(("A.txt",))
+        repo.index.commit(message="feat: add A", **_commitargs)
+
+        # release branch from just before the main branch's HEAD
+        repo.head.reference = repo.create_head("release/0", base_commit)
+        assert not repo.head.is_detached
+        repo.head.reset(index=True, working_tree=True)
+
+        # Some change
+        (run_hopic.toprepo / "something.txt").write_text("usable")
+        repo.index.add(("something.txt",))
+        repo.index.commit(message=f"{msg_tag}: add something useful", **_commitargs)
+
+    monkeypatch.setenv("GIT_COMMITTER_NAME", "My Name is Nobody")
+    monkeypatch.setenv("GIT_COMMITTER_EMAIL", "nobody@example.com")
+    (*_, result) = run_hopic(
+        command("checkout-source-tree", target_remote=run_hopic.toprepo, target_ref="master"),
+        command(
+            "prepare-source-tree",
+            author_name=_author.name,
+            author_email=_author.email,
+            author_date=f"@{_git_time}",
+            commit_date=f"@{_git_time}",
+        )
+        + command("apply-modality-change", "AUTO_MERGE"),
+        command("submit"),
+    )
+
+    assert result.exit_code == 0
+    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+        if expected_version is not None:
+            assert repo.git.describe("master") == expected_version
+
+        commit = repo.heads.master.commit
+        subject = commit.message.splitlines()[0]
+        assert subject == f"{msg_tag}: merge branch 'release/0'"
+
+
 def test_modality_merge_nop(capfd, run_hopic, monkeypatch):
     with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
         (run_hopic.toprepo / "hopic-ci-config.yaml").write_text(

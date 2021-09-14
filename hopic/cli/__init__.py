@@ -1143,7 +1143,9 @@ def apply_modality_change(
     def change_applicator(repo, author, committer):
         has_changed_files = any("changed-files" in cmd for cmd in modality_cmds)
 
-        (commit_message,) = (cmd["commit-message"] for cmd in modality_cmds if "commit-message" in cmd)
+        (commit_message,) = (
+            cmd.get("commit-message", cmd.get("commit-message-cmd")) for cmd in modality_cmds if "commit-message" in cmd or "commit-message-cmd" in cmd
+        )
 
         if not has_changed_files:
             # Force clean builds when we don't know how to discover changed files
@@ -1155,11 +1157,9 @@ def apply_modality_change(
         vars_from_env.update(volume_vars)
         volume_vars = vars_from_env
 
-        commit_message = expand_vars(volume_vars, commit_message)
-
         # Set submit_commit to None to indicate that we haven't got a submittable commit (yet).
         hopic_git_info = HopicGitInfo.from_repo(repo)._replace(submit_commit=None)
-        build.build_variant(variant=modality, cmds=modality_cmds, hopic_git_info=hopic_git_info, exec_stdout=sys.__stderr__, cwd="${CFGDIR}")
+        (*_,) = build.build_variant(variant=modality, cmds=modality_cmds, hopic_git_info=hopic_git_info, exec_stdout=sys.__stderr__, cwd="${CFGDIR}")
 
         if not has_changed_files:
             # 'git add --all' equivalent (excluding the code_dir)
@@ -1187,8 +1187,17 @@ def apply_modality_change(
                 repo.index.add(add_files)
 
         if not repo.index.diff(repo.head.commit):
-            log.info("No changes introduced by '%s'", commit_message)
+            log.info("No changes introduced by '%s'", modality)
             return None
+
+        if isinstance(commit_message, str):
+            commit_message = expand_vars(volume_vars, commit_message)
+        else:
+            assert isinstance(commit_message, Mapping)
+            (commit_message,) = build.build_variant(
+                variant=modality, cmds=[commit_message], hopic_git_info=hopic_git_info, exec_stdout=subprocess.PIPE, cwd="${CFGDIR}"
+            )
+
         commit_message = dedent(f"""\
             {commit_message.rstrip()}
 
@@ -1534,7 +1543,7 @@ def submit(ctx, target_remote):
             cfg.remove_section(f"hopic.{repo.head.commit}")
 
     for phase in ctx.obj.config['post-submit'].values():
-        build.build_variant(variant='post-submit', cmds=phase, hopic_git_info=hopic_git_info)
+        (*_,) = build.build_variant(variant="post-submit", cmds=phase, hopic_git_info=hopic_git_info)
 
 
 @main.command()
