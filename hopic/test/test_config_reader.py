@@ -231,6 +231,21 @@ def test_version_build_non_semver():
 
 def test_default_version_bumping_config():
     version_info = config_reader.read_version_info(os.devnull, {})
+    assert version_info["bump"]["policy"] == "disabled"
+
+
+@pytest.mark.parametrize(
+    "version_fields",
+    (
+        {"tag": True},
+        {"tag": "v{version}"},
+        {"file": "version.txt"},
+    ),
+    ids=lambda v: (v if isinstance(v, str) else json.dumps(v)),
+)
+def test_default_version_bumping_config_with_storage(version_fields):
+    version_info = config_reader.read_version_info(os.devnull, {**version_fields})
+
     assert version_info["bump"]["policy"] == "constant"
 
 
