@@ -732,6 +732,15 @@ Note that this is, above all, a remnant of the previous generation pipeline; it 
 ``commit-message``
     The message that will be used to commit the changes when this modality is run.
 
+    This option is mutually exclusive with ``commit-message-cmd``.
+
+    If omitted, the value of the ``MODALITY`` parameter is used as the commit message.
+
+``commit-message-cmd``
+    A command, or a mapping with an :option:`sh` option, of which ``stdout`` is used as the commit message of this modality.
+
+    This option is mutually exclusive with ``commit-message``.
+
     If omitted, the value of the ``MODALITY`` parameter is used as the commit message.
 
 **example:**
