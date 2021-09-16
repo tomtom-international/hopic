@@ -159,34 +159,6 @@ version: patch
     assert re.search(r"^configuration error in '.*?\bhopic-ci-config\.yaml': .*\bversion\b.*\bmust be\b.*\bmapping\b", err, re.MULTILINE)
 
 
-def test_default_version_bumping_config(run_hopic):
-    (result,) = run_hopic(
-        ("show-config",),
-        config='''\
-{}
-''',
-    )
-
-    assert result.exit_code == 0
-    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
-    assert output['version']['bump']['policy'] == 'constant'
-
-
-def test_default_version_bumping_backwards_compatible_policy(run_hopic):
-    (result,) = run_hopic(
-        ("show-config",),
-        config='''\
-version:
-  bump: patch
-''',
-    )
-
-    assert result.exit_code == 0
-    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
-    assert output['version']['bump']['policy'] == 'constant'
-    assert output['version']['bump']['field'] == 'patch'
-
-
 def test_disabled_version_bumping(run_hopic):
     (result,) = run_hopic(
         ("show-config",),

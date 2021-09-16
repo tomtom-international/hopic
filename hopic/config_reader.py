@@ -582,7 +582,17 @@ def read_version_info(config, version_info):
     if not isinstance(version_info, Mapping):
         raise ConfigurationError("`version` must be a mapping", file=config)
 
-    bump = version_info.setdefault('bump', OrderedDict((('policy', 'constant'),)))
+    tag = version_info.setdefault("tag", False)
+    if not isinstance(tag, (str, bool)):
+        raise ConfigurationError("`version.tag` must be a boolean or format string", file=config)
+
+    if "bump" not in version_info:
+        if tag or "file" in version_info:
+            version_info["bump"] = {"policy": "constant"}
+        else:
+            version_info["bump"] = {"policy": "disabled"}
+
+    bump = version_info["bump"]
     if not isinstance(bump, (str, Mapping, bool)) or isinstance(bump, bool) and bump:
         raise ConfigurationError("`version.bump` must be a mapping, string or the boolean false", file=config)
     elif isinstance(bump, str):
