@@ -631,14 +631,22 @@ def test_modality_merge_commit_message_dynamic(expected_version, msg_tag, run_ho
                     strict: yes
                     on-every-change: yes
 
+                project-name: test-project
+
                 modality-source-preparation:
                   AUTO_MERGE:
                     - git fetch origin release/0
                     - sh: git merge --no-commit --no-ff FETCH_HEAD
                       changed-files: []
                       # Reuse merged commit's commit message tag for the produced merge commit
-                      commit-message-cmd: >
-                        sh -c 'git show -q --format=%s MERGE_HEAD | sed "s|: .*|: merge branch '"'"'release/0'"'"'|"'
+                      commit-message-cmd:
+                        with-credentials:
+                          - id: topsecret
+                            type: username-password
+                            username-variable: MODALITY_AUTHOR
+                            password-variable: MODALITY_PASSWORD
+                        sh: >
+                          sh -c 'git show -q --format=%s MERGE_HEAD | sed "s|: .*|: merge branch '"'"'release/0'"'"'|" && echo && echo "Committed-by: ${MODALITY_AUTHOR}" && echo "Authorized-by: ${MODALITY_PASSWORD}"'
                 """
             )
         )
@@ -662,8 +670,18 @@ def test_modality_merge_commit_message_dynamic(expected_version, msg_tag, run_ho
         repo.index.add(("something.txt",))
         repo.index.commit(message=f"{msg_tag}: add something useful", **_commitargs)
 
+    username = "Master of the Universe"
+    password = "Open Sesame!"
+
+    def get_credential_id(project_name_arg, cred_id):
+        assert cred_id == "topsecret"
+        assert project_name_arg == "test-project"
+        return username, password
+
+    monkeypatch.setattr(credentials, "get_credential_by_id", get_credential_id)
     monkeypatch.setenv("GIT_COMMITTER_NAME", "My Name is Nobody")
     monkeypatch.setenv("GIT_COMMITTER_EMAIL", "nobody@example.com")
+
     (*_, result) = run_hopic(
         command("checkout-source-tree", target_remote=run_hopic.toprepo, target_ref="master"),
         command(
@@ -682,9 +700,15 @@ def test_modality_merge_commit_message_dynamic(expected_version, msg_tag, run_ho
         if expected_version is not None:
             assert repo.git.describe("master") == expected_version
 
-        commit = repo.heads.master.commit
-        subject = commit.message.splitlines()[0]
-        assert subject == f"{msg_tag}: merge branch 'release/0'"
+        message = "".join(repo.heads.master.commit.message.splitlines(keepends=True)[:-1])
+        assert message == dedent(
+            f"""\
+                {msg_tag}: merge branch 'release/0'
+
+                Committed-by: {username}
+                Authorized-by: {password}
+            """
+        )
 
 
 def test_modality_merge_nop(capfd, run_hopic, monkeypatch):
