@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    <title>Configuration &#8212; Hopic 1.46.1.dev8+g75949362 documentation</title>
+    <title>Configuration &#8212; Hopic 1.46.1.dev182+g5b485fad documentation</title>
     <link rel="stylesheet" href="_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
     <link rel="stylesheet" type="text/css" href="_static/banner.css" />
@@ -34,7 +34,7 @@
         <li class="right" >
           <a href="intro.html" title="Introduction"
              accesskey="P">previous</a> |</li>
-        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.46.1.dev8+g75949362 documentation</a> &#187;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.46.1.dev182+g5b485fad documentation</a> &#187;</li> 
       </ul>
     </div>  
 
@@ -1107,6 +1107,12 @@ Upon completion of the command, all files that are changed, removed and/or previ
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">commit-message</span></code></dt>
 <dd><p class="first">The message that will be used to commit the changes when this modality is run.</p>
+<p>This option is mutually exclusive with <code class="docutils literal notranslate"><span class="pre">commit-message-cmd</span></code>.</p>
+<p class="last">If omitted, the value of the <code class="docutils literal notranslate"><span class="pre">MODALITY</span></code> parameter is used as the commit message.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">commit-message-cmd</span></code></dt>
+<dd><p class="first">A command, or a mapping with an <code class="xref std std-option docutils literal notranslate"><span class="pre">sh</span></code> option, of which <code class="docutils literal notranslate"><span class="pre">stdout</span></code> is used as the commit message of this modality.</p>
+<p>This option is mutually exclusive with <code class="docutils literal notranslate"><span class="pre">commit-message</span></code>.</p>
 <p class="last">If omitted, the value of the <code class="docutils literal notranslate"><span class="pre">MODALITY</span></code> parameter is used as the commit message.</p>
 </dd>
 </dl>
@@ -1694,7 +1700,7 @@ The command should output the part of the configuration file to standard output.
         <li class="right" >
           <a href="intro.html" title="Introduction"
              >previous</a> |</li>
-        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.46.1.dev8+g75949362 documentation</a> &#187;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.46.1.dev182+g5b485fad documentation</a> &#187;</li> 
       </ul>
     </div>
     <div class="footer" role="contentinfo">
