@@ -1198,11 +1198,7 @@ def apply_modality_change(
                 variant=modality, cmds=[commit_message], hopic_git_info=hopic_git_info, exec_stdout=subprocess.PIPE, cwd="${CFGDIR}"
             )
 
-        commit_message = dedent(f"""\
-            {commit_message.rstrip()}
-
-            Merged-by: Hopic {get_package_version(PACKAGE)}
-            """)
+        commit_message = commit_message.rstrip() + f"\nMerged-by: Hopic {get_package_version(PACKAGE)}\n"
 
         commit_params = {'message': commit_message}
         # If this change was a merge make sure to produce a merge commit for it
