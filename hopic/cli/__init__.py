@@ -1325,6 +1325,8 @@ def getinfo(
         }
         for cmd in ctx.obj.config["modality-source-preparation"].get(modality, ()):
             info.update(append_meta_from_cmd(info, cmd, permitted_fields))
+            if "commit-message-cmd" in cmd:
+                info.update(append_meta_from_cmd(info, cmd["commit-message-cmd"], permitted_fields))
     elif post_submit:
         permitted_fields = frozenset({
             'node-label',
