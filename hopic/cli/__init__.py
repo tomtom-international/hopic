@@ -787,13 +787,15 @@ def process_prepare_source_tree(
             if 'build' in version_info and '+' not in tagname:
                 tagname += f"+{version_info['build']}"
             tagref = repo.create_tag(
-                    tagname, submit_commit, force=True,
-                    message=f"Tagged-by: Hopic {get_package_version(PACKAGE)}",
-                    env={
-                        'GIT_COMMITTER_NAME': committer.name,
-                        'GIT_COMMITTER_EMAIL': committer.email,
-                    },
-                )
+                tagname,
+                submit_commit,
+                force=True,
+                message=f"Tagged-by: Hopic {utils.get_package_version(PACKAGE)}",
+                env={
+                    "GIT_COMMITTER_NAME": committer.name,
+                    "GIT_COMMITTER_EMAIL": committer.email,
+                },
+            )
 
         # Re-read version to ensure that the newly created tag is taken into account
         ctx.obj.version, _ = determine_version(version_info, ctx.obj.config_dir, ctx.obj.code_dir)
@@ -1143,7 +1145,9 @@ def apply_modality_change(
     def change_applicator(repo, author, committer):
         has_changed_files = any("changed-files" in cmd for cmd in modality_cmds)
 
-        (commit_message,) = (cmd["commit-message"] for cmd in modality_cmds if "commit-message" in cmd)
+        (commit_message,) = (
+            cmd.get("commit-message", cmd.get("commit-message-cmd")) for cmd in modality_cmds if "commit-message" in cmd or "commit-message-cmd" in cmd
+        )
 
         if not has_changed_files:
             # Force clean builds when we don't know how to discover changed files
@@ -1155,11 +1159,9 @@ def apply_modality_change(
         vars_from_env.update(volume_vars)
         volume_vars = vars_from_env
 
-        commit_message = expand_vars(volume_vars, commit_message)
-
         # Set submit_commit to None to indicate that we haven't got a submittable commit (yet).
         hopic_git_info = HopicGitInfo.from_repo(repo)._replace(submit_commit=None)
-        build.build_variant(variant=modality, cmds=modality_cmds, hopic_git_info=hopic_git_info, exec_stdout=sys.__stderr__, cwd="${CFGDIR}")
+        (*_,) = build.build_variant(variant=modality, cmds=modality_cmds, hopic_git_info=hopic_git_info, exec_stdout=sys.__stderr__, cwd="${CFGDIR}")
 
         if not has_changed_files:
             # 'git add --all' equivalent (excluding the code_dir)
@@ -1187,13 +1189,26 @@ def apply_modality_change(
                 repo.index.add(add_files)
 
         if not repo.index.diff(repo.head.commit):
-            log.info("No changes introduced by '%s'", commit_message)
+            log.info("No changes introduced by '%s'", modality)
             return None
-        commit_message = dedent(f"""\
-            {commit_message.rstrip()}
 
-            Merged-by: Hopic {get_package_version(PACKAGE)}
-            """)
+        if isinstance(commit_message, str):
+            commit_message = expand_vars(volume_vars, commit_message)
+        else:
+            assert isinstance(commit_message, Mapping)
+            (commit_message,) = build.build_variant(
+                variant=modality, cmds=[commit_message], hopic_git_info=hopic_git_info, exec_stdout=subprocess.PIPE, cwd="${CFGDIR}"
+            )
+
+        if commit_message[-1:] != "\n":
+            commit_message += "\n"
+
+        # Prevent splitting footers with empty lines in between, because 'git interpret-trailers' doesn't like it.
+        parsed_msg = parse_commit_message(commit_message)
+        if not parsed_msg.footers:
+            commit_message += "\n"
+
+        commit_message += f"Merged-by: Hopic {utils.get_package_version(PACKAGE)}\n"
 
         commit_params = {'message': commit_message}
         # If this change was a merge make sure to produce a merge commit for it
@@ -1226,7 +1241,7 @@ def bump_version(ctx):
             'bump_message': dedent(f"""\
                     chore: release new version
 
-                    Bumped-by: Hopic {get_package_version(PACKAGE)}
+                    Bumped-by: Hopic {utils.get_package_version(PACKAGE)}
                     """),
             'base_commit': tag.commit,
             'bump-override': {
@@ -1316,6 +1331,8 @@ def getinfo(
         }
         for cmd in ctx.obj.config["modality-source-preparation"].get(modality, ()):
             info.update(append_meta_from_cmd(info, cmd, permitted_fields))
+            if "commit-message-cmd" in cmd:
+                info.update(append_meta_from_cmd(info, cmd["commit-message-cmd"], permitted_fields))
     elif post_submit:
         permitted_fields = frozenset({
             'node-label',
@@ -1534,7 +1551,7 @@ def submit(ctx, target_remote):
             cfg.remove_section(f"hopic.{repo.head.commit}")
 
     for phase in ctx.obj.config['post-submit'].values():
-        build.build_variant(variant='post-submit', cmds=phase, hopic_git_info=hopic_git_info)
+        (*_,) = build.build_variant(variant="post-submit", cmds=phase, hopic_git_info=hopic_git_info)
 
 
 @main.command()
