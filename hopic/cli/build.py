@@ -29,8 +29,6 @@ from collections.abc import (
     Sequence,
 )
 from typing import (
-    Any,
-    Callable,
     Dict,
     List,
 )
@@ -443,21 +441,14 @@ def build_variant(
 
                     old_handlers = dict((num, signal.signal(num, signal_handler)) for num in (signal.SIGINT, signal.SIGTERM))
                     try:
-                        run_method: Callable[..., Any] = subprocess.check_call
-                        run_args = {}
-                        if exec_stdout is subprocess.PIPE:
-                            run_method = subprocess.check_output
-                        elif exec_stdout is not None:
-                            run_args["stdout"] = exec_stdout
-
-                        yield echo_cmd(
-                            run_method,
+                        echo_cmd(
+                            subprocess.check_call,
                             final_cmd,
                             env=new_env,
                             cwd=expand_vars(ctx.obj.volume_vars, cwd),
                             obfuscate=variant_credentials,
                             timeout=timeout,
-                            **run_args,
+                            stdout=exec_stdout,
                         )
                     except subprocess.CalledProcessError as e:
                         log.error("Command fatally terminated with exit code %d", e.returncode)
@@ -623,4 +614,4 @@ def build(ctx, phase, variant, dry_run):
             if variant and curvariant not in variant:
                 continue
 
-            (*_,) = build_variant(variant=curvariant, cmds=cmds, hopic_git_info=hopic_git_info)
+            build_variant(variant=curvariant, cmds=cmds, hopic_git_info=hopic_git_info)

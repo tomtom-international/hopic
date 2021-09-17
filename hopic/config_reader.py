@@ -1096,7 +1096,7 @@ class VariantCmd:
 
         yield from self.process_unknown_cmd_item(name=name, value=value, keys=keys)
 
-    def process_cmd(self, cmd: typing.Mapping):
+    def process_cmd(self, cmd):
         assert not isinstance(cmd, str), "internal error: string commands should have been converted to 'sh' dictionary format"
         assert isinstance(cmd, Mapping)
 
@@ -1107,7 +1107,7 @@ class VariantCmd:
             )
         )
 
-    def process_cmd_list(self, cmds: typing.Iterable[typing.Mapping]) -> typing.Iterable:
+    def process_cmd_list(self, cmds: typing.Iterable) -> typing.Iterable:
         seen_sh = False
         global_timeout = None
         summed_timeout = 0
@@ -1177,25 +1177,13 @@ class ModalitySourcePreparationCmd(VariantCmd):
         seen_commit_message = False
 
         for cmd_idx, cmd in enumerate(super().process_cmd_list(cmds)):
-            present_msg_keys = cmd.keys() & {"commit-message", "commit-message-cmd"}
-            if present_msg_keys:
-                if seen_commit_message or len(present_msg_keys) >= 2:
+            if "commit-message" in cmd:
+                if seen_commit_message:
                     raise ConfigurationError(
-                        f"`{self._phase}.{self._variant}[{cmd_idx}]` attempting to define `commit-message` or `commit-message-cmd` multiple times",
+                        f"`{self._phase}.{self._variant}[{cmd_idx}]` attempting to define `commit-message` multiple times",
                         file=self._config_file,
                     )
                 seen_commit_message = True
-
-                if "commit-message-cmd" in cmd:
-                    msg_cmd = cmd["commit-message-cmd"]
-                    if isinstance(msg_cmd, str):
-                        msg_cmd = {"sh": msg_cmd}
-                    if not isinstance(msg_cmd, Mapping) or "sh" not in msg_cmd:
-                        raise ConfigurationError(
-                            f"'{self._phase}.{self._variant}[{cmd_idx}].commit-message-cmd' member is neither a command string, nor a mapping with 'sh' key",
-                            file=self._config_file,
-                        )
-                    (cmd["commit-message-cmd"],) = super().process_cmd_list([msg_cmd])
 
             yield cmd
 
