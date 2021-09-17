@@ -787,13 +787,15 @@ def process_prepare_source_tree(
             if 'build' in version_info and '+' not in tagname:
                 tagname += f"+{version_info['build']}"
             tagref = repo.create_tag(
-                    tagname, submit_commit, force=True,
-                    message=f"Tagged-by: Hopic {get_package_version(PACKAGE)}",
-                    env={
-                        'GIT_COMMITTER_NAME': committer.name,
-                        'GIT_COMMITTER_EMAIL': committer.email,
-                    },
-                )
+                tagname,
+                submit_commit,
+                force=True,
+                message=f"Tagged-by: Hopic {utils.get_package_version(PACKAGE)}",
+                env={
+                    "GIT_COMMITTER_NAME": committer.name,
+                    "GIT_COMMITTER_EMAIL": committer.email,
+                },
+            )
 
         # Re-read version to ensure that the newly created tag is taken into account
         ctx.obj.version, _ = determine_version(version_info, ctx.obj.config_dir, ctx.obj.code_dir)
@@ -1198,7 +1200,7 @@ def apply_modality_change(
                 variant=modality, cmds=[commit_message], hopic_git_info=hopic_git_info, exec_stdout=subprocess.PIPE, cwd="${CFGDIR}"
             )
 
-        commit_message = commit_message.rstrip() + f"\nMerged-by: Hopic {get_package_version(PACKAGE)}\n"
+        commit_message = commit_message.rstrip() + f"\nMerged-by: Hopic {utils.get_package_version(PACKAGE)}\n"
 
         commit_params = {'message': commit_message}
         # If this change was a merge make sure to produce a merge commit for it
@@ -1231,7 +1233,7 @@ def bump_version(ctx):
             'bump_message': dedent(f"""\
                     chore: release new version
 
-                    Bumped-by: Hopic {get_package_version(PACKAGE)}
+                    Bumped-by: Hopic {utils.get_package_version(PACKAGE)}
                     """),
             'base_commit': tag.commit,
             'bump-override': {

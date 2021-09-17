@@ -587,6 +587,7 @@ def test_modality_merge_commit_message(expected_version, msg_prefix, run_hopic, 
         repo.index.add(('something.txt',))
         repo.index.commit(message='feat: add something useful', **_commitargs)
 
+    monkeypatch.setattr(utils, "get_package_version", lambda package: "42.42.42")
     monkeypatch.setenv('GIT_COMMITTER_NAME' , 'My Name is Nobody')
     monkeypatch.setenv('GIT_COMMITTER_EMAIL', 'nobody@example.com')
     monkeypatch.setenv('CUSTOM_VAR', 'custom value')
@@ -602,11 +603,17 @@ def test_modality_merge_commit_message(expected_version, msg_prefix, run_hopic, 
         )
 
     assert result.exit_code == 0
-    with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
+    with git.Repo(run_hopic.toprepo, expand_vars=False) as repo:
         if expected_version is not None:
             assert repo.git.describe("master") == expected_version
 
-        assert repo.heads.master.commit.message.startswith(f"{msg_prefix} branch 'release/0': custom value")
+        assert repo.heads.master.commit.message == dedent(
+            f"""\
+                {msg_prefix} branch 'release/0': custom value
+
+                Merged-by: Hopic 42.42.42
+            """
+        )
 
 
 @pytest.mark.parametrize(
@@ -679,6 +686,7 @@ def test_modality_merge_commit_message_dynamic(expected_version, msg_tag, run_ho
         return username, password
 
     monkeypatch.setattr(credentials, "get_credential_by_id", get_credential_id)
+    monkeypatch.setattr(utils, "get_package_version", lambda package: "42.42.42")
     monkeypatch.setenv("GIT_COMMITTER_NAME", "My Name is Nobody")
     monkeypatch.setenv("GIT_COMMITTER_EMAIL", "nobody@example.com")
 
@@ -700,13 +708,13 @@ def test_modality_merge_commit_message_dynamic(expected_version, msg_tag, run_ho
         if expected_version is not None:
             assert repo.git.describe("master") == expected_version
 
-        message = "".join(repo.heads.master.commit.message.splitlines(keepends=True)[:-1])
-        assert message == dedent(
+        assert repo.heads.master.commit.message == dedent(
             f"""\
                 {msg_tag}: merge branch 'release/0'
 
                 Committed-by: {username}
                 Authorized-by: {password}
+                Merged-by: Hopic 42.42.42
             """
         )
 
