@@ -1200,7 +1200,15 @@ def apply_modality_change(
                 variant=modality, cmds=[commit_message], hopic_git_info=hopic_git_info, exec_stdout=subprocess.PIPE, cwd="${CFGDIR}"
             )
 
-        commit_message = commit_message.rstrip() + f"\nMerged-by: Hopic {utils.get_package_version(PACKAGE)}\n"
+        if commit_message[-1:] != "\n":
+            commit_message += "\n"
+
+        # Prevent splitting footers with empty lines in between, because 'git interpret-trailers' doesn't like it.
+        parsed_msg = parse_commit_message(commit_message)
+        if not parsed_msg.footers:
+            commit_message += "\n"
+
+        commit_message += f"Merged-by: Hopic {utils.get_package_version(PACKAGE)}\n"
 
         commit_params = {'message': commit_message}
         # If this change was a merge make sure to produce a merge commit for it
