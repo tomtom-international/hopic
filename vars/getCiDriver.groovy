@@ -18,6 +18,7 @@ import groovy.json.JsonOutput
 import hudson.model.ParametersDefinitionProperty
 import org.jenkinsci.plugins.credentialsbinding.impl.CredentialNotFoundException
 import org.jenkinsci.plugins.scriptsecurity.sandbox.RejectedAccessException
+import org.jenkinsci.plugins.workflow.multibranch.BranchJobProperty
 import org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty
 
 class ChangeRequest {
@@ -1357,7 +1358,11 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   private def determine_props() {
     List props = null
     try {
-      props = steps.currentBuild.rawBuild.parent.properties.collect { k, v -> v }
+      props = steps.currentBuild.rawBuild.parent.properties
+        .collect { k, v -> v }
+        // Avoid re-setting BranchJobProperty as this already gets preserved by Jenkins itself. Setting it again would double it.
+        // For long-lasting branches this would cause the associated config.xml to grow in size indefinitely.
+        .findAll { !(it instanceof BranchJobProperty) }
 
       def non_param_props = []
       def params = [:]
