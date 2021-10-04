@@ -635,7 +635,7 @@ class CiDriver {
       def venv = steps.pwd(tmp: true) + "/hopic-venv"
       def workspace = steps.pwd()
       // Timeout prevents infinite downloads from blocking the build forever
-      steps.timeout(time: 1, unit: 'MINUTES', activity: true) {
+      steps.timeout(time: 5, unit: 'MINUTES', activity: true) {
         // Use the exact same Hopic version on every build node
         if (this.repo.startsWith("git+") && !(this.repo ==~ /.*@[0-9a-fA-F]{40}/)) {
           // Split on the last '@' only
