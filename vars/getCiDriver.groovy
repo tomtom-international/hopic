@@ -1593,7 +1593,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
   private def build_phases(phases, clean, artifactoryBuildInfo, hopic_extra_arguments, submit_meta, from_phases_locks, previous_phase_locks = []) {
     if (!phases) {
-      return submit_if_needed(submit_meta, hopic_extra_arguments)
+      return submit_if_needed(submit_meta, hopic_extra_arguments, clean)
     }
     def build_phases_func = { locks ->
       build_phases(phases, clean, artifactoryBuildInfo, hopic_extra_arguments, submit_meta, from_phases_locks, locks ?: previous_phase_locks)
@@ -1675,9 +1675,9 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     }
   }
 
-  private def submit_if_needed(submit_meta, hopic_extra_arguments) {
+  private def submit_if_needed(submit_meta, hopic_extra_arguments, clean) {
     if (this.may_submit_result != false) {
-      this.on_build_node(node_expr: submit_meta['node-label'], name: 'submit') { cmd ->
+      this.on_build_node(node_expr: submit_meta['node-label'], name: 'submit', clean: clean) { cmd ->
         if (!this.has_submittable_change()) {
           // Prevent reporting 'submit' as having run as we didn't actually do anything
           def usage_entry = this.nodes_usage[steps.env.NODE_NAME][steps.env.EXECUTOR_NUMBER as Integer].pop()
