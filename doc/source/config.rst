@@ -938,6 +938,24 @@ which XML files to be uploaded.
 .. literalinclude:: ../../examples/allow-missing-junit.yaml
     :language: yaml
 
+JUnit allow-failures
+------------------
+
+.. option:: allow-failures
+
+Normally, a build fails if junit XML report file contains failed tests.
+Setting this option's value to true allows the build to continue even if junit XML report file contains
+failed tests. The variant will still be marked as "failed", but the pipeline will continue.
+
+**Note**: This option cannot suppress failures in test execution. If an executable that produces the junit
+report fails, the pipeline will still fail. This option is useful when junit represents static analysis
+report: a tool succeeds, but produces a report which can be uploaded.
+
+**example:**
+
+.. literalinclude:: ../../examples/allow-failures-junit.yaml
+    :language: yaml
+
 Artifact Archiving
 ------------------
 
