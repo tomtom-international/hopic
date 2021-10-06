@@ -86,40 +86,45 @@ phases:
   static:
     python3.6:
       - timeout: 90
-      - junit: mypy-test.xml
-        allow-failures: yes # TODO: remove when GitPython annotations are correct
+      - junit:
+          test-results: mypy-test.xml
+          allow-failures: yes # TODO: remove when GitPython annotations are correct
         image: hopic-python:3.6-slim-git
         wait-on-full-previous-phase: no
         sh: tox -r -e py36-types
 
     python3.7:
       - timeout: 90
-      - junit: mypy-test.xml
-        allow-failures: yes # TODO: remove when GitPython annotations are correct
+      - junit:
+          test-results: mypy-test.xml
+          allow-failures: yes # TODO: remove when GitPython annotations are correct
         image: hopic-python:3.7-slim-git
         wait-on-full-previous-phase: no
         sh: tox -r -e py37-types
 
     python3.8:
       - timeout: 90
-      - junit: mypy-test.xml
-        allow-failures: yes # TODO: remove when GitPython annotations are correct
+      - junit:
+          test-results: mypy-test.xml
+          allow-failures: yes # TODO: remove when GitPython annotations are correct
         image: hopic-python:3.8-slim-git
         wait-on-full-previous-phase: no
         sh: tox -r -e py38-types
 
     python3.9:
       - timeout: 90
-      - junit: mypy-test.xml
-        allow-failures: yes # TODO: remove when GitPython annotations are correct
+      - junit:
+          test-results: mypy-test.xml
+          allow-failures: yes # TODO: remove when GitPython annotations are correct
         image: hopic-python:3.9-slim-git
         wait-on-full-previous-phase: no
         sh: tox -r -e py39-types
 
     python3.10:
       - timeout: 90
-      - junit: mypy-test.xml
-        allow-failures: yes # TODO: remove when GitPython annotations are correct
+      - junit:
+          test-results: mypy-test.xml
+          allow-failures: yes # TODO: remove when GitPython annotations are correct
         image: hopic-python:3.10-slim-git
         wait-on-full-previous-phase: no
         sh: tox -r -e py310-types
