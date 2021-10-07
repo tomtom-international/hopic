@@ -17,6 +17,26 @@
 Changelog
 =========
 
+1.47.0
+======
+
+New features
+------------
+
+* feat(modality): make the modality commit's message dynamically configurable (#403)
+
+Improvements
+------------
+
+* improvement(config): without storage default version bumping to disabled (#401)
+* improvement(groovy): increase timeout for downloading Hopic to 1 minute (from 5) (#405)
+
+Bug fixes
+---------
+
+* fix(groovy): avoid setting BranchJobProperty twice (#404)
+* fix(groovy): respect the clean build parameter on submit as well (#406)
+
 1.46.0
 ======
 
