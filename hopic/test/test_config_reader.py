@@ -1236,7 +1236,7 @@ def test_ci_locks_wrong_branch_value():
         )
 
 
-def test_mutiple_options_on_archive():
+def test_multiple_options_on_archive():
     with pytest.raises(ConfigurationError, match=r"are not allowed in the same [Aa]rchive configuration, use only 'allow-missing"):
         config_reader.read(
             config_file(
@@ -1321,6 +1321,29 @@ def test_allow_empty_junit():
         )
 
 
+def test_allow_failures_junit():
+    cfg = config_reader.read(
+        config_file(
+            "test-hopic-config.yaml",
+            dedent(
+                """\
+        phases:
+          build:
+            example:
+              - junit:
+                 test-results: doesnotexist.txt
+                 allow-failures: true
+                """
+            ),
+        ),
+        {"WORKSPACE": None},
+    )
+
+    out = cfg["phases"]["build"]["example"][0]["junit"]
+    assert "allow-failures" in out
+    assert out["allow-failures"] is True
+
+
 def test_generated_config_has_test_results():
     cfg = config_reader.read(
         config_file(
@@ -1359,6 +1382,26 @@ def test_junit_allow_missing_not_boolean():
                 )
             ),
             {'WORKSPACE': None}
+        )
+
+
+def test_junit_allow_failures_not_boolean():
+    with pytest.raises(ConfigurationError, match=r"'build.example.junit.allow-failures' should be a boolean, not a str"):
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    """\
+            phases:
+              build:
+                example:
+                  - junit:
+                     test-results: doesnotexist.txt
+                     allow-failures: 'true'
+                    """
+                ),
+            ),
+            {"WORKSPACE": None},
         )
 
 
