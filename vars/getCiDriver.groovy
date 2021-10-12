@@ -545,6 +545,7 @@ class CiDriver {
   private may_publish_result = null
   private pip_constraints    = null
   private virtualenvs        = [:]
+  private paramEnvVars       = []
   private config_file
   private bitbucket_api_credential_id  = null
   private LinkedHashMap<String, LinkedHashMap<Integer, NodeExecution[]>> nodes_usage = [:]
@@ -1324,31 +1325,33 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     def allocation_group = node_params.getOrDefault("allocation_group", exec_name)
     def request_time = this.get_unix_epoch_time()
     return steps.node(node_expr) {
-      if (!this.nodes_usage.containsKey(steps.env.NODE_NAME)) {
-        steps.sh(
-          script: """
-            echo network config for node ${steps.env.NODE_NAME} && 
-            ((LC_ALL=C.UTF-8 ifconfig || LC_ALL=C.UTF-8 ip addr show) | grep inet) || echo -e '\\033[33m[warning] could not get ip information of the node' >&2
-          """,
-          label: 'Hopic (internal): node ip logging')
-      }
-      NodeExecution usage_entry
-      if (exec_name != null) {
-        usage_entry = new NodeExecution(allocation_group: allocation_group, exec_name: exec_name, request_time: request_time, start_time: this.get_unix_epoch_time())
-        this.nodes_usage.get(steps.env.NODE_NAME, [:]).get(steps.env.EXECUTOR_NUMBER as Integer, []).add(usage_entry)
-      }
-      def build_result = 'SUCCESS'
-      try {
-        return closure()
-      } catch(Exception e) {
-        build_result = this.determine_error_build_result(e)
-        throw e
-      } finally {
+      steps.withEnv(this.paramEnvVars) {
+        if (!this.nodes_usage.containsKey(steps.env.NODE_NAME)) {
+          steps.sh(
+            script: """
+              echo network config for node ${steps.env.NODE_NAME} && 
+              ((LC_ALL=C.UTF-8 ifconfig || LC_ALL=C.UTF-8 ip addr show) | grep inet) || echo -e '\\033[33m[warning] could not get ip information of the node' >&2
+            """,
+            label: 'Hopic (internal): node ip logging')
+        }
+        NodeExecution usage_entry
         if (exec_name != null) {
-          assert usage_entry != null
-          assert usage_entry.exec_name == exec_name
-          usage_entry.end_time = this.get_unix_epoch_time()
-          usage_entry.status = steps.currentBuild.currentResult != 'SUCCESS' ? steps.currentBuild.currentResult : build_result
+          usage_entry = new NodeExecution(allocation_group: allocation_group, exec_name: exec_name, request_time: request_time, start_time: this.get_unix_epoch_time())
+          this.nodes_usage.get(steps.env.NODE_NAME, [:]).get(steps.env.EXECUTOR_NUMBER as Integer, []).add(usage_entry)
+        }
+        def build_result = 'SUCCESS'
+        try {
+          return closure()
+        } catch(Exception e) {
+          build_result = this.determine_error_build_result(e)
+          throw e
+        } finally {
+          if (exec_name != null) {
+            assert usage_entry != null
+            assert usage_entry.exec_name == exec_name
+            usage_entry.end_time = this.get_unix_epoch_time()
+            usage_entry.status = steps.currentBuild.currentResult != 'SUCCESS' ? steps.currentBuild.currentResult : build_result
+          }
         }
       }
     }
@@ -1420,6 +1423,8 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       props.add(steps.parameters(params.values()))
     }
     steps.properties(props)
+    // We manually add build parameters as environment variables here, as Jenkins fails to do that for the first build in a new branch.
+    this.paramEnvVars.addAll(steps.params.collect { "${it.key}=${it.value}" })
   }
 
   private def decorate_output(Closure closure) {
@@ -1722,17 +1727,17 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           def workspace = steps.pwd()
 
           /*
-           * We're splitting the enumeration of phases and variants from their execution in order to
-           * enable Jenkins to execute the different variants within a phase in parallel.
-           *
-           * In order to do this we only check out the CI config file to the orchestrator node.
-           */
+          * We're splitting the enumeration of phases and variants from their execution in order to
+          * enable Jenkins to execute the different variants within a phase in parallel.
+          *
+          * In order to do this we only check out the CI config file to the orchestrator node.
+          */
           def scm = steps.checkout(steps.scm)
 
           // Don't trust Jenkin's scm.GIT_COMMIT because it sometimes lies
           steps.env.GIT_COMMIT          = steps.sh(script: 'LC_ALL=C.UTF-8 TZ=UTC git rev-parse HEAD',
-                                                   label: 'Hopic (internal): determine current commit (because Jenkins lies!)',
-                                                   returnStdout: true).trim()
+                                                  label: 'Hopic (internal): determine current commit (because Jenkins lies!)',
+                                                  returnStdout: true).trim()
           steps.env.GIT_COMMITTER_NAME  = scm.GIT_COMMITTER_NAME
           steps.env.GIT_COMMITTER_EMAIL = scm.GIT_COMMITTER_EMAIL
           steps.env.GIT_AUTHOR_NAME     = scm.GIT_AUTHOR_NAME
@@ -1817,7 +1822,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
                   return !this.has_change()
                 } else if (run_on_change == 'only' || run_on_change == 'new-version-only') {
                   if (this.source_commit == null
-                   || this.target_commit == null) {
+                  || this.target_commit == null) {
                     // Don't have enough information to determine whether this is a submittable change: assume it is
                     return true
                   }
@@ -1864,7 +1869,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
               def server = steps.Artifactory.server server_id
               server.publishBuildInfo(buildInfo)
               if (promotion_config.containsKey('target-repo')
-               && is_publishable_change) {
+              && is_publishable_change) {
                 server.promote(
                     targetRepo:  promotion_config['target-repo'],
                     buildName:   buildInfo.name,
