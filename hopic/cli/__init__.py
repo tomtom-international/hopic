@@ -937,7 +937,16 @@ def is_version_bump_enabled(bump_config: Mapping, ctx: Optional[click.Context] =
     assert ctx is not None or is_publish_from_branch_allowed is not None
     if is_publish_from_branch_allowed is None:
         is_publish_from_branch_allowed = is_publish_branch(ctx)
-    return is_publish_from_branch_allowed and bump_config["policy"] != "disabled" and bump_config["on-every-change"]
+    if not is_publish_from_branch_allowed:
+        log.debug("not bumping the version because publishing from the current branch is disabled")
+        return False
+    if bump_config["policy"] == "disabled":
+        log.debug("not bumping the version because the policy is configured to be disabled")
+        return False
+    if not bump_config["on-every-change"]:
+        log.debug("not bumping the version because Hopic is configured not to do so on every change")
+        return False
+    return True
 
 
 def get_current_version(ctx: click.Context) -> Version:
