@@ -1419,7 +1419,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     }
     steps.properties(props)
     // We manually add build parameters as environment variables here, as Jenkins fails to do that for the first build in a new branch.
-    this.paramEnvVars.addAll(steps.params.collect { "${it.key}=${it.value}" })
+    this.paramEnvVars.addAll(steps.params.findAll { steps.env.getEnvironment().get(it.key, null) == null }.collect { "${it.key}=${it.value}" })
   }
 
   private def decorate_output(Closure closure) {
