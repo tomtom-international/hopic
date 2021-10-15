@@ -410,14 +410,18 @@ def test_merge_conventional_feat_bump_not_on_change(capfd, run_hopic):
 
 def test_merge_conventional_breaking_change_on_major_branch(capfd, run_hopic):
     result = merge_conventional_bump(capfd, run_hopic, message='refactor!: make the API type better', target='release/42')
-    assert isinstance(result.exception, VersioningError)
+    assert result.exception is not None
+    if not isinstance(result.exception, VersioningError):
+        raise result.exception
     err = result.exception.format_message()
     assert 'Breaking changes are not allowed' in err
 
 
 def test_merge_conventional_feat_on_minor_branch(capfd, run_hopic):
     result = merge_conventional_bump(capfd, run_hopic, message='feat: add something useful', target='release/42.21')
-    assert isinstance(result.exception, VersioningError)
+    assert result.exception is not None
+    if not isinstance(result.exception, VersioningError):
+        raise result.exception
     err = result.exception.format_message()
     assert 'New features are not allowed' in err
 
@@ -973,7 +977,9 @@ def test_merge_change_request_version_bump(capfd, monkeypatch, run_hopic, strict
         )
 
     if 'error' in expected_result:
-        assert isinstance(result.exception, VersionBumpMismatchError)
+        assert result.exception is not None
+        if not isinstance(result.exception, VersionBumpMismatchError):
+            raise result.exception
     else:
         assert result.exit_code == 0
         with git.Repo.init(run_hopic.toprepo, expand_vars=False) as repo:
@@ -1664,7 +1670,9 @@ def test_hotfix_change_off_release(run_hopic, unrelated_tag):
             "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", "fix/mem-leak",
             "--change-request", "42", "--title", "fix: work around oom kill due to memory leak"),
     )
-    assert isinstance(result.exception, VersioningError)
+    assert result.exception is not None
+    if not isinstance(result.exception, VersioningError):
+        raise result.exception
     err = result.exception.format_message()
     assert "Creating hotfixes on anything but a full release is not supported." in err
 
@@ -1811,7 +1819,9 @@ def test_hotfix_invalid_id(error_msg, hotfix_id, run_hopic):
             "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", "fix/mem-leak",
             "--change-request", "42", "--title", "fix: work around oom kill due to memory leak"),
     )
-    assert isinstance(result.exception, VersioningError)
+    assert result.exception is not None
+    if not isinstance(result.exception, VersioningError):
+        raise result.exception
     err = result.exception.format_message()
     assert error_msg.search(err)
 
@@ -1867,7 +1877,9 @@ def test_hotfix_rejects(error_msg, msg_tag, run_hopic):
             "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", "pr-42",
             "--change-request", "42", "--title", f"{msg_tag}: blorg the oompsie vatsaat"),
     )
-    assert isinstance(result.exception, VersioningError)
+    assert result.exception is not None
+    if not isinstance(result.exception, VersioningError):
+        raise result.exception
     err = result.exception.format_message()
     assert error_msg.search(err)
 
@@ -2004,7 +2016,9 @@ def test_no_initial_version(run_hopic):
             "merge-change-request", "--source-remote", run_hopic.toprepo, "--source-ref", "something-useful", "--title", "ci: add hopic"),
         ("build",),
     )
-    assert isinstance(result.exception, VersioningError)
+    assert result.exception is not None
+    if not isinstance(result.exception, VersioningError):
+        raise result.exception
     err = result.exception.format_message()
     assert "Failed to determine the current version while attempting to bump the version" in err
 
