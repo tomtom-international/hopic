@@ -1423,8 +1423,13 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       props.add(steps.parameters(params.values()))
     }
     steps.properties(props)
-    // We manually add build parameters as environment variables here, as Jenkins fails to do that for the first build in a new branch.
-    this.paramEnvVars.addAll(steps.params.findAll { steps.env.getEnvironment().get(it.key, null) == null }.collect { "${it.key}=${it.value}" })
+    try {
+      // We manually add build parameters as environment variables here, as Jenkins fails to do that for the first build in a new branch.
+      this.paramEnvVars.addAll(steps.params.findAll { steps.env.getEnvironment().get(it.key, null) == null }.collect { "${it.key}=${it.value}" })
+    } catch(org.jenkinsci.plugins.scriptsecurity.sandbox.RejectedAccessException e) {
+      steps.println('\033[33m[warning] could not determine environment variables due to missing script approval; ' 
+                  + 'skip adding parameters to environment \033[39m')
+    }
   }
 
   private def decorate_output(Closure closure) {
