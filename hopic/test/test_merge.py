@@ -1623,8 +1623,16 @@ def test_hotfix_change_on_release(bump_policy, prepare_source_tree, run_hopic, v
         assert repo.tags[expected_version].commit == repo.head.commit
 
 
+@pytest.mark.parametrize(
+    "bump_policy",
+    (
+        {"policy": "constant", "field": "patch"},
+        {"policy": "conventional-commits", "strict": True},
+    ),
+    ids=lambda bp: bp["policy"],
+)
 @pytest.mark.parametrize("unrelated_tag", (None, "1.2.4-rc1"), ids=lambda t: t or "{no-tag}")
-def test_hotfix_change_off_release(run_hopic, unrelated_tag):
+def test_hotfix_change_off_release(bump_policy, run_hopic, unrelated_tag):
     init_version = "1.2.3"
     hotfix_id = "vindyne.mem-leak"
     hotfix_branch = f"hotfix/{init_version}-{hotfix_id}"
@@ -1633,13 +1641,11 @@ def test_hotfix_change_off_release(run_hopic, unrelated_tag):
 
         (run_hopic.toprepo / cfg_file).write_text(
             dedent(
-                """\
+                f"""\
                 version:
                   tag: yes
                   format: semver
-                  bump:
-                    policy: conventional-commits
-                    strict: yes
+                  bump: {json.dumps(bump_policy)}
                   hotfix-branch: '^hotfix/\\d+\\.\\d+\\.\\d+-(?P<id>[a-zA-Z](?:[-.a-zA-Z0-9]*[a-zA-Z0-9])?)$'
                 """
             )
