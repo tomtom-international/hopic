@@ -1539,6 +1539,8 @@ def test_hotfix_change_on_release(bump_policy, prepare_source_tree, run_hopic, v
                   format: semver
                   bump: {json.dumps(bump_policy)}
                   hotfix-branch: '^hotfix/\\d+\\.\\d+\\.\\d+-(?P<id>[a-zA-Z](?:[-.a-zA-Z0-9]*[a-zA-Z0-9])?)$'
+                  hotfix-allowed-start-tags:
+                    - ci
                   {("file: " + version_file) if version_file else ""}
 
                 modality-source-preparation:
@@ -1559,6 +1561,9 @@ def test_hotfix_change_on_release(bump_policy, prepare_source_tree, run_hopic, v
         base_commit = repo.index.commit(message="chore: initial commit", **_commitargs)
         repo.create_tag(init_version)
         repo.git.branch(hotfix_branch, move=True)
+
+        if bump_policy["policy"] == "conventional-commits":
+            base_commit = repo.index.commit(message="ci: prepare for hotfix", **_commitargs)
 
         # PR branch
         repo.head.reference = repo.create_head("fix/mem-leak", base_commit)
@@ -1647,6 +1652,8 @@ def test_hotfix_change_off_release(bump_policy, run_hopic, unrelated_tag):
                   format: semver
                   bump: {json.dumps(bump_policy)}
                   hotfix-branch: '^hotfix/\\d+\\.\\d+\\.\\d+-(?P<id>[a-zA-Z](?:[-.a-zA-Z0-9]*[a-zA-Z0-9])?)$'
+                  hotfix-allowed-start-tags:
+                    - ci
                 """
             )
         )
@@ -1659,6 +1666,9 @@ def test_hotfix_change_off_release(bump_policy, run_hopic, unrelated_tag):
         base_commit = repo.index.commit(message="fix: unrelated cosmetic problem", **_commitargs)
         if unrelated_tag:
             repo.create_tag(unrelated_tag)
+
+        if bump_policy["policy"] == "conventional-commits":
+            base_commit = repo.index.commit(message="ci: prepare for hotfix", **_commitargs)
 
         # PR branch
         repo.head.reference = repo.create_head("fix/mem-leak", base_commit)
