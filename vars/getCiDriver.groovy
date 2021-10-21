@@ -931,7 +931,10 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
             + shell_quote("${tmpdir}/${this.change_bundle}"),
           label: 'Hopic (internal): unbundle change',
         )
-        return this.submit_info.commit
+        def head_commit = this.submit_info.commit ?: steps.sh(script: 'LC_ALL=C.UTF-8 TZ=UTC git rev-parse HEAD',
+                                                              label: 'Hopic (internal): determine current commit (because Jenkins lies!)',
+                                                              returnStdout: true).trim()
+        return head_commit
       } else if (this.get_change() != null) {
         def meta = this.get_change().getinfo(cmd)
         def maybe_timeout = { Closure closure ->
