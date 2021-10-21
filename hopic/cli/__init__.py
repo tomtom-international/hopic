@@ -600,7 +600,18 @@ def process_prepare_source_tree(
                         pass
 
                     # strip dirty state from version to ensure we're not complaining about that in the _is_valid_hotfix_base check below
-                    gitversion = GitVersion(tag_name=gitversion.tag_name, commit_hash=gitversion.commit_hash, commit_count=gitversion.commit_count)
+                    commit_count = gitversion.commit_count
+                    log.debug("checking for %r in %s..%s", version_info["hotfix-allowed-start-tags"], gitversion.tag_name, gitversion.commit_hash)
+                    for commit in parse_commit_range(repo, gitversion.tag_name, gitversion.commit_hash, bump):
+                        log.debug(
+                            "checking whether %r of %r appears in %r",
+                            getattr(commit, "type_tag", None),
+                            commit.message,
+                            version_info["hotfix-allowed-start-tags"],
+                        )
+                        if getattr(commit, "type_tag", None) in version_info["hotfix-allowed-start-tags"]:
+                            commit_count -= 1
+                    gitversion = GitVersion(tag_name=gitversion.tag_name, commit_hash=gitversion.commit_hash, commit_count=commit_count)
                     parse_version = gitversion.to_version(**params)
                     assert parse_version is not None
                     base_version = parse_version
@@ -966,8 +977,8 @@ def get_current_version(ctx: click.Context) -> Version:
 
 def parse_commit_range(
     repo: git.Repo,
-    from_commit: Optional[git.objects.commit.Commit],
-    to_commit: Optional[git.objects.commit.Commit],
+    from_commit: Union[None, git.objects.commit.Commit, str],
+    to_commit: Union[None, git.objects.commit.Commit, str],
     bump_config: Mapping,
 ) -> Iterable[CommitMessage]:
     if from_commit is None or to_commit is None:
