@@ -282,6 +282,8 @@ class JSONEncoder(json.JSONEncoder):
             return str(o)
         elif isinstance(o, Pattern):
             return o.pattern
+        elif isinstance(o, (set, frozenset)):
+            return list(o)
         return super().default(o)
 
 
@@ -654,6 +656,27 @@ def read_version_info(config, version_info):
                 files=config,
             )
     version_info["hotfix-branch"] = hotfix_branch
+
+    hotfix_allowed_start_tags = version_info.get("hotfix-allowed-start-tags", frozenset())
+    try:
+        typeguard.check_type(
+            argname="version.hotfix-allowed-start-tags",
+            value=hotfix_allowed_start_tags,
+            expected_type=typing.Union[typing.AbstractSet[str], typing.Sequence[str]],
+        )
+    except TypeError as exc:
+        raise ConfigurationError(
+            "'version.hotfix-allowed-start-tags' member is not a list of commit tag strings",
+            file=config,
+        ) from exc
+    hotfix_allowed_start_tags = frozenset(hotfix_allowed_start_tags)
+    rejected_tags = hotfix_allowed_start_tags & {"fix", "feat"}
+    if rejected_tags:
+        raise ConfigurationError(
+            f"'version.hotfix-allowed-start-tags' contains rejected tags {'.'.join(rejected_tags)}",
+            file=config,
+        )
+    version_info["hotfix-allowed-start-tags"] = hotfix_allowed_start_tags
 
     return version_info
 
