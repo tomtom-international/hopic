@@ -693,6 +693,11 @@ Another option is when it's performing a modality change (currently only ``UPDAT
 
     This defaults to matching branch names like ``hotfix/x.y.z-{hotfix-id}``.
 
+``hotfix-allowed-start-tags``
+    This contains a list of commit tags to allow after the version tag that the `hotfix-branch`_ has been split off from.
+    This will only get used when using the `Conventional Commits`_ bumping policy.
+    This defaults to an empty set.
+
 .. todo:: Describe ``after-submit``. Maybe?
 
 .. _Semantic Versioning: https://semver.org/
