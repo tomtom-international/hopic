@@ -21,3 +21,5 @@ staticMethod org.codehaus.groovy.runtime.DefaultGroovyMethods getAt java.lang.Ob
 staticMethod jenkins.model.Jenkins getInstance
 method jenkins.model.Jenkins getComputer java.lang.String
 method hudson.model.Computer getNumExecutors
+method hudson.EnvVars get java.lang.String java.lang.String
+method org.jenkinsci.plugins.workflow.support.actions.EnvironmentAction getEnvironment
