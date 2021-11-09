@@ -552,6 +552,8 @@ class CiDriver {
   private ArrayList<LockWaitingTime> lock_times = []
   private printMetrics
   private config_file_content = null
+  private org.hopic.HopicEventCallbacks event_callbacks = null
+  private node_allocation_event_id = 0
 
   private final default_node_expr = "Linux && Docker"
 
@@ -571,6 +573,7 @@ class CiDriver {
       url: steps.scm.userRemoteConfigs[0].url,
     ]
     this.printMetrics = printMetrics
+    this.event_callbacks = params.event_callbacks ?: new org.hopic.HopicEventCallbacks()
   }
 
   private def get_change() {
@@ -628,34 +631,74 @@ class CiDriver {
     }
   }
 
+  private def track_call(Map params = [:], Closure closure) {
+    def call_name = params.get('call_name')
+    try {
+      if (params.get('on_start')) {
+        params.on_start()
+      }
+    } catch(Exception e) {
+      def message = "[warning] ignoring fatal error ${e}"
+      if (call_name) {
+        message += " during ${call_name}-start"
+      }
+      this.steps.println("\033[33m${message}\033[39m")
+    } 
+
+    def exception = null
+    try {
+      return closure()
+    } catch(Exception e) {
+      exception = e
+      throw e
+    } finally {
+      try {
+        if (params.get('on_end')) {
+          if (params.on_end instanceof Map && params.on_end.getOrDefault('requires_exception', false)) {
+            params.on_end.closure(exception)
+          } else {
+            params.on_end()
+          }
+        }
+      } catch(Exception e) {
+        def message = "[warning] ignoring fatal error ${e}"
+        if (call_name) {
+          message += " during ${call_name}-end"
+        }
+        this.steps.println("\033[33m${message}\033[39m")
+      }  
+    }
+  }
+
   public def with_hopic(String variant = null, closure) {
     assert steps.env.NODE_NAME != null, "with_hopic must be executed on a node"
 
     String executor_identifier = get_executor_identifier(variant)
     if (!this.base_cmds.containsKey(executor_identifier)) {
-      def venv = steps.pwd(tmp: true) + "/hopic-venv"
-      def workspace = steps.pwd()
-      // Timeout prevents infinite downloads from blocking the build forever
-      steps.timeout(time: 5, unit: 'MINUTES', activity: true) {
-        // Use the exact same Hopic version on every build node
-        if (this.repo.startsWith("git+") && !(this.repo ==~ /.*@[0-9a-fA-F]{40}/)) {
-          // Split on the last '@' only
-          def split = this.repo[4..-1].split('@')
-          def (remote, ref) = [split[0..-2].join('@'), split[-1]]
-          def commit = line_split(steps.sh(script: "git ls-remote ${shell_quote(remote)}",
-                                           label: 'Hopic (internal): finding latest Hopic commit',
-                                           returnStdout: true)).find { line ->
-            def (hash, remote_ref) = line.split('\t')
-            return (remote_ref == ref || remote_ref == "refs/heads/${ref}" || remote_ref == "refs/tags/${ref}")
+      this.track_call(call_name: 'on_hopic_installation', on_start: { this.event_callbacks.on_hopic_installation_start(steps.env.NODE_NAME) }, on_end: { this.event_callbacks.on_hopic_installation_end(steps.env.NODE_NAME) }) {
+        def venv = steps.pwd(tmp: true) + "/hopic-venv"
+        def workspace = steps.pwd()
+        // Timeout prevents infinite downloads from blocking the build forever
+        steps.timeout(time: 5, unit: 'MINUTES', activity: true) {
+          // Use the exact same Hopic version on every build node
+          if (this.repo.startsWith("git+") && !(this.repo ==~ /.*@[0-9a-fA-F]{40}/)) {
+            // Split on the last '@' only
+            def split = this.repo[4..-1].split('@')
+            def (remote, ref) = [split[0..-2].join('@'), split[-1]]
+            def commit = line_split(steps.sh(script: "git ls-remote ${shell_quote(remote)}",
+                                            label: 'Hopic (internal): finding latest Hopic commit',
+                                            returnStdout: true)).find { line ->
+              def (hash, remote_ref) = line.split('\t')
+              return (remote_ref == ref || remote_ref == "refs/heads/${ref}" || remote_ref == "refs/tags/${ref}")
+            }
+            if (commit != null)
+            {
+              def (hash, remote_ref) = commit.split('\t')
+              this.repo = "git+${remote}@${hash}"
+            }
           }
-          if (commit != null)
-          {
-            def (hash, remote_ref) = commit.split('\t')
-            this.repo = "git+${remote}@${hash}"
-          }
-        }
 
-        steps.sh(script: """\
+          steps.sh(script: """\
 LC_ALL=C.UTF-8
 TZ=UTC
 export LC_ALL TZ
@@ -665,24 +708,25 @@ cd /
 ${shell_quote(venv)}/bin/python -m pip install --prefer-binary --upgrade ${shell_quote("pip>=21.1")} ${shell_quote(this.repo)}
 """,
                  label: 'Hopic: installing Hopic')
-      }
-
-      def cmd = 'LC_ALL=C.UTF-8 TZ=UTC ' + shell_quote("${venv}/bin/python") + ' ' + shell_quote("${venv}/bin/hopic") + ' --color=always'
-      if (this.config_file != null) {
-        cmd += ' --workspace=' + shell_quote(workspace)
-        def cfg_file = this.config_file
-        if (this.config_file_content) {
-          cfg_file = steps.pwd(tmp: true) + "/${this.config_file}"
-          steps.writeFile(
-            file: cfg_file,
-            text: this.config_file_content
-          )
         }
-        def config_file_path = shell_quote(cfg_file.startsWith('/') ? cfg_file : "${workspace}/${cfg_file}")
-        cmd += ' --config=' + "${config_file_path}"
+
+        def cmd = 'LC_ALL=C.UTF-8 TZ=UTC ' + shell_quote("${venv}/bin/python") + ' ' + shell_quote("${venv}/bin/hopic") + ' --color=always'
+        if (this.config_file != null) {
+          cmd += ' --workspace=' + shell_quote(workspace)
+          def cfg_file = this.config_file
+          if (this.config_file_content) {
+            cfg_file = steps.pwd(tmp: true) + "/${this.config_file}"
+            steps.writeFile(
+              file: cfg_file,
+              text: this.config_file_content
+            )
+          }
+          def config_file_path = shell_quote(cfg_file.startsWith('/') ? cfg_file : "${workspace}/${cfg_file}")
+          cmd += ' --config=' + "${config_file_path}"
+        }
+        this.base_cmds[executor_identifier] = cmd
+        this.virtualenvs[executor_identifier] = venv
       }
-      this.base_cmds[executor_identifier] = cmd
-      this.virtualenvs[executor_identifier] = venv
     }
 
     def (build_name, build_identifier) = get_build_id()
@@ -890,124 +934,126 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     }
   }
 
-  private def checkout(String cmd, boolean clean = false) {
-    def tmpdir = steps.pwd(tmp: true)
-    def workspace = steps.pwd()
+  private def checkout(String cmd, boolean clean = false, metric_info = [:]) {
+    return this.track_call(call_name: 'on_workspace_preparation', on_start: { this.event_callbacks.on_node_workspace_preparation_start(steps.env.NODE_NAME) }, on_end: { this.event_callbacks.on_node_workspace_preparation_end(steps.env.NODE_NAME, this) }) {
+      def tmpdir = steps.pwd(tmp: true)
+      def workspace = steps.pwd()
 
-    def params = ''
-    if (clean) {
-      params += ' --clean'
-    }
+      def params = ''
+      if (clean) {
+        params += ' --clean'
+      }
 
-    if (this.has_change()) {
-      params += ' --ignore-initial-submodule-checkout-failure'
-    }
+      if (this.has_change()) {
+        params += ' --ignore-initial-submodule-checkout-failure'
+      }
 
-    def target_ref = get_branch_name()
-    if (!target_ref) {
-      steps.println('\033[36m[info] target branch is not specified; using GIT_COMMIT.\033[39m')
-      target_ref = steps.env.GIT_COMMIT
-    }
+      def target_ref = get_branch_name()
+      if (!target_ref) {
+        steps.println('\033[36m[info] target branch is not specified; using GIT_COMMIT.\033[39m')
+        target_ref = steps.env.GIT_COMMIT
+      }
 
-    params += ' --target-remote=' + shell_quote(this.scm.url)
-    params += ' --target-ref='    + shell_quote(target_ref)
-    if (this.target_commit) {
-      params += ' --target-commit=' + shell_quote(this.target_commit)
-    }
+      params += ' --target-remote=' + shell_quote(this.scm.url)
+      params += ' --target-ref='    + shell_quote(target_ref)
+      if (this.target_commit) {
+        params += ' --target-commit=' + shell_quote(this.target_commit)
+      }
 
-    steps.env.GIT_COMMIT = this.with_git_credentials() {
-      this.target_commit = steps.sh(script: cmd
-                                          + ' checkout-source-tree'
-                                          + params,
-                                    label: 'Hopic: checking out source tree',
-                                    returnStdout: true).trim()
-      if (this.change_bundle != null) {
-        steps.dir(tmpdir) {
-          steps.unstash(name: 'change-transfer.bundle')
-        }
+      steps.env.GIT_COMMIT = this.with_git_credentials() {
+        this.target_commit = steps.sh(script: cmd
+                                            + ' checkout-source-tree'
+                                            + params,
+                                      label: 'Hopic: checking out source tree',
+                                      returnStdout: true).trim()
+        if (this.change_bundle != null) {
+          steps.dir(tmpdir) {
+            steps.unstash(name: 'change-transfer.bundle')
+          }
 
-        steps.sh(
-          script: "${cmd} unbundle "
-            + shell_quote("${tmpdir}/${this.change_bundle}"),
-          label: 'Hopic (internal): unbundle change',
-        )
-        def head_commit = this.submit_info.commit ?: steps.sh(script: 'LC_ALL=C.UTF-8 TZ=UTC git rev-parse HEAD',
-                                                              label: 'Hopic (internal): determine current commit (because Jenkins lies!)',
-                                                              returnStdout: true).trim()
-        return head_commit
-      } else if (this.get_change() != null) {
-        def meta = this.get_change().getinfo(cmd)
-        def maybe_timeout = { Closure closure ->
-          if (meta.containsKey('timeout')) {
-            return steps.timeout(time: meta['timeout'], unit: 'SECONDS') {
-              return closure()
+          steps.sh(
+            script: "${cmd} unbundle "
+              + shell_quote("${tmpdir}/${this.change_bundle}"),
+            label: 'Hopic (internal): unbundle change',
+          )
+          def head_commit = this.submit_info.commit ?: steps.sh(script: 'LC_ALL=C.UTF-8 TZ=UTC git rev-parse HEAD',
+                                                                label: 'Hopic (internal): determine current commit (because Jenkins lies!)',
+                                                                returnStdout: true).trim()
+          return head_commit
+        } else if (this.get_change() != null) {
+          def meta = this.get_change().getinfo(cmd)
+          def maybe_timeout = { Closure closure ->
+            if (meta.containsKey('timeout')) {
+              return steps.timeout(time: meta['timeout'], unit: 'SECONDS') {
+                return closure()
+              }
+            }
+            return closure()
+          }
+
+          def submit_info = this.with_credentials(meta.getOrDefault('with-credentials', [])) { creds_info ->
+            maybe_timeout {
+              def white_listed_vars = creds_info*.white_listed_vars.flatten().findAll{it}
+              this.get_change().apply(
+                cmd + white_listed_vars.collect{" --whitelisted-var=${shell_quote(it)}"}.join(''),
+                this.scm.url,
+              )
             }
           }
-          return closure()
-        }
+          if (submit_info == null)
+          {
+            // Marking the build as ABORTED _before_ deleting it to prevent an exception from reincarnating it
+            steps.currentBuild.result = 'ABORTED'
 
-        def submit_info = this.with_credentials(meta.getOrDefault('with-credentials', [])) { creds_info ->
-          maybe_timeout {
-            def white_listed_vars = creds_info*.white_listed_vars.flatten().findAll{it}
-            this.get_change().apply(
-              cmd + white_listed_vars.collect{" --whitelisted-var=${shell_quote(it)}"}.join(''),
-              this.scm.url,
-            )
-          }
-        }
-        if (submit_info == null)
-        {
-          // Marking the build as ABORTED _before_ deleting it to prevent an exception from reincarnating it
-          steps.currentBuild.result = 'ABORTED'
+            def timerCauses = steps.currentBuild.buildCauses.findAll { cause ->
+              cause._class.contains('TimerTriggerCause')
+            }
+            if (timerCauses) {
+              steps.currentBuild.rawBuild.delete()
+            }
 
-          def timerCauses = steps.currentBuild.buildCauses.findAll { cause ->
-            cause._class.contains('TimerTriggerCause')
+            steps.error('No changes to build')
+          } else if (this.submit_info && submit_info.commit != this.submit_info.commit) {
+            steps.currentBuild.result = 'ABORTED'
+            steps.currentBuild.description = "Aborted: applied change resulted in different HEAD"
+            steps.error("""HEAD commit (${submit_info.commit}) does not match initial HEAD commit (${this.submit_info.commit}) of this build. Aborting build!""")
           }
-          if (timerCauses) {
-            steps.currentBuild.rawBuild.delete()
+          this.submit_info = submit_info
+          if (submit_info.bundle != null) {
+            def dir_index = submit_info.bundle.lastIndexOf('/')
+            steps.dir(dir_index >= 0 ? submit_info.bundle[0..dir_index] : '.') {
+              this.change_bundle = submit_info.bundle[dir_index+1..-1]
+              steps.stash(
+                name: 'change-transfer.bundle',
+                includes: this.change_bundle,
+              )
+            }
           }
-
-          steps.error('No changes to build')
-        } else if (this.submit_info && submit_info.commit != this.submit_info.commit) {
-          steps.currentBuild.result = 'ABORTED'
-          steps.currentBuild.description = "Aborted: applied change resulted in different HEAD"
-          steps.error("""HEAD commit (${submit_info.commit}) does not match initial HEAD commit (${this.submit_info.commit}) of this build. Aborting build!""")
+          return submit_info.commit
         }
-        this.submit_info = submit_info
-        if (submit_info.bundle != null) {
-          def dir_index = submit_info.bundle.lastIndexOf('/')
-          steps.dir(dir_index >= 0 ? submit_info.bundle[0..dir_index] : '.') {
-            this.change_bundle = submit_info.bundle[dir_index+1..-1]
-            steps.stash(
-              name: 'change-transfer.bundle',
-              includes: this.change_bundle,
-            )
-          }
-        }
-        return submit_info.commit
+        return this.target_commit
       }
-      return this.target_commit
-    }
 
-    // Ensure any required extensions are available
-    def install_extensions_param = ""
-    if (this.pip_constraints) {
-      def pip_constraints_file = tmpdir + '/pip-constraints.txt'
-      steps.writeFile(
-          file: pip_constraints_file,
-          text: pip_constraints,
-      )
-      install_extensions_param = "--constraints ${shell_quote(pip_constraints_file)}"
-    }
-    steps.sh(script: "${cmd} install-extensions ${install_extensions_param}", label: 'Hopic: installing extensions')
+      // Ensure any required extensions are available
+      def install_extensions_param = ""
+      if (this.pip_constraints) {
+        def pip_constraints_file = tmpdir + '/pip-constraints.txt'
+        steps.writeFile(
+            file: pip_constraints_file,
+            text: pip_constraints,
+        )
+        install_extensions_param = "--constraints ${shell_quote(pip_constraints_file)}"
+      }
+      steps.sh(script: "${cmd} install-extensions ${install_extensions_param}", label: 'Hopic: installing extensions')
 
-    def code_dir_output = tmpdir + '/code-dir.txt'
-    if (steps.sh(script: 'LC_ALL=C.UTF-8 TZ=UTC git config --get hopic.code.dir > ' + shell_quote(code_dir_output), returnStatus: true,
-                 label: 'Hopic (internal): retrieving Hopic workspace directory') == 0) {
-      workspace = steps.readFile(code_dir_output).trim()
-    }
+      def code_dir_output = tmpdir + '/code-dir.txt'
+      if (steps.sh(script: 'LC_ALL=C.UTF-8 TZ=UTC git config --get hopic.code.dir > ' + shell_quote(code_dir_output), returnStatus: true,
+                  label: 'Hopic (internal): retrieving Hopic workspace directory') == 0) {
+        workspace = steps.readFile(code_dir_output).trim()
+      }
 
-    return workspace
+      return workspace
+    }
   }
 
   public def get_submit_version() {
@@ -1039,6 +1085,12 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       if (this.may_submit_result) {
         steps.println("\033[36m[info] submitting the commits since all merge criteria are met\033[39m")
         steps.currentBuild.description = "Submitting: all merge criteria are met"
+
+      }
+      try {
+        this.event_callbacks.on_submitting_build(may_submit_result)
+      } catch(Exception e) {
+        this.steps.println("\033[33m[warning] ignoring fatal error ${e} during on_submitting_build\033[39m")
       }
     }
     this.may_submit_result = this.may_submit_result && steps.currentBuild.currentResult == 'SUCCESS'
@@ -1327,34 +1379,52 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     def node_expr = node_params.getOrDefault("node_expr", this.default_node_expr)
     def exec_name = node_params.getOrDefault("exec_name", "no execution name")
     def allocation_group = node_params.getOrDefault("allocation_group", exec_name)
+    def phase = node_params.getOrDefault("phase", "")
+    def variant = node_params.getOrDefault("variant", "")
     def request_time = this.get_unix_epoch_time()
+    def node_allocation_id = this.node_allocation_event_id
+    this.node_allocation_event_id++
+
+    try {
+      this.event_callbacks.on_node_requested(phase, variant, exec_name, node_expr, node_allocation_id)
+    } catch(Exception e) {
+      this.steps.println("\033[33m[warning] ignoring fatal error ${e} during on_node_allocation_requested\033[39m")
+    }
+    def build_result = 'SUCCESS'
     return steps.node(node_expr) {
-      steps.withEnv(this.paramEnvVars) {
-        if (!this.nodes_usage.containsKey(steps.env.NODE_NAME)) {
-          steps.sh(
-            script: """
-              echo network config for node ${steps.env.NODE_NAME} && 
-              ((LC_ALL=C.UTF-8 ifconfig || LC_ALL=C.UTF-8 ip addr show) | grep inet) || echo -e '\\033[33m[warning] could not get ip information of the node' >&2
-            """,
-            label: 'Hopic (internal): node ip logging')
-        }
-        NodeExecution usage_entry
-        if (exec_name != null) {
-          usage_entry = new NodeExecution(allocation_group: allocation_group, exec_name: exec_name, request_time: request_time, start_time: this.get_unix_epoch_time())
-          this.nodes_usage.get(steps.env.NODE_NAME, [:]).get(steps.env.EXECUTOR_NUMBER as Integer, []).add(usage_entry)
-        }
-        def build_result = 'SUCCESS'
-        try {
-          return closure()
-        } catch(Exception e) {
-          build_result = this.determine_error_build_result(e)
-          throw e
-        } finally {
+      this.track_call(call_name: 'on_node',
+        on_start: {
+          this.event_callbacks.on_node_acquired(phase, variant, exec_name, steps.env.NODE_NAME, node_allocation_id)
+        }, on_end: {
+          this.event_callbacks.on_node_released(phase, variant, exec_name, steps.env.NODE_NAME, build_result, node_allocation_id)
+      }) {
+        steps.withEnv(this.paramEnvVars) {
+          if (!this.nodes_usage.containsKey(steps.env.NODE_NAME)) {
+            steps.sh(
+              script: """
+                echo network config for node ${steps.env.NODE_NAME} && 
+                ((LC_ALL=C.UTF-8 ifconfig || LC_ALL=C.UTF-8 ip addr show) | grep inet) || echo -e '\\033[33m[warning] could not get ip information of the node' >&2
+              """,
+              label: 'Hopic (internal): node ip logging')
+          }
+          NodeExecution usage_entry
           if (exec_name != null) {
-            assert usage_entry != null
-            assert usage_entry.exec_name == exec_name
-            usage_entry.end_time = this.get_unix_epoch_time()
-            usage_entry.status = steps.currentBuild.currentResult != 'SUCCESS' ? steps.currentBuild.currentResult : build_result
+            usage_entry = new NodeExecution(allocation_group: allocation_group, exec_name: exec_name, request_time: request_time, start_time: this.get_unix_epoch_time())
+            this.nodes_usage.get(steps.env.NODE_NAME, [:]).get(steps.env.EXECUTOR_NUMBER as Integer, []).add(usage_entry)
+          }
+          try {
+            return closure()
+          } catch(Exception e) {
+            build_result = this.determine_error_build_result(e)
+            throw e
+          } finally {
+            build_result = steps.currentBuild.currentResult != 'SUCCESS' ? steps.currentBuild.currentResult : build_result
+            if (exec_name != null) {
+              assert usage_entry != null
+              assert usage_entry.exec_name == exec_name
+              usage_entry.end_time = this.get_unix_epoch_time()
+              usage_entry.status = build_result
+            }
           }
         }
       }
@@ -1453,119 +1523,125 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   }
 
   private void build_variant(String phase, String variant, String cmd, String workspace, Map artifactoryBuildInfo, String hopic_extra_arguments) {
-    steps.stage("${phase}-${variant}") {
-      // Interruption point (just after potentially lengthy node acquisition):
-      // abort PR builds that got changed since the start of this build
-      if (this.has_change()) {
-        this.with_git_credentials() {
-          this.get_change().abort_if_changed(this.scm.url)
-        }
-      }
-
-      // Meta-data retrieval needs to take place on the executing node to ensure environment variable expansion happens properly
-      def meta = steps.readJSON(text: steps.sh(
-          script: "${cmd} getinfo --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant),
-          label: "Hopic: retrieving configuration for phase '${phase}', variant '${variant}'",
-          returnStdout: true,
-        ))
-
-      def error_occurred = false
-      def maybe_timeout = { Closure closure ->
-        if (meta.containsKey('timeout')) {
-          return steps.timeout(time: meta['timeout'], unit: 'SECONDS') {
-            return closure()
+    String stage_name = "${phase}-${variant}"
+    this.track_call(call_name: 'on_variant', on_start: { this.event_callbacks.on_variant_start(phase, variant) }, on_end: [
+        requires_exception: true,
+        closure: { Exception e -> this.event_callbacks.on_variant_end(phase, variant, e)
+      }]) {
+      steps.stage(stage_name) {
+        // Interruption point (just after potentially lengthy node acquisition):
+        // abort PR builds that got changed since the start of this build
+        if (this.has_change()) {
+          this.with_git_credentials() {
+            this.get_change().abort_if_changed(this.scm.url)
           }
         }
-        return closure()
-      }
-      try {
-        maybe_timeout {
-          this.subcommand_with_credentials(
-              cmd + hopic_extra_arguments,
-              'build'
-            + ' --phase=' + shell_quote(phase)
-            + ' --variant=' + shell_quote(variant)
-            , meta.getOrDefault('with-credentials', []),
-            , "Hopic: running build for phase '" + phase + "',  variant '" + variant + "'"
-            )
-        }
-      } catch(Exception e) {
-        error_occurred = true // Jenkins only sets its currentResult to Failure after all user code is executed
-        throw e
-      } finally {
-        this.archive_artifacts_if_enabled(meta, workspace, error_occurred) { server_id ->
-          if (!artifactoryBuildInfo.containsKey(server_id)) {
-            def newBuildInfo = steps.Artifactory.newBuildInfo()
-            def (build_name, build_identifier) = get_build_id()
-            newBuildInfo.name = build_name
-            newBuildInfo.number = build_identifier
-            artifactoryBuildInfo[server_id] = newBuildInfo
+
+        // Meta-data retrieval needs to take place on the executing node to ensure environment variable expansion happens properly
+        def meta = steps.readJSON(text: steps.sh(
+            script: "${cmd} getinfo --phase=" + shell_quote(phase) + ' --variant=' + shell_quote(variant),
+            label: "Hopic: retrieving configuration for phase '${phase}', variant '${variant}'",
+            returnStdout: true,
+          ))
+
+        def error_occurred = false
+        def maybe_timeout = { Closure closure ->
+          if (meta.containsKey('timeout')) {
+            return steps.timeout(time: meta['timeout'], unit: 'SECONDS') {
+              return closure()
+            }
           }
-          return artifactoryBuildInfo[server_id]
+          return closure()
         }
-        if (meta.containsKey('junit')) {
-          steps.dir(workspace) {
-            meta.junit['test-results'].each { result ->
-              steps.junit(
-                testResults: result,
-                allowEmptyResults: meta.junit['allow-missing'],
-                skipMarkingBuildUnstable: meta.junit['allow-failures'])
+        try {
+          maybe_timeout {
+            this.subcommand_with_credentials(
+                cmd + hopic_extra_arguments,
+                'build'
+              + ' --phase=' + shell_quote(phase)
+              + ' --variant=' + shell_quote(variant)
+              , meta.getOrDefault('with-credentials', []),
+              , "Hopic: running build for phase '" + phase + "',  variant '" + variant + "'"
+              )
+          }
+        } catch(Exception e) {
+          error_occurred = true // Jenkins only sets its currentResult to Failure after all user code is executed
+          throw e
+        } finally {
+          this.archive_artifacts_if_enabled(meta, workspace, error_occurred) { server_id ->
+            if (!artifactoryBuildInfo.containsKey(server_id)) {
+              def newBuildInfo = steps.Artifactory.newBuildInfo()
+              def (build_name, build_identifier) = get_build_id()
+              newBuildInfo.name = build_name
+              newBuildInfo.number = build_identifier
+              artifactoryBuildInfo[server_id] = newBuildInfo
+            }
+            return artifactoryBuildInfo[server_id]
+          }
+          if (meta.containsKey('junit')) {
+            steps.dir(workspace) {
+              meta.junit['test-results'].each { result ->
+                steps.junit(
+                  testResults: result,
+                  allowEmptyResults: meta.junit['allow-missing'],
+                  skipMarkingBuildUnstable: meta.junit['allow-failures'])
+              }
             }
           }
         }
-      }
 
-      def executor_identifier = get_executor_identifier(variant)
-      // FIXME: re-evaluate if we can and need to get rid of special casing for stashing
-      if (meta.containsKey('stash')) {
-        def name  = "${phase}-${variant}"
-        def params = [
-            name: name,
-          ]
-        if (meta.stash.containsKey('includes')) {
-          params['includes'] = meta.stash.includes
-        }
-        def stash_dir = workspace
-        if (meta.stash.containsKey('dir')) {
-          if (meta.stash.dir.startsWith('/')) {
-            stash_dir = meta.stash.dir
-          } else {
-            stash_dir = "${workspace}/${meta.stash.dir}"
+        def executor_identifier = get_executor_identifier(variant)
+        // FIXME: re-evaluate if we can and need to get rid of special casing for stashing
+        if (meta.containsKey('stash')) {
+          def name  = "${phase}-${variant}"
+          def params = [
+              name: name,
+            ]
+          if (meta.stash.containsKey('includes')) {
+            params['includes'] = meta.stash.includes
           }
-        }
-        // Make stash locations node-independent by making them relative to the Jenkins workspace
-        if (stash_dir.startsWith('/')) {
-          def cwd = steps.pwd()
-          // This check, unlike relativize() below, doesn't depend on File() and thus doesn't require script approval
-          if (stash_dir == cwd) {
-            stash_dir = '.'
-          } else {
-            cwd = new File(cwd).toPath()
-            stash_dir = cwd.relativize(new File(stash_dir).toPath()) as String
+          def stash_dir = workspace
+          if (meta.stash.containsKey('dir')) {
+            if (meta.stash.dir.startsWith('/')) {
+              stash_dir = meta.stash.dir
+            } else {
+              stash_dir = "${workspace}/${meta.stash.dir}"
+            }
           }
-          if (stash_dir == '') {
-            stash_dir = '.'
+          // Make stash locations node-independent by making them relative to the Jenkins workspace
+          if (stash_dir.startsWith('/')) {
+            def cwd = steps.pwd()
+            // This check, unlike relativize() below, doesn't depend on File() and thus doesn't require script approval
+            if (stash_dir == cwd) {
+              stash_dir = '.'
+            } else {
+              cwd = new File(cwd).toPath()
+              stash_dir = cwd.relativize(new File(stash_dir).toPath()) as String
+            }
+            if (stash_dir == '') {
+              stash_dir = '.'
+            }
           }
+          steps.dir(stash_dir) {
+            steps.stash(params)
+          }
+          this.stashes[name] = [dir: stash_dir, nodes: [(executor_identifier): true]]
         }
-        steps.dir(stash_dir) {
-          steps.stash(params)
+        if (meta.containsKey('worktrees')) {
+          def name = "${phase}-${variant}-worktree-transfer.bundle"
+          steps.stash(
+              name: name,
+              includes: 'worktree-transfer.bundle',
+            )
+          this.worktree_bundles[name] = [nodes: [(executor_identifier): true]]
         }
-        this.stashes[name] = [dir: stash_dir, nodes: [(executor_identifier): true]]
-      }
-      if (meta.containsKey('worktrees')) {
-        def name = "${phase}-${variant}-worktree-transfer.bundle"
-        steps.stash(
-            name: name,
-            includes: 'worktree-transfer.bundle',
-          )
-        this.worktree_bundles[name] = [nodes: [(executor_identifier): true]]
-      }
 
-      // Interruption point (just before node release potentially followed by lengthy node acquisition):
-      // abort PR builds that got changed since the start of this build
-      if (this.has_change()) {
-        this.with_git_credentials() {
-          this.get_change().abort_if_changed(this.scm.url)
+        // Interruption point (just before node release potentially followed by lengthy node acquisition):
+        // abort PR builds that got changed since the start of this build
+        if (this.has_change()) {
+          this.with_git_credentials() {
+            this.get_change().abort_if_changed(this.scm.url)
+          }
         }
       }
     }
@@ -1589,9 +1665,16 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
         def acquire_time = null
         def lock_request_time = this.get_unix_epoch_time()
         try {
+          try {
+            this.event_callbacks.on_locks_requested(lock_names)
+          } catch(Exception e) {
+            this.steps.println("\033[33m[warning] ignoring fatal error ${e} during on_locks_request\033[39m")
+          }
           return lock_closure {
             acquire_time = this.get_unix_epoch_time()
-            return closure()
+            return this.track_call(call_name: 'on_lock', on_start: { this.event_callbacks.on_locks_acquired(lock_names) }, on_end: { this.event_callbacks.on_locks_released(lock_names)}) {
+              return closure()
+            }
           }
         } finally {
           def lock_release_time = this.get_unix_epoch_time()
@@ -1633,55 +1716,57 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     if (variants.size() != 0) {
       def lock_phase_onward_if_necessary = this.with_locks(current_phase_locks)
       lock_phase_onward_if_necessary {
-        steps.stage(phase) {
-          def stepsForBuilding = variants.collectEntries { variant, meta ->
-            def label = meta.label
-            [ (variant): {
-              if (this.nodes.containsKey(variant)) {
-                label = this.nodes[variant]
-              }
-              this.on_node(node_expr: label, exec_name: "${phase}-${variant}", allocation_group: phase) {
-                with_workspace_for_variant(variant) {
-                  this.with_hopic(variant) { cmd ->
-                    // If working with multiple executors on this node, uniquely identify this node by variant
-                    // to ensure the correct workspace.
-                    final workspace = this.ensure_checkout(cmd, clean, variant)
-                    this.pin_variant_to_current_node(variant)
+        this.track_call(call_name: 'on_phase', on_start: { this.event_callbacks.on_phase_start(phase) }, on_end: { this.event_callbacks.on_phase_end(phase) }) {
+          steps.stage(phase) {
+            def stepsForBuilding = variants.collectEntries { variant, meta ->
+              def label = meta.label
+              [ (variant): {
+                if (this.nodes.containsKey(variant)) {
+                  label = this.nodes[variant]
+                }                                   
+                this.on_node(node_expr: label, exec_name: "${phase}-${variant}", phase: phase, variant: variant, allocation_group: phase) {
+                  with_workspace_for_variant(variant) {
+                    this.with_hopic(variant) { cmd ->
+                      // If working with multiple executors on this node, uniquely identify this node by variant
+                      // to ensure the correct workspace.
+                      final workspace = this.ensure_checkout(cmd, clean, variant)
+                      this.pin_variant_to_current_node(variant)
 
-                    this.ensure_unstashed(variant)
+                      this.ensure_unstashed(variant)
 
-                    if (!meta.nop) {
-                      this.build_variant(phase, variant, cmd, workspace, artifactoryBuildInfo, hopic_extra_arguments)
-                    }
-
-                    // Execute a string of uninterrupted phases with our current variant for which we don't need to wait on preceding phases
-                    //
-                    // Using a regular for loop because we need to break out of it early and .takeWhile doesn't work with closures defined in CPS context
-                    for (next_phase in phases.keySet()) {
-                      final next_variants = phases[next_phase]
-
-                      if (!next_variants.containsKey(variant)
-                      // comparing against 'false' directly because we want to reject 'null' too
-                      || next_variants[variant].wait_on_full_previous_phase != false) {
-                        break
+                      if (!meta.nop) {
+                        this.build_variant(phase, variant, cmd, workspace, artifactoryBuildInfo, hopic_extra_arguments)
                       }
 
-                      // Prevent executing this variant again during the phase it really belongs too
-                      final next_variant = next_variants.remove(variant)
-                      assert next_variant.run_on_change == 'always'
+                      // Execute a string of uninterrupted phases with our current variant for which we don't need to wait on preceding phases
+                      //
+                      // Using a regular for loop because we need to break out of it early and .takeWhile doesn't work with closures defined in CPS context
+                      for (next_phase in phases.keySet()) {
+                        final next_variants = phases[next_phase]
 
-                      // Execute this variant's next phase already.
-                      // Because the user asked for it, in order not to relinquish this node until we really have to.
-                      if (!next_variant.nop) {
-                        this.build_variant(next_phase, variant, cmd, workspace, artifactoryBuildInfo, hopic_extra_arguments)
+                        if (!next_variants.containsKey(variant)
+                        // comparing against 'false' directly because we want to reject 'null' too
+                        || next_variants[variant].wait_on_full_previous_phase != false) {
+                          break
+                        }
+
+                        // Prevent executing this variant again during the phase it really belongs too
+                        final next_variant = next_variants.remove(variant)
+                        assert next_variant.run_on_change == 'always'
+
+                        // Execute this variant's next phase already.
+                        // Because the user asked for it, in order not to relinquish this node until we really have to.
+                        if (!next_variant.nop) {
+                          this.build_variant(next_phase, variant, cmd, workspace, artifactoryBuildInfo, hopic_extra_arguments)
+                        }
                       }
                     }
                   }
                 }
-              }
-            }]
+              }]
+            }
+            steps.parallel stepsForBuilding
           }
-          steps.parallel stepsForBuilding
         }
         build_phases_func()
       }
@@ -1731,85 +1816,87 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
     this.extend_build_properties()
     this.decorate_output {
-      def (phases, is_publishable_change, submit_meta, locks) = this.on_node(node_expr: default_node, exec_name: "hopic-init") {
-        return this.with_hopic { cmd, venv ->
-          def workspace = steps.pwd()
+      def (phases, is_publishable_change, submit_meta, locks) = this.on_node(node_expr: default_node, exec_name: "hopic-init", phase: 'hopic-init', variant: 'hopic-init') {
+        this.track_call(call_name: 'on_variant_init', on_start: { this.event_callbacks.on_variant_start("hopic-init", "hopic-init") }, on_end: [
+            requires_exception: true,
+            closure: { Exception e -> this.event_callbacks.on_variant_end("hopic-init", "hopic-init", e) }]) {
+          return this.with_hopic("hopic-init") { cmd, venv ->
+            def workspace = steps.pwd()
 
-          /*
-          * We're splitting the enumeration of phases and variants from their execution in order to
-          * enable Jenkins to execute the different variants within a phase in parallel.
-          *
-          * In order to do this we only check out the CI config file to the orchestrator node.
-          */
-          def scm = steps.checkout(steps.scm)
-          // Make sure hopic will prepare workspace (in case on_build_node is used before this method)
-          this.checkouts.remove(get_executor_identifier())
+            /*
+            * We're splitting the enumeration of phases and variants from their execution in order to
+            * enable Jenkins to execute the different variants within a phase in parallel.
+            *
+            * In order to do this we only check out the CI config file to the orchestrator node.
+            */
+            def scm = steps.checkout(steps.scm)
+            // Make sure hopic will prepare workspace (in case on_build_node is used before this method)
+            this.checkouts.remove(get_executor_identifier())
 
-          // Don't trust Jenkin's scm.GIT_COMMIT because it sometimes lies
-          steps.env.GIT_COMMIT          = steps.sh(script: 'LC_ALL=C.UTF-8 TZ=UTC git rev-parse HEAD',
-                                                  label: 'Hopic (internal): determine current commit (because Jenkins lies!)',
-                                                  returnStdout: true).trim()
-          steps.env.GIT_COMMITTER_NAME  = scm.GIT_COMMITTER_NAME
-          steps.env.GIT_COMMITTER_EMAIL = scm.GIT_COMMITTER_EMAIL
-          steps.env.GIT_AUTHOR_NAME     = scm.GIT_AUTHOR_NAME
-          steps.env.GIT_AUTHOR_EMAIL    = scm.GIT_AUTHOR_EMAIL
+            // Don't trust Jenkin's scm.GIT_COMMIT because it sometimes lies
+            steps.env.GIT_COMMIT          = steps.sh(script: 'LC_ALL=C.UTF-8 TZ=UTC git rev-parse HEAD',
+                                                    label: 'Hopic (internal): determine current commit (because Jenkins lies!)',
+                                                    returnStdout: true).trim()
+            steps.env.GIT_COMMITTER_NAME  = scm.GIT_COMMITTER_NAME
+            steps.env.GIT_COMMITTER_EMAIL = scm.GIT_COMMITTER_EMAIL
+            steps.env.GIT_AUTHOR_NAME     = scm.GIT_AUTHOR_NAME
+            steps.env.GIT_AUTHOR_EMAIL    = scm.GIT_AUTHOR_EMAIL
 
-          if (steps.env.CHANGE_TARGET) {
-            this.source_commit = steps.env.GIT_COMMIT
-          }
+            if (steps.env.CHANGE_TARGET) {
+              this.source_commit = steps.env.GIT_COMMIT
+            }
+            // Force a full based checkout & change application, instead of relying on the checkout done above, to ensure that we're building the list of phases and
+            // variants to execute (below) using the final config file.
+            this.ensure_checkout(cmd, clean)
 
-          // Force a full based checkout & change application, instead of relying on the checkout done above, to ensure that we're building the list of phases and
-          // variants to execute (below) using the final config file.
-          this.ensure_checkout(cmd, clean)
+            // Pin the currently installed pip packages to ensure all variants use the same templates
+            this.pip_constraints = steps.sh(
+                script: "${venv}/bin/python -m pip freeze",
+                label: "Get list of installed pip packages",
+                returnStdout: true,
+            ).replaceAll(/(?m)^[A-Za-z0-9-_.]+ *@.+$/, "") // Remove any URL constraints, as adding support for those has proven troublesome
 
-          // Pin the currently installed pip packages to ensure all variants use the same templates
-          this.pip_constraints = steps.sh(
-              script: "${venv}/bin/python -m pip freeze",
-              label: "Get list of installed pip packages",
-              returnStdout: true,
-          ).replaceAll(/(?m)^[A-Za-z0-9-_.]+ *@.+$/, "") // Remove any URL constraints, as adding support for those has proven troublesome
-
-          def phases = steps.readJSON(text: steps.sh(
-              script: "${cmd} getinfo",
-              label: 'Hopic: retrieving execution graph',
-              returnStdout: true,
-            )).collectEntries { phase, variants ->
-            [
-              (phase): variants.collectEntries { variant, meta ->
-                [
-                  (variant): [
-                    label: meta.getOrDefault('node-label', default_node),
-                    nop: meta.getOrDefault('nop', false),
-                    run_on_change: meta.getOrDefault('run-on-change', 'always'),
-                    wait_on_full_previous_phase: meta.getOrDefault('wait-on-full-previous-phase', true),
+            def phases = steps.readJSON(text: steps.sh(
+                script: "${cmd} getinfo",
+                label: 'Hopic: retrieving execution graph',
+                returnStdout: true,
+              )).collectEntries { phase, variants ->
+              [
+                (phase): variants.collectEntries { variant, meta ->
+                  [
+                    (variant): [
+                      label: meta.getOrDefault('node-label', default_node),
+                      nop: meta.getOrDefault('nop', false),
+                      run_on_change: meta.getOrDefault('run-on-change', 'always'),
+                      wait_on_full_previous_phase: meta.getOrDefault('wait-on-full-previous-phase', true),
+                    ]
                   ]
-                ]
-              }
-            ]
+                }
+              ]
+            }
+            def submit_meta = steps.readJSON(text: steps.sh(
+                script: "${cmd} getinfo --post-submit",
+                label: 'Hopic (internal): running post submit',
+                returnStdout: true,
+              ))
+
+            def is_publishable = this.has_publishable_change()
+
+            if (is_publishable) {
+              // Ensure a new checkout is performed because the target repository may change while waiting for the lock
+              this.checkouts = [:]
+              this.change_bundle = null
+            }
+
+            // Report start of build. _Must_ come after having determined whether this build is submittable and
+            // publishable, because it may affect the result of the submittability check.
+            if (this.change != null) {
+              this.change.notify_build_result(get_job_name(), steps.env.CHANGE_BRANCH, this.source_commit, 'STARTING', exclude_branches_filled_with_pr_branch_discovery)
+              this.change.notify_build_result(get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, 'STARTING', exclude_branches_filled_with_pr_branch_discovery)
+            }
+
+            return [phases, is_publishable, submit_meta, get_ci_locks(cmd, is_publishable)]
           }
-
-          def submit_meta = steps.readJSON(text: steps.sh(
-              script: "${cmd} getinfo --post-submit",
-              label: 'Hopic (internal): running post submit',
-              returnStdout: true,
-            ))
-
-          def is_publishable = this.has_publishable_change()
-
-          if (is_publishable) {
-            // Ensure a new checkout is performed because the target repository may change while waiting for the lock
-            this.checkouts = [:]
-            this.change_bundle = null
-          }
-
-          // Report start of build. _Must_ come after having determined whether this build is submittable and
-          // publishable, because it may affect the result of the submittability check.
-          if (this.change != null) {
-            this.change.notify_build_result(get_job_name(), steps.env.CHANGE_BRANCH, this.source_commit, 'STARTING', exclude_branches_filled_with_pr_branch_discovery)
-            this.change.notify_build_result(get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, 'STARTING', exclude_branches_filled_with_pr_branch_discovery)
-          }
-
-          return [phases, is_publishable, submit_meta, get_ci_locks(cmd, is_publishable)]
         }
       }
 
@@ -1818,6 +1905,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       def artifactoryBuildInfo = [:]
       def hopic_extra_arguments = is_publishable_change ? ' --publishable-version': ''
 
+      def exception = null
       try {
         lock_if_necessary {
           phases = phases.collectEntries { phase, variants ->
@@ -1892,6 +1980,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           }
         }
       } catch(Exception e) {
+        exception = e
         if (this.change != null) {
           def buildStatus = this.determine_error_build_result(e)
           this.change.notify_build_result(
@@ -1903,6 +1992,11 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       } finally {
         this.printMetrics.print_node_usage(this.nodes_usage)
         this.printMetrics.print_critical_path(this.nodes_usage)
+        try {
+          this.event_callbacks.on_build_end(exception)
+        } catch(Exception e) {
+         this.steps.println("\033[33m[warning] ignoring fatal error ${e} during on_build_end\033[39m")
+        }
       }
 
       if (this.change != null) {
