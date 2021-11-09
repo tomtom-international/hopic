@@ -301,8 +301,8 @@ def clean_repo(repo, clean_config=[]):
     restore_mtime_from_git(repo)
 
 
-def install_extensions_and_parse_config():
-    initialize_global_variables_from_config(extensions.install_extensions.callback())
+def install_extensions_and_parse_config(constraints: Optional[str] = None):
+    initialize_global_variables_from_config(extensions.install_extensions.callback(constraints=constraints))
 
 
 _code_dir_re = re.compile(r"^code(?:-\d+)$")
@@ -445,6 +445,7 @@ def checkout_source_tree(
 @click.option('--author-date'               , metavar='<date>', type=DateTime(), help='''Time of last update to the change-request''')
 @click.option('--commit-date'               , metavar='<date>', type=DateTime(), help='''Time of starting to build this change-request''')
 @click.option("--bundle"                    , metavar="<file>", type=click.Path(file_okay=True, dir_okay=False, writable=True))
+@click.option("--constraints"               , metavar="<file>", type=click.Path(exists=True, dir_okay=False, readable=True), help="""Apply the provided constraints file to pip operations""")
 # fmt: on
 def prepare_source_tree(*args, **kwargs):
     """
@@ -464,7 +465,10 @@ def process_prepare_source_tree(
     author_date,
     commit_date,
     bundle: Optional[PathLike],
+    constraints: Optional[str] = None,
 ):
+    ctx.obj.pip_constraints = constraints
+
     with git.Repo(ctx.obj.workspace) as repo:
         if author_name is None or author_email is None:
             # This relies on /etc/passwd entries as a fallback, which might contain the info we need
@@ -504,7 +508,7 @@ def process_prepare_source_tree(
 
         # Re-read config when it was not read already to ensure any changes introduced by 'change_applicator' are taken into account
         if not commit_params.pop('config_parsed', False):
-            install_extensions_and_parse_config()
+            install_extensions_and_parse_config(ctx.obj.pip_constraints)
 
         # Ensure that, when we're dealing with a separated config and code repository, that the code repository is checked out again to the newer version
         if ctx.obj.code_dir != ctx.obj.workspace:
@@ -1110,7 +1114,8 @@ def merge_change_request(
         msg += f'Merged-by: Hopic {get_package_version(PACKAGE)}\n'
 
         # Reread config & install extensions after potential configuration file change
-        install_extensions_and_parse_config()
+        assert hasattr(ctx.obj, "pip_constraints")
+        install_extensions_and_parse_config(ctx.obj.pip_constraints)
 
         bump = ctx.obj.config['version']['bump']
         strict = bump.get('strict', False)
@@ -1157,12 +1162,12 @@ def apply_modality_change(
     Applies the changes specific to the specified modality.
     """
 
-    # Ensure any required extensions are available
-    install_extensions_and_parse_config()
-
-    modality_cmds = ctx.obj.config["modality-source-preparation"][modality]
-
     def change_applicator(repo, author, committer):
+        assert hasattr(ctx.obj, "pip_constraints")
+        install_extensions_and_parse_config(ctx.obj.pip_constraints)
+
+        modality_cmds = ctx.obj.config["modality-source-preparation"][modality]
+
         has_changed_files = any("changed-files" in cmd for cmd in modality_cmds)
 
         (commit_message,) = (
