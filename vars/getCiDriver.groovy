@@ -66,7 +66,7 @@ class ChangeRequest {
     return [:]
   }
 
-  public Map apply(String cmd, String source_remote) {
+  public Map apply(String cmd, String source_remote, pip_constraints_file) {
     assert false : "Change request instance does not override apply()"
   }
 
@@ -352,7 +352,7 @@ class BitbucketPullRequest extends ChangeRequest {
   }
 
   @Override
-  public Map apply(String cmd, String source_remote) {
+  public Map apply(String cmd, String source_remote, pip_constraints_file) {
     def change_request = this.get_info()
     def extra_params = ''
     if (change_request.containsKey('description')) {
@@ -386,6 +386,7 @@ class BitbucketPullRequest extends ChangeRequest {
                                 + ' --author-date=' + shell_quote(String.format("@%.3f", change_request.author_time))
                                 + ' --commit-date=' + shell_quote(String.format("@%.3f", change_request.commit_time))
                                 + ' --bundle=' + shell_quote(merge_bundle)
+                                + (pip_constraints_file ? (' --constraints=' + pip_constraints_file) : '')
                                 + ' merge-change-request'
                                 + ' --source-remote=' + shell_quote(source_remote)
                                 + ' --source-ref=' + shell_quote(this.source_commit)
@@ -486,7 +487,7 @@ class ModalityRequest extends ChangeRequest {
   }
 
   @Override
-  public Map apply(String cmd, String source_remote) {
+  public Map apply(String cmd, String source_remote, pip_constraints_file) {
     def author_time = steps.currentBuild.timeInMillis / 1000.0
     def commit_time = steps.currentBuild.startTimeInMillis / 1000.0
     def modality_bundle = steps.pwd(tmp: true) + '/modality-transfer.bundle'
@@ -495,6 +496,7 @@ class ModalityRequest extends ChangeRequest {
       + ' --author-date=' + shell_quote(String.format("@%.3f", author_time))
       + ' --commit-date=' + shell_quote(String.format("@%.3f", commit_time))
       + ' --bundle=' + shell_quote(modality_bundle)
+      + (pip_constraints_file ? (' --constraints=' + pip_constraints_file) : '')
     )
     def full_cmd = "${prepare_cmd} apply-modality-change ${shell_quote(modality)}"
     if (modality == 'BUMP_VERSION') {
@@ -940,6 +942,19 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     }
   }
 
+  private def write_pip_constraints_to_file(String file) {
+    // Ensure any required extensions are available
+    def pip_constraints_file = null
+    if (this.pip_constraints) {
+      steps.writeFile(
+          file: file,
+          text: this.pip_constraints,
+      )
+      return true
+    }
+    return false
+  }
+
   private def checkout(String cmd, boolean clean = false, metric_info = [:]) {
     return this.track_call(call_name: 'on_workspace_preparation', on_start: { this.event_callbacks.on_node_workspace_preparation_start(steps.env.NODE_NAME) }, on_end: { this.event_callbacks.on_node_workspace_preparation_end(steps.env.NODE_NAME, this) }) {
       def tmpdir = steps.pwd(tmp: true)
@@ -997,14 +1012,15 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
             return closure()
           }
 
-          def submit_info = this.with_credentials(meta.getOrDefault('with-credentials', [])) { creds_info ->
-            maybe_timeout {
-              def white_listed_vars = creds_info*.white_listed_vars.flatten().findAll{it}
-              this.get_change().apply(
-                cmd + white_listed_vars.collect{" --whitelisted-var=${shell_quote(it)}"}.join(''),
-                this.scm.url,
-              )
-            }
+        def submit_info = this.with_credentials(meta.getOrDefault('with-credentials', [])) { creds_info ->
+          maybe_timeout {
+            def pip_constraints_file = tmpdir + '/pip-constraints-apply.txt'
+            def white_listed_vars = creds_info*.white_listed_vars.flatten().findAll{it}
+            this.get_change().apply(
+              cmd + white_listed_vars.collect{" --whitelisted-var=${shell_quote(it)}"}.join(''),
+              this.scm.url,
+              write_pip_constraints_to_file(pip_constraints_file) ? pip_constraints_file : null
+            )
           }
           if (submit_info == null)
           {
@@ -1041,15 +1057,8 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       }
 
       // Ensure any required extensions are available
-      def install_extensions_param = ""
-      if (this.pip_constraints) {
-        def pip_constraints_file = tmpdir + '/pip-constraints.txt'
-        steps.writeFile(
-            file: pip_constraints_file,
-            text: pip_constraints,
-        )
-        install_extensions_param = "--constraints ${shell_quote(pip_constraints_file)}"
-      }
+      def pip_constraints_file = tmpdir + '/pip-constraints-install-extensions.txt'
+      def install_extensions_param = write_pip_constraints_to_file(pip_constraints_file) ? "--constraints ${shell_quote(pip_constraints_file)}" : ""
       steps.sh(script: "${cmd} install-extensions ${install_extensions_param}", label: 'Hopic: installing extensions')
 
       def code_dir_output = tmpdir + '/code-dir.txt'
