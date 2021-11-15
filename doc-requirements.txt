@@ -1,4 +1,5 @@
 sphinx<2,>=1.5
-sphinx-click
+sphinx-click==2.7.1 # sphinx-click 3.0.0 and later require sphinx>=2
 recommonmark
 git+https://github.com/muggenhor/sphinxcontrib-versioning.git
+docutils==0.17.1  # docutils 18.0 breaks older Sphinx installations; https://github.com/sphinx-doc/sphinx/issues/9727
