@@ -32,8 +32,9 @@ public class HopicEventCallbacks {
   *
   * @param phase      The phase where the variant is part of
   * @param variant    The variant name
+  * @param stage_name The Jenkins full stage name 
   */
-  def on_variant_start(String phase, String variant) {}
+  def on_variant_start(String phase, String variant, String stage_name) {}
 
   /**
   * Gets called at the end of a variant
@@ -43,17 +44,107 @@ public class HopicEventCallbacks {
   * @param variant    The variant name
   * @param exception  Exception from the build or null when there is no exception
   */
-  def on_variant_end(String phase, String variant, exception) {}
-  def on_node_requested(String phase, String variant, String stage_name, String node_expr, Integer allocation_id) {}
+  def on_variant_end(String phase, String variant, String stage_name, exception) {}
+
+  /**
+  * Gets called just before a request for a node
+  * This function is NOT called on a node!
+  *
+  * @param phase          The phase where the variant is part of
+  * @param variant        The variant name
+  * @param stage_name     The Jenkins full stage name
+  * @param node_request   Expression that is being used when asking for a node
+  * @param allocation_id  Hopic tracking id to match other on_node_ calls
+  */
+  def on_node_requested(String phase, String variant, String stage_name, String node_request, Integer allocation_id) {}
+  
+  /**
+  * Gets called when a node is allocated
+  * This function is called on the node that is being allocated!
+  *
+  * @param phase          The phase where the variant is part of
+  * @param variant        The variant name
+  * @param stage_name     The Jenkins full stage name
+  * @param node           Name of the current executing node
+  * @param allocation_id  Hopic tracking id to match other on_node_ calls
+  */
   def on_node_acquired(String phase, String variant, String stage_name, String node, Integer allocation_id) {}
+  
+  /**
+  * Gets called just before releasing the node
+  * This function is called on a node!
+  *
+  * @param phase          The phase where the variant is part of
+  * @param variant        The variant name
+  * @param stage_name     The Jenkins full stage name
+  * @param node           Name of the current executing node
+  * @param build_result   Result of current build, values can be SUCCESS, UNSTABLE, FAILURE, NOT_BUILT, ABORTED (see https://javadoc.jenkins-ci.org/hudson/model/Result.html)
+  * @param allocation_id  Hopic tracking id to match other on_node_ calls
+  */
   def on_node_released(String phase, String variant, String stage_name, String node, String build_result, Integer allocation_id) {}
+
+  /**
+  * Gets called when hopic installation starts (before the creation of the virtualenv)
+  * This function is called on a node!
+  *
+  * @param node Name of the current executing node
+  */
   def on_hopic_installation_start(String node) {}
+  
+  /**
+  * Gets called when hopic installation finished (after pip install) 
+  * This function is called on a node!
+  *
+  * @param node Name of the current executing node
+  */  
   def on_hopic_installation_end(String node) {}
+
+  /**
+  * Gets called before any Hopic workspace modification (before the hopic checkout-source-tree)
+  * This function is called on a node!
+  *
+  * @param node Name of the current executing node
+  */
   def on_node_workspace_preparation_start(String node) {}
+
+  /**
+  * Gets called after Hopic applied any required change to the workspace, including extension installation
+  * This function is called on a node!
+  *
+  * @param node Name of the current executing node
+  */
   def on_node_workspace_preparation_end(String node, hopic) {}
+  
+  /**
+  * Gets called before build locks are being requested
+  * This function is NOT called on a node!
+  *
+  * @param locks List of the requested locks
+  */
   def on_locks_requested(List<String> locks) {}
+
+  /**
+  * Gets called after build locks are acquired
+  * This function is NOT called on a node!
+  *
+  * @param locks List of the requested locks
+  */
   def on_locks_acquired(List<String> locks) {}
+  
+  /**
+  * Gets called after build locks are released
+  * This function is NOT called on a node!
+  *
+  * @param locks List of the requested locks
+  */
   def on_locks_released(List<String> locks) {}
+
+  /**
+  * Gets called when it is being determined if the build is submitting or not
+  * This function is NOT called on a node!
+  *
+  * @param is_submitting boolean indicating if the build is submitting or not
+  */
   def on_submitting_build(boolean is_submitting) {}
 
   /**
