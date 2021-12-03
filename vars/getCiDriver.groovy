@@ -1742,6 +1742,8 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           * In order to do this we only check out the CI config file to the orchestrator node.
           */
           def scm = steps.checkout(steps.scm)
+          // Make sure hopic will prepare workspace (in case on_build_node is used before this method)
+          this.checkouts.remove(get_executor_identifier())
 
           // Don't trust Jenkin's scm.GIT_COMMIT because it sometimes lies
           steps.env.GIT_COMMIT          = steps.sh(script: 'LC_ALL=C.UTF-8 TZ=UTC git rev-parse HEAD',
