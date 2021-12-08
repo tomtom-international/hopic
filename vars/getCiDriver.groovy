@@ -1798,8 +1798,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
           if (is_publishable) {
             // Ensure a new checkout is performed because the target repository may change while waiting for the lock
-            final executor_identifier = get_executor_identifier()
-            this.checkouts.remove(executor_identifier)
+            this.checkouts = [:]
             this.change_bundle = null
           }
 
