@@ -1,0 +1,33 @@
+Committed-by: Hopic 1.49.2.dev189+gd3cc6fef
+
+With Python version: 3.6.15
+
+And with these installed packages:
+backports.entry-points-selectable==1.1.1
+click==7.1.2
+click-log==0.3.2
+commisery==0.9.0
+distlib==0.3.4
+filelock==3.4.0
+gitdb==4.0.9
+GitPython==3.1.18
+hopic @ git+https://github.com/tomtom-international/hopic.git@d3cc6fefbe0944e11bfb3347a50b3c2a2e135fe9
+importlib-metadata==4.8.2
+importlib-resources==5.4.0
+packaging==21.3
+platformdirs==2.4.0
+pluggy==1.0.0
+py==1.11.0
+pyparsing==3.0.6
+python-dateutil==2.8.2
+PyYAML==6.0
+regex==2021.11.10
+six==1.16.0
+smmap==5.0.0
+stemming==1.0.1
+toml==0.10.2
+tox==3.24.4
+typeguard==2.10.0
+typing_extensions==4.0.1
+virtualenv==20.10.0
+zipp==3.6.0
