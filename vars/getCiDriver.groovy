@@ -21,6 +21,8 @@ import org.jenkinsci.plugins.scriptsecurity.sandbox.RejectedAccessException
 import org.jenkinsci.plugins.workflow.multibranch.BranchJobProperty
 import org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty
 
+import com.tomtom.hopic.HopicEventCallbacks
+
 class ChangeRequest {
   protected steps
 
@@ -552,7 +554,7 @@ class CiDriver {
   private ArrayList<LockWaitingTime> lock_times = []
   private printMetrics
   private config_file_content = null
-  private org.hopic.HopicEventCallbacks event_callbacks = null
+  private HopicEventCallbacks event_callbacks = null
   private node_allocation_event_id = 0
 
   private final default_node_expr = "Linux && Docker"
@@ -573,7 +575,7 @@ class CiDriver {
       url: steps.scm.userRemoteConfigs[0].url,
     ]
     this.printMetrics = printMetrics
-    this.event_callbacks = params.event_callbacks ?: new org.hopic.HopicEventCallbacks()
+    this.event_callbacks = params.event_callbacks ?: new HopicEventCallbacks()
   }
 
   private def get_change() {
@@ -634,7 +636,7 @@ class CiDriver {
   private def track_call(Map params = [:], Closure closure) {
     def call_name = params.get('call_name')
     try {
-      if (params.get('on_start')) {
+      if (params.containsKey('on_start')) {
         params.on_start()
       }
     } catch(Exception e) {
@@ -653,12 +655,8 @@ class CiDriver {
       throw e
     } finally {
       try {
-        if (params.get('on_end')) {
-          if (params.on_end instanceof Map && params.on_end.getOrDefault('requires_exception', false)) {
-            params.on_end.closure(exception)
-          } else {
-            params.on_end()
-          }
+        if (params.containsKey('on_end')) {
+          params.on_end(exception)
         }
       } catch(Exception e) {
         def message = "[warning] ignoring fatal error ${e}"
@@ -675,7 +673,10 @@ class CiDriver {
 
     String executor_identifier = get_executor_identifier(variant)
     if (!this.base_cmds.containsKey(executor_identifier)) {
-      this.track_call(call_name: 'on_hopic_installation', on_start: { this.event_callbacks.on_hopic_installation_start(steps.env.NODE_NAME) }, on_end: { this.event_callbacks.on_hopic_installation_end(steps.env.NODE_NAME) }) {
+      this.track_call(
+        call_name: 'on_hopic_installation',
+        on_start: { this.event_callbacks.on_hopic_installation_start(steps.env.NODE_NAME) },
+        on_end: { this.event_callbacks.on_hopic_installation_end(steps.env.NODE_NAME) }) {
         def venv = steps.pwd(tmp: true) + "/hopic-venv"
         def workspace = steps.pwd()
         // Timeout prevents infinite downloads from blocking the build forever
@@ -1522,12 +1523,12 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     }
   }
 
-  private void build_variant(String phase, String variant, String cmd, String workspace, Map artifactoryBuildInfo, String hopic_extra_arguments) {
+  private void build_variant(String phase, String variant, String cmd, String workspace, Map artifactoryBuildInfo, String hopic_extra_arguments, String parent_phase) {
     String stage_name = "${phase}-${variant}"
-    this.track_call(call_name: 'on_variant', on_start: { this.event_callbacks.on_variant_start(phase, variant) }, on_end: [
-        requires_exception: true,
-        closure: { Exception e -> this.event_callbacks.on_variant_end(phase, variant, e)
-      }]) {
+    this.track_call(
+      call_name: 'on_variant',
+      on_start: { this.event_callbacks.on_variant_start(phase, variant, parent_phase) },
+      on_end: { Exception e -> this.event_callbacks.on_variant_end(phase, variant, e)}) {
       steps.stage(stage_name) {
         // Interruption point (just after potentially lengthy node acquisition):
         // abort PR builds that got changed since the start of this build
@@ -1735,7 +1736,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
                       this.ensure_unstashed(variant)
 
                       if (!meta.nop) {
-                        this.build_variant(phase, variant, cmd, workspace, artifactoryBuildInfo, hopic_extra_arguments)
+                        this.build_variant(phase, variant, cmd, workspace, artifactoryBuildInfo, hopic_extra_arguments, null)
                       }
 
                       // Execute a string of uninterrupted phases with our current variant for which we don't need to wait on preceding phases
@@ -1757,7 +1758,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
                         // Execute this variant's next phase already.
                         // Because the user asked for it, in order not to relinquish this node until we really have to.
                         if (!next_variant.nop) {
-                          this.build_variant(next_phase, variant, cmd, workspace, artifactoryBuildInfo, hopic_extra_arguments)
+                          this.build_variant(next_phase, variant, cmd, workspace, artifactoryBuildInfo, hopic_extra_arguments, phase)
                         }
                       }
                     }
@@ -1817,9 +1818,10 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     this.extend_build_properties()
     this.decorate_output {
       def (phases, is_publishable_change, submit_meta, locks) = this.on_node(node_expr: default_node, exec_name: "hopic-init", phase: 'hopic-init', variant: 'hopic-init') {
-        this.track_call(call_name: 'on_variant_init', on_start: { this.event_callbacks.on_variant_start("hopic-init", "hopic-init") }, on_end: [
-            requires_exception: true,
-            closure: { Exception e -> this.event_callbacks.on_variant_end("hopic-init", "hopic-init", e) }]) {
+        this.track_call(
+          call_name: 'on_variant_init',
+          on_start: { this.event_callbacks.on_variant_start("hopic-init", "hopic-init", null) },
+          on_end: { Exception e -> this.event_callbacks.on_variant_end("hopic-init", "hopic-init", e) }) {
           return this.with_hopic("hopic-init") { cmd, venv ->
             def workspace = steps.pwd()
 

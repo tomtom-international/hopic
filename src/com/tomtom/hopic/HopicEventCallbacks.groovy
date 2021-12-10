@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.hopic
+package com.tomtom.hopic
 
 public class HopicEventCallbacks {
 
@@ -32,9 +32,9 @@ public class HopicEventCallbacks {
   *
   * @param phase      The phase where the variant is part of
   * @param variant    The variant name
-  * @param stage_name The Jenkins full stage name 
+  * @parent_phase     First phase of the chain when multiple variant are chained via wait_on_full_previous_phase no, null in case it is first phase of the chain.
   */
-  def on_variant_start(String phase, String variant, String stage_name) {}
+  def on_variant_start(String phase, String variant, String parent_phase) {}
 
   /**
   * Gets called at the end of a variant
@@ -44,7 +44,7 @@ public class HopicEventCallbacks {
   * @param variant    The variant name
   * @param exception  Exception from the build or null when there is no exception
   */
-  def on_variant_end(String phase, String variant, String stage_name, exception) {}
+  def on_variant_end(String phase, String variant, exception) {}
 
   /**
   * Gets called just before a request for a node
@@ -148,7 +148,8 @@ public class HopicEventCallbacks {
   def on_submitting_build(boolean is_submitting) {}
 
   /**
-  * Gets called at the start of a phase
+  * Gets called at the start of the phase
+  * Phases that are chained with a previous phase will NOT get this callback
   * This function is NOT called on a node!
   *
   * @param phase      The phase where the variant is part of
@@ -156,7 +157,9 @@ public class HopicEventCallbacks {
   def on_phase_start(String phase) {}
 
   /**
-  * Gets called at the end of a variant
+  * Gets called at the end of the phase
+  * Phases that are chained with a previous phase will NOT get this callback
+  * This method only gets called when the full chain of phases is executed 
   * This function is NOT called on a node!
   *
   * @param phase      The phase where the variant is part of
