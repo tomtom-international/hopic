@@ -188,7 +188,9 @@ class BitbucketPullRequest extends ChangeRequest {
         }
       }
 
-      new_description = new_description + info.description[last_idx..-1]
+      // Because Groovy is unable to obtain an empty trailing string
+      if (last_idx != info.description.length())
+        new_description = new_description + info.description[last_idx..-1]
       info.description = new_description.replace('\r\n', '\n')
     }
 
