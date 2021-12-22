@@ -183,7 +183,10 @@ class BitbucketPullRequest extends ChangeRequest {
             str = "${str} <${user.emailAddress}>"
           }
 
-          new_description = new_description + info.description[last_idx..start - 1] + str
+          // Because Groovy is unable to obtain empty substrings
+          if (last_idx != start)
+            new_description = new_description + info.description[last_idx..start - 1]
+          new_description = new_description + str
           last_idx = end
         }
       }
