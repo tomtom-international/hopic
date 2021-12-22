@@ -378,8 +378,8 @@ class BitbucketPullRequest extends ChangeRequest {
     def merge_bundle = steps.pwd(tmp: true) + '/merge-transfer.bundle'
     def output = line_split(steps.sh(script: cmd
                                 + ' prepare-source-tree'
-                                + ' --author-name=' + shell_quote(cr_author.getOrDefault('displayName', steps.env.CHANGE_AUTHOR))
-                                + ' --author-email=' + shell_quote(cr_author.getOrDefault('emailAddress', steps.env.CHANGE_AUTHOR_EMAIL))
+                                + ' --author-name=' + shell_quote(cr_author.getOrDefault('displayName', steps.env.CHANGE_AUTHOR ?: "Unknown user"))
+                                + ' --author-email=' + shell_quote(cr_author.getOrDefault('emailAddress', steps.env.CHANGE_AUTHOR_EMAIL ?: ""))
                                 + ' --author-date=' + shell_quote(String.format("@%.3f", change_request.author_time))
                                 + ' --commit-date=' + shell_quote(String.format("@%.3f", change_request.commit_time))
                                 + ' --bundle=' + shell_quote(merge_bundle)
