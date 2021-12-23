@@ -818,16 +818,24 @@ def test_embed_variants_syntax_error(capfd, run_hopic):
     assert 'An error occurred when parsing the hopic configuration file' in out
 
 
-@pytest.mark.parametrize('init_version, build, commit_count, dirty, expected_version, expected_pure_version, expected_debversion', (
-    ('0.0.0', None   , 0, False, '0.0.0+g{commit}'                    , '0.0.0'                          , '0.0.0+g{commit}'                   ),
-    ('1.2.3', None   , 2, False, '1.2.4-2+g{commit}'                  , '1.2.4-2'                        , '1.2.4~2+g{commit}'                 ),
-    ('2.0.0', None   , 0, True , '2.0.1-0.dirty.{timestamp}+g{commit}', '2.0.1-0.dirty.{timestamp}'      , '2.0.1~0+dirty{timestamp}+g{commit}'),
-    ('2.5.1', None   , 1, True , '2.5.2-1.dirty.{timestamp}+g{commit}', '2.5.2-1.dirty.{timestamp}'      , '2.5.2~1+dirty{timestamp}+g{commit}'),
-    ('0.0.0', '1.0.0', 0, False, '0.0.0+g{commit}'                    , '0.0.0'                          , '0.0.0+g{commit}'                   ),
-))
+# fmt: off
+@pytest.mark.parametrize(
+    "format, init_version, build, commit_count, dirty, expected_version, expected_pure_version, expected_debversion",
+    (
+        ("semver", "0.0.0"       , None   , 0, False, "0.0.0+g{commit}"                    , "0.0.0"                          , "0.0.0+g{commit}"                   ),
+        ("semver", "1.2.3"       , None   , 2, False, "1.2.4-2+g{commit}"                  , "1.2.4-2"                        , "1.2.4~2+g{commit}"                 ),
+        ("semver", "2.0.0"       , None   , 0, True , "2.0.1-0.dirty.{timestamp}+g{commit}", "2.0.1-0.dirty.{timestamp}"      , "2.0.1~0+dirty{timestamp}+g{commit}"),
+        ("semver", "2.5.1"       , None   , 1, True , "2.5.2-1.dirty.{timestamp}+g{commit}", "2.5.2-1.dirty.{timestamp}"      , "2.5.2~1+dirty{timestamp}+g{commit}"),
+        ("semver", "0.0.0"       , "1.0.0", 0, False, "0.0.0+g{commit}"                    , "0.0.0"                          , "0.0.0+g{commit}"                   ),
+        ("carver", "1.2.3+PI42.3", None   , 0, False, "1.2.3+PI42.3"                       , "1.2.3+PI42.3"                   , "1.2.3+PI42.3"                      ),
+        ("carver", "1.2.3+PI42.3", None   , 2, False, "1.2.3-2+PI42.4"                     , "1.2.3-2+PI42.4"                 , "1.2.3~2+PI42.4"                    ),
+    )
+)
+# fmt: on
 def test_version_variables_content(
     capfd,
     run_hopic,
+    format,
     init_version,
     build,
     commit_count,
@@ -840,9 +848,9 @@ def test_version_variables_content(
         ("build",),
         config=dedent(f"""\
                 version:
-                  format: semver
+                  format: {format}
                   tag:    true
-                  bump:   patch
+                  bump:   {'fix' if format == 'carver' else 'patch'}
                 {('  build: ' + build) if build else ''}
 
                 phases:
