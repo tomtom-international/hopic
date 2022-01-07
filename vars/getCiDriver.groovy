@@ -681,7 +681,7 @@ class CiDriver {
     String executor_identifier = get_executor_identifier(variant)
     if (!this.base_cmds.containsKey(executor_identifier)) {
       this.track_call(
-        call_name: 'on_hopic_installation',
+        call_name: "on_hopic_installation-${steps.env.NODE_NAME}",
         on_start: { this.event_callbacks.on_hopic_installation_start(steps.env.NODE_NAME) },
         on_end: { this.event_callbacks.on_hopic_installation_end(steps.env.NODE_NAME) }) {
         def venv = steps.pwd(tmp: true) + "/hopic-venv"
@@ -956,7 +956,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   }
 
   private def checkout(String cmd, boolean clean = false, metric_info = [:]) {
-    return this.track_call(call_name: 'on_workspace_preparation', on_start: { this.event_callbacks.on_node_workspace_preparation_start(steps.env.NODE_NAME) }, on_end: { this.event_callbacks.on_node_workspace_preparation_end(steps.env.NODE_NAME, this) }) {
+    return this.track_call(call_name: "on_workspace_preparation-${steps.env.NODE_NAME}", on_start: { this.event_callbacks.on_node_workspace_preparation_start(steps.env.NODE_NAME) }, on_end: { this.event_callbacks.on_node_workspace_preparation_end(steps.env.NODE_NAME, this) }) {
       def tmpdir = steps.pwd(tmp: true)
       def workspace = steps.pwd()
 
@@ -1408,7 +1408,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     }
     def build_result = 'SUCCESS'
     return steps.node(node_expr) {
-      this.track_call(call_name: 'on_node',
+      this.track_call(call_name: "on_node-${steps.env.NODE_NAME}",
         on_start: {
           this.event_callbacks.on_node_acquired(phase, variant, exec_name, steps.env.NODE_NAME, node_allocation_id)
         }, on_end: {
@@ -1541,7 +1541,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   private void build_variant(String phase, String variant, String cmd, String workspace, Map artifactoryBuildInfo, String hopic_extra_arguments, String parent_phase) {
     String stage_name = "${phase}-${variant}"
     this.track_call(
-      call_name: 'on_variant',
+      call_name: "on_variant-${phase}-${variant}",
       on_start: { this.event_callbacks.on_variant_start(phase, variant, parent_phase) },
       on_end: { Exception e -> this.event_callbacks.on_variant_end(phase, variant, e)}) {
       steps.stage(stage_name) {
@@ -1688,7 +1688,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           }
           return lock_closure {
             acquire_time = this.get_unix_epoch_time()
-            return this.track_call(call_name: 'on_lock', on_start: { this.event_callbacks.on_locks_acquired(lock_names) }, on_end: { this.event_callbacks.on_locks_released(lock_names)}) {
+            return this.track_call(call_name: "on_lock-${lock_names.join(' ')}", on_start: { this.event_callbacks.on_locks_acquired(lock_names) }, on_end: { this.event_callbacks.on_locks_released(lock_names)}) {
               return closure()
             }
           }
@@ -1732,7 +1732,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     if (variants.size() != 0) {
       def lock_phase_onward_if_necessary = this.with_locks(current_phase_locks)
       lock_phase_onward_if_necessary {
-        this.track_call(call_name: 'on_phase', on_start: { this.event_callbacks.on_phase_start(phase) }, on_end: { this.event_callbacks.on_phase_end(phase) }) {
+        this.track_call(call_name: "on_phase-${phase}", on_start: { this.event_callbacks.on_phase_start(phase) }, on_end: { this.event_callbacks.on_phase_end(phase) }) {
           steps.stage(phase) {
             def stepsForBuilding = variants.collectEntries { variant, meta ->
               def label = meta.label
