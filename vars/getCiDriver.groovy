@@ -18,6 +18,8 @@ import groovy.json.JsonOutput
 import hudson.model.ParametersDefinitionProperty
 import org.jenkinsci.plugins.credentialsbinding.impl.CredentialNotFoundException
 import org.jenkinsci.plugins.scriptsecurity.sandbox.RejectedAccessException
+import org.jenkinsci.plugins.workflow.cps.replay.ReplayAction
+import org.jenkinsci.plugins.workflow.cps.replay.ReplayCause
 import org.jenkinsci.plugins.workflow.multibranch.BranchJobProperty
 import org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty
 
@@ -1080,13 +1082,33 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     return this.get_change() != null
   }
 
-  private def is_build_a_replay() {
-    def r = steps.currentBuild.buildCauses.any{ cause -> cause._class.contains('ReplayCause') }
-    if (r) {
-      steps.println("\033[36m[info] not submitting because this build is a replay of another build.\033[39m")
-      steps.currentBuild.description = "Not submitting: this build is a replay"
+  private def is_build_a_modified_replay() {
+    if (!steps.currentBuild.buildCauses.any{ cause -> cause._class.contains('ReplayCause') }) {
+      return false
     }
-    return r
+    try {
+      def cause = steps.currentBuild.rawBuild.getCause(ReplayCause.class)
+      def original_build = cause ? steps.currentBuild.rawBuild : null
+      // Find first non replay build, don't trust the replay chain if there was a deleted build
+      while(cause != null) {
+        def previous_build = original_build
+        original_build = cause.getOriginal()
+        if (!original_build) {
+          steps.println("\033[36m[info] not submitting because parent build ${previous_build} is not available, hence the source is not trusted\033[39m")
+          steps.currentBuild.description = "Not submitting: Original replayed build not available"
+          return true
+        }
+        cause = original_build.getCause(ReplayCause.class)
+      }
+      
+      def replay_action = steps.currentBuild.rawBuild.getActions(ReplayAction.class)
+      if (replay_action && !replay_action.any { it.getDiff() }) {
+        return false
+      }
+    } catch (RejectedAccessException e) { }
+    steps.println("\033[36m[info] not submitting because this build is a replay of another build.\033[39m")
+    steps.currentBuild.description = "Not submitting: this build is a replay"
+    return true
   }
 
   /**
@@ -1097,7 +1119,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       assert steps.env.NODE_NAME != null, "has_submittable_change must be executed on a node the first time"
 
       assert !this.has_change() || (this.target_commit != null && this.source_commit != null)
-      this.may_submit_result = this.has_change() && this.get_change().maySubmit(target_commit, source_commit, /* allow_cache =*/ false) && !this.is_build_a_replay()
+      this.may_submit_result = this.has_change() && this.get_change().maySubmit(target_commit, source_commit, /* allow_cache =*/ false) && !this.is_build_a_modified_replay()
       if (this.may_submit_result) {
         steps.println("\033[36m[info] submitting the commits since all merge criteria are met\033[39m")
         steps.currentBuild.description = "Submitting: all merge criteria are met"
