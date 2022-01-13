@@ -179,6 +179,7 @@ def checkout_tree(
     allow_submodule_checkout_failure: bool = False,
     clean_config: Union[List, Tuple] = (),
 ):
+    fresh = clean
     try:
         repo = git.Repo(tree)
         # Cleanup potential existing submodules to avoid conflicts in PR's where submodules are added
@@ -204,12 +205,14 @@ def checkout_tree(
 
         assert remote is not None
         repo = git.Repo.clone_from(remote, tree)
+        fresh = True
 
     with repo:
         with repo.config_writer() as cfg:
             cfg.remove_section('hopic.code')
             cfg.set_value('color', 'ui', 'always')
             cfg.set_value('hopic.code', 'cfg-clean', str(clean))
+            cfg.set_value("hopic.code", "fresh", str(fresh))
 
         if remote is not None:
             clean_tags = tags and repo.tags
@@ -255,6 +258,10 @@ def checkout_tree(
 
         if clean:
             clean_repo(repo, clean_config)
+        if fresh:
+            # Only restore mtimes when doing a clean build or working on a fresh clone. This prevents problems with timestamp-based build sytems.
+            # I.e. make and ninja and probably half the world.
+            restore_mtime_from_git(repo)
 
         with repo.config_writer() as cfg:
             section = f"hopic.{commit}"
@@ -295,10 +302,6 @@ def clean_repo(repo, clean_config=[]):
     clean_output = repo.git.clean(x=True, d=True, force=(True, True))
     if clean_output:
         log.info('%s', clean_output)
-
-    # Only restore mtimes when doing a clean build. This prevents problems with timestamp-based build sytems.
-    # I.e. make and ninja and probably half the world.
-    restore_mtime_from_git(repo)
 
 
 def install_extensions_and_parse_config(constraints: Optional[str] = None):
@@ -497,6 +500,7 @@ def process_prepare_source_tree(
             target_ref    = cfg.get(section, 'ref', fallback=None)
             target_remote = cfg.get(section, 'remote', fallback=None)
             code_clean    = cfg.getboolean('hopic.code', 'cfg-clean', fallback=False)
+            code_fresh = cfg.getboolean("hopic.code", "fresh", fallback=code_clean)
 
         repo.git.submodule(["deinit", "--all", "--force"])  # Remove submodules in case it is changed in change_applicator
         commit_params = change_applicator(repo, author=author, committer=committer)
@@ -780,7 +784,9 @@ def process_prepare_source_tree(
 
         update_submodules(repo, code_clean)
 
-        if code_clean:
+        if code_fresh:
+            # Only restore mtimes when doing a clean build or working on a fresh clone. This prevents problems with timestamp-based build sytems.
+            # I.e. make and ninja and probably half the world.
             restore_mtime_from_git(repo)
 
         # Tagging after bumping the version
@@ -1423,6 +1429,7 @@ def unbundle(ctx, *, bundle: PathLike):
             target_ref = cfg.get(section, "ref", fallback=None)
             target_remote = cfg.get(section, "remote", fallback=None)
             code_clean = cfg.getboolean("hopic.code", "cfg-clean", fallback=False)
+            code_fresh = cfg.getboolean("hopic.code", "fresh", fallback=code_clean)
 
         submit_commit: Optional[git.Commit] = None
         commit_meta: Dict[str, Any] = {}
@@ -1471,9 +1478,13 @@ def unbundle(ctx, *, bundle: PathLike):
 
     try:
         ctx.obj.config = read_config(determine_config_file_name(ctx), ctx.obj.volume_vars)
-        if code_clean:
-            with git.Repo(workspace) as repo:
+        with git.Repo(workspace) as repo:
+            if code_clean:
                 clean_repo(repo, ctx.obj.config["clean"])
+            if code_fresh:
+                # Only restore mtimes when doing a clean build or working on a fresh clone. This prevents problems with timestamp-based build sytems.
+                # I.e. make and ninja and probably half the world.
+                restore_mtime_from_git(repo)
         git_cfg = ctx.obj.config["scm"]["git"]
     except (click.BadParameter, KeyError, TypeError, OSError, IOError, YAMLError):
         return
@@ -1494,6 +1505,8 @@ def unbundle(ctx, *, bundle: PathLike):
         cfg.set_value("hopic.code", "cfg-remote", target_remote)
         cfg.set_value("hopic.code", "cfg-ref", target_ref)
         cfg.set_value("hopic.code", "cfg-clean", str(code_clean))
+        if code_fresh:
+            cfg.set_value("hopic.code", "fresh", str(code_fresh))
 
     checkout_tree(
         code_dir,
