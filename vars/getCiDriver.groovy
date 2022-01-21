@@ -550,7 +550,7 @@ class CiDriver {
   private change_bundle      = null
   private submit_info        = [:]
   private change             = null
-  private source_commit      = "HEAD"
+  private source_commit      = null
   private target_commit      = null
   private may_submit_result  = null
   private may_publish_result = null
@@ -1278,10 +1278,12 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   }
 
   /**
-    * Currently known source reference
+    * Get the currently known source reference
     *
+    * @pre source commit has to be initialized
     */ 
-  public String get_source_ref() { 
+  public String get_source_commit() { 
+    assert this.source_commit != null
     return this.source_commit
   }
 
@@ -1890,9 +1892,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
               steps.env.GIT_AUTHOR_NAME     = scm.GIT_AUTHOR_NAME
               steps.env.GIT_AUTHOR_EMAIL    = scm.GIT_AUTHOR_EMAIL
 
-              if (steps.env.CHANGE_TARGET) {
-                this.source_commit = steps.env.GIT_COMMIT
-              }
+              this.source_commit = steps.env.GIT_COMMIT
               // Force a full based checkout & change application, instead of relying on the checkout done above, to ensure that we're building the list of phases and
               // variants to execute (below) using the final config file.
               this.ensure_checkout(cmd, clean)
