@@ -1278,6 +1278,14 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   }
 
   /**
+    * Currently known source reference
+    *
+    */ 
+  public String get_source_ref() { 
+    return this.source_commit
+  }
+
+  /**
    * Unstash everything previously stashed on other nodes that we didn't yet unstash here.
    *
    * @pre this has to be executed on a node
