@@ -104,7 +104,7 @@ def set_version_variables(ctx, config_file, *, config=None):
 
     log.debug("read version: \x1B[34m%s\x1B[39m", ctx.obj.version)
     ctx.obj.volume_vars['VERSION'] = str(ctx.obj.version)
-    ctx.obj.volume_vars['PURE_VERSION'] = ctx.obj.volume_vars['VERSION'].split('+')[0]
+    ctx.obj.volume_vars["PURE_VERSION"] = str(ctx.obj.version.without_meta())
     # FIXME: make this conversion work even when not using SemVer as versioning policy
     # Convert SemVer to Debian version: '~' for pre-release instead of '-'
     ctx.obj.volume_vars['DEBVERSION'] = ctx.obj.volume_vars['VERSION'].replace('-', '~', 1).replace('.dirty.', '+dirty', 1)

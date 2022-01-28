@@ -79,7 +79,6 @@ EmptyDict = TypedDict("EmptyDict", {}, total=True)
 
 
 _interphase_dependent_meta = frozenset({
-    'run-on-change',
     'stash',
     'worktrees',
 })

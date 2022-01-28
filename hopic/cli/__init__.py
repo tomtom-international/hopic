@@ -179,6 +179,7 @@ def checkout_tree(
     allow_submodule_checkout_failure: bool = False,
     clean_config: Union[List, Tuple] = (),
 ):
+    fresh = clean
     try:
         repo = git.Repo(tree)
         # Cleanup potential existing submodules to avoid conflicts in PR's where submodules are added
@@ -204,12 +205,14 @@ def checkout_tree(
 
         assert remote is not None
         repo = git.Repo.clone_from(remote, tree)
+        fresh = True
 
     with repo:
         with repo.config_writer() as cfg:
             cfg.remove_section('hopic.code')
             cfg.set_value('color', 'ui', 'always')
             cfg.set_value('hopic.code', 'cfg-clean', str(clean))
+            cfg.set_value("hopic.code", "fresh", str(fresh))
 
         if remote is not None:
             clean_tags = tags and repo.tags
@@ -255,6 +258,10 @@ def checkout_tree(
 
         if clean:
             clean_repo(repo, clean_config)
+        if fresh:
+            # Only restore mtimes when doing a clean build or working on a fresh clone. This prevents problems with timestamp-based build sytems.
+            # I.e. make and ninja and probably half the world.
+            restore_mtime_from_git(repo)
 
         with repo.config_writer() as cfg:
             section = f"hopic.{commit}"
@@ -296,13 +303,9 @@ def clean_repo(repo, clean_config=[]):
     if clean_output:
         log.info('%s', clean_output)
 
-    # Only restore mtimes when doing a clean build. This prevents problems with timestamp-based build sytems.
-    # I.e. make and ninja and probably half the world.
-    restore_mtime_from_git(repo)
 
-
-def install_extensions_and_parse_config():
-    initialize_global_variables_from_config(extensions.install_extensions.callback())
+def install_extensions_and_parse_config(constraints: Optional[str] = None):
+    initialize_global_variables_from_config(extensions.install_extensions.callback(constraints=constraints))
 
 
 _code_dir_re = re.compile(r"^code(?:-\d+)$")
@@ -445,6 +448,7 @@ def checkout_source_tree(
 @click.option('--author-date'               , metavar='<date>', type=DateTime(), help='''Time of last update to the change-request''')
 @click.option('--commit-date'               , metavar='<date>', type=DateTime(), help='''Time of starting to build this change-request''')
 @click.option("--bundle"                    , metavar="<file>", type=click.Path(file_okay=True, dir_okay=False, writable=True))
+@click.option("--constraints"               , metavar="<file>", type=click.Path(exists=True, dir_okay=False, readable=True), help="""Apply the provided constraints file to pip operations""")
 # fmt: on
 def prepare_source_tree(*args, **kwargs):
     """
@@ -464,7 +468,10 @@ def process_prepare_source_tree(
     author_date,
     commit_date,
     bundle: Optional[PathLike],
+    constraints: Optional[str] = None,
 ):
+    ctx.obj.pip_constraints = constraints
+
     with git.Repo(ctx.obj.workspace) as repo:
         if author_name is None or author_email is None:
             # This relies on /etc/passwd entries as a fallback, which might contain the info we need
@@ -493,6 +500,7 @@ def process_prepare_source_tree(
             target_ref    = cfg.get(section, 'ref', fallback=None)
             target_remote = cfg.get(section, 'remote', fallback=None)
             code_clean    = cfg.getboolean('hopic.code', 'cfg-clean', fallback=False)
+            code_fresh = cfg.getboolean("hopic.code", "fresh", fallback=code_clean)
 
         repo.git.submodule(["deinit", "--all", "--force"])  # Remove submodules in case it is changed in change_applicator
         commit_params = change_applicator(repo, author=author, committer=committer)
@@ -504,7 +512,7 @@ def process_prepare_source_tree(
 
         # Re-read config when it was not read already to ensure any changes introduced by 'change_applicator' are taken into account
         if not commit_params.pop('config_parsed', False):
-            install_extensions_and_parse_config()
+            install_extensions_and_parse_config(ctx.obj.pip_constraints)
 
         # Ensure that, when we're dealing with a separated config and code repository, that the code repository is checked out again to the newer version
         if ctx.obj.code_dir != ctx.obj.workspace:
@@ -776,7 +784,9 @@ def process_prepare_source_tree(
 
         update_submodules(repo, code_clean)
 
-        if code_clean:
+        if code_fresh:
+            # Only restore mtimes when doing a clean build or working on a fresh clone. This prevents problems with timestamp-based build sytems.
+            # I.e. make and ninja and probably half the world.
             restore_mtime_from_git(repo)
 
         # Tagging after bumping the version
@@ -1110,7 +1120,8 @@ def merge_change_request(
         msg += f'Merged-by: Hopic {get_package_version(PACKAGE)}\n'
 
         # Reread config & install extensions after potential configuration file change
-        install_extensions_and_parse_config()
+        assert hasattr(ctx.obj, "pip_constraints")
+        install_extensions_and_parse_config(ctx.obj.pip_constraints)
 
         bump = ctx.obj.config['version']['bump']
         strict = bump.get('strict', False)
@@ -1157,12 +1168,12 @@ def apply_modality_change(
     Applies the changes specific to the specified modality.
     """
 
-    # Ensure any required extensions are available
-    install_extensions_and_parse_config()
-
-    modality_cmds = ctx.obj.config["modality-source-preparation"][modality]
-
     def change_applicator(repo, author, committer):
+        assert hasattr(ctx.obj, "pip_constraints")
+        install_extensions_and_parse_config(ctx.obj.pip_constraints)
+
+        modality_cmds = ctx.obj.config["modality-source-preparation"][modality]
+
         has_changed_files = any("changed-files" in cmd for cmd in modality_cmds)
 
         (commit_message,) = (
@@ -1418,6 +1429,7 @@ def unbundle(ctx, *, bundle: PathLike):
             target_ref = cfg.get(section, "ref", fallback=None)
             target_remote = cfg.get(section, "remote", fallback=None)
             code_clean = cfg.getboolean("hopic.code", "cfg-clean", fallback=False)
+            code_fresh = cfg.getboolean("hopic.code", "fresh", fallback=code_clean)
 
         submit_commit: Optional[git.Commit] = None
         commit_meta: Dict[str, Any] = {}
@@ -1466,9 +1478,13 @@ def unbundle(ctx, *, bundle: PathLike):
 
     try:
         ctx.obj.config = read_config(determine_config_file_name(ctx), ctx.obj.volume_vars)
-        if code_clean:
-            with git.Repo(workspace) as repo:
+        with git.Repo(workspace) as repo:
+            if code_clean:
                 clean_repo(repo, ctx.obj.config["clean"])
+            if code_fresh:
+                # Only restore mtimes when doing a clean build or working on a fresh clone. This prevents problems with timestamp-based build sytems.
+                # I.e. make and ninja and probably half the world.
+                restore_mtime_from_git(repo)
         git_cfg = ctx.obj.config["scm"]["git"]
     except (click.BadParameter, KeyError, TypeError, OSError, IOError, YAMLError):
         return
@@ -1489,6 +1505,8 @@ def unbundle(ctx, *, bundle: PathLike):
         cfg.set_value("hopic.code", "cfg-remote", target_remote)
         cfg.set_value("hopic.code", "cfg-ref", target_ref)
         cfg.set_value("hopic.code", "cfg-clean", str(code_clean))
+        if code_fresh:
+            cfg.set_value("hopic.code", "fresh", str(code_fresh))
 
     checkout_tree(
         code_dir,

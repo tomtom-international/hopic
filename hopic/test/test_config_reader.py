@@ -1039,9 +1039,6 @@ def test_wait_on_full_previous_phase_dependency_multiple_definitions():
 @pytest.mark.parametrize(
     "dep_option",
     (
-        "run-on-change: never",
-        "run-on-change: only",
-        "run-on-change: new-version-only",
         "stash: {includes: test/**}",
         "worktrees: {doc/build/html: {commit-message: bla bla}}",
     ),

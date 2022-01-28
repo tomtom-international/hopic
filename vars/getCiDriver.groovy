@@ -18,6 +18,8 @@ import groovy.json.JsonOutput
 import hudson.model.ParametersDefinitionProperty
 import org.jenkinsci.plugins.credentialsbinding.impl.CredentialNotFoundException
 import org.jenkinsci.plugins.scriptsecurity.sandbox.RejectedAccessException
+import org.jenkinsci.plugins.workflow.cps.replay.ReplayAction
+import org.jenkinsci.plugins.workflow.cps.replay.ReplayCause
 import org.jenkinsci.plugins.workflow.multibranch.BranchJobProperty
 import org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty
 
@@ -66,7 +68,7 @@ class ChangeRequest {
     return [:]
   }
 
-  public Map apply(String cmd, String source_remote) {
+  public Map apply(String cmd, String source_remote, pip_constraints_file) {
     assert false : "Change request instance does not override apply()"
   }
 
@@ -183,12 +185,17 @@ class BitbucketPullRequest extends ChangeRequest {
             str = "${str} <${user.emailAddress}>"
           }
 
-          new_description = new_description + info.description[last_idx..start - 1] + str
+          // Because Groovy is unable to obtain empty substrings
+          if (last_idx != start)
+            new_description = new_description + info.description[last_idx..start - 1]
+          new_description = new_description + str
           last_idx = end
         }
       }
 
-      new_description = new_description + info.description[last_idx..-1]
+      // Because Groovy is unable to obtain an empty trailing string
+      if (last_idx != info.description.length())
+        new_description = new_description + info.description[last_idx..-1]
       info.description = new_description.replace('\r\n', '\n')
     }
 
@@ -347,7 +354,7 @@ class BitbucketPullRequest extends ChangeRequest {
   }
 
   @Override
-  public Map apply(String cmd, String source_remote) {
+  public Map apply(String cmd, String source_remote, pip_constraints_file) {
     def change_request = this.get_info()
     def extra_params = ''
     if (change_request.containsKey('description')) {
@@ -376,11 +383,12 @@ class BitbucketPullRequest extends ChangeRequest {
     def merge_bundle = steps.pwd(tmp: true) + '/merge-transfer.bundle'
     def output = line_split(steps.sh(script: cmd
                                 + ' prepare-source-tree'
-                                + ' --author-name=' + shell_quote(cr_author.getOrDefault('displayName', steps.env.CHANGE_AUTHOR))
-                                + ' --author-email=' + shell_quote(cr_author.getOrDefault('emailAddress', steps.env.CHANGE_AUTHOR_EMAIL))
+                                + ' --author-name=' + shell_quote(cr_author.getOrDefault('displayName', steps.env.CHANGE_AUTHOR ?: "Unknown user"))
+                                + ' --author-email=' + shell_quote(cr_author.getOrDefault('emailAddress', steps.env.CHANGE_AUTHOR_EMAIL ?: ""))
                                 + ' --author-date=' + shell_quote(String.format("@%.3f", change_request.author_time))
                                 + ' --commit-date=' + shell_quote(String.format("@%.3f", change_request.commit_time))
                                 + ' --bundle=' + shell_quote(merge_bundle)
+                                + (pip_constraints_file ? (' --constraints=' + pip_constraints_file) : '')
                                 + ' merge-change-request'
                                 + ' --source-remote=' + shell_quote(source_remote)
                                 + ' --source-ref=' + shell_quote(this.source_commit)
@@ -481,7 +489,7 @@ class ModalityRequest extends ChangeRequest {
   }
 
   @Override
-  public Map apply(String cmd, String source_remote) {
+  public Map apply(String cmd, String source_remote, pip_constraints_file) {
     def author_time = steps.currentBuild.timeInMillis / 1000.0
     def commit_time = steps.currentBuild.startTimeInMillis / 1000.0
     def modality_bundle = steps.pwd(tmp: true) + '/modality-transfer.bundle'
@@ -490,6 +498,7 @@ class ModalityRequest extends ChangeRequest {
       + ' --author-date=' + shell_quote(String.format("@%.3f", author_time))
       + ' --commit-date=' + shell_quote(String.format("@%.3f", commit_time))
       + ' --bundle=' + shell_quote(modality_bundle)
+      + (pip_constraints_file ? (' --constraints=' + pip_constraints_file) : '')
     )
     def full_cmd = "${prepare_cmd} apply-modality-change ${shell_quote(modality)}"
     if (modality == 'BUMP_VERSION') {
@@ -677,7 +686,7 @@ class CiDriver {
     String executor_identifier = get_executor_identifier(variant)
     if (!this.docker_images.containsKey(executor_identifier)) {
       this.track_call(
-        call_name: 'on_hopic_installation',
+        call_name: "on_hopic_installation-${steps.env.NODE_NAME}",
         on_start: { this.event_callbacks.on_hopic_installation_start(steps.env.NODE_NAME) },
         on_end: { this.event_callbacks.on_hopic_installation_end(steps.env.NODE_NAME) }) {
         // Timeout prevents infinite downloads from blocking the build forever
@@ -981,8 +990,21 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     }
   }
 
-  private def checkout(String cmd, boolean clean = false, metric_info = [:]) {
-    return this.track_call(call_name: 'on_workspace_preparation', on_start: { this.event_callbacks.on_node_workspace_preparation_start(steps.env.NODE_NAME) }, on_end: { this.event_callbacks.on_node_workspace_preparation_end(steps.env.NODE_NAME, this) }) {
+  private def write_pip_constraints_to_file(String file) {
+    // Ensure any required extensions are available
+    def pip_constraints_file = null
+    if (this.pip_constraints) {
+      steps.writeFile(
+          file: file,
+          text: this.pip_constraints,
+      )
+      return true
+    }
+    return false
+  }
+
+  private def checkout(String cmd, boolean clean = false) {
+    return this.track_call(call_name: "on_workspace_preparation-${steps.env.NODE_NAME}", on_start: { this.event_callbacks.on_node_workspace_preparation_start(steps.env.NODE_NAME) }, on_end: { this.event_callbacks.on_node_workspace_preparation_end(steps.env.NODE_NAME, this) }) {
       def tmpdir = steps.pwd(tmp: true)
       def workspace = steps.pwd()
 
@@ -1040,10 +1062,12 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
           def submit_info = this.with_credentials(meta.getOrDefault('with-credentials', [])) { creds_info ->
             maybe_timeout {
+              def pip_constraints_file = tmpdir + '/pip-constraints-apply.txt'
               def white_listed_vars = creds_info*.white_listed_vars.flatten().findAll{it}
               this.get_change().apply(
                 cmd + white_listed_vars.collect{" --whitelisted-var=${shell_quote(it)}"}.join(''),
                 this.scm.url,
+                write_pip_constraints_to_file(pip_constraints_file) ? pip_constraints_file : null
               )
             }
           }
@@ -1082,15 +1106,8 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       }
 
       // Ensure any required extensions are available
-      def install_extensions_param = ""
-      if (this.pip_constraints) {
-        def pip_constraints_file = tmpdir + '/pip-constraints.txt'
-        steps.writeFile(
-            file: pip_constraints_file,
-            text: pip_constraints,
-        )
-        install_extensions_param = "--constraints ${shell_quote(pip_constraints_file)}"
-      }
+      def pip_constraints_file = tmpdir + '/pip-constraints-install-extensions.txt'
+      def install_extensions_param = write_pip_constraints_to_file(pip_constraints_file) ? "--constraints ${shell_quote(pip_constraints_file)}" : ""
       steps.sh(script: "${cmd} install-extensions ${install_extensions_param}", label: 'Hopic: installing extensions')
 
       def code_dir_output = tmpdir + '/code-dir.txt'
@@ -1111,13 +1128,33 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     return this.get_change() != null
   }
 
-  private def is_build_a_replay() {
-    def r = steps.currentBuild.buildCauses.any{ cause -> cause._class.contains('ReplayCause') }
-    if (r) {
-      steps.println("\033[36m[info] not submitting because this build is a replay of another build.\033[39m")
-      steps.currentBuild.description = "Not submitting: this build is a replay"
+  private def is_build_a_modified_replay() {
+    if (!steps.currentBuild.buildCauses.any{ cause -> cause._class.contains('ReplayCause') }) {
+      return false
     }
-    return r
+    try {
+      def cause = steps.currentBuild.rawBuild.getCause(ReplayCause.class)
+      def original_build = cause ? steps.currentBuild.rawBuild : null
+      // Find first non replay build, don't trust the replay chain if there was a deleted build
+      while(cause != null) {
+        def previous_build = original_build
+        original_build = cause.getOriginal()
+        if (!original_build) {
+          steps.println("\033[36m[info] not submitting because parent build ${previous_build} is not available, hence the source is not trusted\033[39m")
+          steps.currentBuild.description = "Not submitting: Original replayed build not available"
+          return true
+        }
+        cause = original_build.getCause(ReplayCause.class)
+      }
+      
+      def replay_action = steps.currentBuild.rawBuild.getActions(ReplayAction.class)
+      if (replay_action && !replay_action.any { it.getDiff() }) {
+        return false
+      }
+    } catch (RejectedAccessException e) { }
+    steps.println("\033[36m[info] not submitting because this build is a replay of another build.\033[39m")
+    steps.currentBuild.description = "Not submitting: this build is a replay"
+    return true
   }
 
   /**
@@ -1128,7 +1165,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       assert steps.env.NODE_NAME != null, "has_submittable_change must be executed on a node the first time"
 
       assert !this.has_change() || (this.target_commit != null && this.source_commit != null)
-      this.may_submit_result = this.has_change() && this.get_change().maySubmit(target_commit, source_commit, /* allow_cache =*/ false) && !this.is_build_a_replay()
+      this.may_submit_result = this.has_change() && this.get_change().maySubmit(target_commit, source_commit, /* allow_cache =*/ false) && !this.is_build_a_modified_replay()
       if (this.may_submit_result) {
         steps.println("\033[36m[info] submitting the commits since all merge criteria are met\033[39m")
         steps.currentBuild.description = "Submitting: all merge criteria are met"
@@ -1439,7 +1476,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     }
     def build_result = 'SUCCESS'
     return steps.node(node_expr) {
-      this.track_call(call_name: 'on_node',
+      this.track_call(call_name: "on_node-${steps.env.NODE_NAME}",
         on_start: {
           this.event_callbacks.on_node_acquired(phase, variant, exec_name, steps.env.NODE_NAME, node_allocation_id)
         }, on_end: {
@@ -1572,7 +1609,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   private void build_variant(String phase, String variant, String cmd, String workspace, Map artifactoryBuildInfo, String hopic_extra_arguments, String parent_phase) {
     String stage_name = "${phase}-${variant}"
     this.track_call(
-      call_name: 'on_variant',
+      call_name: "on_variant-${phase}-${variant}",
       on_start: { this.event_callbacks.on_variant_start(phase, variant, parent_phase) },
       on_end: { Exception e -> this.event_callbacks.on_variant_end(phase, variant, e)}) {
       steps.stage(stage_name) {
@@ -1719,7 +1756,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           }
           return lock_closure {
             acquire_time = this.get_unix_epoch_time()
-            return this.track_call(call_name: 'on_lock', on_start: { this.event_callbacks.on_locks_acquired(lock_names) }, on_end: { this.event_callbacks.on_locks_released(lock_names)}) {
+            return this.track_call(call_name: "on_lock-${lock_names.join(' ')}", on_start: { this.event_callbacks.on_locks_acquired(lock_names) }, on_end: { this.event_callbacks.on_locks_released(lock_names)}) {
               return closure()
             }
           }
@@ -1763,7 +1800,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     if (variants.size() != 0) {
       def lock_phase_onward_if_necessary = this.with_locks(current_phase_locks)
       lock_phase_onward_if_necessary {
-        this.track_call(call_name: 'on_phase', on_start: { this.event_callbacks.on_phase_start(phase) }, on_end: { this.event_callbacks.on_phase_end(phase) }) {
+        this.track_call(call_name: "on_phase-${phase}", on_start: { this.event_callbacks.on_phase_start(phase) }, on_end: { this.event_callbacks.on_phase_end(phase) }) {
           steps.stage(phase) {
             def stepsForBuilding = variants.collectEntries { variant, meta ->
               def label = meta.label
@@ -1857,199 +1894,196 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   }
 
   public def build(Map buildParams = [:]) {
-    def clean = buildParams.getOrDefault('clean', false)
-    def default_node = buildParams.getOrDefault('default_node_expr', this.default_node_expr)
-    def exclude_branches_filled_with_pr_branch_discovery = buildParams.getOrDefault('exclude_branches_filled_with_pr_branch_discovery', true)
+    this.track_call(on_end: { Exception e -> this.event_callbacks.on_build_end(e) }) {
+      def clean = buildParams.getOrDefault('clean', false)
+      def default_node = buildParams.getOrDefault('default_node_expr', this.default_node_expr)
+      def exclude_branches_filled_with_pr_branch_discovery = buildParams.getOrDefault('exclude_branches_filled_with_pr_branch_discovery', true)
 
-    this.extend_build_properties()
-    this.decorate_output {
-      def (phases, is_publishable_change, submit_meta, locks) = this.on_node(node_expr: default_node, exec_name: "hopic-init", phase: 'hopic-init', variant: 'hopic-init') {
-        this.track_call(
-          call_name: 'on_variant_init',
-          on_start: { this.event_callbacks.on_variant_start("hopic-init", "hopic-init", null) },
-          on_end: { Exception e -> this.event_callbacks.on_variant_end("hopic-init", "hopic-init", e) }) {
-          return this.with_hopic("hopic-init") { cmd, venv ->
-            def workspace = steps.pwd()
+      this.extend_build_properties()
+      this.decorate_output {
+        def (phases, is_publishable_change, submit_meta, locks) = this.on_node(node_expr: default_node, exec_name: "hopic-init", phase: 'hopic-init', variant: 'hopic-init') {
+          this.track_call(
+            call_name: 'on_variant_init',
+            on_start: { this.event_callbacks.on_variant_start("hopic-init", "hopic-init", null) },
+            on_end: { Exception e -> this.event_callbacks.on_variant_end("hopic-init", "hopic-init", e) }) {
+            return this.with_hopic("hopic-init") { cmd, venv ->
+              def workspace = steps.pwd()
 
-            /*
-            * We're splitting the enumeration of phases and variants from their execution in order to
-            * enable Jenkins to execute the different variants within a phase in parallel.
-            *
-            * In order to do this we only check out the CI config file to the orchestrator node.
-            */
-            def scm = steps.checkout(steps.scm)
-            // Make sure hopic will prepare workspace (in case on_build_node is used before this method)
-            this.checkouts.remove(get_executor_identifier())
+              /*
+              * We're splitting the enumeration of phases and variants from their execution in order to
+              * enable Jenkins to execute the different variants within a phase in parallel.
+              *
+              * In order to do this we only check out the CI config file to the orchestrator node.
+              */
+              def scm = steps.checkout(steps.scm)
+              // Make sure hopic will prepare workspace (in case on_build_node is used before this method)
+              this.checkouts.remove(get_executor_identifier())
 
-            // Don't trust Jenkin's scm.GIT_COMMIT because it sometimes lies
-            steps.env.GIT_COMMIT          = steps.sh(script: 'LC_ALL=C.UTF-8 TZ=UTC git rev-parse HEAD',
-                                                    label: 'Hopic (internal): determine current commit (because Jenkins lies!)',
-                                                    returnStdout: true).trim()
-            steps.env.GIT_COMMITTER_NAME  = scm.GIT_COMMITTER_NAME
-            steps.env.GIT_COMMITTER_EMAIL = scm.GIT_COMMITTER_EMAIL
-            steps.env.GIT_AUTHOR_NAME     = scm.GIT_AUTHOR_NAME
-            steps.env.GIT_AUTHOR_EMAIL    = scm.GIT_AUTHOR_EMAIL
+              // Don't trust Jenkin's scm.GIT_COMMIT because it sometimes lies
+              steps.env.GIT_COMMIT          = steps.sh(script: 'LC_ALL=C.UTF-8 TZ=UTC git rev-parse HEAD',
+                                                      label: 'Hopic (internal): determine current commit (because Jenkins lies!)',
+                                                      returnStdout: true).trim()
+              steps.env.GIT_COMMITTER_NAME  = scm.GIT_COMMITTER_NAME
+              steps.env.GIT_COMMITTER_EMAIL = scm.GIT_COMMITTER_EMAIL
+              steps.env.GIT_AUTHOR_NAME     = scm.GIT_AUTHOR_NAME
+              steps.env.GIT_AUTHOR_EMAIL    = scm.GIT_AUTHOR_EMAIL
 
-            if (steps.env.CHANGE_TARGET) {
-              this.source_commit = steps.env.GIT_COMMIT
-            }
-            // Force a full based checkout & change application, instead of relying on the checkout done above, to ensure that we're building the list of phases and
-            // variants to execute (below) using the final config file.
-            this.ensure_checkout(cmd, clean)
+              if (steps.env.CHANGE_TARGET) {
+                this.source_commit = steps.env.GIT_COMMIT
+              }
+              // Force a full based checkout & change application, instead of relying on the checkout done above, to ensure that we're building the list of phases and
+              // variants to execute (below) using the final config file.
+              this.ensure_checkout(cmd, clean)
 
-            // Pin the currently installed pip packages to ensure all variants use the same templates
-            this.pip_constraints = steps.sh(
-                script: "${venv}/bin/python -m pip freeze",
-                label: "Get list of installed pip packages",
-                returnStdout: true,
-            ).replaceAll(/(?m)^[A-Za-z0-9-_.]+ *@.+$/, "") // Remove any URL constraints, as adding support for those has proven troublesome
+              // Pin the currently installed pip packages to ensure all variants use the same templates
+              this.pip_constraints = steps.sh(
+                  script: "${venv}/bin/python -m pip freeze",
+                  label: "Get list of installed pip packages",
+                  returnStdout: true,
+              ).replaceAll(/(?m)^[A-Za-z0-9-_.]+ *@.+$/, "") // Remove any URL constraints, as adding support for those has proven troublesome
 
-            def phases = steps.readJSON(text: steps.sh(
-                script: "${cmd} getinfo",
-                label: 'Hopic: retrieving execution graph',
-                returnStdout: true,
-              )).collectEntries { phase, variants ->
-              [
-                (phase): variants.collectEntries { variant, meta ->
-                  [
-                    (variant): [
-                      label: meta.getOrDefault('node-label', default_node),
-                      nop: meta.getOrDefault('nop', false),
-                      run_on_change: meta.getOrDefault('run-on-change', 'always'),
-                      wait_on_full_previous_phase: meta.getOrDefault('wait-on-full-previous-phase', true),
+              def phases = steps.readJSON(text: steps.sh(
+                  script: "${cmd} getinfo",
+                  label: 'Hopic: retrieving execution graph',
+                  returnStdout: true,
+                )).collectEntries { phase, variants ->
+                [
+                  (phase): variants.collectEntries { variant, meta ->
+                    [
+                      (variant): [
+                        label: meta.getOrDefault('node-label', default_node),
+                        nop: meta.getOrDefault('nop', false),
+                        run_on_change: meta.getOrDefault('run-on-change', 'always'),
+                        wait_on_full_previous_phase: meta.getOrDefault('wait-on-full-previous-phase', true),
+                      ]
                     ]
-                  ]
-                }
+                  }
+                ]
+              }
+              def submit_meta = steps.readJSON(text: steps.sh(
+                  script: "${cmd} getinfo --post-submit",
+                  label: 'Hopic (internal): running post submit',
+                  returnStdout: true,
+                ))
+
+              def is_publishable = this.has_publishable_change()
+
+              if (is_publishable) {
+                // Ensure a new checkout is performed because the target repository may change while waiting for the lock
+                this.checkouts = [:]
+                this.change_bundle = null
+              }
+
+              // Report start of build. _Must_ come after having determined whether this build is submittable and
+              // publishable, because it may affect the result of the submittability check.
+              if (this.change != null) {
+                this.change.notify_build_result(get_job_name(), steps.env.CHANGE_BRANCH, this.source_commit, 'STARTING', exclude_branches_filled_with_pr_branch_discovery)
+                this.change.notify_build_result(get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, 'STARTING', exclude_branches_filled_with_pr_branch_discovery)
+              }
+
+              return [phases, is_publishable, submit_meta, get_ci_locks(cmd, is_publishable)]
+            }
+          }
+        }
+
+        def lock_if_necessary = this.with_locks(locks.global)
+
+        def artifactoryBuildInfo = [:]
+        def hopic_extra_arguments = is_publishable_change ? ' --publishable-version': ''
+
+        def exception = null
+        try {
+          lock_if_necessary {
+            phases = phases.collectEntries { phase, variants ->
+              // Make sure steps exclusive to changes, or not intended to execute for changes, are skipped when appropriate
+              [
+                (phase): variants.findAll { variant, meta ->
+                  def run_on_change = meta.run_on_change
+
+                  if (run_on_change == 'always') {
+                    return true
+                  } else if (run_on_change == 'never') {
+                    return !this.has_change()
+                  } else if (run_on_change == 'only' || run_on_change == 'new-version-only') {
+                    if (this.source_commit == null
+                    || this.target_commit == null) {
+                      // Don't have enough information to determine whether this is a submittable change: assume it is
+                      return true
+                    }
+                    if (run_on_change == 'new-version-only' && !this.is_new_version()) {
+                      return false
+                    }
+                    return is_publishable_change
+                  }
+                  assert false : "Unknown 'run-on-change' option: ${run_on_change}"
+                },
               ]
             }
-            def submit_meta = steps.readJSON(text: steps.sh(
-                script: "${cmd} getinfo --post-submit",
-                label: 'Hopic (internal): running post submit',
-                returnStdout: true,
-              ))
+            // Clear the target commit hash and submit hash that we determined outside of 'lock_if_necessary' because the target branch
+            // may have moved forward while we didn't hold the lock.
+            this.target_commit = null
+            this.submit_info = [:]
 
-            def is_publishable = this.has_publishable_change()
-
-            if (is_publishable) {
-              // Ensure a new checkout is performed because the target repository may change while waiting for the lock
-              this.checkouts = [:]
-              this.change_bundle = null
-            }
-
-            // Report start of build. _Must_ come after having determined whether this build is submittable and
-            // publishable, because it may affect the result of the submittability check.
-            if (this.change != null) {
-              this.change.notify_build_result(get_job_name(), steps.env.CHANGE_BRANCH, this.source_commit, 'STARTING', exclude_branches_filled_with_pr_branch_discovery)
-              this.change.notify_build_result(get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, 'STARTING', exclude_branches_filled_with_pr_branch_discovery)
-            }
-
-            return [phases, is_publishable, submit_meta, get_ci_locks(cmd, is_publishable)]
-          }
-        }
-      }
-
-      def lock_if_necessary = this.with_locks(locks.global)
-
-      def artifactoryBuildInfo = [:]
-      def hopic_extra_arguments = is_publishable_change ? ' --publishable-version': ''
-
-      def exception = null
-      try {
-        lock_if_necessary {
-          phases = phases.collectEntries { phase, variants ->
-            // Make sure steps exclusive to changes, or not intended to execute for changes, are skipped when appropriate
-            [
-              (phase): variants.findAll { variant, meta ->
-                def run_on_change = meta.run_on_change
-
-                if (run_on_change == 'always') {
-                  return true
-                } else if (run_on_change == 'never') {
-                  return !this.has_change()
-                } else if (run_on_change == 'only' || run_on_change == 'new-version-only') {
-                  if (this.source_commit == null
-                  || this.target_commit == null) {
-                    // Don't have enough information to determine whether this is a submittable change: assume it is
-                    return true
-                  }
-                  if (run_on_change == 'new-version-only' && !this.is_new_version()) {
-                    return false
-                  }
-                  return is_publishable_change
+            // Perform a checkout to ensure the creation of a 'git bundle' containing the change once, instead of multiple times when
+            // we've got multiple parallel variants at the start.
+            if (phases && phases.values().first().size() != 1 && this.change_bundle == null && this.has_change()) {
+              this.on_node(exec_name: 'hopic-bundle-init', node_expr: default_node) {
+                this.with_hopic { cmd ->
+                  // perform a checkout to ensure the creation of a 'git bundle' containing the change.
+                  this.ensure_checkout(cmd, clean)
                 }
-                assert false : "Unknown 'run-on-change' option: ${run_on_change}"
-              },
-            ]
-          }
-          // Clear the target commit hash and submit hash that we determined outside of 'lock_if_necessary' because the target branch
-          // may have moved forward while we didn't hold the lock.
-          this.target_commit = null
-          this.submit_info = [:]
+              }
+            }
 
-          // Perform a checkout to ensure the creation of a 'git bundle' containing the change once, instead of multiple times when
-          // we've got multiple parallel variants at the start.
-          if (phases && phases.values().first().size() != 1 && this.change_bundle == null && this.has_change()) {
-            this.on_node(exec_name: 'hopic-bundle-init', node_expr: default_node) {
-              this.with_hopic { cmd ->
-                // perform a checkout to ensure the creation of a 'git bundle' containing the change.
-                this.ensure_checkout(cmd, clean)
+            this.build_phases(phases, clean, artifactoryBuildInfo, hopic_extra_arguments, submit_meta, locks['from-phase'])
+          }
+
+          if (artifactoryBuildInfo) {
+            assert this.nodes : "When we have artifactory build info we expect to have execution nodes that it got produced on"
+            this.on_build_node { cmd ->
+              def config = steps.readJSON(text: steps.sh(
+                  script: "${cmd} show-config",
+                  label: 'Hopic (internal): determine Artifactory promotion configuration',
+                  returnStdout: true,
+                ))
+
+              artifactoryBuildInfo.each { server_id, buildInfo ->
+                def promotion_config = config.getOrDefault('artifactory', [:]).getOrDefault('promotion', [:]).getOrDefault(server_id, [:])
+
+                def server = steps.Artifactory.server server_id
+                server.publishBuildInfo(buildInfo)
+                if (promotion_config.containsKey('target-repo')
+                && is_publishable_change) {
+                  server.promote(
+                      targetRepo:  promotion_config['target-repo'],
+                      buildName:   buildInfo.name,
+                      buildNumber: buildInfo.number,
+                    )
+                }
+                // Work around Artifactory Groovy bug
+                server = null
               }
             }
           }
-
-          this.build_phases(phases, clean, artifactoryBuildInfo, hopic_extra_arguments, submit_meta, locks['from-phase'])
-        }
-
-        if (artifactoryBuildInfo) {
-          assert this.nodes : "When we have artifactory build info we expect to have execution nodes that it got produced on"
-          this.on_build_node { cmd ->
-            def config = steps.readJSON(text: steps.sh(
-                script: "${cmd} show-config",
-                label: 'Hopic (internal): determine Artifactory promotion configuration',
-                returnStdout: true,
-              ))
-
-            artifactoryBuildInfo.each { server_id, buildInfo ->
-              def promotion_config = config.getOrDefault('artifactory', [:]).getOrDefault('promotion', [:]).getOrDefault(server_id, [:])
-
-              def server = steps.Artifactory.server server_id
-              server.publishBuildInfo(buildInfo)
-              if (promotion_config.containsKey('target-repo')
-              && is_publishable_change) {
-                server.promote(
-                    targetRepo:  promotion_config['target-repo'],
-                    buildName:   buildInfo.name,
-                    buildNumber: buildInfo.number,
-                  )
-              }
-              // Work around Artifactory Groovy bug
-              server = null
-            }
-          }
-        }
-      } catch(Exception e) {
-        exception = e
-        if (this.change != null) {
-          def buildStatus = this.determine_error_build_result(e)
-          this.change.notify_build_result(
-              get_job_name(), steps.env.CHANGE_BRANCH, this.source_commit, buildStatus, exclude_branches_filled_with_pr_branch_discovery)
-          this.change.notify_build_result(
-              get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, buildStatus, exclude_branches_filled_with_pr_branch_discovery)
-        }
-        throw e
-      } finally {
-        this.printMetrics.print_node_usage(this.nodes_usage)
-        this.printMetrics.print_critical_path(this.nodes_usage)
-        try {
-          this.event_callbacks.on_build_end(exception)
         } catch(Exception e) {
-         this.steps.println("\033[33m[warning] ignoring fatal error ${e} during on_build_end\033[39m")
+          exception = e
+          if (this.change != null) {
+            def buildStatus = this.determine_error_build_result(e)
+            this.change.notify_build_result(
+                get_job_name(), steps.env.CHANGE_BRANCH, this.source_commit, buildStatus, exclude_branches_filled_with_pr_branch_discovery)
+            this.change.notify_build_result(
+                get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, buildStatus, exclude_branches_filled_with_pr_branch_discovery)
+          }
+          throw e
+        } finally {
+          this.printMetrics.print_node_usage(this.nodes_usage)
+          this.printMetrics.print_critical_path(this.nodes_usage)
         }
-      }
 
-      if (this.change != null) {
-        this.change.notify_build_result(get_job_name(), steps.env.CHANGE_BRANCH, this.source_commit, steps.currentBuild.result ?: 'SUCCESS', exclude_branches_filled_with_pr_branch_discovery)
-        this.change.notify_build_result(get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, steps.currentBuild.result ?: 'SUCCESS', exclude_branches_filled_with_pr_branch_discovery)
+        if (this.change != null) {
+          this.change.notify_build_result(get_job_name(), steps.env.CHANGE_BRANCH, this.source_commit, steps.currentBuild.result ?: 'SUCCESS', exclude_branches_filled_with_pr_branch_discovery)
+          this.change.notify_build_result(get_job_name(), steps.env.CHANGE_TARGET, steps.env.GIT_COMMIT, steps.currentBuild.result ?: 'SUCCESS', exclude_branches_filled_with_pr_branch_discovery)
+        }
       }
     }
   }
