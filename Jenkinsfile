@@ -24,7 +24,7 @@ String transform_ssh_to_https(String url)
     m = url =~ /^(?:\w+@)?(\w+(?:\.\w+)*\.?):(.+)$/
   }
   m.each { match ->
-    url = "https://${match[1]}/scm/${match[2]}"
+    url = "https://${match[1]}${match[1].contains('bitbucket') ? '/scm' : ''}/${match[2]}"
   }
   return url
 }
