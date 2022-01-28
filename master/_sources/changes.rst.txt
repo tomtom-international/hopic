@@ -17,6 +17,85 @@
 Changelog
 =========
 
+1.51.0
+======
+
+New features
+------------
+
+* feat: allow run-on-change in preceding wait-on-full-previous-phase (#425)
+* feat(versioning): support 'carver' versions from git tags with PURE_VERSION (#430)
+
+Bug fixes
+---------
+
+* fix: limit setuptools build system requires to prevent breakage on macOS (#424)
+* fix: always send on_build_end event (#426)
+* fix(groovy): work around Groovy's inability to obtain an empty string suffix (#427)
+* fix(groovy): work around Groovy's inability to obtain an empty string prefix (#429)
+
+1.50.0
+======
+
+New features
+------------
+
+* feat(groovy): add event callbacks (#420)
+
+1.49.2
+======
+
+Bug fixes
+---------
+
+* fix: always prepare workspace during hopic-init (#421)
+* fix: make sure all workspaces are prepared again after waiting for lock (#422)
+
+1.49.1
+======
+
+Bug fixes
+---------
+
+* fix: add missing script-approvals to get env variables (#417)
+
+1.49.0
+======
+
+New features
+------------
+
+* feat(hotfix): allow ignoring certain commit tags since the last release (#411)
+
+Bug fixes
+---------
+
+* fix: report build status on merge commit rather than target commit (#415)
+* fix: report build status notification to HEAD commit (#416)
+
+1.48.1
+======
+
+Improvements
+------------
+
+* improvement(cli): log the reason for not bumping the version (#409)
+
+Bug fixes
+---------
+
+* fix: set parameters to environment when not set already (#408)
+* fix: only override parameters env variables when not set before (#410)
+* fix: avoid mandatory script approval for accessing environment (#414)
+
+1.48.0
+======
+
+New features
+------------
+
+* feat: add allow-failures flag to junit (#398)
+
 1.47.0
 ======
 
