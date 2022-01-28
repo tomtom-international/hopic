@@ -274,6 +274,9 @@ def test_config_as_extension(monkeypatch, run_hopic):
         inner_template_called.append(True)
         return dedent(
             """\
+              pass-through-environment-vars:
+                - THE_ENVIRONMENT_1
+
               phases:
                 test:
                   variant:
@@ -301,6 +304,10 @@ def test_config_as_extension(monkeypatch, run_hopic):
 
             image: {test_image_name}
 
+            pass-through-environment-vars:
+              - THE_ENVIRONMENT_1
+              - THE_ENVIRONMENT_2
+
             config: !template {template_pkg}
         """)
 
@@ -313,6 +320,7 @@ def test_config_as_extension(monkeypatch, run_hopic):
     # validate that items from top-level configuration are not removed
     assert output['image']['default'] == test_image_name
     # validate that items from config are added
+    assert output['pass-through-environment-vars'] == ['THE_ENVIRONMENT_1', 'THE_ENVIRONMENT_2']
     assert 'variant' in output['phases']['test']
     # validate that 'config' is actually removed to not trigger the process again
     assert 'config' not in output
