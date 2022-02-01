@@ -397,13 +397,20 @@ def load_config_section(cfg):
     if 'config' not in cfg:
         return cfg
 
-    allowed_duplicates = {'pip', 'config'}
+    allowed_duplicates = {'config', 'pass-through-environment-vars', 'pip'}
     illegal_duplicates = set(cfg.keys()) & set(cfg["config"].keys()) - allowed_duplicates
     if illegal_duplicates:
         raise ConfigurationError(f"top level configuration and 'config' item have duplicated keys: {illegal_duplicates}")
 
     config_item = cfg.pop('config')
     cfg.pop('pip', None)
+    pass_through_environment_vars_item = cfg.pop("pass-through-environment-vars", None)
+    if pass_through_environment_vars_item:
+        config_item["pass-through-environment-vars"].extend(
+            environment_var
+            for environment_var in pass_through_environment_vars_item
+            if environment_var not in config_item.get("pass-through-environment-vars", {})
+        )
     cfg.update(config_item)
     return cfg
 
