@@ -271,7 +271,8 @@ def test_recursive_extension_installation_invalid_template_name(monkeypatch, run
     assert len(expected_pkg_install_order) == 0
 
 
-def test_config_as_extension(monkeypatch, run_hopic):
+@pytest.mark.parametrize("pass_through_environment_vars_template", (True, False))
+def test_config_as_extension(monkeypatch, run_hopic, pass_through_environment_vars_template):
     """
     'config' item in hopic config yaml file should extend the existing config, not completely replace it.
     """
@@ -293,17 +294,25 @@ def test_config_as_extension(monkeypatch, run_hopic):
 
     def template(volume_vars):
         inner_template_called.append(True)
-        return dedent(
-            """\
-              pass-through-environment-vars:
-                - THE_ENVIRONMENT_1
+        template = ""
+        if pass_through_environment_vars_template:
+            template = dedent(
+                """\
+                  pass-through-environment-vars:
+                    - THE_ENVIRONMENT_1
+                """
+            )
 
+        template += dedent(
+            """\
               phases:
                 test:
                   variant:
                     - echo 'bob'
             """
         )
+
+        return template
 
     class TestTemplatePackage:
         name = template_pkg

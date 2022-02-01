@@ -406,10 +406,10 @@ def load_config_section(cfg):
     cfg.pop('pip', None)
     pass_through_environment_vars_item = cfg.pop("pass-through-environment-vars", None)
     if pass_through_environment_vars_item:
-        config_item["pass-through-environment-vars"].extend(
+        config_item.setdefault("pass-through-environment-vars", []).extend(
             environment_var
             for environment_var in pass_through_environment_vars_item
-            if environment_var not in config_item.get("pass-through-environment-vars", {})
+            if environment_var not in config_item.get("pass-through-environment-vars", [])
         )
     cfg.update(config_item)
     return cfg
