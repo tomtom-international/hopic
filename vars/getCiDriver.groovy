@@ -565,6 +565,7 @@ class CiDriver {
   private config_file_content = null
   private HopicEventCallbacks event_callbacks = null
   private node_allocation_event_id = 0
+  private is_submit_step_started = false
 
   private final default_node_expr = "Linux && Docker"
 
@@ -1177,7 +1178,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
         this.steps.println("\033[33m[warning] ignoring fatal error ${e} during on_submitting_build\033[39m")
       }
     }
-    this.may_submit_result = this.may_submit_result && steps.currentBuild.currentResult == 'SUCCESS'
+    this.may_submit_result = this.may_submit_result && (steps.currentBuild.currentResult == 'SUCCESS' || this.is_submit_step_started)
     return this.may_submit_result
   }
 
@@ -1881,6 +1882,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
               return closure()
             }
             maybe_timeout {
+              this.is_submit_step_started = true
               this.subcommand_with_credentials(
                   cmd + hopic_extra_arguments,
                   'submit'
