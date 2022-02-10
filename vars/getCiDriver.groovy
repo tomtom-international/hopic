@@ -550,7 +550,7 @@ class CiDriver {
   private change_bundle      = null
   private submit_info        = [:]
   private change             = null
-  private source_commit      = null
+  private source_commit      = "HEAD"
   private target_commit      = null
   private may_submit_result  = null
   private may_publish_result = null
@@ -1325,16 +1325,6 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   }
 
   /**
-    * Get the currently known source reference
-    *
-    * @pre source commit has to be initialized (by calling "build" or "on_build_node"
-    */ 
-  public String get_source_commit() { 
-    assert this.source_commit != null
-    return this.source_commit
-  }
-
-  /**
    * Unstash everything previously stashed on other nodes that we didn't yet unstash here.
    *
    * @pre this has to be executed on a node
@@ -1432,9 +1422,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
     return this.on_node([node_expr: node_expr, exec_name: params.name]) {
       return this.with_hopic { cmd ->
-        def clean = params.getOrDefault('clean', false)
-        this.ensure_commit_is_pinned(clean)
-        this.ensure_checkout(cmd, clean)
+        this.ensure_checkout(cmd, params.getOrDefault('clean', false))
         this.ensure_unstashed()
         return closure(cmd)
       }
@@ -1907,52 +1895,6 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     }
   }
 
-  /**
-   * @pre this has to be executed on a node
-   */
-  private def ensure_commit_is_pinned(boolean clean) {
-    if (this.source_commit == null || this.pip_constraints == null) {
-      this.track_call(
-        call_name: 'on_variant_init',
-        on_start: { this.event_callbacks.on_variant_start("hopic-versions-pinning", "hopic-init", null) },
-        on_end: { Exception e -> this.event_callbacks.on_variant_end("hopic-versions-pinning", "hopic-init", e) }
-      ) {
-        this.with_hopic("hopic-init") { cmd, venv ->
-          /*
-          * We're splitting the enumeration of phases and variants from their execution in order to
-          * enable Jenkins to execute the different variants within a phase in parallel.
-          *
-          * In order to do this we only check out the CI config file to the orchestrator node.
-          */
-          def scm = steps.checkout(steps.scm)
-          // Make sure hopic will prepare workspace (in case on_build_node is used before this method)
-          this.checkouts.remove(get_executor_identifier())
-
-          // Don't trust Jenkin's scm.GIT_COMMIT because it sometimes lies
-          steps.env.GIT_COMMIT          = steps.sh(script: 'LC_ALL=C.UTF-8 TZ=UTC git rev-parse HEAD',
-                                                  label: 'Hopic (internal): determine current commit (because Jenkins lies!)',
-                                                  returnStdout: true).trim()
-          steps.env.GIT_COMMITTER_NAME  = scm.GIT_COMMITTER_NAME
-          steps.env.GIT_COMMITTER_EMAIL = scm.GIT_COMMITTER_EMAIL
-          steps.env.GIT_AUTHOR_NAME     = scm.GIT_AUTHOR_NAME
-          steps.env.GIT_AUTHOR_EMAIL    = scm.GIT_AUTHOR_EMAIL
-
-          this.source_commit = steps.env.GIT_COMMIT
-          // Force a full based checkout & change application, instead of relying on the checkout done above, to ensure that we're building the list of phases and
-          // variants to execute (below) using the final config file.
-          this.ensure_checkout(cmd, clean)
-
-          // Pin the currently installed pip packages to ensure all variants use the same templates
-          this.pip_constraints = steps.sh(
-              script: "${venv}/bin/python -m pip freeze",
-              label: "Get list of installed pip packages",
-              returnStdout: true,
-          ).replaceAll(/(?m)^[A-Za-z0-9-_.]+ *@.+$/, "") // Remove any URL constraints, as adding support for those has proven troublesome
-        }
-      }
-    }
-  }
-
   public def build(Map buildParams = [:]) {
     this.track_call(on_end: { Exception e -> this.event_callbacks.on_build_end(e) }) {
       def clean = buildParams.getOrDefault('clean', false)
@@ -1962,13 +1904,46 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       this.extend_build_properties()
       this.decorate_output {
         def (phases, is_publishable_change, submit_meta, locks) = this.on_node(node_expr: default_node, exec_name: "hopic-init", phase: 'hopic-init', variant: 'hopic-init') {
-          this.ensure_commit_is_pinned(clean)
-          return this.with_hopic("hopic-init") { cmd ->
-            this.track_call(
-              call_name: 'on_variant_init',
-              on_start: { this.event_callbacks.on_variant_start("hopic-getinfo", "hopic-init", null) },
-              on_end: { Exception e -> this.event_callbacks.on_variant_end("hopic-getinfo", "hopic-init", e) }
-            ) {
+          this.track_call(
+            call_name: 'on_variant_init',
+            on_start: { this.event_callbacks.on_variant_start("hopic-init", "hopic-init", null) },
+            on_end: { Exception e -> this.event_callbacks.on_variant_end("hopic-init", "hopic-init", e) }) {
+            return this.with_hopic("hopic-init") { cmd, venv ->
+              def workspace = steps.pwd()
+
+              /*
+              * We're splitting the enumeration of phases and variants from their execution in order to
+              * enable Jenkins to execute the different variants within a phase in parallel.
+              *
+              * In order to do this we only check out the CI config file to the orchestrator node.
+              */
+              def scm = steps.checkout(steps.scm)
+              // Make sure hopic will prepare workspace (in case on_build_node is used before this method)
+              this.checkouts.remove(get_executor_identifier())
+
+              // Don't trust Jenkin's scm.GIT_COMMIT because it sometimes lies
+              steps.env.GIT_COMMIT          = steps.sh(script: 'LC_ALL=C.UTF-8 TZ=UTC git rev-parse HEAD',
+                                                      label: 'Hopic (internal): determine current commit (because Jenkins lies!)',
+                                                      returnStdout: true).trim()
+              steps.env.GIT_COMMITTER_NAME  = scm.GIT_COMMITTER_NAME
+              steps.env.GIT_COMMITTER_EMAIL = scm.GIT_COMMITTER_EMAIL
+              steps.env.GIT_AUTHOR_NAME     = scm.GIT_AUTHOR_NAME
+              steps.env.GIT_AUTHOR_EMAIL    = scm.GIT_AUTHOR_EMAIL
+
+              if (steps.env.CHANGE_TARGET) {
+                this.source_commit = steps.env.GIT_COMMIT
+              }
+              // Force a full based checkout & change application, instead of relying on the checkout done above, to ensure that we're building the list of phases and
+              // variants to execute (below) using the final config file.
+              this.ensure_checkout(cmd, clean)
+
+              // Pin the currently installed pip packages to ensure all variants use the same templates
+              this.pip_constraints = steps.sh(
+                  script: "${venv}/bin/python -m pip freeze",
+                  label: "Get list of installed pip packages",
+                  returnStdout: true,
+              ).replaceAll(/(?m)^[A-Za-z0-9-_.]+ *@.+$/, "") // Remove any URL constraints, as adding support for those has proven troublesome
+
               def phases = steps.readJSON(text: steps.sh(
                   script: "${cmd} getinfo",
                   label: 'Hopic: retrieving execution graph',
