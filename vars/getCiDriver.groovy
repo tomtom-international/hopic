@@ -1280,7 +1280,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   /**
     * Get the currently known source reference
     *
-    * @pre source commit has to be initialized
+    * @pre source commit has to be initialized (by calling "build" or "on_build_node"
     */ 
   public String get_source_commit() { 
     assert this.source_commit != null
@@ -1385,7 +1385,9 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
     return this.on_node([node_expr: node_expr, exec_name: params.name]) {
       return this.with_hopic { cmd ->
-        this.ensure_checkout(cmd, params.getOrDefault('clean', false))
+        def clean = params.getOrDefault('clean', false)
+        this.ensure_commit_is_pinned(clean)
+        this.ensure_checkout(cmd, clean)
         this.ensure_unstashed()
         return closure(cmd)
       }
@@ -1860,12 +1862,12 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   /**
    * @pre this has to be executed on a node
    */
-  private def ensure_repo_pinning() {
+  private def ensure_commit_is_pinned(boolean clean) {
     if (this.source_commit == null || this.pip_constraints == null) {
       this.track_call(
         call_name: 'on_variant_init',
-        on_start: { this.event_callbacks.on_variant_start("hopic-init", "versions-pinning", null) },
-        on_end: { Exception e -> this.event_callbacks.on_variant_end("hopic-init", "versions-pinning", e) }
+        on_start: { this.event_callbacks.on_variant_start("hopic-versions-pinning", "hopic-init", null) },
+        on_end: { Exception e -> this.event_callbacks.on_variant_end("hopic-versions-pinning", "hopic-init", e) }
       ) {
         this.with_hopic("hopic-init") { cmd, venv ->
           /*
@@ -1912,12 +1914,12 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       this.extend_build_properties()
       this.decorate_output {
         def (phases, is_publishable_change, submit_meta, locks) = this.on_node(node_expr: default_node, exec_name: "hopic-init", phase: 'hopic-init', variant: 'hopic-init') {
-          this.ensure_repo_pinning()
+          this.ensure_commit_is_pinned(clean)
           return this.with_hopic("hopic-init") { cmd ->
             this.track_call(
               call_name: 'on_variant_init',
-              on_start: { this.event_callbacks.on_variant_start("hopic-init", "getinfo", null) },
-              on_end: { Exception e -> this.event_callbacks.on_variant_end("hopic-init", "getinfo", e) }
+              on_start: { this.event_callbacks.on_variant_start("hopic-getinfo", "hopic-init", null) },
+              on_end: { Exception e -> this.event_callbacks.on_variant_end("hopic-getinfo", "hopic-init", e) }
             ) {
               def phases = steps.readJSON(text: steps.sh(
                   script: "${cmd} getinfo",
