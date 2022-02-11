@@ -1923,6 +1923,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
               on_start: { this.event_callbacks.on_variant_start("hopic-getinfo", "hopic-init", null) },
               on_end: { Exception e -> this.event_callbacks.on_variant_end("hopic-getinfo", "hopic-init", e) }
             ) {
+              this.ensure_checkout(cmd, clean)
               def phases = steps.readJSON(text: steps.sh(
                   script: "${cmd} getinfo",
                   label: 'Hopic: retrieving execution graph',
