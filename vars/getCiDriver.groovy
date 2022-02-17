@@ -1320,7 +1320,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     }
   }
 
-  private void archive_artifacts_if_enabled(Map meta, String workspace, boolean error_occurred, Closure get_build_info) {
+  private void archive_artifacts_if_enabled(Map meta, String workspace, boolean error_occurred, String phase, String variant, Closure get_build_info) {
     def archiving_cfg = meta.containsKey('archive') ? 'archive' : meta.containsKey('fingerprint') ? 'fingerprint' : null
     if (!archiving_cfg) {
       return
@@ -1344,6 +1344,11 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
               fingerprint: meta.archive.getOrDefault('fingerprint', true),
               allowEmptyArchive: meta.archive['allow-missing']
             )
+          try {
+            this.event_callbacks.on_archive_artifacts(pattern, phase, variant)
+          } catch(Exception e) {
+            this.steps.println("\033[33m[warning] ignoring fatal error ${e} during on_archive_artifacts\033[39m")
+          }
         } else if (archiving_cfg == 'fingerprint') {
           steps.fingerprint(pattern)
         }
@@ -1619,7 +1624,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
           error_occurred = true // Jenkins only sets its currentResult to Failure after all user code is executed
           throw e
         } finally {
-          this.archive_artifacts_if_enabled(meta, workspace, error_occurred) { server_id ->
+          this.archive_artifacts_if_enabled(meta, workspace, error_occurred, phase, variant) { server_id ->
             if (!artifactoryBuildInfo.containsKey(server_id)) {
               def newBuildInfo = steps.Artifactory.newBuildInfo()
               def (build_name, build_identifier) = get_build_id()
@@ -1636,6 +1641,11 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
                   testResults: result,
                   allowEmptyResults: meta.junit['allow-missing'],
                   skipMarkingBuildUnstable: meta.junit['allow-failures'])
+              }
+              try {
+                this.event_callbacks.on_junit(meta.junit['test-results'], phase, variant)
+              } catch(Exception e) {
+                this.steps.println("\033[33m[warning] ignoring fatal error ${e} during on_junit\033[39m")
               }
             }
           }
