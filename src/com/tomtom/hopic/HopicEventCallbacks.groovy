@@ -165,4 +165,23 @@ public class HopicEventCallbacks {
   * @param phase      The phase where the variant is part of
   */
   def on_phase_end(String phase) {}
+
+  /**
+   * Gets called after a junit report is uploaded.
+   * 
+   * @param reports   A list of patterns where the reports should looked in.
+   * @param phase     A phase name where the junit actions is.
+   * @param variant   A variant name where the junit action is.
+   */
+  def on_junit(List<String> reports, String phase, String variant) {}
+
+  /**
+  * Gets called after artifacts by a specific pattern are archived.
+  * This method is called for every pattern even if no artifacts were archived.
+  * 
+  * @param pattern  A pattern used to archive artifacts.
+  * @param phase    A phase name where the archive action is.
+  * @param variant  A variant name where the archive action is.
+  */
+  def on_archive_artifacts(String pattern, String phase, String variant) {}
 } 
