@@ -162,6 +162,12 @@ def determine_version(
                         params['dirty_date'] = determine_source_date(repo)
 
                     version = gitversion.to_version(**params)
+                    if version is None and log.isEnabledFor(logging.WARNING):
+                        log.warning(
+                            "Failed to determine version for %s from tags:\n%s",
+                            repo.head.commit,
+                            "\n".join(f"    {tag.name}={tag.object.hexsha}^{{}}={tag.commit.hexsha}" for tag in repo.tags),
+                        )
         except (git.InvalidGitRepositoryError, git.NoSuchPathError, git.CommandError):
             pass
 
