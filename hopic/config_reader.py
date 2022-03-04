@@ -28,6 +28,7 @@ import inspect
 import io
 import itertools
 import json
+import keyword
 import logging
 from numbers import Real
 import os
@@ -801,6 +802,14 @@ class VariantCmd:
         self._config_file = config_file
         self._volume_vars = volume_vars
 
+    def _finally(self, value, *, name: str, keys: typing.AbstractSet[str]):
+        cmd_list = list(
+            FinallyCmd(phase=self._phase, variant=self._variant + "-finally", config_file=self._config_file, volume_vars=self._volume_vars).process_cmd_list(
+                flatten_command_list(self._phase, self._variant + "-finally", value, self._config_file)
+            )
+        )
+        yield name, cmd_list
+
     def sh(self, value, *, name: str, keys: typing.AbstractSet[str]):
         if isinstance(value, str):
             value = shlex.split(value)
@@ -1132,7 +1141,10 @@ class VariantCmd:
     def process_cmd_item(self, name, value, keys: typing.AbstractSet[str]):
         if "_" not in name:
             try:
-                key_proc = getattr(self, name.replace("-", "_"))
+                func_name = name.replace("-", "_")
+                if func_name in keyword.kwlist:
+                    func_name = "_" + func_name
+                key_proc = getattr(self, func_name)
             except AttributeError:
                 pass
             else:
@@ -1154,6 +1166,7 @@ class VariantCmd:
 
     def process_cmd_list(self, cmds: typing.Iterable[typing.Mapping]) -> typing.Iterable:
         seen_sh = False
+        seen_finally_global = False
         global_timeout = None
         summed_timeout = 0
 
@@ -1175,6 +1188,14 @@ class VariantCmd:
 
             if "sh" in cmd:
                 seen_sh = True
+                if seen_finally_global:
+                    raise ConfigurationError(
+                        f"`{self._phase}.{self._variant}[{cmd_idx}]` attempting to define sh list after the global finally",
+                        file=self._config_file,
+                    )
+
+            if "finally" in cmd and "sh" not in cmd:
+                seen_finally_global = True
 
             if "timeout" in cmd:
                 if not seen_sh:
@@ -1198,6 +1219,39 @@ class VariantCmd:
                         file=self._config_file,
                     )
 
+            yield cmd
+
+
+class FinallyCmd(VariantCmd):
+    cmd_rejected_fields = frozenset(
+        {
+            "archive",
+            "changed-files",
+            "finally",
+            "fingerprint",
+            "foreach",
+            "junit",
+            "node-label",
+            "run-on-change",
+            "stash",
+            "wait-on-full-previous-phase",
+            "worktrees",
+        }
+    )
+
+    def __init__(self, *, phase: str, variant: str, config_file: PathLike, volume_vars: typing.Mapping):
+        super().__init__(phase=phase, variant=variant, config_file=config_file, volume_vars=volume_vars)
+
+    def process_cmd_list(self, cmds: typing.Iterable[typing.Mapping]) -> typing.Iterable:
+        seen_sh = False
+        for cmd_idx, cmd in enumerate(super().process_cmd_list(cmds)):
+            if "sh" in cmd:
+                seen_sh = True
+            if "timeout" in cmd and not seen_sh:
+                raise ConfigurationError(
+                    f"`{self._phase}.{self._variant}[{cmd_idx}]` global `timeout` for `finally` is not supported",
+                    file=self._config_file,
+                )
             yield cmd
 
 
