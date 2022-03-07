@@ -137,6 +137,9 @@ def build_variant(
         volumes = cfg['volumes'].copy()
         global_timeout = None
         global_timeout_expire_time = None
+        global_finally_blocks = [cmd["finally"] for cmd in cmds if "finally" in cmd and "sh" not in cmd]
+        finally_cmds = {"sh-bound": [], "global": [cmd for finally_block in global_finally_blocks for cmd in finally_block]}
+
         for cmd in cmds:
             worktrees = {}
             foreach = None
@@ -194,6 +197,9 @@ def build_variant(
                     )
                 elif timeout is not None:
                     log.debug("restricting current command to a maximum of %f seconds", timeout)
+
+                if "finally" in cmd:
+                    finally_cmds["sh-bound"].extend(cmd["finally"])
 
             try:
                 cmd_volumes_from = cmd['volumes-from']
@@ -460,9 +466,11 @@ def build_variant(
                             **run_args,
                         )
                     except subprocess.CalledProcessError as e:
+                        handle_finally(finally_cmds["sh-bound"], finally_cmds["global"], variant, hopic_git_info)
                         log.error("Command fatally terminated with exit code %d", e.returncode)
                         ctx.exit(e.returncode)
                     except (FatalSignal, subprocess.TimeoutExpired) as exc:
+                        handle_finally(finally_cmds["sh-bound"], finally_cmds["global"], variant, hopic_git_info)
                         if cidfile and os.path.isfile(cidfile):
                             # If we're being signalled to shut down ensure the spawned docker container also gets cleaned up.
                             with open(cidfile) as f:
@@ -485,6 +493,9 @@ def build_variant(
                         else:
                             assert isinstance(exc, subprocess.TimeoutExpired)
                             raise StepTimeoutExpiredError(timeout, cmd=" ".join(cmd))
+                    except Exception as e:
+                        handle_finally(finally_cmds["sh-bound"], finally_cmds["global"], variant, hopic_git_info)
+                        raise e
                     for num, old_handler in old_handlers.items():
                         signal.signal(num, old_handler)
                 finally:
@@ -538,6 +549,8 @@ def build_variant(
                     restore_mtime_from_git(repo)
                     worktree_commits[subdir][1] = str(submit_commit)
                     log.info('%s', repo.git.show(submit_commit, format='fuller', stat=True))
+
+        handle_finally(finally_cmds["sh-bound"], finally_cmds["global"], variant, hopic_git_info)
 
         if worktree_commits:
             with git.Repo(ctx.obj.workspace) as repo, repo.config_writer() as git_cfg:
@@ -624,3 +637,15 @@ def build(ctx, phase, variant, dry_run):
                 continue
 
             (*_,) = build_variant(variant=curvariant, cmds=cmds, hopic_git_info=hopic_git_info)
+
+
+def handle_finally(cmd_finally_cmds, global_finally_cmds, variant, hopic_git_info):
+    try:
+        if cmd_finally_cmds:
+            (*_,) = build_variant(f"{variant}-finally", cmd_finally_cmds, hopic_git_info)
+    except Exception:
+        log.warning("error in %s-finally:", variant, exc_info=True)
+        raise
+    finally:
+        if global_finally_cmds:
+            (*_,) = build_variant(f"{variant}-finally", global_finally_cmds, hopic_git_info)
