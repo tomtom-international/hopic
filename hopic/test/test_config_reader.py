@@ -1822,3 +1822,68 @@ def test_post_submit():
 
     (out,) = cfg["post-submit"]["some-phase"]
     assert out["sh"] == ["echo", "hello Bob"]
+
+
+def test_finally_variant():
+    cfg = config_reader.read(
+        config_file(
+            "test-hopic-config.yaml",
+            dedent(
+                """\
+                phases:
+                    some-phase:
+                        some-variant:
+                            - sh: echo 'hello Bob'
+                              finally:
+                                - "echo 'sh finally'"
+                            - finally:
+                                - echo "finally"
+                """
+            ),
+        ),
+        {"WORKSPACE": None},
+    )
+    out = [elem for cmd in cfg["phases"]["some-phase"]["some-variant"] if "finally" in cmd for elem in cmd["finally"]]
+    assert out[0]["sh"] == ["echo", "sh finally"]
+    assert out[1]["sh"] == ["echo", "finally"]
+
+
+def test_finally_variant_forbidden_keyword():
+    with pytest.raises(ConfigurationError, match=r"`some-phase.some-variant-finally\[0\]` contains forbidden fields stash"):
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    """\
+                    phases:
+                        some-phase:
+                            some-variant:
+                                - sh: echo 'hello Bob'
+                                  finally:
+                                    - sh: "echo 'sh finally'"
+                                      stash: "invalid"
+                    """
+                ),
+            ),
+            {"WORKSPACE": None},
+        )
+
+
+def test_sh_command_after_global_finally_error():
+    with pytest.raises(ConfigurationError, match=r"`some-phase.some-variant\[1\]` attempting to define sh list after the global finally"):
+        config_reader.read(
+            config_file(
+                "test-hopic-config.yaml",
+                dedent(
+                    """\
+                    phases:
+                        some-phase:
+                            some-variant:
+                                - finally:
+                                    - sh: "echo 'sh finally'"
+                                - sh: "echo hello world"
+                    """
+                ),
+            ),
+            {"WORKSPACE": None},
+        )
