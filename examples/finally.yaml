@@ -1,0 +1,14 @@
+phases:
+  a:
+    x:
+      - sh: echo "hello world"
+        finally: 
+          - echo "hello world finally"
+      - sh: invalid_cmd
+        finally: 
+          - echo "invalid cmd finally"
+      - sh: echo "never reach this point"
+        finally:
+          - echo "never execute finally"
+      - finally:
+          - echo "last finally"
