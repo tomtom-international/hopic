@@ -1564,3 +1564,60 @@ def test_global_timeout_expire(monkeypatch, run_hopic):
     assert timeout_msgs, f"Didn't find any timeout related messages matching '{timeout_msg_re.pattern}'"
 
     assert "global" in timeout_msgs[-1], "timeout expiration wasn't caused by the _global_ timeout"
+
+
+def test_variant_finally(monkeypatch, run_hopic):
+    username = "test_username"
+    password = "super_secret"
+    credential_id = "test_credentialId"
+    project_name = "test_project"
+
+    expected_cmds = [("command", "a"), ("invalid", "cmd"), ("final", "one"), ("invalid", "cmd", "finally"), (username, password)]
+
+    username = "test_username"
+    password = "super_secret"
+    credential_id = "test_credentialId"
+    project_name = "test_project"
+
+    def get_credential_id(project_name_arg, cred_id):
+        assert credential_id == cred_id
+        assert project_name == project_name_arg
+        return username, password
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        assert tuple(args) == expected_cmds.pop(0)
+        if "invalid" in args:
+            raise subprocess.CalledProcessError(1, args)
+
+    monkeypatch.setattr(credentials, "get_credential_by_id", get_credential_id)
+    monkeypatch.setattr(subprocess, "check_call", mock_check_call)
+
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(
+            f"""
+            project-name: {project_name}
+            phases:
+              a:
+                x:
+                  - sh: command a
+                    finally:
+                      - final one
+                  - sh: invalid cmd
+                    finally:
+                      - invalid cmd finally
+                  - sh: echo "never reach this point"
+                    finally:
+                      - "never execute finally"
+                  - finally:
+                    - with-credentials:
+                        - id: {credential_id}
+                          type: username-password
+                          username-variable: 'TEST_USER'
+                          password-variable: 'TEST_PASSWORD'
+                    - $TEST_USER $TEST_PASSWORD
+            """
+        ),
+    )
+    assert result.exit_code != 0
+    assert expected_cmds == []
