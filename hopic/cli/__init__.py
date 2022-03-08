@@ -1320,6 +1320,10 @@ def getinfo(
             if key == "timeout" and "sh" not in cmd:
                 # Return _global_ timeout (not "sh"-specific) only
                 pass
+            elif key == "finally":
+                for final_cmd in cmd["finally"]:
+                    info.update(append_meta_from_cmd(info, final_cmd, permitted_fields))
+                continue
             elif key not in permitted_fields:
                 continue
 
