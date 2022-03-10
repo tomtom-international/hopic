@@ -1621,3 +1621,30 @@ def test_variant_finally(monkeypatch, run_hopic):
     )
     assert result.exit_code != 0
     assert expected_cmds == []
+
+
+def test_phase_variant_variables(monkeypatch, run_hopic):
+    expected_cmds = [("command", "a", "x"), ("sh", "a", "x"), ("final", "a", "x")]
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        assert tuple(args) == expected_cmds.pop(0)
+
+    monkeypatch.setattr(subprocess, "check_call", mock_check_call)
+
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(
+            """
+            phases:
+              a:
+                x:
+                  - sh: command $HOPIC_PHASE $HOPIC_VARIANT
+                    finally:
+                      - sh $HOPIC_PHASE $HOPIC_VARIANT
+                  - finally:
+                    - final $HOPIC_PHASE $HOPIC_VARIANT
+            """
+        ),
+    )
+    assert result.exit_code == 0
+    assert expected_cmds == []
