@@ -565,7 +565,6 @@ def process_prepare_source_tree(
             return version.prerelease[:len(hotfix) + 1] == ("hotfix", *hotfix)
 
         if bump['policy'] == 'conventional-commits' and target_ref is not None:
-            has_fix = False
             for commit in source_commits:
                 if commit.has_breaking_change():
                     if bump['reject-breaking-changes-on'].match(target_ref):
@@ -580,16 +579,6 @@ def process_prepare_source_tree(
                     elif hotfix:
                         raise VersioningError(
                             f"New features are not allowed on hotfix branch '{target_ref}', but commit '{commit.hexsha}' contains one:\n{commit.message}")
-                if commit.has_fix():
-                    has_fix = True
-            # intended to deal with apply-modality-change
-            if not source_commits and change_message is not None and change_message.has_fix():
-                has_fix = True
-            if hotfix and bump["on-every-change"] and not has_fix:
-                raise VersioningError(
-                    f"The presence of a 'fix' commit is mandatory on hotfix branch '{target_ref}', but none of these commits contains one:\n"
-                    + ', '.join(str(commit) for commit in source_commits)
-                )
 
         version_bumped = False
         if is_version_bump_enabled(bump, is_publish_from_branch_allowed=is_publish_allowed):
