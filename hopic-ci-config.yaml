@@ -77,7 +77,7 @@ phases:
 
     python3.9:
       - timeout: 300
-      - docker build --network=host --build-arg=PYTHON_VERSION=3.9 -t hopic-python:3.9-slim-git hopic/test/docker-images/python
+      - docker build --network=host --build-arg=PYTHON_VERSION=3.9.10 -t hopic-python:3.9-slim-git hopic/test/docker-images/python
 
     python3.10:
       - timeout: 300
