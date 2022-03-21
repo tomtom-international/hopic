@@ -1088,6 +1088,35 @@ def test_wait_on_full_previous_phase_dependency_run_on_change():
         )
 
 
+def test_wait_on_full_previous_phase_dependency_similar_run_on_change():
+    cfg = config_reader.read(
+        config_file(
+            "test-hopic-config.yaml",
+            dedent(
+                """\
+                phases:
+                    x:
+                      a:
+                        - run-on-change: only
+                    y:
+                      a:
+                        - run-on-change: only
+                          wait-on-full-previous-phase: no
+                """
+            ),
+        ),
+        {"WORKSPACE": None},
+    )
+    (x_a,) = cfg["phases"]["x"]["a"]
+    (y_a,) = cfg["phases"]["y"]["a"]
+    assert "run-on-change" in x_a
+    assert x_a["run-on-change"] == config_reader.RunOnChange.only
+    assert "run-on-change" in y_a
+    assert y_a["run-on-change"] == config_reader.RunOnChange.only
+    assert "wait-on-full-previous-phase" in y_a
+    assert y_a["wait-on-full-previous-phase"] is False
+
+
 def test_wait_on_full_previous_phase_dependency_default_yes():
     cfg = config_reader.read(
         config_file(

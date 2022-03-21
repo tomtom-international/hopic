@@ -1483,12 +1483,16 @@ def read(config, volume_vars, extension_installer=lambda *args: None):
             if variant not in variant_node_label:
                 variant_node_label[variant] = None
                 variant_node_label_phase[variant] = phasename
-            if wait_on_full_previous_phase is False and run_on_change not in (None, RunOnChange.default):
-                raise ConfigurationError(
-                    f"`{phasename}`.`{variant}`.`wait-on-full-previous-phase` disabled but "
-                    f"`{phasename}`.`{variant}`.`run-on-change` set to a value other than {RunOnChange.default}",
-                    file=config,
-                )
+
+            if wait_on_full_previous_phase is False:
+                run_on_change_previous_phase = next((cmd["run-on-change"] for cmd in cfg["phases"][previous_phase][variant] if "run-on-change" in cmd), None)
+
+                if run_on_change is not run_on_change_previous_phase:
+                    raise ConfigurationError(
+                        f"`{phasename}`.`{variant}`.`wait-on-full-previous-phase` disabled but "
+                        f"`{phasename}`.`{variant}`.`run-on-change` set to a value other than {run_on_change_previous_phase}",
+                        file=config,
+                    )
             if (
                 wait_on_full_previous_phase is None
                 and previous_phase is not None
