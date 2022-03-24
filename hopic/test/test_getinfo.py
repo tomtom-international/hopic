@@ -380,3 +380,34 @@ def test_post_submit_summed_timeout(run_hopic):
     output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
 
     assert output["timeout"] == 42 + 37
+
+
+def test_finally_with_credentials_format(run_hopic):
+    (result,) = run_hopic(
+        ("getinfo",),
+        config=dedent(
+            """\
+              phases:
+                build:
+                  a:
+                  - finally:
+                    - with-credentials: test_id
+                    - with-credentials:
+                        id: second_id
+                    - with-credentials:
+                        - id: third_id
+                        - id: fourth_id
+            """
+        ),
+    )
+
+    assert result.exit_code == 0
+    output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
+
+    with_credentials = output["build"]["a"]["with-credentials"]
+    assert isinstance(with_credentials, Sequence)
+    assert len(with_credentials) == 4
+    assert "test_id" in with_credentials[0]["id"]
+    assert "second_id" in with_credentials[1]["id"]
+    assert "third_id" in with_credentials[2]["id"]
+    assert "fourth_id" in with_credentials[3]["id"]

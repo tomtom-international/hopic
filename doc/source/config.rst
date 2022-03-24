@@ -139,6 +139,16 @@ During a build the following configuration variables are available.
 ``BUILD_DURATION`` will contain the amount of seconds passed since ``GIT_COMMIT_TIME``.
 Under the assumption that ``GIT_COMMIT_TIME`` is (close enough) to the start of the build this represents the time the build has taken so far.
 
+.. option:: HOPIC_PHASE
+
+``HOPIC_PHASE`` will contain the name of the current executing phase.
+This name is only available during phases specified within ``phases``!
+
+.. option:: HOPIC_VARIANT
+
+``HOPIC_VARIANT`` will contain the name of the current executing variant.
+This name is only available during variants specified within ``phases``!
+
 Pre-defined environment variables
 ---------------------------------
 
@@ -1089,3 +1099,35 @@ With yaml-generation.py:
 
 .. literalinclude:: ../../examples/embed/yaml-generation.py
     :language: python
+
+Finally
+-------
+
+.. option:: finally
+
+The option ``finally`` can be used within a variant to specify actions that should be executed regardless of an earlier failure.
+Intended actions for ``finally`` could be metrics reporting or resource cleanup actions.
+
+Finally is syntactically the same as a variant, however the following keywords are forbidden:
+
+* :option:`finally`
+* :option:`fingerprint`
+* :option:`foreach`
+* :option:`junit`
+* :option:`node-label`
+* :option:`run-on-change`
+* :option:`stash`
+* :option:`wait-on-full-previous-phase`
+* :option:`worktrees`
+
+When there is no ``sh`` block next to the ``finally`` block, the ``finally`` block is considered global for the variant.
+It is *not* allowed to specify a ``sh`` command after the global ``finally`` is defined.
+The global ``finally`` is always executed last within the variant.
+
+If the ``finally`` is specified on the same level as an ``sh`` command, the ``finally`` block is only executed when the
+corresponding ``sh`` block was executed, but not if an early command failed.
+
+:option:`timeout` is supported, but only when attached to a command.
+
+.. literalinclude:: ../../examples/finally.yaml
+    :language: yaml
