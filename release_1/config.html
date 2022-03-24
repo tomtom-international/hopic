@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    <title>Configuration &#8212; Hopic 1.54.1.dev207+g4ce7dcca documentation</title>
+    <title>Configuration &#8212; Hopic 1.54.1.dev18+g306f9766 documentation</title>
     <link rel="stylesheet" href="_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
     <link rel="stylesheet" type="text/css" href="_static/banner.css" />
@@ -34,7 +34,7 @@
         <li class="right" >
           <a href="intro.html" title="Introduction"
              accesskey="P">previous</a> |</li>
-        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.54.1.dev207+g4ce7dcca documentation</a> &#187;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.54.1.dev18+g306f9766 documentation</a> &#187;</li> 
       </ul>
     </div>  
 
@@ -244,6 +244,20 @@ On Jenkins it will contain the URL for the build’s overview page.</p>
 
 <p><code class="docutils literal notranslate"><span class="pre">BUILD_DURATION</span></code> will contain the amount of seconds passed since <code class="docutils literal notranslate"><span class="pre">GIT_COMMIT_TIME</span></code>.
 Under the assumption that <code class="docutils literal notranslate"><span class="pre">GIT_COMMIT_TIME</span></code> is (close enough) to the start of the build this represents the time the build has taken so far.</p>
+<dl class="option">
+<dt id="cmdoption-arg-hopic-phase">
+<code class="descname">HOPIC_PHASE</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-hopic-phase" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p><code class="docutils literal notranslate"><span class="pre">HOPIC_PHASE</span></code> will contain the name of the current executing phase.
+This name is only available during phases specified within <code class="docutils literal notranslate"><span class="pre">phases</span></code>!</p>
+<dl class="option">
+<dt id="cmdoption-arg-hopic-variant">
+<code class="descname">HOPIC_VARIANT</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-hopic-variant" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p><code class="docutils literal notranslate"><span class="pre">HOPIC_VARIANT</span></code> will contain the name of the current executing variant.
+This name is only available during variants specified within <code class="docutils literal notranslate"><span class="pre">phases</span></code>!</p>
 </div>
 <div class="section" id="pre-defined-environment-variables">
 <h2>Pre-defined environment variables<a class="headerlink" href="#pre-defined-environment-variables" title="Permalink to this headline">¶</a></h2>
@@ -1714,6 +1728,50 @@ The command should output the part of the configuration file to standard output.
 </pre></div>
 </div>
 </div>
+<div class="section" id="finally">
+<h2>Finally<a class="headerlink" href="#finally" title="Permalink to this headline">¶</a></h2>
+<dl class="option">
+<dt id="cmdoption-arg-finally">
+<code class="descname">finally</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-arg-finally" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<p>The option <code class="docutils literal notranslate"><span class="pre">finally</span></code> can be used within a variant to specify actions that should be executed regardless of an earlier failure.
+Intended actions for <code class="docutils literal notranslate"><span class="pre">finally</span></code> could be metrics reporting or resource cleanup actions.</p>
+<p>Finally is syntactically the same as a variant, however the following keywords are forbidden:</p>
+<ul class="simple">
+<li><a class="reference internal" href="#cmdoption-arg-finally"><code class="xref std std-option docutils literal notranslate"><span class="pre">finally</span></code></a></li>
+<li><a class="reference internal" href="#cmdoption-arg-fingerprint"><code class="xref std std-option docutils literal notranslate"><span class="pre">fingerprint</span></code></a></li>
+<li><a class="reference internal" href="#cmdoption-arg-foreach"><code class="xref std std-option docutils literal notranslate"><span class="pre">foreach</span></code></a></li>
+<li><a class="reference internal" href="#cmdoption-arg-junit"><code class="xref std std-option docutils literal notranslate"><span class="pre">junit</span></code></a></li>
+<li><a class="reference internal" href="#cmdoption-arg-node-label"><code class="xref std std-option docutils literal notranslate"><span class="pre">node-label</span></code></a></li>
+<li><a class="reference internal" href="#cmdoption-arg-run-on-change"><code class="xref std std-option docutils literal notranslate"><span class="pre">run-on-change</span></code></a></li>
+<li><a class="reference internal" href="#cmdoption-arg-stash"><code class="xref std std-option docutils literal notranslate"><span class="pre">stash</span></code></a></li>
+<li><code class="xref std std-option docutils literal notranslate"><span class="pre">wait-on-full-previous-phase</span></code></li>
+<li><a class="reference internal" href="#cmdoption-arg-worktrees"><code class="xref std std-option docutils literal notranslate"><span class="pre">worktrees</span></code></a></li>
+</ul>
+<p>When there is no <code class="docutils literal notranslate"><span class="pre">sh</span></code> block next to the <code class="docutils literal notranslate"><span class="pre">finally</span></code> block, the <code class="docutils literal notranslate"><span class="pre">finally</span></code> block is considered global for the variant.
+It is <em>not</em> allowed to specify a <code class="docutils literal notranslate"><span class="pre">sh</span></code> command after the global <code class="docutils literal notranslate"><span class="pre">finally</span></code> is defined.
+The global <code class="docutils literal notranslate"><span class="pre">finally</span></code> is always executed last within the variant.</p>
+<p>If the <code class="docutils literal notranslate"><span class="pre">finally</span></code> is specified on the same level as an <code class="docutils literal notranslate"><span class="pre">sh</span></code> command, the <code class="docutils literal notranslate"><span class="pre">finally</span></code> block is only executed when the
+corresponding <code class="docutils literal notranslate"><span class="pre">sh</span></code> block was executed, but not if an early command failed.</p>
+<p><a class="reference internal" href="#cmdoption-arg-timeout"><code class="xref std std-option docutils literal notranslate"><span class="pre">timeout</span></code></a> is supported, but only when attached to a command.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span><span class="w"></span>
+<span class="w">  </span><span class="nt">a</span><span class="p">:</span><span class="w"></span>
+<span class="w">    </span><span class="nt">x</span><span class="p">:</span><span class="w"></span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">sh</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">echo &quot;hello world&quot;</span><span class="w"></span>
+<span class="w">        </span><span class="nt">finally</span><span class="p">:</span><span class="w"> </span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">echo &quot;hello world finally&quot;</span><span class="w"></span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">sh</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">invalid_cmd</span><span class="w"></span>
+<span class="w">        </span><span class="nt">finally</span><span class="p">:</span><span class="w"> </span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">echo &quot;invalid cmd finally&quot;</span><span class="w"></span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">sh</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">echo &quot;never reach this point&quot;</span><span class="w"></span>
+<span class="w">        </span><span class="nt">finally</span><span class="p">:</span><span class="w"></span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">echo &quot;never execute finally&quot;</span><span class="w"></span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">finally</span><span class="p">:</span><span class="w"></span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">echo &quot;last finally&quot;</span><span class="w"></span>
+</pre></div>
+</div>
+</div>
 </div>
 
 
@@ -1744,7 +1802,7 @@ The command should output the part of the configuration file to standard output.
         <li class="right" >
           <a href="intro.html" title="Introduction"
              >previous</a> |</li>
-        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.54.1.dev207+g4ce7dcca documentation</a> &#187;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.54.1.dev18+g306f9766 documentation</a> &#187;</li> 
       </ul>
     </div>
     <div class="footer" role="contentinfo">
