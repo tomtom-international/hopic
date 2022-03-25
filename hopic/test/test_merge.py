@@ -1846,10 +1846,9 @@ def test_hotfix_invalid_id(error_msg, hotfix_id, run_hopic):
     "msg_tag, error_msg",
     (
         ("refactor!", re.compile("[Bb]reaking changes are not allowed [io]n hotfix")),
-        ("feat"     , re.compile("[Nn]ew features are not allowed [io]n hotfix")),
-        ("chore"    , re.compile("presence of a 'fix' commit is mandatory")),
+        ("feat", re.compile("[Nn]ew features are not allowed [io]n hotfix")),
     ),
-    ids=("breaking-change", "new-feature", "not-fix"),
+    ids=("breaking-change", "new-feature"),
 )
 def test_hotfix_rejects(error_msg, msg_tag, run_hopic):
     init_version = "1.2.3"
