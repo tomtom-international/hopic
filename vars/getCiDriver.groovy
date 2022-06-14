@@ -1005,7 +1005,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
   }
 
   private def checkout(String cmd, boolean clean = false) {
-    return this.track_call(call_name: "on_workspace_preparation-${steps.env.NODE_NAME}", on_start: { this.event_callbacks.on_node_workspace_preparation_start(steps.env.NODE_NAME) }, on_end: { this.event_callbacks.on_node_workspace_preparation_end(steps.env.NODE_NAME, this) }) {
+    return this.track_call(call_name: "on_workspace_preparation-${steps.env.NODE_NAME}", on_start: { this.event_callbacks.on_node_workspace_preparation_start(steps.env.NODE_NAME) }, on_end: { this.event_callbacks.on_node_workspace_preparation_end(steps.env.NODE_NAME, this, cmd) }) {
       def tmpdir = steps.pwd(tmp: true)
       def workspace = steps.pwd()
 
