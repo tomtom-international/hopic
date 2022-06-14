@@ -113,7 +113,7 @@ public class HopicEventCallbacks {
   *
   * @param node Name of the current executing node
   */
-  def on_node_workspace_preparation_end(String node, hopic) {}
+  def on_node_workspace_preparation_end(String node, hopic, String hopic_cmd = "") {}
   
   /**
   * Gets called before build locks are being requested
