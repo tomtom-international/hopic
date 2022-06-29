@@ -42,10 +42,8 @@ def echo_cmd(fun, cmd, *args, dry_run=False, obfuscate=None, **kwargs):
         env = kwargs['env'].copy()
     except KeyError:
         env = os.environ.copy()
-    for key in list(env):
-        if key.startswith('LC_') or key in ('LANG', 'LANGUAGE'):
-            del env[key]
-    env['LANG'] = 'C.UTF-8'
+    # LC_ALL has precedence over all other LC_* environment variables, so overrides the rest
+    env["LC_ALL"] = "C.UTF-8"
     kwargs['env'] = env
 
     try:
