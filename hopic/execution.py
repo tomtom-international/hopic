@@ -29,7 +29,7 @@ def no_exec(*args, **kwargs):
 
 
 # Caching is not just an optimization: manipulating the locale multiple times is risky on some platforms
-@functools.cache
+@functools.lru_cache(maxsize=None)
 def determine_locale_envvars():
     # Prefer the current LC_CTYPE (character encoding) locale when it's already UTF-8
     if re.match(".*utf[-_]?8$", os.environ.get("LC_CTYPE", ""), re.IGNORECASE):
