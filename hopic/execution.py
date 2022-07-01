@@ -14,7 +14,10 @@
 
 import click
 import logging
+import functools
+import locale
 import os
+import re
 import shlex
 
 log = logging.getLogger(__name__)
@@ -23,6 +26,28 @@ log.addHandler(logging.NullHandler())
 
 def no_exec(*args, **kwargs):
     return 0
+
+
+# Caching is not just an optimization: manipulating the locale multiple times is risky on some platforms
+@functools.cache
+def determine_locale_envvars():
+    # Prefer the current LC_CTYPE (character encoding) locale when it's already UTF-8
+    if re.match(".*utf[-_]?8$", os.environ.get("LC_CTYPE", ""), re.IGNORECASE):
+        return {"LANG": "C", "LC_CTYPE": os.environ["LC_CTYPE"]}
+
+    # FreeBSD's preferred way of setting the encoding is to specify only the codeset name in LC_CTYPE without any language (and MacOS inherits this).
+    # This doesn't work on glibc based operating systems though (most Linux distros) so make it optional.
+    try:
+        locale.setlocale(locale.LC_CTYPE, "UTF-8")
+    except locale.Error:
+        pass
+    else:
+        return {"LANG": "C", "LC_CTYPE": "UTF-8"}
+
+    # C.UTF-8 works on all Linux distros (glibc really)
+    # Also LC_ALL has precedence over all other LC_* environment variables, so overrides the rest.
+    # So we can use that only if we're not setting any other LC_* vars.
+    return {"LC_ALL": "C.UTF-8"}
 
 
 def echo_cmd(fun, cmd, *args, dry_run=False, obfuscate=None, **kwargs):
@@ -42,8 +67,10 @@ def echo_cmd(fun, cmd, *args, dry_run=False, obfuscate=None, **kwargs):
         env = kwargs['env'].copy()
     except KeyError:
         env = os.environ.copy()
-    # LC_ALL has precedence over all other LC_* environment variables, so overrides the rest
-    env["LC_ALL"] = "C.UTF-8"
+    for key in list(env):
+        if key.startswith("LC_") or key in ("LANG", "LANGUAGE"):
+            del env[key]
+    env.update(determine_locale_envvars())
     kwargs['env'] = env
 
     try:
