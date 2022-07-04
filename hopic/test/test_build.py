@@ -745,6 +745,50 @@ def test_command_with_branch_and_commit(capfd, run_hopic):
     assert claimed_commit == checkout_commit
 
 
+def test_command_without_branch(capfd, run_hopic):
+    fallback_branch = "unknown-local-branch"
+
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(
+            f"""\
+            phases:
+              build:
+                test:
+                  - echo -n ${{GIT_BRANCH:-{fallback_branch}}}
+            """
+        ),
+    )
+    assert result.exit_code == 0
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    assert out == fallback_branch
+
+
+def test_fallback_variable(capfd, run_hopic):
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(
+            """\
+            phases:
+              build:
+                test:
+                  - echo -n ${NON_EXISTANT:-fallback}
+            """
+        ),
+    )
+    assert result.exit_code == 0
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    assert out == "fallback"
+
+
 def test_empty_variant(run_hopic):
     (result,) = run_hopic(
         ("build",),
