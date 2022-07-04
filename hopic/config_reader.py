@@ -134,7 +134,28 @@ class CredentialEncoding(str, Enum):
     default = plain
 
 
-_variable_interpolation_re = re.compile(r'(?<!\$)\$(?:(\w+)|\{([^}]+)\})')
+_variable_interpolation_re = re.compile(
+    r"""
+    # start with a non-escaped dollar
+    (?<!\$)\$
+    (?:
+        # variable name without surrounding curly braces
+        (\w+) |
+        \{
+            # variable name surround by curly braces
+            ([^}$:]+)
+            # optional fallback text
+            (?:
+            :-
+            ([^}$]*)
+            )?
+        \}
+    )
+""",
+    re.VERBOSE,
+)
+
+
 def expand_vars(vars, expr):  # noqa: E302 'expected 2 blank lines'
     if isinstance(expr, str):
         # Expand variables from our "virtual" environment
@@ -142,7 +163,11 @@ def expand_vars(vars, expr):  # noqa: E302 'expected 2 blank lines'
         new_val = expr[:last_idx]
         for var in _variable_interpolation_re.finditer(expr):
             name = var.group(1) or var.group(2)
-            value = vars[name]
+            default = var.group(3)
+            if default is not None:
+                value = vars.get(name, default)
+            else:
+                value = vars[name]
             if isinstance(value, Exception):
                 raise value
             new_val = new_val + expr[last_idx:var.start()].replace('$$', '$') + value
