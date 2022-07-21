@@ -35,6 +35,7 @@ import logging
 import os
 import pytest
 import re
+import shlex
 import signal
 import stat
 import subprocess
@@ -1390,6 +1391,64 @@ def test_normalize_artifacts(capfd, expected_hash, include_file, mtime, run_hopi
     sys.stdout.write(out)
     sys.stderr.write(err)
     assert out == f"{expected_hash} *archive-0.0.0.tar.gz\n", "archive's hash should not depend on build time"
+
+
+def test_normalize_dpkg(capfd, run_hopic):
+    mtime = "2012-12-12 12:12:12.121212 +1200"
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(
+            f"""\
+            version:
+              tag: true
+
+            phases:
+              a:
+                x:
+                  - archive:
+                      artifacts: cow-mode_${{DEBVERSION}}_all.deb
+                  - sh -c 'md5sum usr/share/doc/cows/special-cow-mode.txt > control/md5sums'
+                  - tar -C control -czf ${{WORKSPACE}}/control.tar.gz md5sums control
+                  - touch -d {shlex.quote(mtime)} usr/share/doc/cows/special-cow-mode.txt
+                  - tar -czf data.tar.gz --format=pax usr
+                  - ar rcU cow-mode_${{DEBVERSION}}_all.deb debian-binary control.tar.gz data.tar.gz
+              b:
+                x:
+                  - ar x cow-mode_${{DEBVERSION}}_all.deb
+                  - sha256sum -b debian-binary control.tar.gz data.tar.gz cow-mode_${{DEBVERSION}}_all.deb
+            """
+        ),
+        files={
+            "debian-binary": "2.0\n",
+            "control/control": dedent(
+                """
+                Architecture: all
+                Depends: apt, dpkg
+                Recommends: aptitude
+                Description: Adds Super Cow Powers to apt, even aptitude which claims not to have it.
+                Maintainer: no-reply@example.com
+                Package: cow-mode
+                Priority: optional
+                Version: 12.12.12
+                Installed-Size: 27
+                """
+            ),
+            "usr/share/doc/cows/special-cow-mode.txt": "Super Cow Powers unlocked!\n",
+        },
+        tag="12.12.12",
+    )
+
+    assert result.exit_code == 0
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+    checksum = out.splitlines()[-4:]
+    assert checksum == [
+        "d526eb4e878a23ef26ae190031b4efd2d58ed66789ac049ea3dbaf74c9df7402 *debian-binary",
+        "201071bdac6fd3fdeeedb4a37733deb4be3dbe94c0c4ae8aed5b2d01cde46f2c *control.tar.gz",
+        "0fc7da07a77e902fe747544f2e65dc00998a015eeca4799636a985f52fad9fb7 *data.tar.gz",
+        "92fccd82a96e65692edeaa2961e4d742c0087da46cb566d75f0fb9d2c5147a44 *cow-mode_12.12.12+gf7c740f27d9fdf_all.deb",
+    ], "archive's hash should not depend on build time"
 
 
 @pytest.mark.parametrize("archive_key", (
