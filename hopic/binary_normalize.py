@@ -16,6 +16,7 @@ import copy
 from decimal import Decimal
 from gzip import GzipFile
 import os
+from pathlib import Path
 import shutil
 import sys
 import tarfile
@@ -123,7 +124,7 @@ class ArInfo(object):
         except ValueError:
             raise IOError("Non-numeric file size in ar header")
 
-        arinfo = cls(fileobj, data_offset, size, member_name or None)
+        arinfo = cls(fileobj, data_offset, size, Path(member_name) if member_name else None)
 
         arinfo.mtime = int(mtime)
         arinfo.uid   = int(uid)
@@ -133,7 +134,7 @@ class ArInfo(object):
         return arinfo
 
     def tobuf(self):
-        buf = f"{self.name:<16.16}{self.mtime:<12d}{self.uid:<6d}{self.gid:<6d}{self.perm:<8o}{self.size:<10d}`\n".encode('ASCII')
+        buf = f"{self.name!s:<16.16}{self.mtime:<12d}{self.uid:<6d}{self.gid:<6d}{self.perm:<8o}{self.size:<10d}`\n".encode("ASCII")
         if len(buf) != self.HEADER_SIZE:
             raise IOError(f"Exceeding maximum header size: {buf}")
         return buf
@@ -374,7 +375,7 @@ def normalize(filename, fileobj=None, outname='', outfileobj=None, source_date_e
             for pkg_member in in_pkg:
                 if expected_files:
                     expected = expected_files.pop(0)
-                    if pkg_member.name not in expected:
+                    if str(pkg_member.name) not in expected:
                         break
 
                 # Clamping mtime to source_date_epoch ensures that source files are the only sources of timestamps, not build time
