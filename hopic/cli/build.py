@@ -327,7 +327,8 @@ def build_variant(ctx, variant, cmds, hopic_git_info, *, exec_stdout=None, cwd: 
             except KeyError:
                 continue
 
-            volume_vars['WORKSPACE'] = '/code' if image is not None else str(ctx.obj.code_dir)
+            volume_vars["WORKSPACE"] = "/code" if image is not None else str(ctx.obj.code_dir)
+            volume_vars["CFGDIR"] = "/cfg" if image is not None else str(ctx.obj.config_dir)
 
             env = (dict(
                 HOME            = '/home/sandbox',              # noqa: E251 "unexpected spaces around '='"

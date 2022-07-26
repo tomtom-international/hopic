@@ -553,7 +553,8 @@ def expand_docker_volumes_from(volume_vars, volumes_from_vars):
 
 def expand_docker_volume_spec(config_dir, volume_vars, volume_specs, add_defaults=True):
     guest_volume_vars = {
-        'WORKSPACE': '/code',
+        "WORKSPACE": "/code",
+        "CFGDIR": "/cfg",
     }
     volumes = OrderedDict()
     for volume in volume_specs:
@@ -598,10 +599,15 @@ def expand_docker_volume_spec(config_dir, volume_vars, volume_specs, add_default
         volumes[target] = volume
 
     if add_defaults:
-        volumes.setdefault(guest_volume_vars['WORKSPACE'], {
-            'source': volume_vars['WORKSPACE'],
-            'target': guest_volume_vars['WORKSPACE'],
-        })
+        for var in guest_volume_vars:
+            volumes.setdefault(
+                guest_volume_vars[var],
+                {
+                    "source": volume_vars[var],
+                    "target": guest_volume_vars[var],
+                },
+            )
+
         volumes.setdefault('/etc/passwd', {
             'source': '/etc/passwd',
             'target': '/etc/passwd',
