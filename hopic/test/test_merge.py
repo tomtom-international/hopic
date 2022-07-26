@@ -25,6 +25,8 @@ from textwrap import dedent
 import git
 import pytest
 
+from . import config_file
+
 from .. import credentials
 from ..build import HopicGitInfo
 from ..cli import utils
@@ -2130,3 +2132,53 @@ def test_merge_with_pip_constraints(run_hopic, monkeypatch):
         ),
     )
     assert result.exit_code == 0
+
+
+def test_modality_image_config_dir(capfd, monkeypatch, run_hopic):
+    config_dir = "config_directory"
+    expected_docker_args = {"docker", "--workdir=/cfg", f"--volume={run_hopic.toprepo / config_dir}:/cfg", f"--volume={run_hopic.toprepo}:/code"}
+    hopic_config = dedent(
+        """\
+        image: buildpack-deps:18.04
+
+        modality-source-preparation:
+          DUMMY:
+            - sh: pwd
+            # This will fail when tests are executed in docker!
+            # - sh: test -e /cfg/hopic-ci-config.yaml
+            # - sh: test ! -e /code/hopic-ci-config.yaml
+        """
+    )
+
+    cfg_file = f"{config_dir}/hopic-ci-config.yaml"
+
+    old_subprocess_check_call = subprocess.check_call
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        assert expected_docker_args - set(args) == set()
+        expected_docker_args.clear()
+        return old_subprocess_check_call(args)
+
+    monkeypatch.setattr(subprocess, "check_call", mock_check_call)
+
+    (result,) = run_hopic(
+        ("--config", cfg_file)
+        + command(
+            "prepare-source-tree",
+            author_name=_author.name,
+            author_email=_author.email,
+            author_date=f"@{_git_time}",
+            commit_date=f"@{_git_time}",
+        )
+        + command("apply-modality-change", "DUMMY"),
+        config=config_file(cfg_file, hopic_config),
+        rundir=run_hopic.toprepo,
+    )
+
+    out, err = capfd.readouterr()
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+
+    assert result.exit_code == 0
+    assert out.splitlines()[0] == "/cfg"
+    assert len(expected_docker_args) == 0
