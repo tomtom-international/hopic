@@ -303,6 +303,7 @@ def test_docker_run_arguments(run_hopic, expect_forward_tty, has_stderr, has_std
             '--cap-add=SYS_PTRACE', '--rm', '--volume=/etc/passwd:/etc/passwd:ro',
             '--volume=/etc/group:/etc/group:ro', '--workdir=/code',
             f"--volume={os.getcwd()}:/code",
+            f"--volume={os.getcwd()}/.ci:/cfg",
             f"--env=SOURCE_DATE_EPOCH={source_date_epoch}",
             '--env=HOME=/home/sandbox', '--env=_JAVA_OPTIONS=-Duser.home=/home/sandbox',
             f"--user={uid}:{gid}",
