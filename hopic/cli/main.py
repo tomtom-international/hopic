@@ -104,11 +104,6 @@ def main(ctx, color, config, workspace, whitelisted_var, publishable_version):
         ctx.color = True
     elif color == 'never':
         ctx.color = False
-    # Force or suppress colors according to http://bixense.com/clicolors/ convention.
-    elif os.environ.get("CLICOLOR_FORCE", "0") != "0":
-        ctx.color = True
-    elif os.environ.get("CLICOLOR", "1") == "0":
-        ctx.color = False
     else:
         # leave as is: 'auto' is the default for Click
         pass
