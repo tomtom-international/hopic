@@ -33,6 +33,7 @@ from typing import (
     Callable,
     Dict,
     List,
+    Optional,
 )
 
 import click
@@ -333,6 +334,22 @@ def build_variant(ctx, variant, cmds, hopic_git_info, *, exec_stdout=None, cwd: 
                 HOME            = '/home/sandbox',              # noqa: E251 "unexpected spaces around '='"
                 _JAVA_OPTIONS   = '-Duser.home=/home/sandbox',  # noqa: E251 "unexpected spaces around '='"
             ) if image is not None else {})
+
+            # Force or suppress colors according to http://bixense.com/clicolors/ convention.
+            color: Optional[bool] = ctx.color
+            if color is None:
+                # When Hopic is only using auto detection then only pass on the existing values of these variables.
+                if "CLICOLOR" in os.environ:
+                    env["CLICOLOR"] = os.environ["CLICOLOR"]
+                if "CLICOLOR_FORCE" in os.environ:
+                    env["CLICOLOR_FORCE"] = os.environ["CLICOLOR_FORCE"]
+            elif color:
+                # CLICOLOR_FORCE overrules CLICOLOR so we can ignore the latter in this case
+                env["CLICOLOR_FORCE"] = "1"
+            else:
+                assert not ctx.color
+                env["CLICOLOR_FORCE"] = "0"
+                env["CLICOLOR"] = "0"
 
             for varname in cfg['pass-through-environment-vars']:
                 if varname in os.environ:
