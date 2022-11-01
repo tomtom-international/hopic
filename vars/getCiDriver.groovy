@@ -721,7 +721,11 @@ ${shell_quote(venv)}/bin/python -m pip install --prefer-binary --upgrade ${shell
                  label: 'Hopic: installing Hopic')
         }
 
-        def cmd = 'LC_ALL=C.UTF-8 TZ=UTC ' + shell_quote("${venv}/bin/python") + ' ' + shell_quote("${venv}/bin/hopic") + ' --color=always'
+        def cmd = ('LC_ALL=C.UTF-8 TZ=UTC '
+          + shell_quote("${venv}/bin/python")
+          + ' ' + shell_quote("${venv}/bin/hopic")
+          + ' --color=' + shell_quote(steps.params.getOrDefault('CLICOLOR_SELECTION', 'always'))
+        )
         if (this.config_file != null) {
           cmd += ' --workspace=' + shell_quote(workspace)
           def cfg_file = this.config_file
@@ -1528,6 +1532,13 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
     if (params == null) {
       steps.echo('\033[33m[warning] could not determine build parameters, will not add extra parameters\033[39m')
     } else {
+      if (!params.containsKey('CLICOLOR_SELECTION')) {
+        params['CLICOLOR_SELECTION'] = steps.choice(
+          name:        'CLICOLOR_SELECTION',
+          description: 'Whether to have applications output color ("auto" lets them use their regular auto-detection).',
+          choices:     ['always', 'never', 'auto'],
+        )
+      }
       if (!params.containsKey('HOPIC_VERBOSITY')) {
         params['HOPIC_VERBOSITY'] = steps.choice(
           name:        'HOPIC_VERBOSITY',
