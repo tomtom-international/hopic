@@ -17,6 +17,128 @@
 Changelog
 =========
 
+1.59.0
+======
+
+New features
+------------
+
+* feat: support CLICOLOR* color control environment variables (#462)
+ 
+1.58.0
+======
+
+* feat: execute variant finally from chained variants (#459)
+
+1.57.2
+======
+
+Bug fixes
+---------
+
+* fix: always mount config directory (#458)
+
+1.57.1
+======
+
+Bug fixes
+---------
+
+* fix(normalize): ensure ArInfo.name always is a Path (#457)
+
+1.57.0
+======
+
+New features
+------------
+
+* feat(config): support fallbacks for variable expansion (#456)
+
+Bug fixes
+---------
+
+* fix(execution): set LC_CTYPE to UTF-8 directly on platforms that support that (#455)
+
+1.56.2
+======
+
+Bug fixes
+---------
+
+* fix: use LC_ALL to override the locale instead of LANG (#454)
+
+1.56.1
+======
+
+Empty release.
+
+1.56.0
+======
+
+New features
+------------
+
+* feat(groovy): add hopic command string to workspace preparation end callback (#451)
+
+1.55.0
+======
+
+New features
+------------
+
+* feat: allow similar run-on-change value in chained variants (#445)
+* feat: finally support within variants (#443)
+* feat: allow non bumping only commits on pr flow in hotfix context (#446)
+
+Improvements
+------------
+
+* improvement(versioning): log list of tags we couldn't determine our version from (#442)
+
+1.54.0
+======
+
+New features
+------------
+
+* feat: merge pass-through-environment-vars from config and templates (#436)
+* feat(groovy): make source ref publicly available (#434)
+* feat: add junit archive callbacks (#440)
+
+Bug fixes
+---------
+
+* fix: handle default pass-through-environment-vars in config (#438)
+* fix(groovy): ignore build status for has_submittable_change after submit started (#437)
+* fix: make sure hopic-init always has proper workspace (#441)
+
+1.53.0
+======
+
+New features
+------------
+
+* feat(checkout): always restore mtime of files for fresh clones (#435)
+
+Improvements
+------------
+
+* improvement: allow replay builds as submitting builds if there is no diff (#433)
+* chore: add event identifier to the logging in case an error occurred (#432)
+
+1.52.0
+======
+
+New features
+------------
+
+* feat: add pip constraints support to prepare-source-tree (#431)
+
+Bug fixes
+---------
+
+* fix(groovy): handle nonexistent pull request authors (#428)
+
 1.51.0
 ======
 
