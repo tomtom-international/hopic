@@ -3,11 +3,7 @@ requires = [
   "setuptools >= 40.9.0,< 60.0",
   "setuptools_scm >= 6.3.1",
   "setuptools_scm_git_archive",
-  "wheel < 0.40",
-# We have to pin `wheel` here to avoid the following:
-# wheel.vendored.packaging.requirements.InvalidRequirement: Expected end or semicolon (after version specifier
-#          netstruct>=1.1.2<2
-# Ref: https://github.com/pypa/wheel/commit/861a3a35437aad0d2358a6a89eebe625e80d496b
+  "wheel",
 ]
 build-backend = "setuptools.build_meta"
 

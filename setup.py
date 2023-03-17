@@ -55,7 +55,7 @@ setup(
       'typing_extensions >= 3.6.4; python_version < "3.8"',
     ),
     extras_require={
-        'interactive': ['keyring>=21.5.0,<22', 'netstruct>=1.1.2<2'],
+        'interactive': ['keyring>=21.5.0,<22', 'netstruct>=1.1.2,<2'],
     },
     entry_points='''
       [console_scripts]
