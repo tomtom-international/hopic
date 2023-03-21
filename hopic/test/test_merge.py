@@ -452,15 +452,15 @@ phases:
         repo.index.add(('.gitmodules',))
         repo.index.commit(message='Initial commit', **_commitargs)
 
-    # Move submodule
-    repo.create_head("move_submodule_branch")
-    repo.git.checkout('move_submodule_branch')
-    repo.index.remove(['subrepo_test'])
-    with (run_hopic.toprepo / '.gitmodules').open('r+') as f:
-        f.truncate(0)
+        # Move submodule
+        repo.create_head("move_submodule_branch")
+        repo.git.checkout("move_submodule_branch")
+        repo.index.remove(["subrepo_test"])
+        with (run_hopic.toprepo / ".gitmodules").open("r+") as f:
+            f.truncate(0)
 
-    repo.git.submodule(('add', subrepo, 'moved_subrepo'))
-    repo.index.commit(message='Move submodule', **_commitargs)
+        repo.git.submodule(("add", subrepo, "moved_subrepo"))
+        repo.index.commit(message="Move submodule", **_commitargs)
 
     (result,) = run_hopic(('--workspace', run_hopic.toprepo, 'checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'))
     assert result.exit_code == 0
