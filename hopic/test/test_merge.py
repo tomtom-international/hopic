@@ -428,7 +428,16 @@ def test_merge_conventional_feat_on_minor_branch(capfd, run_hopic):
     assert 'New features are not allowed' in err
 
 
-def test_move_submodule(capfd, run_hopic, tmp_path):
+def test_move_submodule(capfd, monkeypatch, run_hopic, tmp_path):
+    old_subcommand_getter = git.cmd.Git.__getattr__
+
+    def new_subcommand_getter(self, name: str):
+        if name == "submodule":
+            self(c="protocol.file.allow=always")
+        return old_subcommand_getter(self, name)
+
+    monkeypatch.setattr("git.cmd.Git.__getattr__", new_subcommand_getter)
+
     subrepo = tmp_path / 'subrepo'
     with git.Repo.init(str(subrepo), expand_vars=False) as repo:
         with (subrepo / 'dummy.txt').open('w') as f:
