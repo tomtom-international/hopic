@@ -1395,7 +1395,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
     return this.on_node([node_expr: node_expr, exec_name: params.name]) {
       return this.with_hopic { cmd ->
-        def clean = params.getOrDefault('clean', false)
+        def clean = params.clean || false
         this.ensure_commit_is_pinned(clean)
         this.ensure_checkout(cmd, clean)
         this.ensure_unstashed()
