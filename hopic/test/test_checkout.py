@@ -30,7 +30,7 @@ _commitargs = dict(
 )
 
 
-def test_clean_submodule_checkout(capfd, run_hopic, tmp_path):
+def test_clean_submodule_checkout(capfd, monkeypatch, run_hopic, tmp_path):
     author = git.Actor('Bob Tester', 'bob@example.net')
     commitargs = dict(
             author_date=_git_time,
@@ -38,6 +38,15 @@ def test_clean_submodule_checkout(capfd, run_hopic, tmp_path):
             author=author,
             committer=author,
         )
+
+    old_subcommand_getter = git.cmd.Git.__getattr__
+
+    def new_subcommand_getter(self, name: str):
+        if name == "submodule":
+            self(c="protocol.file.allow=always")
+        return old_subcommand_getter(self, name)
+
+    monkeypatch.setattr("git.cmd.Git.__getattr__", new_subcommand_getter)
 
     dummy_content = 'Lalalala!\n'
     subrepo = tmp_path / 'subrepo'

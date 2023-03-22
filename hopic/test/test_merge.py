@@ -428,7 +428,16 @@ def test_merge_conventional_feat_on_minor_branch(capfd, run_hopic):
     assert 'New features are not allowed' in err
 
 
-def test_move_submodule(capfd, run_hopic, tmp_path):
+def test_move_submodule(capfd, monkeypatch, run_hopic, tmp_path):
+    old_subcommand_getter = git.cmd.Git.__getattr__
+
+    def new_subcommand_getter(self, name: str):
+        if name == "submodule":
+            self(c="protocol.file.allow=always")
+        return old_subcommand_getter(self, name)
+
+    monkeypatch.setattr("git.cmd.Git.__getattr__", new_subcommand_getter)
+
     subrepo = tmp_path / 'subrepo'
     with git.Repo.init(str(subrepo), expand_vars=False) as repo:
         with (subrepo / 'dummy.txt').open('w') as f:
@@ -452,15 +461,15 @@ phases:
         repo.index.add(('.gitmodules',))
         repo.index.commit(message='Initial commit', **_commitargs)
 
-    # Move submodule
-    repo.create_head("move_submodule_branch")
-    repo.git.checkout('move_submodule_branch')
-    repo.index.remove(['subrepo_test'])
-    with (run_hopic.toprepo / '.gitmodules').open('r+') as f:
-        f.truncate(0)
+        # Move submodule
+        repo.create_head("move_submodule_branch")
+        repo.git.checkout("move_submodule_branch")
+        repo.index.remove(["subrepo_test"])
+        with (run_hopic.toprepo / ".gitmodules").open("r+") as f:
+            f.truncate(0)
 
-    repo.git.submodule(('add', subrepo, 'moved_subrepo'))
-    repo.index.commit(message='Move submodule', **_commitargs)
+        repo.git.submodule(("add", subrepo, "moved_subrepo"))
+        repo.index.commit(message="Move submodule", **_commitargs)
 
     (result,) = run_hopic(('--workspace', run_hopic.toprepo, 'checkout-source-tree', '--target-remote', run_hopic.toprepo, '--target-ref', 'master'))
     assert result.exit_code == 0
