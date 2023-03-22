@@ -66,74 +66,74 @@ I.e. the execution flow “forks” to each variant at the start of a phase and 
 Variants appearing in multiple phases are guaranteed to run on the same executor within each phase.
 This provides a stable environment (workspace) to work in and allows incremental steps, such as building in phase A and running built tests in phase B.</p>
 <p>For example, the configuration example listed results in an execution flow as shown after that.</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span><span class="w"></span>
-<span class="w">  </span><span class="nt">style</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">commit-message-checker</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="c1"># Require each commit message to adhere to our requirements</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">foreach</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">AUTOSQUASHED_COMMIT</span><span class="w"></span>
-<span class="w">        </span><span class="nt">sh</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">.ci/verify-commit-message.py ${AUTOSQUASHED_COMMIT}</span><span class="w"></span>
-<span class="w">    </span><span class="nt">clang-format</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="c1"># Show all changes necessary to have each commit formatted properly</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">foreach</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">AUTOSQUASHED_COMMIT</span><span class="w"></span>
-<span class="w">        </span><span class="nt">sh</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">GIT_PAGER=&quot;tee ${AUTOSQUASHED_COMMIT}.format.diff&quot; git clang-format --style=file --diff ${AUTOSQUASHED_COMMIT}~1 ${AUTOSQUASHED_COMMIT}</span><span class="w"></span>
-<span class="w">      </span><span class="c1"># Assert that no changes were necessary</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">foreach</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">AUTOSQUASHED_COMMIT</span><span class="w"></span>
-<span class="w">        </span><span class="nt">sh</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;test</span><span class="nv"> </span><span class="s">!</span><span class="nv"> </span><span class="s">-s</span><span class="nv"> </span><span class="s">${AUTOSQUASHED_COMMIT}.format.diff&#39;</span><span class="w"></span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">style</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">commit-message-checker</span><span class="p">:</span>
+<span class="w">      </span><span class="c1"># Require each commit message to adhere to our requirements</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">foreach</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">AUTOSQUASHED_COMMIT</span>
+<span class="w">        </span><span class="nt">sh</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">.ci/verify-commit-message.py ${AUTOSQUASHED_COMMIT}</span>
+<span class="w">    </span><span class="nt">clang-format</span><span class="p">:</span>
+<span class="w">      </span><span class="c1"># Show all changes necessary to have each commit formatted properly</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">foreach</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">AUTOSQUASHED_COMMIT</span>
+<span class="w">        </span><span class="nt">sh</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">GIT_PAGER=&quot;tee ${AUTOSQUASHED_COMMIT}.format.diff&quot; git clang-format --style=file --diff ${AUTOSQUASHED_COMMIT}~1 ${AUTOSQUASHED_COMMIT}</span>
+<span class="w">      </span><span class="c1"># Assert that no changes were necessary</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">foreach</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">AUTOSQUASHED_COMMIT</span>
+<span class="w">        </span><span class="nt">sh</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;test</span><span class="nv"> </span><span class="s">!</span><span class="nv"> </span><span class="s">-s</span><span class="nv"> </span><span class="s">${AUTOSQUASHED_COMMIT}.format.diff&#39;</span>
 
-<span class="w">  </span><span class="nt">build</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">x64-release</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake -B build-x64-release -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-release</span><span class="w"></span>
-<span class="w">    </span><span class="nt">x64-debug</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake -B build-x64-debug -S . -DCMAKE_BUILD_TYPE=Debug</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-debug</span><span class="w"></span>
-<span class="w">    </span><span class="nt">arm64-release</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake -B build-arm64-release -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_TOOLCHAIN_FILE:PATH=${CMAKE_AGL_AARCH64_TOOLCHAIN_FILE}</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-arm64-release</span><span class="w"></span>
-<span class="w">    </span><span class="nt">arm64-debug</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake -B build-arm64-debug -S . -DCMAKE_BUILD_TYPE=Debug -DCMAKE_TOOLCHAIN_FILE:PATH=${CMAKE_AGL_AARCH64_TOOLCHAIN_FILE}</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-arm64-debug</span><span class="w"></span>
+<span class="w">  </span><span class="nt">build</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">x64-release</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake -B build-x64-release -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-release</span>
+<span class="w">    </span><span class="nt">x64-debug</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake -B build-x64-debug -S . -DCMAKE_BUILD_TYPE=Debug</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-debug</span>
+<span class="w">    </span><span class="nt">arm64-release</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake -B build-arm64-release -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_TOOLCHAIN_FILE:PATH=${CMAKE_AGL_AARCH64_TOOLCHAIN_FILE}</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-arm64-release</span>
+<span class="w">    </span><span class="nt">arm64-debug</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake -B build-arm64-debug -S . -DCMAKE_BUILD_TYPE=Debug -DCMAKE_TOOLCHAIN_FILE:PATH=${CMAKE_AGL_AARCH64_TOOLCHAIN_FILE}</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-arm64-debug</span>
 
-<span class="w">  </span><span class="nt">test</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">x64-debug</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">junit</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-x64-debug/test-unit.xml</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-debug --target test</span><span class="w"></span>
+<span class="w">  </span><span class="nt">test</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">x64-debug</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">junit</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-x64-debug/test-unit.xml</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-debug --target test</span>
 
-<span class="w">  </span><span class="nt">package</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">x64-release</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">fingerprint</span><span class="p">:</span><span class="w"></span>
-<span class="w">          </span><span class="nt">artifacts</span><span class="p">:</span><span class="w"></span>
-<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-x64-release/TomTom-Stacktrace-${VERSION}-Linux-x86_64.tar.gz</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-release --target package</span><span class="w"></span>
-<span class="w">    </span><span class="nt">x64-debug</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">fingerprint</span><span class="p">:</span><span class="w"></span>
-<span class="w">          </span><span class="nt">artifacts</span><span class="p">:</span><span class="w"></span>
-<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-x64-debug/TomTom-Stacktrace-${VERSION}-Linux-x86_64.tar.gz</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-debug --target package</span><span class="w"></span>
-<span class="w">    </span><span class="nt">arm64-release</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">fingerprint</span><span class="p">:</span><span class="w"></span>
-<span class="w">          </span><span class="nt">artifacts</span><span class="p">:</span><span class="w"></span>
-<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-arm64-release/TomTom-Stacktrace-${VERSION}-Linux-aarch64.tar.gz</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-arm64-release --target package</span><span class="w"></span>
-<span class="w">    </span><span class="nt">arm64-debug</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">fingerprint</span><span class="p">:</span><span class="w"></span>
-<span class="w">          </span><span class="nt">artifacts</span><span class="p">:</span><span class="w"></span>
-<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-arm64-debug/TomTom-Stacktrace-${VERSION}-Linux-aarch64.tar.gz</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-arm64-debug --target package</span><span class="w"></span>
+<span class="w">  </span><span class="nt">package</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">x64-release</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">fingerprint</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">artifacts</span><span class="p">:</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-x64-release/TomTom-Stacktrace-${VERSION}-Linux-x86_64.tar.gz</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-release --target package</span>
+<span class="w">    </span><span class="nt">x64-debug</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">fingerprint</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">artifacts</span><span class="p">:</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-x64-debug/TomTom-Stacktrace-${VERSION}-Linux-x86_64.tar.gz</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-debug --target package</span>
+<span class="w">    </span><span class="nt">arm64-release</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">fingerprint</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">artifacts</span><span class="p">:</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-arm64-release/TomTom-Stacktrace-${VERSION}-Linux-aarch64.tar.gz</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-arm64-release --target package</span>
+<span class="w">    </span><span class="nt">arm64-debug</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">fingerprint</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">artifacts</span><span class="p">:</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-arm64-debug/TomTom-Stacktrace-${VERSION}-Linux-aarch64.tar.gz</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-arm64-debug --target package</span>
 
-<span class="w">  </span><span class="nt">upload</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">x64-release</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run-on-change</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">only</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-x64-release/do-upload.sh</span><span class="w"></span>
-<span class="w">    </span><span class="nt">x64-debug</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run-on-change</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">only</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-x64-debug/do-upload.sh</span><span class="w"></span>
-<span class="w">    </span><span class="nt">arm64-release</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run-on-change</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">only</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-arm64-release/do-upload.sh</span><span class="w"></span>
-<span class="w">    </span><span class="nt">arm64-debug</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run-on-change</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">only</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-arm64-debug/do-upload.sh</span><span class="w"></span>
+<span class="w">  </span><span class="nt">upload</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">x64-release</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run-on-change</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">only</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-x64-release/do-upload.sh</span>
+<span class="w">    </span><span class="nt">x64-debug</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run-on-change</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">only</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-x64-debug/do-upload.sh</span>
+<span class="w">    </span><span class="nt">arm64-release</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run-on-change</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">only</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-arm64-release/do-upload.sh</span>
+<span class="w">    </span><span class="nt">arm64-debug</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run-on-change</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">only</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-arm64-debug/do-upload.sh</span>
 </pre></div>
 </div>
 <div class="figure" id="id3">
@@ -150,9 +150,9 @@ This provides a stable environment (workspace) to work in and allows incremental
 <p>Hopic provides built-in clean check-out functionality by executing <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">clean</span> <span class="pre">-fxd</span></code> on the <code class="docutils literal notranslate"><span class="pre">${WORKSPACE}</span></code>.
 It is possible to add a list of commands that is executed before the <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">clean</span> <span class="pre">-fxd</span></code> is executed.
 Within the list of commands <code class="docutils literal notranslate"><span class="pre">$HOME</span></code> and <code class="docutils literal notranslate"><span class="pre">~</span></code> will be expanded to the home directory of the current user.</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">clean</span><span class="p">:</span><span class="w"></span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rm -rf ~/.cache</span><span class="w"></span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rm -rf ${HOME}/.other_cache</span><span class="w"></span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">clean</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rm -rf ~/.cache</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rm -rf ${HOME}/.other_cache</span>
 </pre></div>
 </div>
 </div>
@@ -190,42 +190,42 @@ In addition to that you can specify the name of the config and environment varia
 </ul>
 </dd>
 </dl>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span><span class="w"></span>
-<span class="w">  </span><span class="nt">download</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">toolchain</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">with-credentials</span><span class="p">:</span><span class="w"></span>
-<span class="w">          </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">access_key</span><span class="w"></span>
-<span class="w">          </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">string</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">download --api-key=${SECRET}</span><span class="w"></span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">download</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">toolchain</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">with-credentials</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">access_key</span>
+<span class="w">          </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">string</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">download --api-key=${SECRET}</span>
 
-<span class="w">  </span><span class="nt">build</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">toolchain</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">with-credentials</span><span class="p">:</span><span class="w"></span>
-<span class="w">          </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">license_file</span><span class="w"></span>
-<span class="w">          </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build --license-key=${SECRET_FILE}</span><span class="w"></span>
+<span class="w">  </span><span class="nt">build</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">toolchain</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">with-credentials</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">license_file</span>
+<span class="w">          </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build --license-key=${SECRET_FILE}</span>
 
-<span class="w">  </span><span class="nt">test</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">toolchain</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">with-credentials</span><span class="p">:</span><span class="w"></span>
-<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">squish_cred</span><span class="w"></span>
-<span class="w">            </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">username_password</span><span class="w"></span>
-<span class="w">            </span><span class="nt">username-variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">SQUISH_USERNAME</span><span class="w"></span>
-<span class="w">            </span><span class="nt">password-variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">SQUISH_PASSWORD</span><span class="w"></span>
-<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">artifactory_creds</span><span class="w"></span>
-<span class="w">            </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">username-password</span><span class="w"></span>
-<span class="w">            </span><span class="nt">username-variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ARTIFACTORY_USERNAME</span><span class="w"></span>
-<span class="w">            </span><span class="nt">password-variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ARTIFACTORY_PASSWORD</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">download test-certificate --username=${ARTIFACTORY_USERNAME} --password=${ARTIFACTORY_PASSWORD}</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">test --username=${SQUISH_USERNAME} --password=${SQUISH_PASSWORD}</span><span class="w"></span>
+<span class="w">  </span><span class="nt">test</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">toolchain</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">with-credentials</span><span class="p">:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">squish_cred</span>
+<span class="w">            </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">username_password</span>
+<span class="w">            </span><span class="nt">username-variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">SQUISH_USERNAME</span>
+<span class="w">            </span><span class="nt">password-variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">SQUISH_PASSWORD</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">artifactory_creds</span>
+<span class="w">            </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">username-password</span>
+<span class="w">            </span><span class="nt">username-variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ARTIFACTORY_USERNAME</span>
+<span class="w">            </span><span class="nt">password-variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ARTIFACTORY_PASSWORD</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">download test-certificate --username=${ARTIFACTORY_USERNAME} --password=${ARTIFACTORY_PASSWORD}</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">test --username=${SQUISH_USERNAME} --password=${SQUISH_PASSWORD}</span>
 
-<span class="w">  </span><span class="nt">deploy</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">toolchain</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run-on-change</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">only</span><span class="w"></span>
-<span class="w">        </span><span class="nt">with-credentials</span><span class="p">:</span><span class="w"></span>
-<span class="w">          </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">artifactory_creds</span><span class="w"></span>
-<span class="w">          </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">username-password</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">publish --user=${USERNAME} --password=${PASSWORD}</span><span class="w"></span>
+<span class="w">  </span><span class="nt">deploy</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">toolchain</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run-on-change</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">only</span>
+<span class="w">        </span><span class="nt">with-credentials</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">artifactory_creds</span>
+<span class="w">          </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">username-password</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">publish --user=${USERNAME} --password=${PASSWORD}</span>
 </pre></div>
 </div>
 </div>
@@ -242,21 +242,21 @@ Alternatively it can contain a mapping where the keys and values are the names o
 If using the mapping form, the <code class="docutils literal notranslate"><span class="pre">default</span></code> key will be used for variants that don’t have an image specified explicitly.
 The image can also be specified within a phase for a variant, this will override the global specified image for the specific variant for only the phase where it is specified.</p>
 <p>An example of the mapping style where two different variants are executed in containers based on different images:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">image</span><span class="p">:</span><span class="w"></span>
-<span class="w">  </span><span class="nt">default</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">buildpack-deps:testing</span><span class="w"></span>
-<span class="w">  </span><span class="nt">whoami</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">buildpack-deps:testing-curl</span><span class="w"></span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">image</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">default</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">buildpack-deps:testing</span>
+<span class="w">  </span><span class="nt">whoami</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">buildpack-deps:testing-curl</span>
 
-<span class="nt">phases</span><span class="p">:</span><span class="w"></span>
-<span class="w">  </span><span class="nt">prepare</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">hello</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cc -o hello hello.c</span><span class="w"></span>
-<span class="w">    </span><span class="nt">whoami</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">curl --output ip-address.txt https://api.ipify.org</span><span class="w"></span>
+<span class="nt">phases</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">prepare</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">hello</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cc -o hello hello.c</span>
+<span class="w">    </span><span class="nt">whoami</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">curl --output ip-address.txt https://api.ipify.org</span>
 
-<span class="w">  </span><span class="nt">run</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">hello</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">busybox:latest</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./hello</span><span class="w"></span>
+<span class="w">  </span><span class="nt">run</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">hello</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">busybox:latest</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./hello</span>
 </pre></div>
 </div>
 <p>For the purpose of using an image (name and version) specified in an Ivy dependency manifest file the <cite>!image-from-ivy-manifest</cite> type constructor exists.
@@ -285,26 +285,26 @@ This defaults to the content of the <code class="docutils literal notranslate"><
 <p>When used this will get treated as if the expansion of <code class="docutils literal notranslate"><span class="pre">{repository}/{path}/{name}:{rev}</span></code> was specified as a string value of this field.
 This allows using Ivy as a mechanism for automatically keeping the Docker image up to date.</p>
 <p>For example, when using this dependency manifest in <code class="docutils literal notranslate"><span class="pre">${WORKSPACE}/dependency_manifest.xml</span></code>:</p>
-<div class="highlight-xml notranslate"><div class="highlight"><pre><span></span><span class="nt">&lt;ivy-module</span> <span class="na">version=</span><span class="s">&quot;2.0&quot;</span><span class="nt">&gt;</span>
-  <span class="nt">&lt;info</span> <span class="na">module=</span><span class="s">&quot;p1cms&quot;</span> <span class="na">organisation=</span><span class="s">&quot;com.tomtom&quot;</span> <span class="na">revision=</span><span class="s">&quot;dont-care&quot;</span> <span class="nt">/&gt;</span>
-  <span class="nt">&lt;dependencies&gt;</span>
-    <span class="nt">&lt;dependency</span> <span class="na">name=</span><span class="s">&quot;python&quot;</span> <span class="na">org=</span><span class="s">&quot;com.tomtom.toolchains&quot;</span> <span class="na">rev=</span><span class="s">&quot;3.6.5&quot;</span> <span class="na">revConstraint=</span><span class="s">&quot;[3.5,4.0[&quot;</span><span class="nt">&gt;</span>
-      <span class="cm">&lt;!-- identify this as the dependency specifying the Docker image for Hopic --&gt;</span>
-      <span class="nt">&lt;conf</span> <span class="na">mapped=</span><span class="s">&quot;toolchain&quot;</span> <span class="na">name=</span><span class="s">&quot;default&quot;</span> <span class="nt">/&gt;</span>
-    <span class="nt">&lt;/dependency&gt;</span>
-  <span class="nt">&lt;/dependencies&gt;</span>
+<div class="highlight-xml notranslate"><div class="highlight"><pre><span></span><span class="nt">&lt;ivy-module</span><span class="w"> </span><span class="na">version=</span><span class="s">&quot;2.0&quot;</span><span class="nt">&gt;</span>
+<span class="w">  </span><span class="nt">&lt;info</span><span class="w"> </span><span class="na">module=</span><span class="s">&quot;p1cms&quot;</span><span class="w"> </span><span class="na">organisation=</span><span class="s">&quot;com.tomtom&quot;</span><span class="w"> </span><span class="na">revision=</span><span class="s">&quot;dont-care&quot;</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="w">  </span><span class="nt">&lt;dependencies&gt;</span>
+<span class="w">    </span><span class="nt">&lt;dependency</span><span class="w"> </span><span class="na">name=</span><span class="s">&quot;python&quot;</span><span class="w"> </span><span class="na">org=</span><span class="s">&quot;com.tomtom.toolchains&quot;</span><span class="w"> </span><span class="na">rev=</span><span class="s">&quot;3.6.5&quot;</span><span class="w"> </span><span class="na">revConstraint=</span><span class="s">&quot;[3.5,4.0[&quot;</span><span class="nt">&gt;</span>
+<span class="w">      </span><span class="cm">&lt;!-- identify this as the dependency specifying the Docker image for Hopic --&gt;</span>
+<span class="w">      </span><span class="nt">&lt;conf</span><span class="w"> </span><span class="na">mapped=</span><span class="s">&quot;toolchain&quot;</span><span class="w"> </span><span class="na">name=</span><span class="s">&quot;default&quot;</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="w">    </span><span class="nt">&lt;/dependency&gt;</span>
+<span class="w">  </span><span class="nt">&lt;/dependencies&gt;</span>
 <span class="nt">&lt;/ivy-module&gt;</span>
 </pre></div>
 </div>
 <p>And this Hopic config file:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">image</span><span class="p">:</span><span class="w"></span>
-<span class="w">  </span><span class="nt">default</span><span class="p">:</span><span class="w"> </span><span class="kt">!image-from-ivy-manifest</span><span class="w"></span>
-<span class="w">    </span><span class="nt">repository</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hub.docker.com</span><span class="w"></span>
-<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tomtom</span><span class="w"></span>
-<span class="w">  </span><span class="nt">Linux_AGL-aarch64</span><span class="p">:</span><span class="w"> </span><span class="kt">!image-from-ivy-manifest</span><span class="w"></span>
-<span class="w">    </span><span class="nt">repository</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hub.docker.com</span><span class="w"></span>
-<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tomtom</span><span class="w"></span>
-<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">agl-build-aarch64-toolchain</span><span class="w"></span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">image</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">default</span><span class="p">:</span><span class="w"> </span><span class="kt">!image-from-ivy-manifest</span>
+<span class="w">    </span><span class="nt">repository</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hub.docker.com</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tomtom</span>
+<span class="w">  </span><span class="nt">Linux_AGL-aarch64</span><span class="p">:</span><span class="w"> </span><span class="kt">!image-from-ivy-manifest</span>
+<span class="w">    </span><span class="nt">repository</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hub.docker.com</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tomtom</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">agl-build-aarch64-toolchain</span>
 </pre></div>
 </div>
 <p>The result will be to use the <code class="docutils literal notranslate"><span class="pre">hub.docker.com/tomtom/python:3.6.5</span></code> image by default.
@@ -381,35 +381,35 @@ e.g. <a class="reference internal" href="#cmdoption-arg-volumes"><code class="xr
 In case an inherited bind mount needs to be overridden, that can be accomplished by adding a volume with the same <code class="docutils literal notranslate"><span class="pre">target_location</span></code>.
 Consider the following example where <cite>/tmp/downloads</cite> is overridden:</p>
 <p><strong>example:</strong></p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">buildpack-deps:testing-curl</span><span class="w"></span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">buildpack-deps:testing-curl</span>
 
-<span class="nt">volumes</span><span class="p">:</span><span class="w"></span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">~/</span><span class="w"></span>
-<span class="w">    </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/tools/devenv</span><span class="w"></span>
-<span class="w">    </span><span class="nt">read-only</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">yes</span><span class="w"></span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/tmp</span><span class="w"></span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/tmp/Music:/home/sandbox/temp</span><span class="w"></span>
+<span class="nt">volumes</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">~/</span>
+<span class="w">    </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/tools/devenv</span>
+<span class="w">    </span><span class="nt">read-only</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">yes</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/tmp</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/tmp/Music:/home/sandbox/temp</span>
 
-<span class="nt">phases</span><span class="p">:</span><span class="w"></span>
-<span class="w">  </span><span class="nt">list</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">jira</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">with-credentials</span><span class="p">:</span><span class="w"></span>
-<span class="w">          </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">netrc</span><span class="w"></span>
-<span class="w">          </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file</span><span class="w"></span>
-<span class="w">        </span><span class="nt">volumes</span><span class="p">:</span><span class="w"></span>
-<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${SECRET_FILE}:~/.netrc:ro</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">curl -v --netrc --silent &quot;https://jira.atlassian.com/rest/api/2/search?maxResults=100&amp;fields=key,summary,assignee&amp;jql=resolution+%3D+unresolved+AND+%28project+%3D+BSERV+OR+assignee+%3D+currentUser()%29+ORDER+BY+priority+DESC%2C+created+ASC&quot;</span><span class="w"></span>
-<span class="w">    </span><span class="nt">print</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">echo &quot;only global volumes will be mounted&quot;</span><span class="w"></span>
-<span class="w">  </span><span class="nt">mounts</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">print</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">sh</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">echo &quot;/tmp/Music will be overridden with /tmp/Downloads&quot;</span><span class="w"></span>
-<span class="w">        </span><span class="nt">volumes</span><span class="p">:</span><span class="w"></span>
-<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/tmp/Downloads:/home/sandbox/temp</span><span class="w"></span>
+<span class="nt">phases</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">list</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">jira</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">with-credentials</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">netrc</span>
+<span class="w">          </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file</span>
+<span class="w">        </span><span class="nt">volumes</span><span class="p">:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${SECRET_FILE}:~/.netrc:ro</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">curl -v --netrc --silent &quot;https://jira.atlassian.com/rest/api/2/search?maxResults=100&amp;fields=key,summary,assignee&amp;jql=resolution+%3D+unresolved+AND+%28project+%3D+BSERV+OR+assignee+%3D+currentUser()%29+ORDER+BY+priority+DESC%2C+created+ASC&quot;</span>
+<span class="w">    </span><span class="nt">print</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">echo &quot;only global volumes will be mounted&quot;</span>
+<span class="w">  </span><span class="nt">mounts</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">print</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">sh</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">echo &quot;/tmp/Music will be overridden with /tmp/Downloads&quot;</span>
+<span class="w">        </span><span class="nt">volumes</span><span class="p">:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/tmp/Downloads:/home/sandbox/temp</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">volumes</span><span class="p">:</span><span class="w"> </span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/tmp/Pictures:/home/sandbox/temp</span><span class="w"></span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/tmp/Desktop</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">echo &quot;override /tmp/Downloads with /tmp/Pictures and /tmp/Desktop is added&quot;</span><span class="w"></span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/tmp/Pictures:/home/sandbox/temp</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/tmp/Desktop</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">echo &quot;override /tmp/Downloads with /tmp/Pictures and /tmp/Desktop is added&quot;</span>
 </pre></div>
 </div>
 </div>
@@ -424,19 +424,19 @@ Consider the following example where <cite>/tmp/downloads</cite> is overridden:<
 This is a list of strings.
 Each string is the name of an environment variable.
 If the named environment variable exists in the host environment, it will be set to the same value inside the container.</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-image:4.2.1</span><span class="w"></span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-image:4.2.1</span>
 
-<span class="nt">pass-through-environment-vars</span><span class="p">:</span><span class="w"></span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">JENKINS_TEST_INSTANCE</span><span class="w"></span>
+<span class="nt">pass-through-environment-vars</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">JENKINS_TEST_INSTANCE</span>
 
-<span class="nt">phases</span><span class="p">:</span><span class="w"></span>
-<span class="w">  </span><span class="nt">x86</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">build</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./build.sh</span><span class="w"></span>
+<span class="nt">phases</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">x86</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">build</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./build.sh</span>
 
-<span class="w">  </span><span class="nt">x86</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">upload</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./upload-from-non-test-only.sh</span><span class="w"></span>
+<span class="w">  </span><span class="nt">x86</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">upload</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./upload-from-non-test-only.sh</span>
 </pre></div>
 </div>
 </div>
@@ -459,17 +459,17 @@ The behavior translates directly to a <code class="docutils literal notranslate"
 </dl>
 <p>The combination of <code class="docutils literal notranslate"><span class="pre">&lt;image-name&gt;:&lt;image-version&gt;</span></code> should result in a correct, downloadable Docker image.</p>
 <p><strong>example:</strong></p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span><span class="w"></span>
-<span class="w">  </span><span class="nt">coverity</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">x64</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Coverity run</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">volumes-from</span><span class="p">:</span><span class="w"></span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">image-name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hub.docker.com/tomtom/coverity</span><span class="w"></span>
-<span class="w">          </span><span class="nt">image-version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.4.7</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sh -c &#39;cd build/x64-rel;</span><span class="w"></span>
-<span class="w">          </span><span class="l l-Scalar l-Scalar-Plain">/opt/coverity/bin/cov-configure --template --compiler c++ --comptype gcc --version 7.3 --config my_config.conf;</span><span class="w"></span>
-<span class="w">          </span><span class="l l-Scalar l-Scalar-Plain">/opt/coverity/bin/cov-build --config my_config.conf --dir cov-int ninja;</span><span class="w"></span>
-<span class="w">          </span><span class="l l-Scalar l-Scalar-Plain">echo etc.&#39;</span><span class="w"></span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">coverity</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">x64</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Coverity run</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">volumes-from</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">image-name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hub.docker.com/tomtom/coverity</span>
+<span class="w">          </span><span class="nt">image-version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.4.7</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sh -c &#39;cd build/x64-rel;</span>
+<span class="w">          </span><span class="l l-Scalar l-Scalar-Plain">/opt/coverity/bin/cov-configure --template --compiler c++ --comptype gcc --version 7.3 --config my_config.conf;</span>
+<span class="w">          </span><span class="l l-Scalar l-Scalar-Plain">/opt/coverity/bin/cov-build --config my_config.conf --dir cov-int ninja;</span>
+<span class="w">          </span><span class="l l-Scalar l-Scalar-Plain">echo etc.&#39;</span>
 </pre></div>
 </div>
 </div>
@@ -485,7 +485,7 @@ Publication includes version bumping (see <a class="reference internal" href="#c
 <p>If this option is omitted, Hopic allows publication from any branch.</p>
 <p>The example below configures Hopic to only publish from the <code class="docutils literal notranslate"><span class="pre">master</span></code> branch or any branch starting with <code class="docutils literal notranslate"><span class="pre">release/</span></code> or <code class="docutils literal notranslate"><span class="pre">rel-</span></code>.</p>
 <p><strong>example:</strong></p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">publish-from-branch</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;^master$|^release/.*|^rel-.*&#39;</span><span class="w"></span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">publish-from-branch</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;^master$|^release/.*|^rel-.*&#39;</span>
 </pre></div>
 </div>
 </div>
@@ -537,12 +537,12 @@ Otherwise it describes a version bumping policy in its <code class="docutils lit
 <div>Its <code class="docutils literal notranslate"><span class="pre">version.bump.field</span></code> property specifies what field to bump.
 It will always bump that field and no other.
 When not specified it defaults to bumping the default-to-bump part of the used version policy.</div></blockquote>
-<div class="last highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">version</span><span class="p">:</span><span class="w"></span>
-<span class="w">  </span><span class="nt">format</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">semver</span><span class="w"></span>
-<span class="w">  </span><span class="nt">tag</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;v.{version.major}.{version.minor}.{version.patch}&#39;</span><span class="w"></span>
-<span class="w">  </span><span class="nt">bump</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">policy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">constant</span><span class="w"></span>
-<span class="w">    </span><span class="nt">field</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">patch</span><span class="w"></span>
+<div class="last highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">version</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">format</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">semver</span>
+<span class="w">  </span><span class="nt">tag</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;v.{version.major}.{version.minor}.{version.patch}&#39;</span>
+<span class="w">  </span><span class="nt">bump</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">policy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">constant</span>
+<span class="w">    </span><span class="nt">field</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">patch</span>
 </pre></div>
 </div>
 </dd>
@@ -556,14 +556,14 @@ Otherwise the merge will fail when encountering invalidly formatted messages.</p
 <p>The <code class="docutils literal notranslate"><span class="pre">version.bump.reject-breaking-changes-on</span></code> and <code class="docutils literal notranslate"><span class="pre">version.bump.reject-new-features-on</span></code> options specify regular expressions matching branch names.
 Merges into these branches will be rejected if, respectively, they contain breaking changes or new features.
 The purpose of this is to prevent accidental inclusion of these kinds of changes into release branches.</p>
-<div class="last highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">version</span><span class="p">:</span><span class="w"></span>
-<span class="w">  </span><span class="nt">format</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">semver</span><span class="w"></span>
-<span class="w">  </span><span class="nt">tag</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;v.{version.major}.{version.minor}.{version.patch}&#39;</span><span class="w"></span>
-<span class="w">  </span><span class="nt">bump</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">policy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">conventional-commits</span><span class="w"></span>
-<span class="w">    </span><span class="nt">strict</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">no</span><span class="w"> </span><span class="c1"># default</span><span class="w"></span>
-<span class="w">    </span><span class="nt">reject-breaking-changes-on</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;release/.*|rel-.*&#39;</span><span class="w"> </span><span class="c1"># default</span><span class="w"></span>
-<span class="w">    </span><span class="nt">reject-new-features-on</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;release/\d+\..*|rel-\d+\..*&#39;</span><span class="w"> </span><span class="c1"># default</span><span class="w"></span>
+<div class="last highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">version</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">format</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">semver</span>
+<span class="w">  </span><span class="nt">tag</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;v.{version.major}.{version.minor}.{version.patch}&#39;</span>
+<span class="w">  </span><span class="nt">bump</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">policy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">conventional-commits</span>
+<span class="w">    </span><span class="nt">strict</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">no</span><span class="w"> </span><span class="c1"># default</span>
+<span class="w">    </span><span class="nt">reject-breaking-changes-on</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;release/.*|rel-.*&#39;</span><span class="w"> </span><span class="c1"># default</span>
+<span class="w">    </span><span class="nt">reject-new-features-on</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;release/\d+\..*|rel-\d+\..*&#39;</span><span class="w"> </span><span class="c1"># default</span>
 </pre></div>
 </div>
 </dd>
@@ -608,12 +608,12 @@ Upon completion of the command, all files that are changed, removed and/or previ
 </dd>
 </dl>
 <p><strong>example:</strong></p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">modality-source-preparation</span><span class="p">:</span><span class="w"></span>
-<span class="w">  </span><span class="nt">UPDATE_DEPENDENCY_MANIFEST</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">sh</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">update_dependency_manifest.py ${CFGDIR}/dependency_manifest.xml ${CFGDIR}/ivysettings.xml</span><span class="w"></span>
-<span class="w">      </span><span class="nt">changed-files</span><span class="p">:</span><span class="w"></span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${CFGDIR}/dependency_manifest.xml</span><span class="w"></span>
-<span class="w">      </span><span class="nt">commit-message</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Update of dependency manifest</span><span class="w"></span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">modality-source-preparation</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">UPDATE_DEPENDENCY_MANIFEST</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">sh</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">update_dependency_manifest.py ${CFGDIR}/dependency_manifest.xml ${CFGDIR}/ivysettings.xml</span>
+<span class="w">      </span><span class="nt">changed-files</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${CFGDIR}/dependency_manifest.xml</span>
+<span class="w">      </span><span class="nt">commit-message</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Update of dependency manifest</span>
 </pre></div>
 </div>
 </div>
@@ -626,11 +626,11 @@ Upon completion of the command, all files that are changed, removed and/or previ
 
 <p>The option <code class="docutils literal notranslate"><span class="pre">node-label</span></code> executes the specified steps on an agent available in the Jenkins environment with the provided label(s).</p>
 <p><strong>example:</strong></p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span><span class="w"></span>
-<span class="w">  </span><span class="nt">build</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">Linux-x86_64-Release</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">node-label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Linux &amp;&amp; Docker &amp;&amp; Release</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Build/build.py -f Build/Linux-x86_64.yaml -m Release</span><span class="w"></span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">build</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">Linux-x86_64-Release</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">node-label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Linux &amp;&amp; Docker &amp;&amp; Release</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Build/build.py -f Build/Linux-x86_64.yaml -m Release</span>
 </pre></div>
 </div>
 </div>
@@ -652,20 +652,20 @@ The value of the <code class="docutils literal notranslate"><span class="pre">ru
 <dd>The steps will only be performed when the change is to be submitted in the current execution.</dd>
 </dl>
 <p><strong>example:</strong></p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span><span class="w"></span>
-<span class="w">  </span><span class="nt">build</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">x64-release</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-release</span><span class="w"></span>
-<span class="w">    </span><span class="nt">x64-debug</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-debug</span><span class="w"></span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">build</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">x64-release</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-release</span>
+<span class="w">    </span><span class="nt">x64-debug</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-debug</span>
 
-<span class="w">  </span><span class="nt">upload</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">x64-release</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run-on-change</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">only</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-x64-release/do-upload.sh</span><span class="w"></span>
-<span class="w">    </span><span class="nt">x64-debug</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run-on-change</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">only</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-x64-debug/do-upload.sh</span><span class="w"></span>
+<span class="w">  </span><span class="nt">upload</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">x64-release</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run-on-change</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">only</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-x64-release/do-upload.sh</span>
+<span class="w">    </span><span class="nt">x64-debug</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run-on-change</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">only</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-x64-debug/do-upload.sh</span>
 </pre></div>
 </div>
 </div>
@@ -682,13 +682,13 @@ The stashed files are available for every executor/node in every phase and works
 Use Wildcards like <cite>module/dist/**/*.zip</cite>.
 A <cite>*</cite> expands only to a single directory entry, where <cite>**</cite> expands to multiple directory levels deep.</p>
 <p><strong>example:</strong></p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span><span class="w"></span>
-<span class="w">  </span><span class="nt">upload</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">Linux-x86_64-Release</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run-on-change</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">only</span><span class="w"></span>
-<span class="w">        </span><span class="nt">stash</span><span class="p">:</span><span class="w"></span>
-<span class="w">          </span><span class="nt">includes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Build/Output/x86_64-Linux-clang/Release/ivy-repo/published_artifacts.yaml</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Build/build.py -f Build/Linux-x86_64.yaml Publish.ALL -m Release</span><span class="w"></span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">upload</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">Linux-x86_64-Release</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run-on-change</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">only</span>
+<span class="w">        </span><span class="nt">stash</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">includes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Build/Output/x86_64-Linux-clang/Release/ivy-repo/published_artifacts.yaml</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Build/build.py -f Build/Linux-x86_64.yaml Publish.ALL -m Release</span>
 </pre></div>
 </div>
 </div>
@@ -701,14 +701,14 @@ A <cite>*</cite> expands only to a single directory entry, where <cite>**</cite>
 
 <p>The option <code class="docutils literal notranslate"><span class="pre">description</span></code> adds a description to the step which will be printed in the logs.</p>
 <p><strong>example:</strong></p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span><span class="w"></span>
-<span class="w">  </span><span class="nt">quality</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">Coverity</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Coverity run</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">volumes-from</span><span class="p">:</span><span class="w"></span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">image-name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hub.docker.com/tomtom/coverity</span><span class="w"></span>
-<span class="w">          </span><span class="nt">image-version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.4.6</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">echo -e &quot;Run Coverity here, eg.:\n  cov-configure --template --compiler gcc --comptype gcc\n  cov-configure -co /tools/devenv/Linux/Linux/gcc-4.8.2/bin/c++ -- -msse -mfpmath=sse\netc..&quot;</span><span class="w"></span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">quality</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">Coverity</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Coverity run</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">volumes-from</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">image-name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hub.docker.com/tomtom/coverity</span>
+<span class="w">          </span><span class="nt">image-version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.4.6</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">echo -e &quot;Run Coverity here, eg.:\n  cov-configure --template --compiler gcc --comptype gcc\n  cov-configure -co /tools/devenv/Linux/Linux/gcc-4.8.2/bin/c++ -- -msse -mfpmath=sse\netc..&quot;</span>
 </pre></div>
 </div>
 </div>
@@ -766,15 +766,15 @@ A <cite>*</cite> expands only to a single directory entry, where <cite>**</cite>
 <p>The option <code class="docutils literal notranslate"><span class="pre">junit</span></code> triggers Jenkins Unit Testing.
 For more information about this feature see: <a class="reference external" href="https://www.tutorialspoint.com/jenkins/jenkins_unit_testing.htm">https://www.tutorialspoint.com/jenkins/jenkins_unit_testing.htm</a></p>
 <p><strong>example:</strong></p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span><span class="w"></span>
-<span class="w">  </span><span class="nt">build</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">x64-release</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-release</span><span class="w"></span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">build</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">x64-release</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-release</span>
 
-<span class="w">  </span><span class="nt">test</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">x64-debug</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">junit</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-x64-debug/test-unit.xml</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-debug --target test</span><span class="w"></span>
+<span class="w">  </span><span class="nt">test</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">x64-debug</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">junit</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-x64-debug/test-unit.xml</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-debug --target test</span>
 </pre></div>
 </div>
 </div>
@@ -794,20 +794,20 @@ A <cite>*</cite> expands only to a single directory entry, where <cite>**</cite>
 <p>Use the <code class="docutils literal notranslate"><span class="pre">pattern</span></code> option to identify and upload a specific artifact.
 The specific artifact can then be uploaded to artifactory with the option <code class="docutils literal notranslate"><span class="pre">target</span></code>.</p>
 <p><strong>example:</strong></p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span><span class="w"></span>
-<span class="w">  </span><span class="nt">build</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">x64-release</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake -B build-x64-release -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo</span><span class="w"></span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">build</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">x64-release</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake -B build-x64-release -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo</span>
 
-<span class="w">  </span><span class="nt">upload</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">x64-release</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-release --target package</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">archive</span><span class="p">:</span><span class="w"></span>
-<span class="w">          </span><span class="nt">artifacts</span><span class="p">:</span><span class="w"></span>
-<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Build/Output/x64/release/**</span><span class="w"></span>
-<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Build/Output/x64/release/TomTom-Package-${VERSION}-x64.tar.gz</span><span class="w"></span>
-<span class="w">              </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cs-snapshot/com.tomtom.package/Package/x64/release/${VERSION}/TomTom-Package-x64-release-${VERSION}.tar.gz</span><span class="w"></span>
-<span class="w">        </span><span class="nt">run-on-change</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">only</span><span class="w"></span>
+<span class="w">  </span><span class="nt">upload</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">x64-release</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-release --target package</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">archive</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">artifacts</span><span class="p">:</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Build/Output/x64/release/**</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Build/Output/x64/release/TomTom-Package-${VERSION}-x64.tar.gz</span>
+<span class="w">              </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cs-snapshot/com.tomtom.package/Package/x64/release/${VERSION}/TomTom-Package-x64-release-${VERSION}.tar.gz</span>
+<span class="w">        </span><span class="nt">run-on-change</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">only</span>
 </pre></div>
 </div>
 <div class="section" id="archiving-to-artifactory">
@@ -821,18 +821,18 @@ The specific artifact can then be uploaded to artifactory with the option <code 
 The option <code class="docutils literal notranslate"><span class="pre">id</span></code> is the named identifier referring to a preconfigured Artifactory server from Jenkins’ global configuration.
 The artifacts to be uploaded are specified with the <code class="docutils literal notranslate"><span class="pre">artifacts</span></code> option.</p>
 <p><strong>example:</strong></p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span><span class="w"></span>
-<span class="w">  </span><span class="nt">upload</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">Linux-x86_64</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">archive</span><span class="p">:</span><span class="w"></span>
-<span class="w">          </span><span class="nt">artifacts</span><span class="p">:</span><span class="w"></span>
-<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-x86/TomTom-Stacktrace-${VERSION}-Linux-x86_64.tar.gz</span><span class="w"></span>
-<span class="w">              </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cs-psa-p1cms-snapshot/com.tomtom.stacktrace/Stacktrace/linux/x86_64/release/${VERSION}/Stacktrace-linux-x86_64-release-custom-${VERSION}.tar.gz</span><span class="w"></span>
-<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-x86/TomTom-Stacktrace-${VERSION}-Linux-x86_64.tar.gz</span><span class="w"></span>
-<span class="w">              </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cs-psa-p1cms-snapshot/com.tomtom.stacktrace/Stacktrace/linux/x86_64/debug/${VERSION}/Stacktrace-linux-x86_64-release-custom-${VERSION}.tar.gz</span><span class="w"></span>
-<span class="w">          </span><span class="nt">upload-artifactory</span><span class="p">:</span><span class="w"></span>
-<span class="w">            </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">artifactory-navkit</span><span class="w"></span>
-<span class="w">        </span><span class="nt">run-on-change</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">only</span><span class="w"></span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">upload</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">Linux-x86_64</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">archive</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">artifacts</span><span class="p">:</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-x86/TomTom-Stacktrace-${VERSION}-Linux-x86_64.tar.gz</span>
+<span class="w">              </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cs-psa-p1cms-snapshot/com.tomtom.stacktrace/Stacktrace/linux/x86_64/release/${VERSION}/Stacktrace-linux-x86_64-release-custom-${VERSION}.tar.gz</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-x86/TomTom-Stacktrace-${VERSION}-Linux-x86_64.tar.gz</span>
+<span class="w">              </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cs-psa-p1cms-snapshot/com.tomtom.stacktrace/Stacktrace/linux/x86_64/debug/${VERSION}/Stacktrace-linux-x86_64-release-custom-${VERSION}.tar.gz</span>
+<span class="w">          </span><span class="nt">upload-artifactory</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">artifactory-navkit</span>
+<span class="w">        </span><span class="nt">run-on-change</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">only</span>
 </pre></div>
 </div>
 <div class="section" id="promoting-builds-in-artifactory">
@@ -847,34 +847,34 @@ The option <code class="docutils literal notranslate"><span class="pre">promotio
 The option <code class="docutils literal notranslate"><span class="pre">target-repo</span></code> specifies the Artifactory target repository.</p>
 <p>Only build artifacts that were uploaded with the option <code class="docutils literal notranslate"><span class="pre">upload-artifactory</span></code> will be promoted.</p>
 <p><strong>example:</strong></p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">artifactory</span><span class="p">:</span><span class="w"></span>
-<span class="w">  </span><span class="nt">promotion</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">artifactory-navkit</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="nt">target-repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cs-psa-p1cms-release</span><span class="w"></span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">artifactory</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">promotion</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">artifactory-navkit</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target-repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cs-psa-p1cms-release</span>
 
-<span class="nt">phases</span><span class="p">:</span><span class="w"></span>
-<span class="w">  </span><span class="nt">build</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">Linux-x86_64</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-x86</span><span class="w"></span>
-<span class="w">    </span><span class="nt">Linux_AGL-aarch64</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-agl-aarch64</span><span class="w"></span>
+<span class="nt">phases</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">build</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">Linux-x86_64</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-x86</span>
+<span class="w">    </span><span class="nt">Linux_AGL-aarch64</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-agl-aarch64</span>
 
-<span class="w">  </span><span class="nt">package</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">Linux-x86_64</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">fingerprint</span><span class="p">:</span><span class="w"></span>
-<span class="w">          </span><span class="nt">artifacts</span><span class="p">:</span><span class="w"></span>
-<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-x86/TomTom-Stacktrace-${VERSION}-Linux-x86_64.tar.gz</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-x86 --target package</span><span class="w"></span>
+<span class="w">  </span><span class="nt">package</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">Linux-x86_64</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">fingerprint</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">artifacts</span><span class="p">:</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-x86/TomTom-Stacktrace-${VERSION}-Linux-x86_64.tar.gz</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-x86 --target package</span>
 
-<span class="w">  </span><span class="nt">upload</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">Linux-x86_64</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">archive</span><span class="p">:</span><span class="w"></span>
-<span class="w">          </span><span class="nt">artifacts</span><span class="p">:</span><span class="w"></span>
-<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-x86/TomTom-Stacktrace-${VERSION}-Linux-x86_64.tar.gz</span><span class="w"></span>
-<span class="w">              </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cs-psa-p1cms-snapshot/com.tomtom.stacktrace/Stacktrace/linux/x86_64/release/${VERSION}/Stacktrace-linux-x86_64-release-custom-${VERSION}.tar.gz</span><span class="w"></span>
-<span class="w">          </span><span class="nt">upload-artifactory</span><span class="p">:</span><span class="w"></span>
-<span class="w">            </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">artifactory-navkit</span><span class="w"></span>
-<span class="w">        </span><span class="nt">run-on-change</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">only</span><span class="w"></span>
+<span class="w">  </span><span class="nt">upload</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">Linux-x86_64</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">archive</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">artifacts</span><span class="p">:</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-x86/TomTom-Stacktrace-${VERSION}-Linux-x86_64.tar.gz</span>
+<span class="w">              </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cs-psa-p1cms-snapshot/com.tomtom.stacktrace/Stacktrace/linux/x86_64/release/${VERSION}/Stacktrace-linux-x86_64-release-custom-${VERSION}.tar.gz</span>
+<span class="w">          </span><span class="nt">upload-artifactory</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">artifactory-navkit</span>
+<span class="w">        </span><span class="nt">run-on-change</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">only</span>
 </pre></div>
 </div>
 </div>
@@ -892,17 +892,17 @@ Use the option <code class="docutils literal notranslate"><span class="pre">arti
 <p>With the <code class="docutils literal notranslate"><span class="pre">fingerprint</span></code> option, the Jenkins “fingerprint” feature is invoked.
 For more information about this feature see: <a class="reference external" href="https://jenkins.io/doc/pipeline/steps/core/#fingerprint-record-fingerprints-of-files-to-track-usage">https://jenkins.io/doc/pipeline/steps/core/#fingerprint-record-fingerprints-of-files-to-track-usage</a></p>
 <p><strong>example:</strong></p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span><span class="w"></span>
-<span class="w">  </span><span class="nt">build</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">x64-release</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-release</span><span class="w"></span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">phases</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">build</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">x64-release</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-release</span>
 
-<span class="w">  </span><span class="nt">package</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">x64-release</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">fingerprint</span><span class="p">:</span><span class="w"></span>
-<span class="w">          </span><span class="nt">artifacts</span><span class="p">:</span><span class="w"></span>
-<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-x64-release/TomTom-Stacktrace-${VERSION}-Linux-x86_64.tar.gz</span><span class="w"></span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-release --target package</span><span class="w"></span>
+<span class="w">  </span><span class="nt">package</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">x64-release</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">fingerprint</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">artifacts</span><span class="p">:</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-x64-release/TomTom-Stacktrace-${VERSION}-Linux-x86_64.tar.gz</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake --build build-x64-release --target package</span>
 </pre></div>
 </div>
 </div>
@@ -940,7 +940,7 @@ For more information about this feature see: <a class="reference external" href=
       </ul>
     </div>
     <div class="footer" role="contentinfo">
-        &#169; Copyright 2022 - 2020, TomTom N.V..
+        &#169; Copyright 2023 - 2020, TomTom N.V..
       Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.8.6.
     </div>
   </body>

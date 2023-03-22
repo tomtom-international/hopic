@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    <title>Usage &#8212; Hopic 1.59.0 documentation</title>
+    <title>Usage &#8212; Hopic 1.59.1.dev5+g9583046e documentation</title>
     <link rel="stylesheet" href="_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
     <link rel="stylesheet" type="text/css" href="_static/banner.css" />
@@ -34,7 +34,7 @@
         <li class="right" >
           <a href="index.html" title="Hopic"
              accesskey="P">previous</a> |</li>
-        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.59.0 documentation</a> &#187;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.59.1.dev5+g9583046e documentation</a> &#187;</li> 
       </ul>
     </div>  
 
@@ -47,7 +47,7 @@
 <h1>Usage<a class="headerlink" href="#usage" title="Permalink to this headline">¶</a></h1>
 <div class="section" id="hopic">
 <h2>hopic<a class="headerlink" href="#hopic" title="Permalink to this headline">¶</a></h2>
-<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic <span class="o">[</span>OPTIONS<span class="o">]</span> COMMAND <span class="o">[</span>ARGS<span class="o">]</span>...
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span><span class="w"> </span>COMMAND<span class="w"> </span><span class="o">[</span>ARGS<span class="o">]</span>...
 </pre></div>
 </div>
 <p class="rubric">Options</p>
@@ -131,7 +131,7 @@
 <p>This defaults to building all variants for all phases.
 It’s possible to limit building to either all variants for a single phase, all phases for a single variant or a
 single variant for a single phase.</p>
-<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic build <span class="o">[</span>OPTIONS<span class="o">]</span>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic<span class="w"> </span>build<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </pre></div>
 </div>
 <p class="rubric">Options</p>
@@ -157,7 +157,7 @@ single variant for a single phase.</p>
 <div class="section" id="hopic-checkout-source-tree">
 <h3>checkout-source-tree<a class="headerlink" href="#hopic-checkout-source-tree" title="Permalink to this headline">¶</a></h3>
 <p>Checks out a source tree of the specified remote’s ref to the workspace.</p>
-<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic checkout-source-tree <span class="o">[</span>OPTIONS<span class="o">]</span>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic<span class="w"> </span>checkout-source-tree<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </pre></div>
 </div>
 <p class="rubric">Options</p>
@@ -195,7 +195,7 @@ single variant for a single phase.</p>
 <p>The output is JSON encoded.</p>
 <p>If a phase or variant filter is specified the name of that will not be present in the output.
 Otherwise this is a nested dictionary of phases and variants.</p>
-<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic getinfo <span class="o">[</span>OPTIONS<span class="o">]</span>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic<span class="w"> </span>getinfo<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </pre></div>
 </div>
 <p class="rubric">Options</p>
@@ -226,7 +226,7 @@ Otherwise this is a nested dictionary of phases and variants.</p>
 </div>
 <div class="section" id="hopic-install-extensions">
 <h3>install-extensions<a class="headerlink" href="#hopic-install-extensions" title="Permalink to this headline">¶</a></h3>
-<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic install-extensions <span class="o">[</span>OPTIONS<span class="o">]</span>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic<span class="w"> </span>install-extensions<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </pre></div>
 </div>
 <p class="rubric">Options</p>
@@ -246,14 +246,14 @@ Otherwise this is a nested dictionary of phases and variants.</p>
 <div class="section" id="hopic-may-publish">
 <h3>may-publish<a class="headerlink" href="#hopic-may-publish" title="Permalink to this headline">¶</a></h3>
 <p>Check if the target branch name is allowed to be published, according to publish-from-branch in the config file.</p>
-<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic may-publish <span class="o">[</span>OPTIONS<span class="o">]</span>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic<span class="w"> </span>may-publish<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </pre></div>
 </div>
 </div>
 <div class="section" id="hopic-prepare-source-tree">
 <h3>prepare-source-tree<a class="headerlink" href="#hopic-prepare-source-tree" title="Permalink to this headline">¶</a></h3>
 <p>Prepares the source tree for building a change performed by a subcommand.</p>
-<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic prepare-source-tree <span class="o">[</span>OPTIONS<span class="o">]</span> COMMAND <span class="o">[</span>ARGS<span class="o">]</span>...
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic<span class="w"> </span>prepare-source-tree<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span><span class="w"> </span>COMMAND<span class="w"> </span><span class="o">[</span>ARGS<span class="o">]</span>...
 </pre></div>
 </div>
 <p class="rubric">Options</p>
@@ -295,7 +295,7 @@ Otherwise this is a nested dictionary of phases and variants.</p>
 <div class="section" id="hopic-prepare-source-tree-apply-modality-change">
 <h4>apply-modality-change<a class="headerlink" href="#hopic-prepare-source-tree-apply-modality-change" title="Permalink to this headline">¶</a></h4>
 <p>Applies the changes specific to the specified modality.</p>
-<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic prepare-source-tree apply-modality-change <span class="o">[</span>OPTIONS<span class="o">]</span> MODALITY
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic<span class="w"> </span>prepare-source-tree<span class="w"> </span>apply-modality-change<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span><span class="w"> </span>MODALITY
 </pre></div>
 </div>
 <p class="rubric">Arguments</p>
@@ -309,14 +309,14 @@ Otherwise this is a nested dictionary of phases and variants.</p>
 <div class="section" id="hopic-prepare-source-tree-bump-version">
 <h4>bump-version<a class="headerlink" href="#hopic-prepare-source-tree-bump-version" title="Permalink to this headline">¶</a></h4>
 <p>Bump the version based on the configuration.</p>
-<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic prepare-source-tree bump-version <span class="o">[</span>OPTIONS<span class="o">]</span>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic<span class="w"> </span>prepare-source-tree<span class="w"> </span>bump-version<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </pre></div>
 </div>
 </div>
 <div class="section" id="hopic-prepare-source-tree-merge-change-request">
 <h4>merge-change-request<a class="headerlink" href="#hopic-prepare-source-tree-merge-change-request" title="Permalink to this headline">¶</a></h4>
 <p>Merges the change request from the specified branch.</p>
-<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic prepare-source-tree merge-change-request <span class="o">[</span>OPTIONS<span class="o">]</span>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic<span class="w"> </span>prepare-source-tree<span class="w"> </span>merge-change-request<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </pre></div>
 </div>
 <p class="rubric">Options</p>
@@ -361,21 +361,21 @@ Otherwise this is a nested dictionary of phases and variants.</p>
 <div class="section" id="hopic-show-config">
 <h3>show-config<a class="headerlink" href="#hopic-show-config" title="Permalink to this headline">¶</a></h3>
 <p>Diagnostic helper command to display the configuration after processing.</p>
-<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic show-config <span class="o">[</span>OPTIONS<span class="o">]</span>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic<span class="w"> </span>show-config<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </pre></div>
 </div>
 </div>
 <div class="section" id="hopic-show-env">
 <h3>show-env<a class="headerlink" href="#hopic-show-env" title="Permalink to this headline">¶</a></h3>
 <p>Diagnostic helper command to display the execution environment.</p>
-<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic show-env <span class="o">[</span>OPTIONS<span class="o">]</span>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic<span class="w"> </span>show-env<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </pre></div>
 </div>
 </div>
 <div class="section" id="hopic-submit">
 <h3>submit<a class="headerlink" href="#hopic-submit" title="Permalink to this headline">¶</a></h3>
 <p>Submit the changes created by prepare-source-tree to the target remote.</p>
-<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic submit <span class="o">[</span>OPTIONS<span class="o">]</span>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic<span class="w"> </span>submit<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </pre></div>
 </div>
 <p class="rubric">Options</p>
@@ -389,7 +389,7 @@ Otherwise this is a nested dictionary of phases and variants.</p>
 <div class="section" id="hopic-unbundle">
 <h3>unbundle<a class="headerlink" href="#hopic-unbundle" title="Permalink to this headline">¶</a></h3>
 <p>Unbundle the specified git bundle and setup all included refs for pushing.</p>
-<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic unbundle <span class="o">[</span>OPTIONS<span class="o">]</span> BUNDLE
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic<span class="w"> </span>unbundle<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span><span class="w"> </span>BUNDLE
 </pre></div>
 </div>
 <p class="rubric">Arguments</p>
@@ -403,7 +403,7 @@ Otherwise this is a nested dictionary of phases and variants.</p>
 <div class="section" id="hopic-unbundle-worktrees">
 <h3>unbundle-worktrees<a class="headerlink" href="#hopic-unbundle-worktrees" title="Permalink to this headline">¶</a></h3>
 <p>Unbundle a git bundle and fast-forward all the configured worktrees that are included in it.</p>
-<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic unbundle-worktrees <span class="o">[</span>OPTIONS<span class="o">]</span>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>hopic<span class="w"> </span>unbundle-worktrees<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </pre></div>
 </div>
 <p class="rubric">Options</p>
@@ -445,11 +445,11 @@ Otherwise this is a nested dictionary of phases and variants.</p>
         <li class="right" >
           <a href="index.html" title="Hopic"
              >previous</a> |</li>
-        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.59.0 documentation</a> &#187;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">Hopic 1.59.1.dev5+g9583046e documentation</a> &#187;</li> 
       </ul>
     </div>
     <div class="footer" role="contentinfo">
-        &#169; Copyright 2022 - 2020, TomTom N.V..
+        &#169; Copyright 2023 - 2020, TomTom N.V..
       Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.8.6.
     </div>
   </body>
