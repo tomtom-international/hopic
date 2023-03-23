@@ -17,6 +17,16 @@
 Changelog
 =========
 
+1.59.1
+======
+
+Bug fixes
+---------
+
+* fix: avoid parameters being null for first build causing problems (#465)
+* fix: use correct version range syntax in `setup.py` (#464)
+* fix: compile reject-patterns before using them (#463)
+
 1.59.0
 ======
 
