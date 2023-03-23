@@ -667,14 +667,21 @@ def read_version_info(config, version_info):
         bump.setdefault('strict', False)
         if not isinstance(version_info['bump']['strict'], bool):
             raise ConfigurationError("`version.bump.strict` field for the `conventional-commits` policy must be a boolean", file=config)
+
         bump.setdefault('reject-breaking-changes-on', re.compile(r'^(?:release/|rel-).*$'))
         bump.setdefault('reject-new-features-on', re.compile(r'^(?:release/|rel-)\d+\..*$'))
+
         if not isinstance(bump['reject-breaking-changes-on'], (str, Pattern)):
             raise ConfigurationError(
                     "`version.bump.reject-breaking-changes-on` field for the `conventional-commits` policy must be a regex or boolean", file=config)
         if not isinstance(bump['reject-new-features-on'], (str, Pattern)):
             raise ConfigurationError(
                     "`version.bump.reject-new-features-on` field for the `conventional-commits` policy must be a regex or boolean", file=config)
+
+        if isinstance(bump["reject-breaking-changes-on"], str):
+            bump["reject-breaking-changes-on"] = re.compile(bump["reject-breaking-changes-on"])
+        if isinstance(bump["reject-new-features-on"], str):
+            bump["reject-new-features-on"] = re.compile(bump["reject-new-features-on"])
 
     if 'build' in version_info:
         if 'format' in version_info and version_info['format'] != 'semver':
