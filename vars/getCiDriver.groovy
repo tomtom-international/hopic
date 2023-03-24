@@ -566,6 +566,7 @@ class CiDriver {
   private HopicEventCallbacks event_callbacks = null
   private node_allocation_event_id = 0
   private is_submit_step_started = false
+  private allow_concurrent_builds = false
 
   private final default_node_expr = "Linux && Docker"
 
@@ -586,6 +587,7 @@ class CiDriver {
     ]
     this.printMetrics = printMetrics
     this.event_callbacks = params.event_callbacks ?: new HopicEventCallbacks()
+    this.allow_concurrent_builds = params.allow_concurrent_builds ?: false
   }
 
   private def get_change() {
@@ -1525,7 +1527,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       return
     }
 
-    if (!props.any { it instanceof DisableConcurrentBuildsJobProperty }) {
+    if (!this.allow_concurrent_builds && !props.any { it instanceof DisableConcurrentBuildsJobProperty }) {
       props.add(steps.disableConcurrentBuilds())
     }
 
