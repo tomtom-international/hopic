@@ -20,6 +20,10 @@ outputs:
     value: ${{ steps.determine-version.outputs.PURE_VERSION }}
   publishable-version:
     value: ${{ contains(steps.determine-version.outputs.PURE_VERSION, '-') && steps.determine-version.outputs.PUBLISH_VERSION || steps.determine-version.outputs.PURE_VERSION }}
+  meta:
+    value: ${{ steps.determine-version.outputs.hopic-meta }}
+  version-bumped:
+    value: ${{ fromJSON(steps.determine-version.outputs.hopic-meta).version-bumped }}
 
 runs:
   using: "composite"
@@ -105,4 +109,11 @@ runs:
         LC_ALL: C.UTF-8
         TZ: UTC
       run: |
-        python3 -m hopic --workspace="${GITHUB_WORKSPACE}" --config="${GITHUB_ACTION_PATH}/hopic-version-dump.yaml" build --variant=version-info >> "$GITHUB_OUTPUT"
+        echo -n 'hopic-meta=' >> "$GITHUB_OUTPUT"
+        if [[ "${GITHUB_EVENT_NAME}" == pull_request* ]]; then
+          git fetch hopic-merge-transfer.bundle refs/hopic/bundle/meta
+          git show FETCH_HEAD:hopic-meta | tee -a "$GITHUB_OUTPUT"
+        else
+          echo "{\"version-bumped\":false,\"target-commit\":\"${GITHUB_SHA}\"}" | tee -a "$GITHUB_OUTPUT"
+        fi
+        python3 -m hopic --workspace="${GITHUB_WORKSPACE}" --config="${GITHUB_ACTION_PATH}/hopic-version-dump.yaml" build --variant=version-info >> "$GITHUB_OUTPUT" || :
