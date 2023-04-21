@@ -1481,8 +1481,8 @@ def unbundle(ctx, *, bundle: PathLike):
         git_cfg = ctx.obj.config["scm"]["git"]
     except (click.BadParameter, KeyError, TypeError, OSError, IOError, YAMLError):
         return
-
-    log.info("%s", repo.git.show(submit_commit, format="fuller", stat=True, notes="*"))
+    finally:
+        log.info("%s", repo.git.show(submit_commit, format="fuller", stat=True, notes="*"))
 
     checkout_worktrees(workspace, git_cfg["worktrees"])
 
