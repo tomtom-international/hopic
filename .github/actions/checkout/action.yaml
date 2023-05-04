@@ -88,6 +88,13 @@ runs:
         if curl --fail -o "${RUNNER_TEMP}/pr-author.json" -u 'x-access-token:${{github.token}}' -H 'Accept: application/json' '${{github.event.pull_request.user.url}}'; then
           extra_prep_params+=("--author-name=$(python -c 'import os, json; print(json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "pr-author.json")))["name"], end="")')")
         fi
+        if curl --fail -o "${RUNNER_TEMP}/pr-reviews.json" -u 'x-access-token:${{github.token}}' -H 'Accept: application/json' '${{github.event.pull_request.url}}/reviews?per_page=100'; then
+          while read review_commit review_user_login review_user_url; do
+            if curl --fail -o "${RUNNER_TEMP}/user-${review_user_login}.json" -u 'x-access-token:${{github.token}}' -H 'Accept: application/json' "${review_user_url}"; then
+              extra_cr_params+=("--approved-by=$(review_user_login="${review_user_login}" python -c 'import os, json; user = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "user-" + str(os.environ["review_user_login"]) + ".json"))); print(user["name"] + " <" + (user.get("email") or "{user[id]}+{user[login]}@users.noreply.github.com".format(user=user)) + ">", end="")'):${review_commit}")
+            fi
+          done < <(python -c 'import os, json; print("\n".join(review["commit_id"] + " " + review["user"]["login"] + " " + review["user"]["url"] for review in json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "pr-reviews.json"))) if review["state"] == "APPROVED"))')
+        fi
         # Pass our own Hopic config file if no such config file exists after merging this PR
         git fetch "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" "${GITHUB_REF}:${GITHUB_REF}"
         if ! git show "${GITHUB_REF}:hopic-ci-config.yaml" > /dev/null && ! git show "${GITHUB_REF}:.ci/hopic-ci-config.yaml" > /dev/null; then
