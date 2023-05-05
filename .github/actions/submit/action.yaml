@@ -1,0 +1,73 @@
+# Copyright (C) 2023 TomTom NV. All rights reserved.
+#
+# This software is the proprietary copyright of TomTom NV and its subsidiaries and may be
+# used for internal evaluation purposes or commercial use strictly subject to separate
+# license agreement between you and TomTom NV. If you are the licensee, you are only permitted
+# to use this software in accordance with the terms of your license agreement. If you are
+# not the licensee, you are not authorized to use this software in any manner and should
+# immediately return or destroy it.
+
+name: Hopic Submit
+
+description: Submit changes prepared by Hopic
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/checkout@v3
+
+    - name: Download Merge Transfer Git Bundle
+      if: ${{ !startsWith(github.event_name, 'pull_request') || contains(github.event.pull_request.labels.*.name, 'automerge') }}
+      id: download-bundle
+      continue-on-error: true
+      uses: actions/download-artifact@v3
+      with:
+        name: hopic-merge-transfer.bundle
+
+    - name: Install Hopic
+      shell: bash
+      env:
+        # Need to put this in 'env' as we cannot use the ${{ github.X }} form directly in 'run' due to https://github.com/orgs/community/discussions/49245#discussioncomment-5209064
+        GH_ACTION_REPOSITORY: ${{ github.action_repository || github.repository }}
+        GH_ACTION_REF: ${{ github.action_ref || github.ref_name }}
+      run: python3 -m pip install --user "git+${GITHUB_SERVER_URL}/${GH_ACTION_REPOSITORY}@${GH_ACTION_REF}#egg=hopic"
+
+    - name: Unbundle Hopic Prepared Source Tree
+      if: ${{ steps.download-bundle.outcome == 'success' }}
+      id: unbundle
+      shell: bash
+      env:
+        CLICOLOR_FORCE: '1'
+        LC_ALL: C.UTF-8
+        TZ: UTC
+      run: |
+        declare -a config_params
+        if [ ! -e "${GITHUB_WORKSPACE}/hopic-ci-config.yaml" -a ! -e "${GITHUB_WORKSPACE}/.ci/hopic-ci-config.yaml" ]; then
+          config_params+=("--config=${GITHUB_ACTION_PATH}/../checkout/hopic-version-dump.yaml")
+        fi
+        set -x
+        git fetch hopic-merge-transfer.bundle refs/hopic/bundle/meta
+        echo -n 'hopic-meta=' >> "$GITHUB_OUTPUT"
+        git show FETCH_HEAD:hopic-meta >> "$GITHUB_OUTPUT"
+        echo >> "$GITHUB_OUTPUT"
+        python3 -m hopic --workspace="${GITHUB_WORKSPACE}" unbundle hopic-merge-transfer.bundle
+        if [[ "${GITHUB_EVENT_NAME}" == pull_request* ]] && python3 -m hopic --workspace="${GITHUB_WORKSPACE}" "${config_params[@]}" may-publish; then
+          echo 'may-publish=true' >> "${GITHUB_OUTPUT}"
+        else
+          echo 'may-publish=false' >> "${GITHUB_OUTPUT}"
+        fi
+
+    - name: Submit with Hopic
+      if: ${{ steps.download-bundle.outcome == 'success' && !fromJSON(steps.unbundle.outputs.hopic-meta).autosquashed-commit && fromJSON(steps.unbundle.outputs.may-publish) && fromJSON(steps.unbundle.outputs.hopic-meta).refspecs }}
+      shell: bash
+      env:
+        CLICOLOR_FORCE: '1'
+        LC_ALL: C.UTF-8
+        TZ: UTC
+      run: |
+        declare -a config_params
+        if [ ! -e "${GITHUB_WORKSPACE}/hopic-ci-config.yaml" -a ! -e "${GITHUB_WORKSPACE}/.ci/hopic-ci-config.yaml" ]; then
+          config_params+=("--config=${GITHUB_ACTION_PATH}/../checkout/hopic-version-dump.yaml")
+        fi
+        set -x
+        python3 -m hopic --workspace="${GITHUB_WORKSPACE}" "${config_params[@]}" submit
