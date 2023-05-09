@@ -134,6 +134,7 @@ runs:
         if [[ "${GITHUB_EVENT_NAME}" == pull_request* ]]; then
           git fetch hopic-merge-transfer.bundle refs/hopic/bundle/meta
           git show FETCH_HEAD:hopic-meta >> "$GITHUB_OUTPUT"
+          echo >> "$GITHUB_OUTPUT"
         else
           echo "{\"version-bumped\":false,\"target-commit\":\"${GITHUB_SHA}\"}" >> "$GITHUB_OUTPUT"
         fi
