@@ -48,7 +48,7 @@ def is_publish_branch(ctx, hopic_git_info=None) -> bool:
         return True
 
     publish_branch_pattern = re.compile(f"(?:{publish_from_branch})$")
-    return publish_branch_pattern.match(hopic_git_info.submit_ref) is not None
+    return publish_branch_pattern.match(re.sub("^refs/heads/", "", hopic_git_info.submit_ref)) is not None
 
 
 def determine_config_file_name(ctx, workspace: Optional[Path] = None):

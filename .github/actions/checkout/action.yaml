@@ -11,6 +11,11 @@ name: Hopic Checkout
 
 description: Checkout sources with Hopic
 
+inputs:
+  modality:
+    description: Change modality to apply
+    required: false
+
 outputs:
   version:
     value: ${{ steps.determine-version.outputs.VERSION }}
@@ -32,7 +37,7 @@ runs:
   steps:
     - name: Download Merge Transfer Git Bundle
       id: download-bundle
-      if: ${{ startsWith(github.event_name, 'pull_request') }}
+      if: ${{ startsWith(github.event_name, 'pull_request') || inputs.modality }}
       continue-on-error: true
       uses: actions/download-artifact@v3
       with:
@@ -103,8 +108,36 @@ runs:
         set -x
         python3 -m hopic --workspace="${GITHUB_WORKSPACE}" "${config_params[@]}" prepare-source-tree --author-date='${{github.event.pull_request.updated_at}}' "${extra_prep_params[@]}" --bundle="hopic-merge-transfer.bundle" merge-change-request "${extra_cr_params[@]}" --source-remote='${{github.event.pull_request.head.repo.clone_url}}' --source-ref='${{ github.event.pull_request.head.ref }}' --change-request='${{github.event.pull_request.number}}' --title='${{github.event.pull_request.title}}'
 
+    - name: Bump Version with Hopic
+      if: ${{ steps.download-bundle.outcome != 'success' && !startsWith(github.event_name, 'pull_request') && inputs.modality }}
+      shell: bash
+      env:
+        CLICOLOR_FORCE: '1'
+        LC_ALL: C.UTF-8
+        TZ: UTC
+        MODALITY: ${{ inputs.modality }}
+      run: |
+        declare -a config_params modality_params
+        # Pass our own Hopic config file if no such config file exists after merging this PR
+        git fetch "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" "${GITHUB_REF}:${GITHUB_REF}"
+        if [ ! -e "${GITHUB_WORKSPACE}/hopic-ci-config.yaml" -a ! -e "${GITHUB_WORKSPACE}/.ci/hopic-ci-config.yaml" ]; then
+          config_params+=("--config=${GITHUB_ACTION_PATH}/hopic-version-dump.yaml")
+        fi
+        if [ "${MODALITY}" = 'BUMP_VERSION' ]; then
+          modality_params+=(bump-version)
+        else
+          modality_params+=(apply-modality-change "${MODALITY}")
+        fi
+        set -x
+        python3 -m hopic --workspace="${GITHUB_WORKSPACE}" "${config_params[@]}" prepare-source-tree --bundle="hopic-merge-transfer.bundle" "${modality_params[@]}" > "${RUNNER_TEMP}/prep-tree.txt"
+        set +x
+        if [ ! -s "${RUNNER_TEMP}/prep-tree.txt" ]; then
+          echo "##[warning]no changes to build" >&2
+          exit 2
+        fi
+
     - name: Upload Merge Transfer Git Bundle
-      if: ${{ startsWith(github.event_name, 'pull_request') && steps.download-bundle.outcome != 'success' }}
+      if: ${{ steps.download-bundle.outcome != 'success' && (startsWith(github.event_name, 'pull_request') || inputs.modality) }}
       uses: actions/upload-artifact@v3
       with:
         name: hopic-merge-transfer.bundle
@@ -117,13 +150,14 @@ runs:
         CLICOLOR_FORCE: '1'
         LC_ALL: C.UTF-8
         TZ: UTC
+        MODALITY: ${{ inputs.modality }}
       run: |
         declare -a config_params global_options
         if [ ! -e "${GITHUB_WORKSPACE}/hopic-ci-config.yaml" -a ! -e "${GITHUB_WORKSPACE}/.ci/hopic-ci-config.yaml" ]; then
           config_params+=("--config=${GITHUB_ACTION_PATH}/hopic-version-dump.yaml")
         fi
         set -x
-        if [[ "${GITHUB_EVENT_NAME}" == pull_request* ]] && python3 -m hopic --workspace="${GITHUB_WORKSPACE}" "${config_params[@]}" may-publish; then
+        if [[ "${GITHUB_EVENT_NAME}" == pull_request* || -n "${MODALITY}" ]] && python3 -m hopic --workspace="${GITHUB_WORKSPACE}" "${config_params[@]}" may-publish; then
           # TODO: check PR approval state too
           #global_options+=('--publishable-version')
           echo 'may-publish=true' >> "${GITHUB_OUTPUT}"
@@ -131,7 +165,7 @@ runs:
           echo 'may-publish=false' >> "${GITHUB_OUTPUT}"
         fi
         echo -n 'hopic-meta=' >> "$GITHUB_OUTPUT"
-        if [[ "${GITHUB_EVENT_NAME}" == pull_request* ]]; then
+        if [[ "${GITHUB_EVENT_NAME}" == pull_request* || -n "${MODALITY}" ]]; then
           git fetch hopic-merge-transfer.bundle refs/hopic/bundle/meta
           git show FETCH_HEAD:hopic-meta >> "$GITHUB_OUTPUT"
           echo >> "$GITHUB_OUTPUT"

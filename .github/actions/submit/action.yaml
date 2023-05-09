@@ -70,4 +70,4 @@ runs:
           config_params+=("--config=${GITHUB_ACTION_PATH}/../checkout/hopic-version-dump.yaml")
         fi
         set -x
-        python3 -m hopic --workspace="${GITHUB_WORKSPACE}" "${config_params[@]}" submit
+        python3 -m hopic --workspace="${GITHUB_WORKSPACE}" "${config_params[@]}" --publishable-version submit
