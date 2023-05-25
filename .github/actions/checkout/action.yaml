@@ -37,7 +37,7 @@ runs:
   steps:
     - name: Download Merge Transfer Git Bundle
       id: download-bundle
-      if: ${{ startsWith(github.event_name, 'pull_request') || inputs.modality }}
+      if: ${{ startsWith(github.event_name, 'pull_request') || (inputs.modality && inputs.modality != 'NORMAL') }}
       continue-on-error: true
       uses: actions/download-artifact@v3
       with:
@@ -109,7 +109,7 @@ runs:
         python3 -m hopic --workspace="${GITHUB_WORKSPACE}" "${config_params[@]}" prepare-source-tree --author-date='${{github.event.pull_request.updated_at}}' "${extra_prep_params[@]}" --bundle="hopic-merge-transfer.bundle" merge-change-request "${extra_cr_params[@]}" --source-remote='${{github.event.pull_request.head.repo.clone_url}}' --source-ref='${{ github.event.pull_request.head.ref }}' --change-request='${{github.event.pull_request.number}}' --title='${{github.event.pull_request.title}}'
 
     - name: Bump Version with Hopic
-      if: ${{ steps.download-bundle.outcome != 'success' && !startsWith(github.event_name, 'pull_request') && inputs.modality }}
+      if: ${{ steps.download-bundle.outcome != 'success' && !startsWith(github.event_name, 'pull_request') && inputs.modality && inputs.modality != 'NORMAL' }}
       shell: bash
       env:
         CLICOLOR_FORCE: '1'
@@ -137,7 +137,7 @@ runs:
         fi
 
     - name: Upload Merge Transfer Git Bundle
-      if: ${{ steps.download-bundle.outcome != 'success' && (startsWith(github.event_name, 'pull_request') || inputs.modality) }}
+      if: ${{ steps.download-bundle.outcome != 'success' && (startsWith(github.event_name, 'pull_request') || (inputs.modality && inputs.modality != 'NORMAL')) }}
       uses: actions/upload-artifact@v3
       with:
         name: hopic-merge-transfer.bundle
@@ -157,7 +157,7 @@ runs:
           config_params+=("--config=${GITHUB_ACTION_PATH}/hopic-version-dump.yaml")
         fi
         set -x
-        if [[ "${GITHUB_EVENT_NAME}" == pull_request* || -n "${MODALITY}" ]] && python3 -m hopic --workspace="${GITHUB_WORKSPACE}" "${config_params[@]}" may-publish; then
+        if [[ "${GITHUB_EVENT_NAME}" == pull_request* || ( -n "${MODALITY}" && "${MODALITY}" != NORMAL ) ]] && python3 -m hopic --workspace="${GITHUB_WORKSPACE}" "${config_params[@]}" may-publish; then
           # TODO: check PR approval state too
           #global_options+=('--publishable-version')
           echo 'may-publish=true' >> "${GITHUB_OUTPUT}"
@@ -165,7 +165,7 @@ runs:
           echo 'may-publish=false' >> "${GITHUB_OUTPUT}"
         fi
         echo -n 'hopic-meta=' >> "$GITHUB_OUTPUT"
-        if [[ "${GITHUB_EVENT_NAME}" == pull_request* || -n "${MODALITY}" ]]; then
+        if [[ "${GITHUB_EVENT_NAME}" == pull_request* || ( -n "${MODALITY}" && "${MODALITY}" != NORMAL ) ]]; then
           git fetch hopic-merge-transfer.bundle refs/hopic/bundle/meta
           git show FETCH_HEAD:hopic-meta >> "$GITHUB_OUTPUT"
           echo >> "$GITHUB_OUTPUT"
