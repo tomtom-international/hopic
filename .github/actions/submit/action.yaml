@@ -51,7 +51,7 @@ runs:
         git show FETCH_HEAD:hopic-meta >> "$GITHUB_OUTPUT"
         echo >> "$GITHUB_OUTPUT"
         python3 -m hopic --workspace="${GITHUB_WORKSPACE}" unbundle hopic-merge-transfer.bundle
-        if [[ "${GITHUB_EVENT_NAME}" == pull_request* ]] && python3 -m hopic --workspace="${GITHUB_WORKSPACE}" "${config_params[@]}" may-publish; then
+        if python3 -m hopic --workspace="${GITHUB_WORKSPACE}" "${config_params[@]}" may-publish; then
           echo 'may-publish=true' >> "${GITHUB_OUTPUT}"
         else
           echo 'may-publish=false' >> "${GITHUB_OUTPUT}"
