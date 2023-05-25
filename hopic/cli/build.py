@@ -33,6 +33,7 @@ from typing import (
     Callable,
     Dict,
     List,
+    Optional,
 )
 
 import click
@@ -131,8 +132,7 @@ def build_variant(ctx, variant, cmds, hopic_git_info, *, exec_stdout=None, cwd: 
         volumes = cfg['volumes'].copy()
         global_timeout = None
         global_timeout_expire_time = None
-        global_finally_blocks = [cmd["finally"] for cmd in cmds if "finally" in cmd and "sh" not in cmd]
-        finally_cmds = {"sh-bound": [], "global": [cmd for finally_block in global_finally_blocks for cmd in finally_block]}
+        finally_cmds = {"sh-bound": [], "global": determine_global_finally_block(cmds)}
 
         for cmd in cmds:
             worktrees = {}
@@ -327,12 +327,29 @@ def build_variant(ctx, variant, cmds, hopic_git_info, *, exec_stdout=None, cwd: 
             except KeyError:
                 continue
 
-            volume_vars['WORKSPACE'] = '/code' if image is not None else str(ctx.obj.code_dir)
+            volume_vars["WORKSPACE"] = "/code" if image is not None else str(ctx.obj.code_dir)
+            volume_vars["CFGDIR"] = "/cfg" if image is not None else str(ctx.obj.config_dir)
 
             env = (dict(
                 HOME            = '/home/sandbox',              # noqa: E251 "unexpected spaces around '='"
                 _JAVA_OPTIONS   = '-Duser.home=/home/sandbox',  # noqa: E251 "unexpected spaces around '='"
             ) if image is not None else {})
+
+            # Force or suppress colors according to http://bixense.com/clicolors/ convention.
+            color: Optional[bool] = ctx.color
+            if color is None:
+                # When Hopic is only using auto detection then only pass on the existing values of these variables.
+                if "CLICOLOR" in os.environ:
+                    env["CLICOLOR"] = os.environ["CLICOLOR"]
+                if "CLICOLOR_FORCE" in os.environ:
+                    env["CLICOLOR_FORCE"] = os.environ["CLICOLOR_FORCE"]
+            elif color:
+                # CLICOLOR_FORCE overrules CLICOLOR so we can ignore the latter in this case
+                env["CLICOLOR_FORCE"] = "1"
+            else:
+                assert not ctx.color
+                env["CLICOLOR_FORCE"] = "0"
+                env["CLICOLOR"] = "0"
 
             for varname in cfg['pass-through-environment-vars']:
                 if varname in os.environ:
@@ -618,7 +635,14 @@ def build(ctx, phase, variant, dry_run):
     if unknown_phases:
         raise UnknownPhaseError(phase=unknown_phases)
 
-    for phasename, curphase in ctx.obj.config['phases'].items():
+    phases_obj = ctx.obj.config["phases"]
+    next_phases = {}
+    for phasename in phases_obj.keys():
+        for next_phase in next_phases:
+            next_phases[next_phase].append(phasename)
+        next_phases[phasename] = []
+
+    for phasename, curphase in phases_obj.items():
         if phase and phasename not in phase:
             continue
 
@@ -630,9 +654,32 @@ def build(ctx, phase, variant, dry_run):
             if variant and curvariant not in variant:
                 continue
 
-            (*_,) = build_variant(
-                variant=curvariant, cmds=cmds, hopic_git_info=hopic_git_info, config_based_volume_vars={"HOPIC_PHASE": phasename, "HOPIC_VARIANT": curvariant}
-            )
+            try:
+                (*_,) = build_variant(
+                    variant=curvariant,
+                    cmds=cmds,
+                    hopic_git_info=hopic_git_info,
+                    config_based_volume_vars={"HOPIC_PHASE": phasename, "HOPIC_VARIANT": curvariant},
+                )
+            except Exception:
+                for next_phase in next_phases[phasename]:
+                    if curvariant not in phases_obj[next_phase] or (
+                        not any(
+                            "wait-on-full-previous-phase" in elem and elem["wait-on-full-previous-phase"] is False
+                            for elem in phases_obj[next_phase][curvariant]
+                        )
+                    ):
+                        break
+                    # Chained variants
+
+                    handle_finally(
+                        [],
+                        determine_global_finally_block(phases_obj[next_phase][curvariant]),
+                        curvariant,
+                        hopic_git_info,
+                        {"HOPIC_PHASE": next_phase, "HOPIC_VARIANT": curvariant},
+                    )
+                raise
 
 
 def handle_finally(cmd_finally_cmds, global_finally_cmds, variant, hopic_git_info, config_based_volume_vars):
@@ -645,3 +692,8 @@ def handle_finally(cmd_finally_cmds, global_finally_cmds, variant, hopic_git_inf
     finally:
         if global_finally_cmds:
             (*_,) = build_variant(f"{variant}-finally", global_finally_cmds, hopic_git_info, config_based_volume_vars=config_based_volume_vars)
+
+
+def determine_global_finally_block(cmds):
+    global_finally_blocks = [cmd["finally"] for cmd in cmds if "finally" in cmd and "sh" not in cmd]
+    return [cmd for finally_block in global_finally_blocks for cmd in finally_block]

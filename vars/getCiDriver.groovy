@@ -566,6 +566,7 @@ class CiDriver {
   private HopicEventCallbacks event_callbacks = null
   private node_allocation_event_id = 0
   private is_submit_step_started = false
+  private allow_concurrent_builds = false
 
   private final default_node_expr = "Linux && Docker"
 
@@ -586,6 +587,7 @@ class CiDriver {
     ]
     this.printMetrics = printMetrics
     this.event_callbacks = params.event_callbacks ?: new HopicEventCallbacks()
+    this.allow_concurrent_builds = params.allow_concurrent_builds ?: false
   }
 
   private def get_change() {
@@ -766,7 +768,7 @@ docker build --build-arg=PYTHON_VERSION=3.6 --iidfile=${shell_quote(docker_src)}
         '--volume=/var/run/docker.sock:/var/run/docker.sock',
         "--group-add=${shell_quote(steps.sh(script: 'stat -c %g /var/run/docker.sock', returnStdout: true).trim())}",
       ].join(' ')) {
-      def cmd = 'LC_ALL=C.UTF-8 TZ=UTC hopic --color=always'
+      def cmd = 'LC_ALL=C.UTF-8 TZ=UTC hopic --color=' + shell_quote(steps.params.getOrDefault('CLICOLOR_SELECTION', 'always'))
       if (this.config_file != null) {
         cmd += ' --workspace=' + shell_quote(workspace)
         def cfg_file = this.config_file
@@ -1437,7 +1439,7 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
 
     return this.on_node([node_expr: node_expr, exec_name: params.name]) {
       return this.with_hopic { cmd ->
-        def clean = params.getOrDefault('clean', false)
+        def clean = params.clean || false
         this.ensure_commit_is_pinned(clean)
         this.ensure_checkout(cmd, clean)
         this.ensure_unstashed()
@@ -1567,13 +1569,20 @@ SSH_ASKPASS_REQUIRE=force SSH_ASKPASS='''
       return
     }
 
-    if (!props.any { it instanceof DisableConcurrentBuildsJobProperty }) {
+    if (!this.allow_concurrent_builds && !props.any { it instanceof DisableConcurrentBuildsJobProperty }) {
       props.add(steps.disableConcurrentBuilds())
     }
 
     if (params == null) {
       steps.echo('\033[33m[warning] could not determine build parameters, will not add extra parameters\033[39m')
     } else {
+      if (!params.containsKey('CLICOLOR_SELECTION')) {
+        params['CLICOLOR_SELECTION'] = steps.choice(
+          name:        'CLICOLOR_SELECTION',
+          description: 'Whether to have applications output color ("auto" lets them use their regular auto-detection).',
+          choices:     ['always', 'never', 'auto'],
+        )
+      }
       if (!params.containsKey('HOPIC_VERBOSITY')) {
         params['HOPIC_VERBOSITY'] = steps.choice(
           name:        'HOPIC_VERBOSITY',

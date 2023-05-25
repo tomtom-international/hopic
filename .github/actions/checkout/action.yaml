@@ -1,0 +1,175 @@
+# Copyright (C) 2023 TomTom NV. All rights reserved.
+#
+# This software is the proprietary copyright of TomTom NV and its subsidiaries and may be
+# used for internal evaluation purposes or commercial use strictly subject to separate
+# license agreement between you and TomTom NV. If you are the licensee, you are only permitted
+# to use this software in accordance with the terms of your license agreement. If you are
+# not the licensee, you are not authorized to use this software in any manner and should
+# immediately return or destroy it.
+
+name: Hopic Checkout
+
+description: Checkout sources with Hopic
+
+inputs:
+  modality:
+    description: Change modality to apply
+    required: false
+
+outputs:
+  version:
+    value: ${{ steps.determine-version.outputs.VERSION }}
+  publish-version:
+    value: ${{ steps.determine-version.outputs.PUBLISH_VERSION }}
+  pure-version:
+    value: ${{ steps.determine-version.outputs.PURE_VERSION }}
+  publishable-version:
+    value: ${{ contains(steps.determine-version.outputs.PURE_VERSION, '-') && steps.determine-version.outputs.PUBLISH_VERSION || steps.determine-version.outputs.PURE_VERSION }}
+  meta:
+    value: ${{ steps.determine-version.outputs.hopic-meta }}
+  version-bumped:
+    value: ${{ fromJSON(steps.determine-version.outputs.hopic-meta).version-bumped }}
+  may-publish:
+    value: ${{ steps.determine-version.outputs.may-publish == 'true' }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Download Merge Transfer Git Bundle
+      id: download-bundle
+      if: ${{ startsWith(github.event_name, 'pull_request') || (inputs.modality && inputs.modality != 'NORMAL') }}
+      continue-on-error: true
+      uses: actions/download-artifact@v3
+      with:
+        name: hopic-merge-transfer.bundle
+
+    - name: Install Hopic
+      shell: bash
+      env:
+        # Need to put this in 'env' as we cannot use the ${{ github.X }} form directly in 'run' due to https://github.com/orgs/community/discussions/49245#discussioncomment-5209064
+        GH_ACTION_REPOSITORY: ${{ github.action_repository || github.repository }}
+        GH_ACTION_REF: ${{ github.action_ref || github.ref_name }}
+      run: python3 -m pip install --user "git+${GITHUB_SERVER_URL}/${GH_ACTION_REPOSITORY}@${GH_ACTION_REF}#egg=hopic"
+
+    - name: Initialize git repo
+      shell: bash
+      run: |
+        git config --global --add safe.directory "$GITHUB_WORKSPACE"
+        git init
+        git config --local http.extraHeader "Authorization: Basic $(echo -n 'x-access-token:${{github.token}}' | base64)"
+        git config --local user.name "${GIT_COMMITTER_NAME:-github-actions[bot]}"
+        git config --local user.email "${GIT_COMMITTER_EMAIL:-41898282+github-actions[bot]@users.noreply.github.com}"
+
+    - name: Checkout with Hopic
+      shell: bash --noprofile --norc -e -x -o pipefail {0}
+      env:
+        CLICOLOR_FORCE: '1'
+        LC_ALL: C.UTF-8
+        TZ: UTC
+      run: python3 -m hopic --workspace="${GITHUB_WORKSPACE}" checkout-source-tree --target-remote="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" --target-ref='${{ github.event.pull_request.base.ref || github.ref }}'
+
+    - name: Unbundle Hopic Prepared Source Tree
+      if: ${{ steps.download-bundle.outcome == 'success' }}
+      shell: bash
+      env:
+        CLICOLOR_FORCE: '1'
+        LC_ALL: C.UTF-8
+        TZ: UTC
+      run: python3 -m hopic --workspace="${GITHUB_WORKSPACE}" unbundle hopic-merge-transfer.bundle
+
+    - name: Prepare Source Tree with Hopic
+      if: ${{ steps.download-bundle.outcome != 'success' && startsWith(github.event_name, 'pull_request') }}
+      shell: bash
+      env:
+        CLICOLOR_FORCE: '1'
+        LC_ALL: C.UTF-8
+        TZ: UTC
+      run: |
+        declare -a config_params extra_cr_params extra_prep_params
+        if [ -n '${{github.event.pull_request.body}}' ]; then
+          extra_cr_params+=("--description=$(echo -n '${{github.event.pull_request.body}}' | awk 'BEGIN { output=1 } /^(- )?\[[ x]\] / { output=0 } output')")
+        fi
+        extra_prep_params+=('--author-email=${{github.event.pull_request.user.id}}+${{github.event.pull_request.user.login}}@users.noreply.github.com')
+        if curl --fail -o "${RUNNER_TEMP}/pr-author.json" -u 'x-access-token:${{github.token}}' -H 'Accept: application/json' '${{github.event.pull_request.user.url}}'; then
+          extra_prep_params+=("--author-name=$(python -c 'import os, json; print(json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "pr-author.json")))["name"], end="")')")
+        fi
+        if curl --fail -o "${RUNNER_TEMP}/pr-reviews.json" -u 'x-access-token:${{github.token}}' -H 'Accept: application/json' '${{github.event.pull_request.url}}/reviews?per_page=100'; then
+          while read review_commit review_user_login review_user_url; do
+            if curl --fail -o "${RUNNER_TEMP}/user-${review_user_login}.json" -u 'x-access-token:${{github.token}}' -H 'Accept: application/json' "${review_user_url}"; then
+              extra_cr_params+=("--approved-by=$(review_user_login="${review_user_login}" python -c 'import os, json; user = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "user-" + str(os.environ["review_user_login"]) + ".json"))); print(user["name"] + " <" + (user.get("email") or "{user[id]}+{user[login]}@users.noreply.github.com".format(user=user)) + ">", end="")'):${review_commit}")
+            fi
+          done < <(python -c 'import os, json; print("\n".join(review["commit_id"] + " " + review["user"]["login"] + " " + review["user"]["url"] for review in json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "pr-reviews.json"))) if review["state"] == "APPROVED"))')
+        fi
+        # Pass our own Hopic config file if no such config file exists after merging this PR
+        git fetch "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" "${GITHUB_REF}:${GITHUB_REF}"
+        if ! git show "${GITHUB_REF}:hopic-ci-config.yaml" > /dev/null && ! git show "${GITHUB_REF}:.ci/hopic-ci-config.yaml" > /dev/null; then
+          config_params+=("--config=${GITHUB_ACTION_PATH}/hopic-version-dump.yaml")
+        fi
+        set -x
+        python3 -m hopic --workspace="${GITHUB_WORKSPACE}" "${config_params[@]}" prepare-source-tree --author-date='${{github.event.pull_request.updated_at}}' "${extra_prep_params[@]}" --bundle="hopic-merge-transfer.bundle" merge-change-request "${extra_cr_params[@]}" --source-remote='${{github.event.pull_request.head.repo.clone_url}}' --source-ref='${{ github.event.pull_request.head.ref }}' --change-request='${{github.event.pull_request.number}}' --title='${{github.event.pull_request.title}}'
+
+    - name: Bump Version with Hopic
+      if: ${{ steps.download-bundle.outcome != 'success' && !startsWith(github.event_name, 'pull_request') && inputs.modality && inputs.modality != 'NORMAL' }}
+      shell: bash
+      env:
+        CLICOLOR_FORCE: '1'
+        LC_ALL: C.UTF-8
+        TZ: UTC
+        MODALITY: ${{ inputs.modality }}
+      run: |
+        declare -a config_params modality_params
+        # Pass our own Hopic config file if no such config file exists after merging this PR
+        git fetch "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" "${GITHUB_REF}:${GITHUB_REF}"
+        if [ ! -e "${GITHUB_WORKSPACE}/hopic-ci-config.yaml" -a ! -e "${GITHUB_WORKSPACE}/.ci/hopic-ci-config.yaml" ]; then
+          config_params+=("--config=${GITHUB_ACTION_PATH}/hopic-version-dump.yaml")
+        fi
+        if [ "${MODALITY}" = 'BUMP_VERSION' ]; then
+          modality_params+=(bump-version)
+        else
+          modality_params+=(apply-modality-change "${MODALITY}")
+        fi
+        set -x
+        python3 -m hopic --workspace="${GITHUB_WORKSPACE}" "${config_params[@]}" prepare-source-tree --bundle="hopic-merge-transfer.bundle" "${modality_params[@]}" > "${RUNNER_TEMP}/prep-tree.txt"
+        set +x
+        if [ ! -s "${RUNNER_TEMP}/prep-tree.txt" ]; then
+          echo "##[warning]no changes to build" >&2
+          exit 2
+        fi
+
+    - name: Upload Merge Transfer Git Bundle
+      if: ${{ steps.download-bundle.outcome != 'success' && (startsWith(github.event_name, 'pull_request') || (inputs.modality && inputs.modality != 'NORMAL')) }}
+      uses: actions/upload-artifact@v3
+      with:
+        name: hopic-merge-transfer.bundle
+        path: hopic-merge-transfer.bundle
+
+    - name: Determine version
+      id: determine-version
+      shell: bash
+      env:
+        CLICOLOR_FORCE: '1'
+        LC_ALL: C.UTF-8
+        TZ: UTC
+        MODALITY: ${{ inputs.modality }}
+      run: |
+        declare -a config_params global_options
+        if [ ! -e "${GITHUB_WORKSPACE}/hopic-ci-config.yaml" -a ! -e "${GITHUB_WORKSPACE}/.ci/hopic-ci-config.yaml" ]; then
+          config_params+=("--config=${GITHUB_ACTION_PATH}/hopic-version-dump.yaml")
+        fi
+        set -x
+        if [[ "${GITHUB_EVENT_NAME}" == pull_request* || ( -n "${MODALITY}" && "${MODALITY}" != NORMAL ) ]] && python3 -m hopic --workspace="${GITHUB_WORKSPACE}" "${config_params[@]}" may-publish; then
+          # TODO: check PR approval state too
+          #global_options+=('--publishable-version')
+          echo 'may-publish=true' >> "${GITHUB_OUTPUT}"
+        else
+          echo 'may-publish=false' >> "${GITHUB_OUTPUT}"
+        fi
+        echo -n 'hopic-meta=' >> "$GITHUB_OUTPUT"
+        if [[ "${GITHUB_EVENT_NAME}" == pull_request* || ( -n "${MODALITY}" && "${MODALITY}" != NORMAL ) ]]; then
+          git fetch hopic-merge-transfer.bundle refs/hopic/bundle/meta
+          git show FETCH_HEAD:hopic-meta >> "$GITHUB_OUTPUT"
+          echo >> "$GITHUB_OUTPUT"
+        else
+          echo "{\"version-bumped\":false,\"target-commit\":\"${GITHUB_SHA}\"}" >> "$GITHUB_OUTPUT"
+        fi
+        python3 -m hopic --workspace="${GITHUB_WORKSPACE}" --config="${GITHUB_ACTION_PATH}/hopic-version-dump.yaml" "${global_options[@]}" build --variant=version-info >> "$GITHUB_OUTPUT" || :

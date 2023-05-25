@@ -553,7 +553,8 @@ def expand_docker_volumes_from(volume_vars, volumes_from_vars):
 
 def expand_docker_volume_spec(config_dir, volume_vars, volume_specs, add_defaults=True):
     guest_volume_vars = {
-        'WORKSPACE': '/code',
+        "WORKSPACE": "/code",
+        "CFGDIR": "/cfg",
     }
     volumes = OrderedDict()
     for volume in volume_specs:
@@ -598,10 +599,14 @@ def expand_docker_volume_spec(config_dir, volume_vars, volume_specs, add_default
         volumes[target] = volume
 
     if add_defaults:
-        volumes.setdefault(guest_volume_vars['WORKSPACE'], {
-            'source': volume_vars['WORKSPACE'],
-            'target': guest_volume_vars['WORKSPACE'],
-        })
+        for var in guest_volume_vars:
+            volumes.setdefault(
+                guest_volume_vars[var],
+                {
+                    "source": volume_vars[var],
+                    "target": guest_volume_vars[var],
+                },
+            )
 
     volumes = OrderedDict([
         (target, volume)
@@ -651,14 +656,21 @@ def read_version_info(config, version_info):
         bump.setdefault('strict', False)
         if not isinstance(version_info['bump']['strict'], bool):
             raise ConfigurationError("`version.bump.strict` field for the `conventional-commits` policy must be a boolean", file=config)
+
         bump.setdefault('reject-breaking-changes-on', re.compile(r'^(?:release/|rel-).*$'))
         bump.setdefault('reject-new-features-on', re.compile(r'^(?:release/|rel-)\d+\..*$'))
+
         if not isinstance(bump['reject-breaking-changes-on'], (str, Pattern)):
             raise ConfigurationError(
                     "`version.bump.reject-breaking-changes-on` field for the `conventional-commits` policy must be a regex or boolean", file=config)
         if not isinstance(bump['reject-new-features-on'], (str, Pattern)):
             raise ConfigurationError(
                     "`version.bump.reject-new-features-on` field for the `conventional-commits` policy must be a regex or boolean", file=config)
+
+        if isinstance(bump["reject-breaking-changes-on"], str):
+            bump["reject-breaking-changes-on"] = re.compile(bump["reject-breaking-changes-on"])
+        if isinstance(bump["reject-new-features-on"], str):
+            bump["reject-new-features-on"] = re.compile(bump["reject-new-features-on"])
 
     if 'build' in version_info:
         if 'format' in version_info and version_info['format'] != 'semver':

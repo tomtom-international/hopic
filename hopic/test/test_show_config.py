@@ -261,7 +261,7 @@ def test_default_volume_mapping_set(run_hopic):
     output = json.loads(result.stdout, object_pairs_hook=OrderedDict)
     volumes = output['volumes']
 
-    assert set(volumes.keys()) == {'/code'}
+    assert set(volumes.keys()) == {'/code', "/cfg"}
 
 
 def test_delete_volumes_from_default_set(run_hopic):

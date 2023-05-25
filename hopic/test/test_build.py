@@ -303,6 +303,7 @@ def test_docker_run_arguments(run_hopic, expect_forward_tty, has_stderr, has_std
             '--cap-add=SYS_PTRACE', '--rm',
             '--workdir=/code',
             f"--volume={os.getcwd()}:/code",
+            f"--volume={os.getcwd()}/.ci:/cfg",
             f"--env=SOURCE_DATE_EPOCH={source_date_epoch}",
             '--env=HOME=/home/sandbox', '--env=_JAVA_OPTIONS=-Duser.home=/home/sandbox',
             f"--user={uid}:{gid}",
@@ -1677,11 +1678,6 @@ def test_variant_finally(monkeypatch, run_hopic):
 
     expected_cmds = [("command", "a"), ("invalid", "cmd"), ("final", "one"), ("invalid", "cmd", "finally"), (username, password)]
 
-    username = "test_username"
-    password = "super_secret"
-    credential_id = "test_credentialId"
-    project_name = "test_project"
-
     def get_credential_id(project_name_arg, cred_id):
         assert credential_id == cred_id
         assert project_name == project_name_arg
@@ -1750,4 +1746,40 @@ def test_phase_variant_variables(monkeypatch, run_hopic):
         ),
     )
     assert result.exit_code == 0
+    assert expected_cmds == []
+
+
+def test_chained_variants_finally(monkeypatch, run_hopic):
+    expected_cmds = [("invalid", "command"), ("sh", "a", "x"), ("final", "a", "x"), ("chained", "b", "x")]
+
+    def mock_check_call(args, *popenargs, **kwargs):
+        assert tuple(args) == expected_cmds.pop(0)
+        if "invalid" in args:
+            raise subprocess.CalledProcessError(1, args)
+
+    monkeypatch.setattr(subprocess, "check_call", mock_check_call)
+
+    (result,) = run_hopic(
+        ("build",),
+        config=dedent(
+            """
+            phases:
+              a:
+                x:
+                  - sh: invalid command
+                    finally:
+                      - sh $HOPIC_PHASE $HOPIC_VARIANT
+                  - finally:
+                    - final $HOPIC_PHASE $HOPIC_VARIANT
+
+              b:
+                x:
+                  - wait-on-full-previous-phase: no
+                  - sh: never execute!
+                  - finally:
+                    - chained $HOPIC_PHASE $HOPIC_VARIANT
+            """
+        ),
+    )
+    assert result.exit_code != 0
     assert expected_cmds == []
