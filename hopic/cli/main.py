@@ -89,6 +89,38 @@ class OptionContext(object):
         self._missing_parameters[name] = self._missing_parameters[dependency]
 
 
+class GitHubLogFormatter(logging.Formatter):
+    level_prefix = (
+        (logging.ERROR  , "error"  ),
+        (logging.WARNING, "warning"),
+        (logging.INFO   , "notice" ),
+        (logging.DEBUG  , "debug"  ),
+    )
+
+    def __init__(self):
+        super().__init__("%(message)s", style="%")
+
+    def format(self, record):
+        msg = super().format(record)
+
+        # turn into GitHub diagnostic emitting command
+        for min_level, prefix in self.level_prefix:
+            if record.levelno >= min_level:
+                break
+        else:
+            # no known way to encode this for GitHub, just emit this as is
+            return msg
+
+        # percent-encode the strict set of characters that's both required and permitted by GitHub
+        msg = msg.replace("%", "%25").replace("\n", "%0A").replace("\r", "%0D")
+        msg = f"::{prefix}::{msg}"
+        return msg
+
+
+def on_github_actions():
+    return os.environ.get("CI") == "true" and os.environ.get("GITHUB_JOB")
+
+
 @click.group(context_settings=dict(help_option_names=('-h', '--help')))
 @click.option('--color'          , type=click.Choice(('always', 'auto', 'never'))                                                  , default='auto'      , show_default=True)  # noqa: E501
 @click.option('--config'         , type=click.Path(exists=False, file_okay=True , dir_okay=False, readable=True, resolve_path=True), default=lambda: None, show_default='${WORKSPACE}/hopic-ci-config.yaml')  # noqa: E501
@@ -96,8 +128,8 @@ class OptionContext(object):
 @click.option('--whitelisted-var', multiple=True                                                                                   , default=['CT_DEVENV_HOME'], hidden=True)  # noqa: E501
 @click.option('--publishable-version', is_flag=True                                                                                , default=False, hidden=True, help='''Indicate if change is publishable or not''')  # noqa: E501
 @click.version_option(get_package_version(PACKAGE))
-@click_log.simple_verbosity_option(PACKAGE                 , envvar='HOPIC_VERBOSITY', autocompletion=autocomplete.click_log_verbosity)
-@click_log.simple_verbosity_option('git', '--git-verbosity', envvar='GIT_VERBOSITY'  , autocompletion=autocomplete.click_log_verbosity)
+@click_log.simple_verbosity_option(PACKAGE                 , envvar='HOPIC_VERBOSITY', autocompletion=autocomplete.click_log_verbosity, default=lambda: "DEBUG" if on_github_actions() and os.environ.get("RUNNER_DEBUG") == "1" else "INFO")
+@click_log.simple_verbosity_option('git', '--git-verbosity', envvar='GIT_VERBOSITY'  , autocompletion=autocomplete.click_log_verbosity, default=lambda: "DEBUG" if on_github_actions() and os.environ.get("RUNNER_DEBUG") == "1" else "INFO")
 @click.pass_context
 def main(ctx, color, config, workspace, whitelisted_var, publishable_version):
     if color == 'always':
@@ -113,7 +145,9 @@ def main(ctx, color, config, workspace, whitelisted_var, publishable_version):
         # leave as is: 'auto' is the default for Click
         pass
 
-    click_log.basic_config()
+    global_logger = click_log.basic_config()
+    if on_github_actions():
+        global_logger.handlers[0].formatter = GitHubLogFormatter()
 
     ctx.obj = OptionContext()
     for param in ctx.command.params:
