@@ -58,7 +58,7 @@ runs:
         fi
 
     - name: Submit with Hopic
-      if: ${{ steps.download-bundle.outcome == 'success' && !fromJSON(steps.unbundle.outputs.hopic-meta).autosquashed-commit && fromJSON(steps.unbundle.outputs.may-publish) && fromJSON(steps.unbundle.outputs.hopic-meta).refspecs }}
+      if: ${{ steps.download-bundle.outcome == 'success' && !fromJSON(steps.unbundle.outputs.hopic-meta).autosquashed-commit && fromJSON(steps.unbundle.outputs.hopic-meta).refspecs }}
       shell: bash
       env:
         CLICOLOR_FORCE: '1'
