@@ -96,7 +96,7 @@ runs:
         if curl --fail -o "${RUNNER_TEMP}/pr-reviews.json" -u 'x-access-token:${{github.token}}' -H 'Accept: application/json' '${{github.event.pull_request.url}}/reviews?per_page=100'; then
           while read review_commit review_user_login review_user_url; do
             if curl --fail -o "${RUNNER_TEMP}/user-${review_user_login}.json" -u 'x-access-token:${{github.token}}' -H 'Accept: application/json' "${review_user_url}"; then
-              extra_cr_params+=("--approved-by=$(review_user_login="${review_user_login}" python -c 'import os, json; user = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "user-" + str(os.environ["review_user_login"]) + ".json"))); print(user["name"] + " <" + (user.get("email") or "{user[id]}+{user[login]}@users.noreply.github.com".format(user=user)) + ">", end="")'):${review_commit}")
+              extra_cr_params+=("--approved-by=$(review_user_login="${review_user_login}" python -c 'import os, json; user = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "user-" + os.environ["review_user_login"] + ".json"))); print((user.get("name") or user.get("login") or os.environ["review_user_login"]) + " <" + (user.get("email") or "{user[id]}+{user[login]}@users.noreply.github.com".format(user=user)) + ">", end="")'):${review_commit}")
             fi
           done < <(python -c 'import os, json; print("\n".join(review["commit_id"] + " " + review["user"]["login"] + " " + review["user"]["url"] for review in json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "pr-reviews.json"))) if review["state"] == "APPROVED"))')
         fi
