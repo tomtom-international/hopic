@@ -85,6 +85,7 @@ runs:
         LC_ALL: C.UTF-8
         TZ: UTC
       run: |
+        set -x
         declare -a config_params extra_cr_params extra_prep_params
         if [ -n '${{github.event.pull_request.body}}' ]; then
           extra_cr_params+=("--description=$(echo -n '${{github.event.pull_request.body}}' | awk 'BEGIN { output=1 } /^(- )?\[[ x]\] / { output=0 } output')")
@@ -105,7 +106,6 @@ runs:
         if ! git show "${GITHUB_REF}:hopic-ci-config.yaml" > /dev/null && ! git show "${GITHUB_REF}:.ci/hopic-ci-config.yaml" > /dev/null; then
           config_params+=("--config=${GITHUB_ACTION_PATH}/hopic-version-dump.yaml")
         fi
-        set -x
         python3 -m hopic --workspace="${GITHUB_WORKSPACE}" "${config_params[@]}" prepare-source-tree --author-date='${{github.event.pull_request.updated_at}}' "${extra_prep_params[@]}" --bundle="hopic-merge-transfer.bundle" merge-change-request "${extra_cr_params[@]}" --source-remote='${{github.event.pull_request.head.repo.clone_url}}' --source-ref='${{ github.event.pull_request.head.ref }}' --change-request='${{github.event.pull_request.number}}' --title='${{github.event.pull_request.title}}'
 
     - name: Bump Version with Hopic
@@ -117,6 +117,7 @@ runs:
         TZ: UTC
         MODALITY: ${{ inputs.modality }}
       run: |
+        set -x
         declare -a config_params modality_params
         # Pass our own Hopic config file if no such config file exists after merging this PR
         git fetch "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" "${GITHUB_REF}:${GITHUB_REF}"
@@ -128,7 +129,6 @@ runs:
         else
           modality_params+=(apply-modality-change "${MODALITY}")
         fi
-        set -x
         python3 -m hopic --workspace="${GITHUB_WORKSPACE}" "${config_params[@]}" prepare-source-tree --bundle="hopic-merge-transfer.bundle" "${modality_params[@]}" > "${RUNNER_TEMP}/prep-tree.txt"
         set +x
         if [ ! -s "${RUNNER_TEMP}/prep-tree.txt" ]; then
@@ -152,11 +152,11 @@ runs:
         TZ: UTC
         MODALITY: ${{ inputs.modality }}
       run: |
+        set -x
         declare -a config_params global_options
         if [ ! -e "${GITHUB_WORKSPACE}/hopic-ci-config.yaml" -a ! -e "${GITHUB_WORKSPACE}/.ci/hopic-ci-config.yaml" ]; then
           config_params+=("--config=${GITHUB_ACTION_PATH}/hopic-version-dump.yaml")
         fi
-        set -x
         if [[ "${GITHUB_EVENT_NAME}" == pull_request* || ( -n "${MODALITY}" && "${MODALITY}" != NORMAL ) ]] && python3 -m hopic --workspace="${GITHUB_WORKSPACE}" "${config_params[@]}" may-publish; then
           # TODO: check PR approval state too
           #global_options+=('--publishable-version')

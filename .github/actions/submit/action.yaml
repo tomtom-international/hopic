@@ -41,11 +41,11 @@ runs:
         LC_ALL: C.UTF-8
         TZ: UTC
       run: |
+        set -x
         declare -a config_params
         if [ ! -e "${GITHUB_WORKSPACE}/hopic-ci-config.yaml" -a ! -e "${GITHUB_WORKSPACE}/.ci/hopic-ci-config.yaml" ]; then
           config_params+=("--config=${GITHUB_ACTION_PATH}/../checkout/hopic-version-dump.yaml")
         fi
-        set -x
         git fetch hopic-merge-transfer.bundle refs/hopic/bundle/meta
         echo -n 'hopic-meta=' >> "$GITHUB_OUTPUT"
         git show FETCH_HEAD:hopic-meta >> "$GITHUB_OUTPUT"
@@ -65,9 +65,9 @@ runs:
         LC_ALL: C.UTF-8
         TZ: UTC
       run: |
+        set -x
         declare -a config_params
         if [ ! -e "${GITHUB_WORKSPACE}/hopic-ci-config.yaml" -a ! -e "${GITHUB_WORKSPACE}/.ci/hopic-ci-config.yaml" ]; then
           config_params+=("--config=${GITHUB_ACTION_PATH}/../checkout/hopic-version-dump.yaml")
         fi
-        set -x
         python3 -m hopic --workspace="${GITHUB_WORKSPACE}" "${config_params[@]}" --publishable-version submit
