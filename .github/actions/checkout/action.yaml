@@ -84,11 +84,13 @@ runs:
         CLICOLOR_FORCE: '1'
         LC_ALL: C.UTF-8
         TZ: UTC
+        GH_PR_TITLE: ${{ github.event.pull_request.title }}
+        GH_PR_BODY: ${{ github.event.pull_request.body }}
       run: |
         set -x
         declare -a config_params extra_cr_params extra_prep_params
-        if [ -n '${{github.event.pull_request.body}}' ]; then
-          extra_cr_params+=("--description=$(echo -n '${{github.event.pull_request.body}}' | awk 'BEGIN { output=1 } /^(- )?\[[ x]\] / { output=0 } output')")
+        if [ -n "${GH_PR_BODY:-}" ]; then
+          extra_cr_params+=("--description=$(echo -n "${GH_PR_BODY:-}" | awk 'BEGIN { output=1 } /^(- )?\[[ x]\] / { output=0 } output')")
         fi
         extra_prep_params+=('--author-email=${{github.event.pull_request.user.id}}+${{github.event.pull_request.user.login}}@users.noreply.github.com')
         if curl --fail -o "${RUNNER_TEMP}/pr-author.json" -u 'x-access-token:${{github.token}}' -H 'Accept: application/json' '${{github.event.pull_request.user.url}}'; then
@@ -106,7 +108,7 @@ runs:
         if ! git show "${GITHUB_REF}:hopic-ci-config.yaml" > /dev/null && ! git show "${GITHUB_REF}:.ci/hopic-ci-config.yaml" > /dev/null; then
           config_params+=("--config=${GITHUB_ACTION_PATH}/hopic-version-dump.yaml")
         fi
-        python3 -m hopic --workspace="${GITHUB_WORKSPACE}" "${config_params[@]}" prepare-source-tree --author-date='${{github.event.pull_request.updated_at}}' "${extra_prep_params[@]}" --bundle="hopic-merge-transfer.bundle" merge-change-request "${extra_cr_params[@]}" --source-remote='${{github.event.pull_request.head.repo.clone_url}}' --source-ref='${{ github.event.pull_request.head.ref }}' --change-request='${{github.event.pull_request.number}}' --title='${{github.event.pull_request.title}}'
+        python3 -m hopic --workspace="${GITHUB_WORKSPACE}" "${config_params[@]}" prepare-source-tree --author-date='${{github.event.pull_request.updated_at}}' "${extra_prep_params[@]}" --bundle="hopic-merge-transfer.bundle" merge-change-request "${extra_cr_params[@]}" --source-remote='${{github.event.pull_request.head.repo.clone_url}}' --source-ref='${{ github.event.pull_request.head.ref }}' --change-request='${{github.event.pull_request.number}}' --title="${GH_PR_TITLE}"
 
     - name: Bump Version with Hopic
       if: ${{ steps.download-bundle.outcome != 'success' && !startsWith(github.event_name, 'pull_request') && inputs.modality && inputs.modality != 'NORMAL' }}
