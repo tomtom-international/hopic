@@ -14,8 +14,6 @@ description: Submit changes prepared by Hopic
 runs:
   using: "composite"
   steps:
-    - uses: actions/checkout@v3
-
     - name: Download Merge Transfer Git Bundle
       if: ${{ !startsWith(github.event_name, 'pull_request') || contains(github.event.pull_request.labels.*.name, 'automerge') }}
       id: download-bundle
@@ -25,12 +23,32 @@ runs:
         name: hopic-merge-transfer.bundle
 
     - name: Install Hopic
+      if: ${{ steps.download-bundle.outcome == 'success' }}
       shell: bash
       env:
         # Need to put this in 'env' as we cannot use the ${{ github.X }} form directly in 'run' due to https://github.com/orgs/community/discussions/49245#discussioncomment-5209064
         GH_ACTION_REPOSITORY: ${{ github.action_repository || github.repository }}
         GH_ACTION_REF: ${{ github.action_ref || github.ref_name }}
       run: python3 -m pip install --user "git+${GITHUB_SERVER_URL}/${GH_ACTION_REPOSITORY}@${GH_ACTION_REF}#egg=hopic"
+
+    - name: Initialize git repo
+      if: ${{ steps.download-bundle.outcome == 'success' }}
+      shell: bash
+      run: |
+        git config --global --add safe.directory "$GITHUB_WORKSPACE"
+        git init
+        git config --local http.extraHeader "Authorization: Basic $(echo -n 'x-access-token:${{github.token}}' | base64)"
+        git config --local user.name "${GIT_COMMITTER_NAME:-github-actions[bot]}"
+        git config --local user.email "${GIT_COMMITTER_EMAIL:-41898282+github-actions[bot]@users.noreply.github.com}"
+
+    - name: Checkout with Hopic
+      if: ${{ steps.download-bundle.outcome == 'success' }}
+      shell: bash --noprofile --norc -e -x -o pipefail {0}
+      env:
+        CLICOLOR_FORCE: '1'
+        LC_ALL: C.UTF-8
+        TZ: UTC
+      run: python3 -m hopic --workspace="${GITHUB_WORKSPACE}" checkout-source-tree --target-remote="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" --target-ref='${{ github.event.pull_request.base.ref || github.ref }}'
 
     - name: Unbundle Hopic Prepared Source Tree
       if: ${{ steps.download-bundle.outcome == 'success' }}
