@@ -810,7 +810,7 @@ def process_prepare_source_tree(
         # Re-read version to ensure that the newly created tag is taken into account
         ctx.obj.version, _ = determine_version(version_info, ctx.obj.config_dir, ctx.obj.code_dir)
 
-        log.info('%s', repo.git.show(submit_commit, format='fuller', stat=True, notes='*'))
+        log.info('%s', repo.git.show(submit_commit, format='fuller', stat=True, decorate=True, notes='*'))
 
         push_commit = submit_commit
         if (ctx.obj.version is not None
@@ -847,7 +847,7 @@ def process_prepare_source_tree(
             commit_params['head'] = False
 
             push_commit = new_index.commit(**commit_params)
-            log.info('%s', repo.git.show(push_commit, format='fuller', stat=True))
+            log.info('%s', repo.git.show(push_commit, format='fuller', stat=True, decorate=True))
 
         refspecs = []
         bundle_excludes = [
@@ -1482,7 +1482,7 @@ def unbundle(ctx, *, bundle: PathLike):
     except (click.BadParameter, KeyError, TypeError, OSError, IOError, YAMLError):
         return
     finally:
-        log.info("%s", repo.git.show(submit_commit, format="fuller", stat=True, notes="*"))
+        log.info("%s", repo.git.show(submit_commit, format="fuller", stat=True, decorate=True, notes="*"))
 
     checkout_worktrees(workspace, git_cfg["worktrees"])
 
