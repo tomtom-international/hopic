@@ -810,7 +810,7 @@ def process_prepare_source_tree(
         # Re-read version to ensure that the newly created tag is taken into account
         ctx.obj.version, _ = determine_version(version_info, ctx.obj.config_dir, ctx.obj.code_dir)
 
-        log.info('%s', repo.git.show(submit_commit, format='fuller', stat=True, decorate=True, notes='*'))
+        log.info("%s", repo.git.show(tagref or submit_commit, format="fuller", stat=True, decorate=True, notes="*"))
 
         push_commit = submit_commit
         if (ctx.obj.version is not None
@@ -1454,6 +1454,7 @@ def unbundle(ctx, *, bundle: PathLike):
             unbundle_proc.terminate()
         except OSError:
             pass
+        hopic_git_info = HopicGitInfo.from_repo(repo)
 
     if not submit_commit or not commit_meta:
         log.error("Couldn't find Hopic meta data inside given bundle")
@@ -1469,6 +1470,8 @@ def unbundle(ctx, *, bundle: PathLike):
         clean=code_clean,
     )
 
+    tagrefs = [commitish for commitish in (refspec.split(":", 1)[0] for refspec in hopic_git_info.refspecs) if commitish != submit_commit]
+
     try:
         ctx.obj.config = read_config(determine_config_file_name(ctx), ctx.obj.volume_vars)
         with git.Repo(workspace) as repo:
@@ -1482,7 +1485,7 @@ def unbundle(ctx, *, bundle: PathLike):
     except (click.BadParameter, KeyError, TypeError, OSError, IOError, YAMLError):
         return
     finally:
-        log.info("%s", repo.git.show(submit_commit, format="fuller", stat=True, decorate=True, notes="*"))
+        log.info("%s", repo.git.show(submit_commit, *tagrefs, format="fuller", stat=True, decorate=True, notes="*"))
 
     checkout_worktrees(workspace, git_cfg["worktrees"])
 
