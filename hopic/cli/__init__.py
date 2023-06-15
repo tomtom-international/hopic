@@ -1031,10 +1031,14 @@ def merge_change_request(
         for approval_entry in approved_by_list:
             hash_match = valid_hash_re.match(approval_entry)
             if not hash_match:
+                if approval_entry in valid_approvers:
+                    continue
                 valid_approvers.append(approval_entry)
                 continue
 
             approver, last_reviewed_commit_hash = hash_match.groups()
+            if approver in valid_approvers:
+                continue
             try:
                 last_reviewed_commit = repo.commit(last_reviewed_commit_hash)
             except ValueError:
