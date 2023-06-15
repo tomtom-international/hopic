@@ -90,7 +90,7 @@ runs:
         set -x
         declare -a config_params extra_cr_params extra_prep_params
         if [ -n "${GH_PR_BODY:-}" ]; then
-          extra_cr_params+=("--description=$(echo -n "${GH_PR_BODY:-}" | awk 'BEGIN { output=1 } /^(- )?\[[ x]\] / { output=0 } output')")
+          extra_cr_params+=("--description=$(echo -n "${GH_PR_BODY:-}" | awk 'BEGIN { output=1 } /^(- )?\[[ x]\] |^<details>$/ { output=0 } output')")
         fi
         extra_prep_params+=('--author-email=${{github.event.pull_request.user.id}}+${{github.event.pull_request.user.login}}@users.noreply.github.com')
         if curl --fail -o "${RUNNER_TEMP}/pr-author.json" -u 'x-access-token:${{github.token}}' -H 'Accept: application/json' '${{github.event.pull_request.user.url}}'; then
