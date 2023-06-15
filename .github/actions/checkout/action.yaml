@@ -37,7 +37,7 @@ runs:
   steps:
     - name: Download Merge Transfer Git Bundle
       id: download-bundle
-      if: ${{ startsWith(github.event_name, 'pull_request') || (inputs.modality && inputs.modality != 'NORMAL') }}
+      if: ${{ startsWith(github.event_name, 'pull_request') || inputs.modality != 'NORMAL' }}
       continue-on-error: true
       uses: actions/download-artifact@v3
       with:
@@ -153,13 +153,14 @@ runs:
         LC_ALL: C.UTF-8
         TZ: UTC
         MODALITY: ${{ inputs.modality }}
+        STEPS_DOWNLOAD_BUNDLE_OUTCOME: ${{ steps.download-bundle.outcome }}
       run: |
         set -x
         declare -a config_params global_options
         if [ ! -e "${GITHUB_WORKSPACE}/hopic-ci-config.yaml" -a ! -e "${GITHUB_WORKSPACE}/.ci/hopic-ci-config.yaml" ]; then
           config_params+=("--config=${GITHUB_ACTION_PATH}/hopic-version-dump.yaml")
         fi
-        if [[ "${GITHUB_EVENT_NAME}" == pull_request* || ( -n "${MODALITY}" && "${MODALITY}" != NORMAL ) ]] && python3 -m hopic --workspace="${GITHUB_WORKSPACE}" "${config_params[@]}" may-publish; then
+        if [[ "${STEPS_DOWNLOAD_BUNDLE_OUTCOME}" == 'success' || "${GITHUB_EVENT_NAME}" == pull_request* || ( -n "${MODALITY}" && "${MODALITY}" != NORMAL ) ]] && python3 -m hopic --workspace="${GITHUB_WORKSPACE}" "${config_params[@]}" may-publish; then
           # TODO: check PR approval state too
           #global_options+=('--publishable-version')
           echo 'may-publish=true' >> "${GITHUB_OUTPUT}"
@@ -167,7 +168,7 @@ runs:
           echo 'may-publish=false' >> "${GITHUB_OUTPUT}"
         fi
         echo -n 'hopic-meta=' >> "$GITHUB_OUTPUT"
-        if [[ "${GITHUB_EVENT_NAME}" == pull_request* || ( -n "${MODALITY}" && "${MODALITY}" != NORMAL ) ]]; then
+        if [[ "${STEPS_DOWNLOAD_BUNDLE_OUTCOME}" == 'success' || "${GITHUB_EVENT_NAME}" == pull_request* || ( -n "${MODALITY}" && "${MODALITY}" != NORMAL ) ]]; then
           git fetch hopic-merge-transfer.bundle refs/hopic/bundle/meta
           git show FETCH_HEAD:hopic-meta >> "$GITHUB_OUTPUT"
           echo >> "$GITHUB_OUTPUT"
