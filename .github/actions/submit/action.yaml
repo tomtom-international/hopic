@@ -18,7 +18,7 @@ runs:
       if: ${{ !startsWith(github.event_name, 'pull_request') || contains(github.event.pull_request.labels.*.name, 'automerge') }}
       id: download-bundle
       continue-on-error: true
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: hopic-merge-transfer.bundle
 

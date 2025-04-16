@@ -39,7 +39,7 @@ runs:
       id: download-bundle
       if: ${{ startsWith(github.event_name, 'pull_request') || inputs.modality != 'NORMAL' }}
       continue-on-error: true
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: hopic-merge-transfer.bundle
 
@@ -140,7 +140,7 @@ runs:
 
     - name: Upload Merge Transfer Git Bundle
       if: ${{ steps.download-bundle.outcome != 'success' && (startsWith(github.event_name, 'pull_request') || (inputs.modality && inputs.modality != 'NORMAL')) }}
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: hopic-merge-transfer.bundle
         path: hopic-merge-transfer.bundle
